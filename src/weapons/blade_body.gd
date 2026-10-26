@@ -13,6 +13,17 @@ extends RigidBody3D
 @export var blade_tip := Vector3(0, 0, -0.95)
 ## Name shown in debug output and logs.
 @export var weapon_name := "weapon"
+## Active element: colors the trail now, drives on-hit effects later (GDD section 5).
+@export var element := Elements.NONE
+## Draw a ribbon trail behind the blade when it moves fast.
+@export var show_trail := true
+
+## True while the wielder is performing an attack with this weapon (an enemy
+## strike). Clashing with an attacking blade can be a parry.
+var attacking := false
+## Who holds this weapon (enemy or player holder), or null.
+var wielder: Node = null
+var trail: BladeTrail
 
 # Velocity snapshot taken at the end of our _physics_process, i.e. what the
 # body carried into the next physics step.
@@ -27,6 +38,10 @@ func _ready() -> void:
 	process_physics_priority = 100
 	continuous_cd = true
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
+	if show_trail:
+		trail = BladeTrail.new()
+		trail.name = "Trail"
+		add_child(trail)
 
 
 ## World-space center of mass.
@@ -41,6 +56,16 @@ func get_blade_axis() -> Vector3:
 
 func get_tip_global() -> Vector3:
 	return global_transform * blade_tip
+
+
+func get_blade_start_global() -> Vector3:
+	return global_transform * blade_start
+
+
+func set_element(new_element: String) -> void:
+	element = new_element
+	if trail:
+		trail.refresh_material()
 
 
 ## Velocity a world point on this weapon had going into the last physics step.

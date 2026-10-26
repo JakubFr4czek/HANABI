@@ -1,0 +1,158 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/weapons/held_weapon.gd" id="1_script"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_iron"]
+friction = 0.6
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_body"]
+height = 0.93
+radius = 0.055
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_handle"]
+height = 0.28
+radius = 0.02
+
+[sub_resource type="StandardMaterial3D" id="Mat_iron"]
+albedo_color = Color(0.11, 0.1, 0.1, 1)
+metallic = 0.85
+roughness = 0.45
+
+[sub_resource type="StandardMaterial3D" id="Mat_wrap"]
+albedo_color = Color(0.35, 0.06, 0.05, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="Mesh_body"]
+material = SubResource("Mat_iron")
+top_radius = 0.035
+bottom_radius = 0.062
+height = 0.93
+radial_segments = 8
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_handle"]
+material = SubResource("Mat_wrap")
+top_radius = 0.02
+bottom_radius = 0.02
+height = 0.28
+radial_segments = 10
+rings = 1
+
+[sub_resource type="CylinderMesh" id="Mesh_band"]
+material = SubResource("Mat_iron")
+top_radius = 0.068
+bottom_radius = 0.068
+height = 0.025
+radial_segments = 8
+rings = 1
+
+[sub_resource type="BoxMesh" id="Mesh_stud"]
+material = SubResource("Mat_iron")
+size = Vector3(0.03, 0.03, 0.03)
+
+[node name="Kanabo" type="RigidBody3D"]
+collision_layer = 4
+collision_mask = 27
+mass = 4.0
+physics_material_override = SubResource("PhysicsMaterial_iron")
+center_of_mass_mode = 1
+center_of_mass = Vector3(0, 0, -0.6)
+continuous_cd = true
+script = ExtResource("1_script")
+blade_start = Vector3(0, 0, -0.15)
+blade_tip = Vector3(0, 0, -1.05)
+weapon_name = "kanabo"
+damage_per_speed = 13.0
+knockback_per_speed = 1.2
+
+[node name="BodyShape" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, -0.585)
+shape = SubResource("CylinderShape3D_body")
+
+[node name="HandleShape" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0.01)
+shape = SubResource("CylinderShape3D_handle")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, -0.585)
+mesh = SubResource("Mesh_body")
+
+[node name="Handle" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0.01)
+mesh = SubResource("Mesh_handle")
+
+[node name="Band0" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, -0.16)
+mesh = SubResource("Mesh_band")
+
+[node name="Band1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, -0.6)
+mesh = SubResource("Mesh_band")
+
+[node name="Band2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, -1.03)
+mesh = SubResource("Mesh_band")
+
+[node name="Stud0" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0423, 0.0423, -0.7)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0423, 0.0423, -0.7)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0423, -0.0423, -0.7)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud3" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0423, -0.0423, -0.7)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud4" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0627, 0.0000, -0.8)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud5" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0000, 0.0627, -0.8)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud6" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0627, 0.0000, -0.8)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud7" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0000, -0.0627, -0.8)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud8" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0464, 0.0464, -0.9)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud9" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0464, 0.0464, -0.9)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud10" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0464, -0.0464, -0.9)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud11" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0464, -0.0464, -0.9)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud12" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0479, 0.0479, -0.97)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud13" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0479, 0.0479, -0.97)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud14" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0479, -0.0479, -0.97)
+mesh = SubResource("Mesh_stud")
+
+[node name="Stud15" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0479, -0.0479, -0.97)
+mesh = SubResource("Mesh_stud")

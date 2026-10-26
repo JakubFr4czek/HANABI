@@ -8,6 +8,7 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - **Godot OpenXR Vendors**: Godot XR contributors (MIT), with the Khronos OpenXR loader (Apache 2.0) and the Meta OpenXR loader (Oculus SDK License)
 
 ## Assets in the game
+- Katana model: **Grab3D** (grab3d.com, CC0)
 - Sword swing and clash sounds: **StarNinjas** (OpenGameArt, CC0)
 - Impact sounds: **Kenney** (kenney.nl, CC0)
 

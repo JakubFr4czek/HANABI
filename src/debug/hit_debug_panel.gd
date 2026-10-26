@@ -13,6 +13,7 @@ var _lines: Array[String] = []
 var _best_speed := 0.0
 var _best_damage := 0.0
 var _last_clash := "-"
+var _parries := 0
 var _dummy: TrainingDummy
 
 
@@ -29,13 +30,14 @@ func _ready() -> void:
 	_dummy = get_node_or_null(dummy_path) as TrainingDummy
 	GameEvents.hit_landed.connect(_on_hit)
 	GameEvents.weapon_clash.connect(_on_clash)
+	GameEvents.parry.connect(func(_p): _parries += 1)
 	_refresh()
 
 
 func _on_hit(hit: Dictionary) -> void:
 	_best_speed = maxf(_best_speed, hit.speed)
 	_best_damage = maxf(_best_damage, hit.get("damage", 0.0))
-	_lines.push_front("%5.1f m/s  →  %5.1f dmg   %-11s (%s)" % [hit.speed, hit.get("damage", 0.0), hit.part, hit.zone])
+	_lines.push_front("%5.1f m/s  →  %5.1f dmg   %-11s (%s)%s" % [hit.speed, hit.get("damage", 0.0), hit.part, hit.zone, "  COUNTER" if hit.get("counter", false) else ""])
 	if _lines.size() > MAX_LINES:
 		_lines.pop_back()
 	DamageNumber.spawn(get_tree().current_scene, hit.point, hit.get("damage", 0.0), hit.speed)
@@ -43,7 +45,7 @@ func _on_hit(hit: Dictionary) -> void:
 
 
 func _on_clash(clash: Dictionary) -> void:
-	_last_clash = "%.1f m/s at %.0f°" % [clash.speed, clash.angle_deg]
+	_last_clash = "%.1f m/s at %.0f°%s" % [clash.speed, clash.angle_deg, "  PARRY!" if clash.get("parry", false) else ""]
 	_refresh()
 
 
@@ -57,10 +59,12 @@ func _refresh() -> void:
 	var text := "HIT DEBUG\n"
 	if _dummy:
 		var states := ["STANDING", "KNOCKED DOWN", "GETTING UP"]
-		text += "Dummy  HP %d/%d   balance %.2f   muscle %.2f   %s\n" % [
-			_dummy.hp, _dummy.profile.max_hp, _dummy.balance, _dummy.muscle, states[_dummy.state]]
+		text += "Dummy  HP %d/%d   balance %.2f   muscle %.2f   %s   attacks %s\n" % [
+			_dummy.hp, _dummy.profile.max_hp, _dummy.balance, _dummy.muscle, states[_dummy.state], "ON" if _dummy.attacks_enabled() else "off"]
+		if _dummy.counter_time_left() > 0.0:
+			text += ">> COUNTER WINDOW %.1f s <<\n" % _dummy.counter_time_left()
 	text += "Best   %.1f m/s   %.1f dmg\n" % [_best_speed, _best_damage]
-	text += "Clash  %s\n" % _last_clash
+	text += "Clash  %s   parries %d\n" % [_last_clash, _parries]
 	text += "──────────────────────────────\n"
 	text += "\n".join(_lines) if not _lines.is_empty() else "(swing at the dummy)"
 	_label.text = text

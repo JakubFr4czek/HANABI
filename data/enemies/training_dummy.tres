@@ -18,6 +18,15 @@ balance_regen = 0.7
 muscle_regen = 0.9
 knockdown_time = 1.6
 getup_time = 1.8
+counter_window = 1.5
+counter_multiplier = 1.5
 tactics = {
-"track_player": true
+"attack_interval": 2.2,
+"attack_range": 2.4,
+"attacks": false,
+"parry_stun_time": 1.2,
+"recover_time": 0.6,
+"strike_time": 0.45,
+"track_player": true,
+"windup_time": 0.55
 }

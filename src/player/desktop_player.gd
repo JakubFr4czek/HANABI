@@ -6,7 +6,11 @@ extends CharacterBody3D
 ## Click to capture the mouse, Esc to release. Mouse looks around; hold the
 ## right mouse button to move the sword hand with the mouse instead. WASD to
 ## walk. F / G / T play a scripted horizontal slash / overhead cut / thrust,
-## mouse wheel changes their speed. E grabs or drops the sword.
+## mouse wheel changes their speed. Hold Q to raise a high block (parry the
+## dummy's overhead cut). E grabs or drops the weapon, 1 / 2 pick katana /
+## kanabō, Z cycles the element, P toggles the dummy's attacks.
+
+signal toggle_attacks_requested
 
 const EYE_HEIGHT := 1.65
 const HAND_REST := Vector3(0.22, -0.28, -0.42)
@@ -15,6 +19,8 @@ const HAND_RANGE := Vector2(0.6, 0.5)
 const SLASH_HORIZONTAL := [Vector3(0.6, -0.22, 0), Vector3(-0.6, -0.3, 0)]  # torso height, right to left
 const SLASH_OVERHEAD := [Vector3(0.05, 0.5, 0), Vector3(0.0, -0.5, 0)]
 const THRUST := [Vector3(0, -0.2, -0.05), Vector3(0, -0.15, 0.42)]
+## Hand pose (camera space) of the high block: blade across, above the eyes.
+var BLOCK_HIGH := Transform3D(Basis.from_euler(Vector3(deg_to_rad(12.0), deg_to_rad(90.0), 0.0), EULER_ORDER_YXZ), Vector3(0.3, 0.12, -0.42))
 
 @export var move_speed := 3.0
 @export var mouse_look_sensitivity := 0.0025
@@ -27,6 +33,12 @@ var holder := WeaponHolder.new()
 var hand_offset := Vector3.ZERO
 ## Seconds a scripted swing takes (changed with the mouse wheel).
 var swing_duration := 0.22
+## Weapons that 1 / 2 / ... switch between (set by the room).
+var weapons: Array = []
+## 0..1 blend toward the high block pose (Q).
+var block_amount := 0.0
+## Force the block on (tests), regardless of the Q key.
+var force_block := false
 
 var _pitch := 0.0
 var _swing_tween: Tween
@@ -98,6 +110,37 @@ func _unhandled_input(event: InputEvent) -> void:
 					holder.release()
 				else:
 					holder.recall()
+			KEY_1, KEY_2, KEY_3:
+				var i: int = event.physical_keycode - KEY_1
+				if i < weapons.size():
+					take_weapon(weapons[i])
+			KEY_Z:
+				if holder.held:
+					holder.held.set_element(XRPlayer.next_element(holder.held.element))
+			KEY_P:
+				toggle_attacks_requested.emit()
+
+
+## Move the player instantly; the held weapon comes along instead of flying
+## across the room behind the hand.
+func teleport(position_: Vector3, yaw: float = 0.0) -> void:
+	global_position = position_
+	rotation = Vector3(0, yaw, 0)
+	velocity = Vector3.ZERO
+	_update_hand()
+	if holder.held:
+		holder.held.snap_to_hand()
+
+
+## Drop what we hold and pull [param weapon] into the hand.
+func take_weapon(weapon: HeldWeapon) -> void:
+	if holder.held == weapon:
+		return
+	holder.release()
+	weapon.global_transform = holder.get_grip_transform()
+	weapon.linear_velocity = Vector3.ZERO
+	weapon.angular_velocity = Vector3.ZERO
+	holder.grab(weapon)
 
 
 ## Play a scripted swing through the given hand offsets, then return to rest.
@@ -105,6 +148,8 @@ func swing(points: Array) -> void:
 	_kill_swing()
 	_swing_tween = create_tween()
 	_swing_tween.set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	# The player's hand moves in real time, even during slow motion (like in VR).
+	_swing_tween.set_ignore_time_scale(true)
 	_swing_tween.tween_property(self, "hand_offset", points[0], 0.15).set_trans(Tween.TRANS_SINE)
 	for i in range(1, points.size()):
 		_swing_tween.tween_property(self, "hand_offset", points[i], swing_duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -128,6 +173,9 @@ func _physics_process(delta: float) -> void:
 	velocity.z = dir.z * move_speed
 	velocity.y = 0.0 if is_on_floor() else velocity.y - 9.8 * delta
 	move_and_slide()
+	var real_delta := TimeController.real_tick()
+	var want_block := 1.0 if (force_block or Input.is_physical_key_pressed(KEY_Q)) else 0.0
+	block_amount = move_toward(block_amount, want_block, real_delta * 8.0)
 	_update_hand()
 	_hud.text = _hud_text()
 
@@ -139,16 +187,22 @@ func _update_hand() -> void:
 	var yaw := -hand_offset.x * 1.4
 	var pitch := deg_to_rad(40.0) + hand_offset.y * 2.0
 	var local := Transform3D(Basis.from_euler(Vector3(pitch, yaw, 0.0), EULER_ORDER_YXZ), pos)
+	if block_amount > 0.0:
+		local = local.interpolate_with(BLOCK_HIGH, block_amount)
 	hand.global_transform = camera.global_transform * local
 
 
 func _hud_text() -> String:
 	var t := "HANABI desktop test rig (no XR runtime found)\n"
 	t += "Click: capture mouse   Esc: release   WASD: walk   Mouse: look\n"
-	t += "Hold RMB + mouse: move the sword   F/G/T: slash / overhead / thrust\n"
-	t += "Wheel: scripted swing time %.2f s   E: grab/drop sword   R: reset dummy\n" % swing_duration
+	t += "Hold RMB + mouse: move the weapon   F/G/T: slash / overhead / thrust   hold Q: high block\n"
+	t += "Wheel: scripted swing time %.2f s   1/2: katana / kanabō   E: drop/take   Z: element\n" % swing_duration
+	t += "P: dummy attacks on/off   R: reset dummy\n"
 	if holder.held:
-		t += "Tip speed: %.1f m/s" % holder.held.measured_tip_speed
+		var w := holder.held
+		t += "%s [%s]   tip %.1f m/s   arm strength %.0f%%" % [w.weapon_name, w.element, w.measured_tip_speed, w.strength * 100.0]
 	else:
-		t += "Sword not held (press E)"
+		t += "No weapon in hand (press 1 or 2)"
+	if TimeController.time_scale < 1.0:
+		t += "   TIME x%.2f" % TimeController.time_scale
 	return t

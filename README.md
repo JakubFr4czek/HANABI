@@ -4,19 +4,20 @@ VR melee survivor-like for Meta Quest: Blade & Sorcery–style physics swordplay
 
 The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [`docs/HANABI_agent_prompt.md`](docs/HANABI_agent_prompt.md).
 
-## Current state: milestone 1, step 1 (physics test room)
+## Current state: milestone 1 (sword physics) — PD katana, hit-stop, trail, parry
 
 | Works | Stubbed / temporary |
 |---|---|
-| OpenXR rig (godot-xr-tools): smooth move, snap turn, hands | Sword follows the hand by **velocity** (stiff, no weight lag). The PD-controlled katana is the next task |
-| Grab the practice bokken with **grip**; recall it with grip + B/Y | Bokken is a primitive mesh (the katana model comes with the PD katana) |
-| Physics blade: collides with walls and bodies (no clipping), continuous collision detection | No hit-stop, trail or parry slow-mo yet (parry *detection data* is logged) |
-| **Active ragdoll training dummy**: 11 rigid bodies + joints, muscles hold a guard pose, balance help, staggers, falls, gets up | Dummy is built from primitives, not the Quaternius mesh |
-| Dummy holds its own physics bokken (blade vs blade clashes are detected and logged with speed and angle) | Dummy does not attack |
-| Damage from the relative speed at the contact point, zone multipliers (head ×1.5, limbs ×0.7) | |
-| Debug panel on the wall (hit speed, damage, body part, dummy HP/balance/state), floating damage numbers, haptics, sword SFX | |
+| OpenXR rig (godot-xr-tools): smooth move, snap turn, hands; the hand model stays on the hilt when the blade is stopped | Only one weapon per hand; no two-handed grip yet |
+| **Katana on a PD controller** (force + torque, stable PD): weight and inertia matter, a heavy **kanabō** visibly lags behind the hand with the same arm strength | Katana is the Grab3D model; kanabō is built from primitives |
+| No clipping (CCD) and **no bulldozing**: when the blade is held back the arm gives way (strength drops to 30%), with a light haptic buzz | |
+| **Hit-stop** 50–80 ms on hits ≥ 40 damage, haptics scaled by impact | |
+| **Blade trail** (CPU ribbon, works on Quest's Compatibility renderer) colored by element: none / sakura / storm / ink / shadow | Elements only change the trail color so far (abilities come in milestone 3) |
+| **Parry**: the dummy can attack (telegraphed overhead cut); meeting its attacking blade fast enough and across it (≥ 25°) is a parry: sparks, compensated slow-mo ×0.3 for 0.6 s (your blade stays real-time), dummy stunned, **counter window** 1.5 s with ×1.5 damage | Only the dummy attacks; it does not damage the player (no player HP yet) |
+| **Active ragdoll training dummy** with its own physics bokken: staggers, falls, gets up | Dummy is built from primitives, not the Quaternius mesh |
+| Damage from the relative speed at the contact point, zone multipliers; debug panel (hits, COUNTER, PARRY!, counter window), damage numbers, SFX | |
 | Desktop test rig for machines without a headset (e.g. macOS) | |
-| Central event log (`GameEvents`), data-driven enemy profile, swappable enemy brain | No AI/LLM features yet (later phase, see GDD §8) |
+| Central event log (`GameEvents`), data-driven enemy profile, swappable enemy brain (DummyBrain has a small attack FSM) | No AI/LLM features yet (later phase, see GDD §8) |
 
 ## Requirements
 - **Godot 4.7.2** (standard build, not .NET): https://godotengine.org/download. On macOS, move `Godot.app` to `/Applications`.
@@ -36,26 +37,32 @@ The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [
    | Click / Esc | capture / release the mouse |
    | Mouse | look |
    | WASD | walk |
-   | Hold **right mouse button** + move the mouse | move the sword hand (swing it yourself) |
+   | Hold **right mouse button** + move the mouse | move the weapon hand (swing it yourself) |
    | **F / G / T** | scripted horizontal slash / overhead cut / thrust |
    | Mouse wheel | scripted swing duration (faster swings hit harder) |
-   | E | drop / take the sword |
-   | R | reset the dummy (and the sword, if dropped) |
+   | Hold **Q** | high block (parry the dummy's overhead cut) |
+   | **1 / 2** | katana / kanabō |
+   | E | drop / take the weapon |
+   | Z | cycle the element (trail color) |
+   | **P** | dummy attacks on / off |
+   | R | reset the dummy (and put dropped weapons back) |
 
 ## Automated checks
 ```sh
 GODOT=/Applications/Godot.app/Contents/MacOS/Godot
 $GODOT --headless --path . --import                  # first time / after adding assets
 $GODOT --headless --path . --fixed-fps 90 res://tests/physics_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/combat_test.tscn -- --desktop
 ```
-`physics_test` checks that:
-- the dummy stands and holds its sword;
-- faster slashes hit harder;
-- hits stagger the dummy, a quick combo knocks it down, and it gets up again;
-- a thrust into a wall stops at the wall;
-- blade clashes are detected.
+- `physics_test` checks the dummy (stands, staggers, knockdown, gets up), velocity-scaled damage, the wall stopping a thrust, and blade clashes.
+- `combat_test` checks:
+  - the katana settles in about 0.13 s and the kanabō lags (about 0.47 s);
+  - pushing into the dummy does not bulldoze it, and the arm gives way;
+  - hit-stop timing and the trail;
+  - parrying the dummy's strike leads to slow-mo, stun, counter window and a counter hit;
+  - the katana keeps real-time tracking during slow-mo.
 
-The exit code is 0 when all checks pass. `res://tests/screenshots.tscn -- --desktop --shots /tmp/shots` renders screenshots. `tests/diag/` holds small diagnostic scenes, e.g. the Jolt joint-limit sign check.
+Both exit with code 0 when all checks pass. `res://tests/screenshots.tscn -- --desktop --shots /tmp/shots` renders screenshots. `tests/diag/` holds small diagnostic scenes, e.g. the Jolt joint-limit sign check and slow-mo tracking.
 
 ## Run on Meta Quest (standalone)
 
@@ -133,9 +140,13 @@ On Quest the renderer switches to **Compatibility** automatically (`rendering_me
 |---|---|
 | Left stick | move (smooth locomotion) |
 | Right stick | snap turn |
-| **Grip** near the bokken (on the table) | take it; release grip to drop |
-| Grip + **B/Y** | recall the bokken into the hand |
+| **Grip** near a weapon (on the table) | take it; release grip to drop |
+| Grip + **B/Y** | recall the nearest weapon into the hand |
+| **B/Y** (without grip) | dummy attacks on / off |
+| Thumbstick **click** | cycle the element of the weapon in that hand |
 | **A/X** | reset the dummy |
+
+To practice parries: turn the dummy's attacks on, stand about 1.3 m in front of it, and meet its overhead cut with your blade held across it.
 
 ## Project layout
 ```
@@ -145,18 +156,34 @@ assets_raw/        original downloaded packs (git-ignored, Godot-ignored)
 data/enemies/      EnemyProfile resources (stats, resistances, tactics as data)
 docs/              GDD and brief
 scenes/            test_room, player rigs, weapons
-src/core/          GameEvents (central event log), Sfx, test room
+src/core/          GameEvents (event log), TimeController (hit-stop, slow-mo), Elements, Sfx, test room
 src/player/        XR rig, desktop rig, WeaponHolder (grab/recall/haptics)
-src/weapons/       BladeBody (blade geometry, pre-impact velocity), HeldWeapon (follow, hits, clashes)
+src/weapons/       BladeBody (blade, element, pre-impact velocity), HeldWeapon (PD follow, hits, clashes, parry), BladeTrail
 src/enemies/       ActiveRagdoll, TrainingDummy, EnemyBrain / DummyBrain, EnemyProfile
-src/debug/         hit debug panel, damage numbers
+src/debug/         hit debug panel, damage numbers, spark bursts
 tests/             headless physics test, screenshots, diagnostics
 ```
 
 ## How the physics works (short)
-- **Weapon hit speed:** each weapon stores its velocity before every physics step. On a new contact, the hit speed is the relative velocity of the two contact points *before* the solver slowed them down. Damage = `(speed − 1.5 m/s) × 9`, capped at 120, times the zone multiplier.
-- **Active ragdoll:** each joint's muscle is a velocity-level PD drive that rotates the joint's whole subtree (e.g. upper arm + forearm + sword) toward the pose, so joints don't fight and the solver stays stable. "Puppet string" balance keeps the pelvis and chest upright, at standing height and near an anchor. Hits drain `balance` and `muscle`: low balance means a stagger, zero means a knockdown, then a timed get-up.
-- **Jolt note:** Generic6DOF angular limits are measured in the opposite sense to the pose convention, so the ragdoll negates them. `tests/diag/diag_joint.tscn` verifies this.
+- **Katana:** a `RigidBody3D` driven by a stable PD controller.
+  - Force goes on the center of mass toward the hand pose, torque toward the hand orientation, and the weapon's own weight is held.
+  - Force and torque are capped by the player's arm strength (260 N, 40 N·m). A heavier weapon therefore accelerates less and lags.
+  - When the grip is held more than 10 cm away from the hand, strength drops to 30%, so the blade rests on obstacles instead of shoving them.
+- **Weapon hit speed:** each weapon stores its velocity before every physics step. On a new contact, the hit speed is the relative velocity of the two contact points *before* the solver slowed them down. Damage = `(speed − 1.5 m/s) × 9` (×13 for the kanabō), capped at 120, times the zone multiplier and ×1.5 for counters.
+- **Time effects (`TimeController`):**
+  - Hit-stop and slow-mo set `Engine.time_scale` and are timed in real time (counted in physics ticks, which stay at 90/s).
+  - In a parry slow-mo the player's weapon is compensated: its gains are scaled by real_tick / sim_delta. Your blade keeps real-time speed while the world moves at ×0.3.
+  - Speeds of player hits are converted back to real m/s.
+- **Parry:** a new contact between the player's blade and an enemy blade flagged `attacking` (the enemy brain sets it during a strike), with relative speed ≥ 1.5 m/s and blades crossing at ≥ 25°.
+- **Active ragdoll:**
+  - Each joint's muscle is a velocity-level PD drive that rotates the joint's whole subtree (e.g. upper arm + forearm + sword) toward the pose, so joints don't fight and the solver stays stable.
+  - Poses can set `_stiffness` and `_max_speed` (the strike is fast but capped so it can be read and parried).
+  - "Puppet string" balance keeps the pelvis and chest upright, at standing height and near an anchor.
+  - Hits drain `balance` and `muscle`: low balance means a stagger, zero means a knockdown, then a timed get-up.
+  - All parts use CCD, so a flung shin cannot tunnel into the floor.
+- **Jolt notes:**
+  - Generic6DOF angular limits are measured in the opposite sense to the pose convention, so the ragdoll negates them (`tests/diag/diag_joint.tscn`).
+  - `max_angular_velocity` is raised to 150 rad/s so the compensated katana is not clamped in slow-mo.
 
 ## Licensing
 All third-party files and their licenses are listed in [LICENSES.md](LICENSES.md); credits are in [CREDITS.md](CREDITS.md). The Vacuous BGM music must never be committed.

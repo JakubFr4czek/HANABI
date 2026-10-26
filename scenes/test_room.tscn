@@ -3,7 +3,8 @@
 [ext_resource type="Script" path="res://src/core/test_room.gd" id="1_room"]
 [ext_resource type="Script" path="res://src/enemies/training_dummy.gd" id="2_dummy"]
 [ext_resource type="Resource" path="res://data/enemies/training_dummy.tres" id="3_profile"]
-[ext_resource type="PackedScene" path="res://scenes/weapons/practice_sword.tscn" id="4_sword"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/katana.tscn" id="4_sword"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/kanabo.tscn" id="6_kanabo"]
 [ext_resource type="Script" path="res://src/debug/hit_debug_panel.gd" id="5_panel"]
 
 [sub_resource type="Environment" id="Env"]
@@ -40,11 +41,11 @@ emission_enabled = true
 emission = Color(0.15, 0.2, 0.35, 1)
 
 [sub_resource type="BoxShape3D" id="Shape_Floor"]
-size = Vector3(10.6, 0.2, 10.6)
+size = Vector3(10.6, 1.0, 10.6)
 
 [sub_resource type="BoxMesh" id="Mesh_Floor"]
 material = SubResource("Mat_floor")
-size = Vector3(10.6, 0.2, 10.6)
+size = Vector3(10.6, 1.0, 10.6)
 
 [sub_resource type="BoxShape3D" id="Shape_WallNorth"]
 size = Vector3(10.6, 3.5, 0.3)
@@ -96,11 +97,11 @@ material = SubResource("Mat_torii")
 size = Vector3(5.2, 0.35, 0.5)
 
 [sub_resource type="BoxShape3D" id="Shape_SwordTable"]
-size = Vector3(0.9, 0.9, 0.45)
+size = Vector3(1.4, 0.9, 0.5)
 
 [sub_resource type="BoxMesh" id="Mesh_SwordTable"]
 material = SubResource("Mat_table")
-size = Vector3(0.9, 0.9, 0.45)
+size = Vector3(1.4, 0.9, 0.5)
 
 [sub_resource type="BoxShape3D" id="Shape_FloorLine"]
 size = Vector3(0.04, 0.005, 10.0)
@@ -143,7 +144,7 @@ omni_range = 6.0
 [node name="Room" type="Node3D" parent="."]
 
 [node name="Floor" type="StaticBody3D" parent="Room"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 
 [node name="Mesh" type="MeshInstance3D" parent="Room/Floor"]
 mesh = SubResource("Mesh_Floor")
@@ -215,7 +216,7 @@ mesh = SubResource("Mesh_Beam")
 shape = SubResource("Shape_Beam")
 
 [node name="SwordTable" type="StaticBody3D" parent="Room"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.9, 0.45, 1.4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0, 0.45, 1.4)
 
 [node name="Mesh" type="MeshInstance3D" parent="Room/SwordTable"]
 mesh = SubResource("Mesh_SwordTable")
@@ -235,8 +236,11 @@ mesh = SubResource("Mesh_FloorLine2")
 script = ExtResource("2_dummy")
 profile = ExtResource("3_profile")
 
-[node name="PracticeSword" parent="." instance=ExtResource("4_sword")]
-transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.25, 0.94, 1.4)
+[node name="Katana" parent="." instance=ExtResource("4_sword")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.45, 0.95, 1.3)
+
+[node name="Kanabo" parent="." instance=ExtResource("6_kanabo")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.5, 0.98, 1.52)
 
 [node name="PlayerSpawn" type="Marker3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.8)
@@ -249,7 +253,7 @@ dummy_path = NodePath("../TrainingDummy")
 [node name="HelpLabel" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.6, 2.9, -4.95)
 pixel_size = 0.0022
-text = "CONTROLS\nVR: left stick move, right stick turn\n    hold GRIP near the bokken to take it\n    GRIP + B/Y: recall the bokken\n    A/X: reset the dummy\nDesktop: see the top-left of the window"
+text = "CONTROLS\nVR: left stick move, right stick turn\n    hold GRIP near a weapon to take it\n    GRIP + B/Y: recall a weapon\n    B/Y (no grip): dummy attacks on/off\n    stick click: change element\n    A/X: reset the dummy\nDesktop: see the top-left of the window"
 font_size = 32
 outline_size = 8
 horizontal_alignment = 0

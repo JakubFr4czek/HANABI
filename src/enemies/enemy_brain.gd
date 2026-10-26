@@ -13,14 +13,27 @@ var body: Node3D
 var profile: EnemyProfile
 
 
+## Called once by the body after it created / found this brain.
+func setup(p_body: Node3D, p_profile: EnemyProfile) -> void:
+	body = p_body
+	profile = p_profile
+
+
 ## Return an intent Dictionary for this frame. Known keys:
 ## - "pose": String, name of the target pose (e.g. "guard")
 ## - "face_position": Vector3, world point to turn toward (optional)
-## [param context] carries perception, e.g. "player_position" (Vector3, optional).
+## - "attacking": bool, the weapon is in an attack (can be parried)
+## [param context] carries perception: "player_position", "self_position"
+## (Vector3, optional) and "can_act" (bool, false while knocked down).
 func think(_delta: float, _context: Dictionary) -> Dictionary:
 	return {"pose": "guard"}
 
 
 ## Called by the body when it gets hit (after damage was applied).
 func on_hit(_hit: Dictionary) -> void:
+	pass
+
+
+## Called by the body when the player parried its attack.
+func on_parried(_info: Dictionary) -> void:
 	pass

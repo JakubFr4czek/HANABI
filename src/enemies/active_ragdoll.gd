@@ -62,6 +62,8 @@ var anchor_position := Vector3.ZERO
 
 var _defs := {}  # name -> part definition Dictionary
 var _poses := {}  # pose name -> {part name -> Quaternion}
+var _pose_stiffness := {}  # pose name -> muscle stiffness multiplier ("_stiffness" key in the pose)
+var _pose_max_speed := {}  # pose name -> max joint speed in rad/s ("_max_speed" key)
 var _rest := {}  # name -> Transform3D relative to this node
 var _order: Array[String] = []  # parents before children
 var _children := {}  # part name -> Array of child part names
@@ -97,6 +99,8 @@ func _define_parts() -> Dictionary:
 
 
 ## Return {pose_name: {part_name: Vector3 euler_deg relative to the parent}}.
+## Optional "_stiffness": float key makes muscles faster/stronger in that pose
+## (e.g. a strike); "_max_speed": float caps how fast joints move (rad/s).
 func _define_poses() -> Dictionary:
 	return {}
 
@@ -114,7 +118,11 @@ func _build() -> void:
 	for pose_name in pose_defs:
 		var src: Dictionary = pose_defs[pose_name]
 		var q := {}
+		_pose_stiffness[pose_name] = float(src.get("_stiffness", 1.0))
+		_pose_max_speed[pose_name] = float(src.get("_max_speed", INF))
 		for part_name in src:
+			if part_name.begins_with("_"):
+				continue
 			var e: Vector3 = src[part_name]
 			q[part_name] = Basis.from_euler(Vector3(deg_to_rad(e.x), deg_to_rad(e.y), deg_to_rad(e.z))).get_rotation_quaternion()
 		_poses[pose_name] = q
@@ -165,6 +173,9 @@ func _create_part(part_name: String, def: Dictionary) -> void:
 	body.collision_mask = BODY_MASK
 	body.angular_damp = 0.5
 	body.linear_damp = 0.05
+	# Limbs can be flung fast (hits, knockdowns); without CCD a shin can tunnel
+	# into the floor and get stuck there.
+	body.continuous_cd = true
 	body.set_meta("hit_receiver", self)
 	body.set_meta("body_part", part_name)
 	body.set_meta("zone", def.get("zone", "torso"))
@@ -358,6 +369,8 @@ func _drive_joints(delta: float) -> void:
 	if muscle <= 0.0:
 		return
 	var pose: Dictionary = _poses.get(current_pose, {})
+	var k: float = _pose_stiffness.get(current_pose, 1.0)
+	var max_speed: float = _pose_max_speed.get(current_pose, INF)
 	for part_name in _order:
 		var def: Dictionary = _defs[part_name]
 		if def.get("parent", "") == "":
@@ -366,11 +379,11 @@ func _drive_joints(delta: float) -> void:
 		var parent: RagdollPart = parts[def.parent]
 		var q_rel: Quaternion = pose.get(part_name, Quaternion.IDENTITY)
 		var q_target := parent.global_basis.get_rotation_quaternion() * q_rel
-		var omega_des := _rotation_error(q_target, child.global_basis.get_rotation_quaternion()) * joint_stiffness
+		var omega_des := (_rotation_error(q_target, child.global_basis.get_rotation_quaternion()) * (joint_stiffness * k)).limit_length(max_speed)
 		var omega_rel := child.angular_velocity - parent.angular_velocity
 		var dw := (omega_des - omega_rel) * (joint_gain * muscle)
 		var pivot := _joint_world(part_name)
-		var max_l: float = def.get("max_torque", 300.0) * delta
+		var max_l: float = def.get("max_torque", 300.0) * k * delta
 		var reaction := _rotate_subtree(_subtree[part_name], pivot, dw, max_l)
 		# Equal and opposite on the parent: momentum at the joint, angular momentum about it.
 		if muscle_reaction > 0.0:
@@ -466,6 +479,20 @@ static func _rotation_error(to: Quaternion, from: Quaternion) -> Vector3:
 	if angle < 0.0001:
 		return Vector3.ZERO
 	return q.get_axis().normalized() * angle
+
+
+## Degrees between each joint's current and target rotation (debug / tests).
+func pose_errors() -> Dictionary:
+	var out := {}
+	var pose: Dictionary = _poses.get(current_pose, {})
+	for part_name in _order:
+		var def: Dictionary = _defs[part_name]
+		if def.get("parent", "") == "":
+			continue
+		var parent: RagdollPart = parts[def.parent]
+		var rel := parent.global_basis.get_rotation_quaternion().inverse() * (parts[part_name] as RagdollPart).global_basis.get_rotation_quaternion()
+		out[part_name] = snappedf(rad_to_deg(rel.angle_to(pose.get(part_name, Quaternion.IDENTITY))), 1.0)
+	return out
 
 
 ## Height of the pelvis above this node's origin (debug / tests).
