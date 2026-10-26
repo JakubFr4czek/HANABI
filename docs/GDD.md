@@ -26,7 +26,10 @@ Spawn at the shrine, then fight waves, collect soul drops, level up, pick an ofu
 ## 4. Combat and physics
 - **Katana:** a `RigidBody3D` pulled toward the controller pose by a PD controller (force and torque). It is not parented to the hand.
 - **Weight:** mass and inertia make heavier weapons lag behind the hand.
-- **No clipping:** the blade stops on walls and bodies while the hand continues. Use continuous collision detection on the blade.
+- **No clipping:** the blade stops on walls while the hand continues (the hand model stays on the hilt). Use continuous collision detection on the blade.
+- **Hand priority:** the weapon never visibly leaves the hand (grip within a few cm, a limited wrist twist that sells a heavy weapon's weight). On enemy bodies the blade collides and rests briefly; if the hand keeps going deep, the blade follows it through instead of wedging.
+- **Grip:** a handle grip always seats the sword the natural way (cutting edge leading a cut), whatever angle the hand came in at.
+- **Edge alignment:** the angle between the motion and the blade's edge decides the strike: edge or point ×1.0, flat ×0.3, blunt spine ×0.2, hilt ×0.3, each with its own sound and spark.
 - **Damage:** scales with blade velocity at impact. Light swings make shallow cuts; full swings make heavy hits.
 - **Parry:** emerges from blade-vs-blade physics. A clash with the right velocity and angle counts as a parry and triggers a short slow-mo and a counter window.
 - **Feedback:** hit-stop (50–80 ms) on strong hits, haptics scaled by impact, and a blade trail colored by the active element.
@@ -137,10 +140,12 @@ At the start of a run the player hovers about 0.5–1 m above the arena in a med
 ## 13. Open questions
 - Locomotion: decided in VR Comfort & Accessibility; build it in the final phase. Current build: smooth move on the left stick, snap turn on the right stick.
 - Placeholders in the test room (2026-10-26): the training dummy and both bokken are built from Godot primitives; the Quaternius base character / katana models are not used yet. Skinning the Quaternius mesh onto the active ragdoll is planned with the yōkai (milestone 2).
-- Balance numbers for the dummy (first pass): damage = (relative speed − 1.5 m/s) × 9, cap 120; one full swing (~10 m/s) staggers, two quick heavy hits knock it down. Tune by feel in the headset.
+- Balance numbers for the dummy (first pass): damage = (relative speed − 1.5 m/s) × 9, cap 120, × strike multiplier; poise damage 0.01 per damage point, balance regen 0.5/s: one full edge cut (~10 m/s) staggers, two or three quick heavy cuts knock it down. Tune by feel in the headset.
+- Hand priority limits (first pass): grip 3.5 cm, twist 30° (kanabō 40°), rest on an enemy body up to 10 cm before the blade follows the hand through. Tune in the headset.
+- Fog (first pass): depth fog 3.5–16 m, curve 1.4 (0% on the arena, ~44% at the giant torii, ~89% at 15 m), dark blue-violet fog color shared with the sky horizon.
 - Active ragdoll muscles currently act like animation (no reaction torque on the parent) for stability; full momentum-conserving muscles are a later polish item.
 - Combat feel, first pass (2026-10-26): player arm strength 260 N / 40 N·m (katana 1.1 kg settles in ~0.13 s, kanabō 4 kg in ~0.47 s); hit-stop on hits ≥ 40 damage; parry = clash with an *attacking* enemy blade at ≥ 1.5 m/s relative and ≥ 25° between blades, then slow-mo ×0.3 for 0.6 s with the player's blade kept real-time, enemy stunned 1.2 s, counter window 1.5 s at ×1.5 damage. Tune in the headset.
-- Hit-stop freezes the whole world (including the player's blade) for 50–80 ms; in VR the head and hands keep tracking. If it feels bad in the headset, switch to a local hit-stop (only the hit enemy and the blade).
+- Hit-stop freezes the world for 50–80 ms; the player's blade stays in the tracked hand (hand priority), so the bite is felt through the frozen enemy and haptics.
 - Enemy damage, first pass (normal difficulty): vertical 18, horizontal 14, thrust 20 (easy ×0.6, hard ×1.4). Tune in the headset.
 - After a knockdown the dummy stands up where it fell instead of walking back; the duelist AI walks back home when not sparring, but obstacle-aware navigation (NavigationAgent3D) comes with the yōkai.
 - Godot docs recommend the Compatibility renderer for Android XR; the project uses Mobile on PC and Compatibility on Quest. Revisit if Mobile on Quest becomes recommended (needed for some VFX).
