@@ -187,9 +187,9 @@ func _define_poses() -> Dictionary:
 		# Thrust: fist pulled back to the hip, point aimed at the player...
 		"windup_t": {
 			"_stiffness": 1.3,
-			"chest": Vector3(-4, 2, 0),
+			"chest": Vector3(-22, -1, 0),
 			"head": Vector3(-6, 18, 0),
-			"upper_arm_r": Vector3(49, -1, -26),
+			"upper_arm_r": Vector3(49, -1, -38),
 			"lower_arm_r": Vector3(-99, -12, 0),
 			"upper_arm_l": Vector3(-50, 20, -30),
 			"lower_arm_l": Vector3(-60, 0, 0),
