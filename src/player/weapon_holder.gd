@@ -30,6 +30,7 @@ var _recall_was_pressed := false
 var _hand: Node3D = null  # XR Tools hand model next to us, if any
 var _hand_anchor: Node3D = null  # follows the weapon; the hand model is pinned to it
 var _hand_pinned := false
+var _pattern_id := 0
 
 
 func _ready() -> void:
@@ -135,6 +136,20 @@ func recall() -> void:
 func pulse(amplitude: float, duration: float) -> void:
 	if _controller:
 		_controller.trigger_haptic_pulse("haptic", 0.0, amplitude, duration, 0.0)
+
+
+## Plays [amplitude, seconds] steps back to back in real time (unaffected by
+## hit-stop and slow motion). A newer pattern cuts off an older one.
+func pulse_pattern(steps: Array) -> void:
+	if _controller == null:
+		return
+	_pattern_id += 1
+	var id := _pattern_id
+	for step in steps:
+		if id != _pattern_id or not is_inside_tree():
+			return
+		pulse(step[0], step[1])
+		await get_tree().create_timer(step[1], true, false, true).timeout
 
 
 func _process(_delta: float) -> void:

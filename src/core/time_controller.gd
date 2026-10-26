@@ -27,6 +27,12 @@ func hit_stop(duration: float, scale: float = 0.05) -> void:
 	_add("hit_stop", scale, duration, false)
 
 
+## A barely-felt catch on medium hits and blade clashes (25–35 ms), so contact
+## has weight without breaking the flow.
+func micro_stop(duration: float, scale: float = 0.3) -> void:
+	_add("micro_stop", scale, duration, false)
+
+
 ## Slow the world down; the player's weapon stays real-time if [param compensate_player].
 func slow_motion(scale: float, duration: float, compensate_player: bool = true) -> void:
 	_add("slow_motion", scale, duration, compensate_player)

@@ -62,6 +62,7 @@ script = ExtResource("1_script")
 blade_start = Vector3(0, 0, -0.15)
 blade_tip = Vector3(0, 0, -1.05)
 weapon_name = "kanabo"
+metal_ring = false
 damage_per_speed = 13.0
 knockback_per_speed = 1.2
 
