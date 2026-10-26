@@ -32,6 +32,8 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 ## Generated in-project (no third-party license)
 - Training dummy, the dummy's bokken, the kanabō, and the **Dojo of the Storm** training arena (`scenes/training_arena.tscn`): built from Godot primitives (`CylinderMesh`, `TorusMesh`, `PlaneMesh`, `SphereMesh`, `BoxMesh`), custom shaders (`src/shaders/*.gdshader`), and the procedural `ImmediateMesh` generator `StormLightning` for branching storm bolts.
 - Blade trails and spark bursts: generated at runtime (`ImmediateMesh`, `CPUParticles3D`).
+- Rain, splashes and blade drips: runtime `GPUParticles3D` with `src/shaders/rain_streak.gdshader`.
+- `assets/audio/generated/*.wav` (rain loop, distant thunder, blade ring): synthesized from noise and sine partials by `tools/gen_storm_audio.py`; no recordings involved.
 
 ## Raw packs available locally (`assets_raw/`, not committed)
 

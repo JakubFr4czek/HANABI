@@ -15,7 +15,7 @@ global uniform vec3 moon_direction;
 global uniform float storm_flash;
 global uniform vec2 storm_flash_dir;
 
-uniform vec3 deep_color : source_color = vec3(0.004, 0.005, 0.011);
+uniform vec3 deep_color : source_color = vec3(0.012, 0.014, 0.026);
 uniform vec3 moon_color : source_color = vec3(0.8, 0.86, 1.0);
 uniform vec3 lightning_tint : source_color = vec3(0.55, 0.72, 1.0);
 
@@ -24,7 +24,7 @@ uniform sampler2D normal_map_b : hint_normal, filter_linear_mipmap, repeat_enabl
 uniform sampler2D sky_panorama : source_color, filter_linear_mipmap, repeat_enable;
 
 uniform float swell_strength : hint_range(0.0, 0.5) = 0.09;
-uniform float rain_strength : hint_range(0.0, 1.0) = 0.32;
+uniform float rain_strength : hint_range(0.0, 1.0) = 0.5;
 uniform float platform_radius = 5.25;
 
 varying vec3 v_world_pos;
@@ -85,6 +85,6 @@ void fragment() {
 
 	vec3 col = mix(deep_color, refl, fresnel);
 	// Raindrop crowns catch a little light close to the viewer.
-	col += vec3(0.05, 0.055, 0.08) * rr.z * 0.6;
+	col += vec3(0.1, 0.11, 0.16) * rr.z * (1.0 + storm_flash * 2.0);
 	ALBEDO = col;
 }

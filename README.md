@@ -9,11 +9,12 @@ The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [
 | Works | Stubbed / temporary |
 |---|---|
 | OpenXR rig (godot-xr-tools): smooth move, snap turn, hands; the hand model stays pinned to the exact grip spot when the blade is stopped (up to 0.3 m from the controller) | |
-| **Dojo of the Storm training arena** (`scenes/training_arena.tscn`, GDD §9): floating wet dark-stone disc on an endless water-mirror floor (shader-faked sky/torii/lightning reflections, no SSR), drifting surface mist, deep violet-to-navy storm sky with silent branching lightning (`StormLightning` mesh + shader), giant torii + tilted half-sunken torii, four-part `桜 雷 墨 影` floor seal, weapon stand, and `LightmapGI` setup | The sakura tree was removed until a better asset is available; run intro levitation and VR comfort options are deferred to later milestones |
+| **Dojo of the Storm training arena** (`scenes/training_arena.tscn`, GDD §9): rain-soaked dark-stone disc with puddles and raindrop rings on an endless black water mirror (shader-faked sky/moon/torii/lightning reflections, no SSR), drifting surface mist, cloud deck lit by a low moon behind the giant vermilion torii, tilted half-sunken torii, branching lightning that lights clouds, fog and water, rain (streaks, splashes, drips off the blade), four-part `桜 雷 墨 影` floor seal, weapon stand, and `LightmapGI` setup | The sakura tree was removed until a better asset is available; run intro levitation and VR comfort options are deferred to later milestones |
 | **Free grip anywhere on the katana** (handle / *tsuka*, guard / *tsuba*, blunt spine of the blade / *mune*) and **two-handed grip** (including half-swording and seamless handoff when releasing either hand) | |
 | **Katana on a PD controller** (force + torque, stable PD): weight and inertia matter, a heavy **kanabō** visibly lags behind one hand and responds faster when held two-handed | Katana is the Grab3D model; kanabō is built from primitives |
 | No clipping (CCD) and **no bulldozing**: when the blade is held back the arm gives way (strength drops to 30%), with a light haptic buzz | |
-| **Hit-stop** 50–80 ms on hits ≥ 40 damage, haptics scaled by impact | |
+| **Hit-stop** 50–80 ms on hits ≥ 40 damage, **micro hit-stop** 25–35 ms (partial slow-down) on medium hits and blade clashes; **haptic patterns** per event (hit, clash, parry with a softer echo in the free hand) | |
+| **Storm audio**: stereo rain bed, distant thunder 1–2.5 s after each flash from the bolt's direction, steel ring on metal clashes/parries/cuts, open-air reverb on all positional sounds | Rain, thunder and steel ring are synthesized placeholders (`tools/gen_storm_audio.py`) until real recordings are added |
 | **Blade trail** (CPU ribbon, works on Quest's Compatibility renderer) colored by element: none / sakura / storm / ink / shadow | Elements change the trail color and highlight their quadrant on the `桜 雷 墨 影` floor seal (abilities come in milestone 3) |
 | **Parry**: the dummy can attack (telegraphed overhead cut); meeting its attacking blade fast enough and across it (≥ 25°) is a parry: sparks, compensated slow-mo ×0.3 for 0.6 s (your blade stays real-time), dummy stunned, **counter window** 1.5 s with ×1.5 damage | Only the dummy attacks; it does not damage the player (no player HP yet) |
 | **Active ragdoll training dummy** with its own physics bokken: staggers, falls, gets up | Dummy is built from primitives, not the Quaternius mesh |
@@ -68,7 +69,7 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/grip_stability_test.tscn -
   - the katana keeps real-time tracking during slow-mo;
   - free grip on the handle (*tsuka*), guard (*tsuba*) and blunt side of the blade (*mune*, snapping away from the cutting edge);
   - two-handed grip (second hand attaches without releasing the first, steers the weapon between both hands, boosts force/torque on heavy weapons, and seamlessly hands off to the remaining hand when either hand lets go);
-  - Dojo of the Storm arena nodes (water, mist, fog) and the procedural storm lightning flash.
+  - Dojo of the Storm arena nodes (water, mist, fog), the lightning flash (global `storm_flash`, fog and ambient brighten, flash light switched off afterwards), rain setup, thunder after a strike, audio buses, and the micro hit-stop.
 - `grip_stability_test` checks that the katana and kanabō (one- and two-handed, at 72 and 90 Hz, with simulated tracking noise) hold still without oscillating, that a heavy body slamming into the blade or a kick at the tip does not knock it out of the hand, that a weapon flying off past 0.4 m is put back in the hand, that weapons ignore the player's own bodies, and that the VR hand model never drifts more than 0.3 m from the controller.
 
 All exit with code 0 when all checks pass. `res://tests/screenshots.tscn -- --desktop --shots /tmp/shots` renders screenshots. `tests/diag/` holds small diagnostic scenes, e.g. the Jolt joint-limit sign check and slow-mo tracking.
@@ -165,14 +166,37 @@ assets_raw/        original downloaded packs (git-ignored, Godot-ignored)
 data/enemies/      EnemyProfile resources (stats, resistances, tactics as data)
 docs/              GDD and brief
 scenes/            training_arena, test_room, player rigs, weapons
-src/core/          GameEvents (event log), TimeController (hit-stop, slow-mo), Elements, Sfx, test room, StormLightning
-src/shaders/       Dojo of the Storm shaders (sky dome, water mirror, water mist, stone platform, spawn seal, lightning bolt)
+src/core/          GameEvents (event log), TimeController (hit-stop, micro-stop, slow-mo), Elements, Sfx (+ audio buses), test room, StormLightning, StormAmbience
+src/shaders/       Dojo of the Storm shaders (sky, sky dome, water mirror, water mist, stone platform, spawn seal, lightning bolt, rain) and shared materials (wet_surface, katana_steel)
+src/vfx/           StormRain (rain streaks, splashes, blade drips)
+tools/             offline generators (gen_storm_audio.py → assets/audio/generated/)
 src/player/        XR rig, desktop rig, WeaponHolder (grab/recall/haptics)
 src/weapons/       BladeBody (blade, element, pre-impact velocity), HeldWeapon (PD follow, hits, clashes, parry), BladeTrail
 src/enemies/       ActiveRagdoll, TrainingDummy, EnemyBrain / DummyBrain, EnemyProfile
 src/debug/         hit debug panel, damage numbers, spark bursts
 tests/             headless physics test, screenshots, diagnostics
 ```
+
+## Look & feel (Quest 3, Compatibility renderer)
+The target is a realistic, cinematic night storm ("premium, never cheap", GDD §9), within 72+ fps on Quest 3. Everything below runs without post-processing that Compatibility lacks.
+- **Tonemapping and grade:** ACES, exposure 1.1. Compatibility has no LUT pass, so the grade lives in the palette: violet/navy fog and sky, cold moonlight, and only a few strong accents (vermilion torii, the active element's neon on the seal, sparks, lightning).
+- **Light:** one directional moon, low behind the giant torii, so silhouettes read against brighter fog. Ambient comes from a flat color, reflections from a static sky shader (`storm_sky.gdshader`, radiance only). The lightning light exists only while a strike is visible.
+- **Glow:** only HDR emission blooms (threshold 1.15), on desktop. Glow is an extra full-screen pass, so it is switched off on Android/Quest.
+- **Materials:** everything is PBR and wet. `wet_surface.gdshader` darkens surfaces and lowers roughness, runs rain streaks down them, adds grime at the waterline, wood grain, a rim, and a cheap fill term that keeps backlit props readable without another light pass. The katana is polished steel with rain beads and a black/white silk wrap. Stone puddles are near-mirrors with raindrop rings.
+- **Storm:** the global shader uniforms `storm_flash`, `storm_flash_dir`, `moon_direction` and `storm_fog_color` (in `project.godot`) let sky, water, mist, seal, katana and rain all react to one lightning strike. The fog and ambient brighten with it.
+- **No camera motion of any kind** (no head-bob or shake): VR comfort.
+- **LightmapGI must be baked by hand:** Godot has no scripting API for baking. Open `scenes/training_arena.tscn`, select `Arena/LightmapGI`, click **Bake Lightmaps**, then commit the generated `.lmbake`. Until then the arena uses the moon light and ambient only.
+- **Performance still has to be measured on the device** (OVR Metrics Tool, GPU level, frame timing). Main suspects if it drops below 72 fps: fog plus the water shader's fill rate, the 1400 rain streaks, and the moon shadow (orthogonal, 14 m).
+
+### Needed assets (to go from good to premium)
+No external assets were added for this pass. These would raise quality the most:
+1. **Training dummy model:** a rigged wooden makiwara or wara-ningyō dummy with PBR textures, to replace the primitive capsules.
+2. **Torii and stone lanterns:** high-poly or normal-mapped PBR versions (weathered vermilion lacquer, wet granite), to replace the low-poly CC0 models.
+3. **Weapon stand and sword table:** lacquered wood, PBR.
+4. **Stone tiling textures** (albedo, normal, roughness) for the platform: wet basalt or granite slabs.
+5. **Audio recordings:** heavy rain on stone and water (stereo loop), distant thunder rolls (3–5), katana draw and cut whooshes, steel-on-steel clashes and rings, wood bokken hits.
+6. **Night-sky HDRI** with clouds (for example from Poly Haven), to bake a richer reflection cubemap.
+7. **Sakura tree** (stylized-realistic, with alpha-tested petals that fit the Quest budget), to bring back the tree that was removed.
 
 ## How the physics works (short)
 - **Katana:** a `RigidBody3D` driven by a stable PD controller.
