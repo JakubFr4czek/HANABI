@@ -9,6 +9,8 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 
 ## Assets in the game
 - Katana model: **Grab3D** (grab3d.com, CC0)
+- Torii gate model: **Quaternius** (poly.pizza, CC0)
+- Stone lantern model: **Kay Lousberg** (poly.pizza, CC0)
 - Sword swing and clash sounds: **StarNinjas** (OpenGameArt, CC0)
 - Impact sounds: **Kenney** (kenney.nl, CC0)
 

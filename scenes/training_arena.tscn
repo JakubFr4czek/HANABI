@@ -1,0 +1,371 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/core/test_room.gd" id="1_room"]
+[ext_resource type="Script" path="res://src/enemies/training_dummy.gd" id="2_dummy"]
+[ext_resource type="Resource" path="res://data/enemies/training_dummy.tres" id="3_profile"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/katana.tscn" id="4_sword"]
+[ext_resource type="Script" path="res://src/debug/hit_debug_panel.gd" id="5_panel"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/kanabo.tscn" id="6_kanabo"]
+[ext_resource type="Shader" path="res://src/shaders/storm_sky_dome.gdshader" id="7_sky_shader"]
+[ext_resource type="Shader" path="res://src/shaders/water_mirror.gdshader" id="8_water_shader"]
+[ext_resource type="Shader" path="res://src/shaders/stone_platform.gdshader" id="9_stone_shader"]
+[ext_resource type="Shader" path="res://src/shaders/spawn_seal.gdshader" id="10_seal_shader"]
+[ext_resource type="Shader" path="res://src/shaders/sakura_petal.gdshader" id="11_petal_shader"]
+[ext_resource type="Script" path="res://src/core/storm_lightning.gd" id="12_lightning"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/Torii_Gate_Quaternius.glb" id="13_torii"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/Lantern_KayLousberg.glb" id="14_lantern"]
+[ext_resource type="Script" path="res://src/core/sakura_tree_generator.gd" id="15_sakura_gen"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMat"]
+sky_top_color = Color(0.035, 0.02, 0.085, 1)
+sky_horizon_color = Color(0.03, 0.04, 0.095, 1)
+ground_bottom_color = Color(0.012, 0.016, 0.036, 1)
+ground_horizon_color = Color(0.03, 0.04, 0.095, 1)
+
+[sub_resource type="Sky" id="Sky_storm"]
+sky_material = SubResource("ProceduralSkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky_storm")
+ambient_light_source = 2
+ambient_light_color = Color(0.24, 0.22, 0.38, 1)
+ambient_light_energy = 0.65
+tonemap_mode = 2
+glow_enabled = true
+glow_intensity = 0.34
+glow_strength = 0.78
+glow_bloom = 0.04
+fog_enabled = true
+fog_light_color = Color(0.035, 0.03, 0.075, 1)
+fog_density = 0.016
+fog_sky_affect = 0.25
+
+[sub_resource type="ShaderMaterial" id="Mat_SkyDome"]
+render_priority = -100
+shader = ExtResource("7_sky_shader")
+
+[sub_resource type="SphereMesh" id="Mesh_SkyDome"]
+radius = 125.0
+height = 250.0
+radial_segments = 48
+rings = 24
+
+[sub_resource type="ShaderMaterial" id="Mat_WaterMirror"]
+shader = ExtResource("8_water_shader")
+
+[sub_resource type="CylinderMesh" id="Mesh_WaterMirror"]
+top_radius = 110.0
+bottom_radius = 110.0
+height = 0.02
+radial_segments = 64
+rings = 1
+
+[sub_resource type="ShaderMaterial" id="Mat_StonePlatform"]
+shader = ExtResource("9_stone_shader")
+
+[sub_resource type="CylinderMesh" id="Mesh_PlatformDisc"]
+top_radius = 5.25
+bottom_radius = 4.75
+height = 0.44
+radial_segments = 64
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="Mat_DarkStoneTrim"]
+albedo_color = Color(0.055, 0.06, 0.085, 1)
+metallic = 0.15
+roughness = 0.55
+
+[sub_resource type="TorusMesh" id="Mesh_PlatformRim"]
+material = SubResource("Mat_DarkStoneTrim")
+inner_radius = 5.08
+outer_radius = 5.34
+rings = 64
+ring_segments = 16
+
+[sub_resource type="BoxMesh" id="Mesh_NorthThreshold"]
+material = SubResource("Mat_DarkStoneTrim")
+size = Vector3(5.4, 0.24, 0.18)
+
+[sub_resource type="ShaderMaterial" id="Mat_SpawnSeal"]
+render_priority = 1
+shader = ExtResource("10_seal_shader")
+
+[sub_resource type="PlaneMesh" id="Mesh_SpawnSeal"]
+size = Vector2(3.4, 3.4)
+
+[sub_resource type="ShaderMaterial" id="Mat_SakuraPetal"]
+render_priority = 2
+shader = ExtResource("11_petal_shader")
+
+[sub_resource type="ParticleProcessMaterial" id="ProcMat_SakuraPetals"]
+emission_shape = 3
+emission_box_extents = Vector3(1.85, 0.65, 1.85)
+direction = Vector3(0.42, -1, 0.28)
+spread = 32.0
+initial_velocity_min = 0.18
+initial_velocity_max = 0.42
+angular_velocity_min = -80.0
+angular_velocity_max = 80.0
+gravity = Vector3(0.14, -0.26, 0.09)
+scale_min = 0.032
+scale_max = 0.058
+
+[sub_resource type="QuadMesh" id="Mesh_SakuraPetal"]
+material = SubResource("Mat_SakuraPetal")
+size = Vector2(0.065, 0.065)
+
+[sub_resource type="StandardMaterial3D" id="Mat_LacquerStand"]
+albedo_color = Color(0.09, 0.05, 0.06, 1)
+metallic = 0.25
+roughness = 0.38
+
+[sub_resource type="StandardMaterial3D" id="Mat_CrimsonTrim"]
+albedo_color = Color(0.55, 0.08, 0.09, 1)
+roughness = 0.45
+
+[sub_resource type="BoxShape3D" id="Shape_Floor"]
+size = Vector3(10.6, 1.0, 10.6)
+
+[sub_resource type="BoxShape3D" id="Shape_WallNorth"]
+size = Vector3(10.6, 3.5, 0.3)
+
+[sub_resource type="BoxShape3D" id="Shape_WallSouth"]
+size = Vector3(10.6, 3.5, 0.3)
+
+[sub_resource type="BoxShape3D" id="Shape_WallEast"]
+size = Vector3(0.3, 3.5, 10.0)
+
+[sub_resource type="BoxShape3D" id="Shape_WallWest"]
+size = Vector3(0.3, 3.5, 10.0)
+
+[sub_resource type="BoxShape3D" id="Shape_SwordTable"]
+size = Vector3(1.4, 0.9, 0.5)
+
+[sub_resource type="BoxMesh" id="Mesh_SwordTableTop"]
+material = SubResource("Mat_LacquerStand")
+size = Vector3(1.4, 0.08, 0.5)
+
+[sub_resource type="BoxMesh" id="Mesh_SwordTableLeg"]
+material = SubResource("Mat_LacquerStand")
+size = Vector3(0.12, 0.84, 0.44)
+
+[sub_resource type="BoxMesh" id="Mesh_SwordTableBeam"]
+material = SubResource("Mat_CrimsonTrim")
+size = Vector3(1.32, 0.06, 0.08)
+
+[node name="TestRoom" type="Node3D"]
+script = ExtResource("1_room")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Moon" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.4096, 0.2868, 0, 0.5736, 0.8192, -0.5, -0.7094, 0.4967, 0, 8, 0)
+light_color = Color(0.56, 0.64, 0.96, 1)
+light_energy = 0.52
+light_bake_mode = 1
+shadow_enabled = true
+
+[node name="SakuraGlowLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.9, 2.35, -1.9)
+light_color = Color(0.92, 0.22, 0.56, 1)
+light_energy = 0.58
+light_bake_mode = 1
+omni_range = 6.2
+omni_attenuation = 1.35
+
+[node name="ToriiAccentLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.2, -8.5)
+light_color = Color(0.92, 0.24, 0.34, 1)
+light_energy = 1.15
+light_bake_mode = 1
+omni_range = 12.0
+
+[node name="StandWarmLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4, 1.85, 1.4)
+light_color = Color(0.95, 0.58, 0.35, 1)
+light_energy = 0.85
+light_bake_mode = 1
+omni_range = 4.5
+
+[node name="Arena" type="Node3D" parent="."]
+
+[node name="LightmapGI" type="LightmapGI" parent="Arena"]
+quality = 1
+bounces = 2
+
+[node name="SkyDome" type="MeshInstance3D" parent="Arena"]
+material_override = SubResource("Mat_SkyDome")
+cast_shadow = 0
+mesh = SubResource("Mesh_SkyDome")
+
+[node name="WaterMirror" type="MeshInstance3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, 0)
+material_override = SubResource("Mat_WaterMirror")
+cast_shadow = 0
+mesh = SubResource("Mesh_WaterMirror")
+
+[node name="PlatformDisc" type="MeshInstance3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.22, 0)
+material_override = SubResource("Mat_StonePlatform")
+gi_mode = 1
+mesh = SubResource("Mesh_PlatformDisc")
+
+[node name="PlatformRim" type="MeshInstance3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.03, 0)
+gi_mode = 1
+mesh = SubResource("Mesh_PlatformRim")
+
+[node name="NorthThreshold" type="MeshInstance3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, -5.02)
+gi_mode = 1
+mesh = SubResource("Mesh_NorthThreshold")
+
+[node name="SpawnSeal" type="MeshInstance3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.004, 0)
+material_override = SubResource("Mat_SpawnSeal")
+cast_shadow = 0
+mesh = SubResource("Mesh_SpawnSeal")
+
+[node name="StormLightning" type="MeshInstance3D" parent="Arena"]
+script = ExtResource("12_lightning")
+
+[node name="LightningFlashLight" type="DirectionalLight3D" parent="Arena"]
+transform = Transform3D(0.9397, -0.171, 0.2962, 0, 0.866, 0.5, -0.342, -0.4698, 0.8138, 0, 14, -20)
+light_color = Color(0.42, 0.72, 1, 1)
+light_energy = 0.0
+
+[node name="ToriiGates" type="Node3D" parent="Arena"]
+
+[node name="GiantTorii" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
+transform = Transform3D(2.35, 0, 0, 0, 2.35, 0, 0, 0, 2.35, 0, -0.45, -10.5)
+
+[node name="SunkenTorii0" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
+transform = Transform3D(0.8229, -0.1813, -0.4366, 0.1602, 0.9325, -0.085, 0.4448, -0.0052, 0.8388, -8.5, -1.35, -7.2)
+
+[node name="SunkenTorii1" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
+transform = Transform3D(0.7946, 0.2025, 0.3705, -0.1835, 0.8769, -0.0856, -0.3803, -0.004, 0.8157, 8.8, -1.55, -6.8)
+
+[node name="SunkenTorii2" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
+transform = Transform3D(0.3134, -0.2718, -0.9642, 0.2585, 1.0142, -0.1862, 0.9679, -0.1661, 0.3027, -12.5, -1.8, 0.8)
+
+[node name="SunkenTorii3" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
+transform = Transform3D(0.3136, 0.1476, 0.7763, -0.1369, 0.8371, -0.0553, -0.7783, -0.0205, 0.3177, 11.8, -1.65, 1.5)
+
+[node name="SunkenTorii4" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
+transform = Transform3D(-0.5488, 0.1935, -0.5488, 0.1369, 0.7761, -0.1369, 0.5657, 0, -0.5657, -7.2, -1.95, 8.6)
+
+[node name="SunkenTorii5" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
+transform = Transform3D(-0.6782, -0.183, 0.53, -0.1442, 0.8607, 0.1127, -0.5419, 0, -0.6935, 7.6, -1.75, 9.2)
+
+[node name="SunkenTorii6" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
+transform = Transform3D(1.1736, 0.1877, 0.1649, -0.1859, 1.1852, -0.0261, -0.167, 0, 1.1883, 4.2, -2.1, -17.5)
+
+[node name="Lanterns" type="Node3D" parent="Arena"]
+
+[node name="LanternLeft" parent="Arena/Lanterns" instance=ExtResource("14_lantern")]
+transform = Transform3D(1.45, 0, 0, 0, 1.45, 0, 0, 0, 1.45, -2.35, 0, -4.65)
+
+[node name="LanternRight" parent="Arena/Lanterns" instance=ExtResource("14_lantern")]
+transform = Transform3D(1.45, 0, 0, 0, 1.45, 0, 0, 0, 1.45, 2.35, 0, -4.65)
+
+[node name="SakuraTree" type="Node3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.55, 0, -2.35)
+script = ExtResource("15_sakura_gen")
+
+[node name="SakuraPetals" type="GPUParticles3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.85, 2.95, -1.85)
+cast_shadow = 0
+amount = 64
+lifetime = 6.5
+preprocess = 3.0
+visibility_aabb = AABB(-6, -4, -6, 12, 6, 12)
+process_material = SubResource("ProcMat_SakuraPetals")
+draw_pass_1 = SubResource("Mesh_SakuraPetal")
+
+[node name="Room" type="Node3D" parent="."]
+
+[node name="Floor" type="StaticBody3D" parent="Room"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+
+[node name="Shape" type="CollisionShape3D" parent="Room/Floor"]
+shape = SubResource("Shape_Floor")
+
+[node name="WallNorth" type="StaticBody3D" parent="Room"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.75, -5.15)
+
+[node name="Shape" type="CollisionShape3D" parent="Room/WallNorth"]
+shape = SubResource("Shape_WallNorth")
+
+[node name="WallSouth" type="StaticBody3D" parent="Room"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.75, 5.15)
+
+[node name="Shape" type="CollisionShape3D" parent="Room/WallSouth"]
+shape = SubResource("Shape_WallSouth")
+
+[node name="WallEast" type="StaticBody3D" parent="Room"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.15, 1.75, 0)
+
+[node name="Shape" type="CollisionShape3D" parent="Room/WallEast"]
+shape = SubResource("Shape_WallEast")
+
+[node name="WallWest" type="StaticBody3D" parent="Room"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.15, 1.75, 0)
+
+[node name="Shape" type="CollisionShape3D" parent="Room/WallWest"]
+shape = SubResource("Shape_WallWest")
+
+[node name="SwordTable" type="StaticBody3D" parent="Room"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0, 0.45, 1.4)
+
+[node name="TopMesh" type="MeshInstance3D" parent="Room/SwordTable"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.41, 0)
+gi_mode = 1
+mesh = SubResource("Mesh_SwordTableTop")
+
+[node name="LegLeft" type="MeshInstance3D" parent="Room/SwordTable"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.56, -0.03, 0)
+gi_mode = 1
+mesh = SubResource("Mesh_SwordTableLeg")
+
+[node name="LegRight" type="MeshInstance3D" parent="Room/SwordTable"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.56, -0.03, 0)
+gi_mode = 1
+mesh = SubResource("Mesh_SwordTableLeg")
+
+[node name="CrossBeam" type="MeshInstance3D" parent="Room/SwordTable"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)
+gi_mode = 1
+mesh = SubResource("Mesh_SwordTableBeam")
+
+[node name="Shape" type="CollisionShape3D" parent="Room/SwordTable"]
+shape = SubResource("Shape_SwordTable")
+
+[node name="TrainingDummy" type="Node3D" parent="."]
+script = ExtResource("2_dummy")
+profile = ExtResource("3_profile")
+
+[node name="Katana" parent="." instance=ExtResource("4_sword")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.45, 0.95, 1.3)
+
+[node name="Kanabo" parent="." instance=ExtResource("6_kanabo")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 1.5, 0.98, 1.52)
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.8)
+
+[node name="HitDebugPanel" type="Node3D" parent="."]
+transform = Transform3D(0.9397, 0, 0.342, 0, 1, 0, -0.342, 0, 0.9397, -3.1, 2.35, -4.3)
+script = ExtResource("5_panel")
+dummy_path = NodePath("../TrainingDummy")
+
+[node name="HelpLabel" type="Label3D" parent="."]
+transform = Transform3D(0.9397, 0, -0.342, 0, 1, 0, 0.342, 0, 0.9397, 2.3, 2.35, -4.3)
+pixel_size = 0.0022
+text = "DOJO OF THE STORM — CONTROLS\nVR: left stick move, right stick turn\n    hold GRIP on handle/tsuba/blade spine (1H or 2H)\n    GRIP + B/Y: recall a weapon\n    B/Y (no grip): dummy attacks on/off\n    stick click: change element\n    A/X: reset the dummy\nDesktop: see the top-left of the window"
+font_size = 32
+outline_size = 8
+horizontal_alignment = 0
+vertical_alignment = 0
+modulate = Color(0.8, 0.85, 0.95, 1)

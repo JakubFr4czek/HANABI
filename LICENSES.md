@@ -26,10 +26,12 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/audio/sfx/sword_clash/sword_clash.*.ogg` | same pack | StarNinjas | CC0 |
 | `assets/audio/sfx/impact/impactPlank_medium_*.ogg`, `impactPunch_heavy_*.ogg` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 |
 | `assets/models/weapons/katana_grab3d/katana.glb` | https://grab3d.com/models/weapons/katana/ | Grab3D | CC0 1.0 |
+| `assets/models/environment/Torii_Gate_Quaternius.glb` | https://poly.pizza/m/7SyXZ62xR5 | Quaternius | CC0 |
+| `assets/models/environment/Lantern_KayLousberg.glb` | https://poly.pizza/m/CtHBJ1ufeW | Kay Lousberg | CC0 |
 
 ## Generated in-project (no third-party license)
-- Training dummy, the dummy's bokken, the kanabō and the test room: built from Godot primitives (`CapsuleMesh`, `BoxMesh`, `CylinderMesh`, `TorusMesh`) in `scenes/` and `src/`.
-- Blade trails and spark bursts: generated at runtime (`ImmediateMesh`, `CPUParticles3D`).
+- Training dummy, the dummy's bokken, the kanabō, and the **Dojo of the Storm** training arena (`scenes/training_arena.tscn`): built from Godot primitives (`CylinderMesh`, `TorusMesh`, `PlaneMesh`, `SphereMesh`, `BoxMesh`), custom shaders (`src/shaders/*.gdshader`), and procedural `MultiMesh` / `ImmediateMesh` generators (`SakuraTreeGenerator` for the gnarled dark-bark sakura tree + lacy blossom clusters, `StormLightning` for branching storm bolts).
+- Blade trails, liquid-glass sakura petals, and spark bursts: generated at runtime (`ImmediateMesh`, `GPUParticles3D`, `CPUParticles3D`).
 
 ## Raw packs available locally (`assets_raw/`, not committed)
 
