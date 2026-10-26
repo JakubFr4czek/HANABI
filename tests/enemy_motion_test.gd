@@ -128,6 +128,10 @@ func _test_no_jitter_while_circling() -> void:
 			h[1] = h[0]
 			h[0] = w
 	var mean := total / maxf(samples, 1)
+	var per := {}
+	for name in LIMBS:
+		per[name] = roundi(float(per_limb.get(name, 0.0)) / maxf(samples / LIMBS.size(), 1))
+	print("    per limb: %s" % [per])
 	var legs := (float(per_limb.upper_leg_l) + float(per_limb.upper_leg_r)) / 2.0 / maxf(samples / LIMBS.size(), 1)
 	print("    circling: mean limb jerk %.0f rad/s³ (legs %.0f), worst %.0f rad/s³" % [mean, legs, worst])
 	_check("circling without shivering (mean limb jerk %.0f rad/s³ < 1500)" % mean, mean < 1500.0)

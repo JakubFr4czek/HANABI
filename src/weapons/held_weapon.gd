@@ -188,6 +188,9 @@ var _impact_this_tick := false
 ## power window, updated every physics tick while held.
 var hand_speed := 0.0
 var hand_travel := 0.0
+## Physics frame of the last teleport into the hand (not a swing: observers
+## should not read that jump as blade speed).
+var teleported_frame := -100
 var _hand_hist: Array = []  # [segment length, real dt] per tick, newest last
 var _prev_hand := Vector3.INF
 # Velocity change the arm and gravity were expected to cause in the last step.
@@ -707,6 +710,7 @@ func snap_to_hand() -> void:
 
 
 func _teleport_to(target: Transform3D) -> void:
+	teleported_frame = Engine.get_physics_frames()
 	global_transform = target
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO

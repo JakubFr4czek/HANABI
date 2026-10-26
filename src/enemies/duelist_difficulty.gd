@@ -19,15 +19,24 @@ extends Resource
 @export var max_combo := 2
 ## Chance that a wind-up is a feint that switches into a different attack.
 @export var feint_chance := 0.15
-## Chance to raise a block against an incoming player swing.
-@export var block_chance := 0.55
+## Chance to read an incoming player swing and lay the guard across it.
+@export var block_chance := 0.7
 ## Chance to step back out of reach of a swing instead (rolled after the block).
 @export var evade_chance := 0.2
 ## Chance to answer a successful block with an immediate counter-attack. A
 ## block raised early enough to deflect the swing (a parry) doubles it.
-@export var riposte_chance := 0.4
-## Seconds before the enemy reacts to a player swing (lower = sharper).
-@export var reaction_time := 0.2
+@export var riposte_chance := 0.55
+## Perception lag (s): the enemy acts on where the player's blade was this long
+## ago, extrapolated. Lower = sharper reads of fast or curving swings.
+@export var reaction_time := 0.18
+## Chance to read a cut the player is loading (sword lifted, or drawn back to
+## a side) and move the guard to cover that line before the cut starts.
+@export var anticipation := 0.8
+## How fast the sword arm may move (1 = ~400°/s of joint motion).
+@export var arm_speed := 1.0
+## Swing power (0..1, how much arm is behind it) that beats this guard aside
+## instead of being parried. Higher = sturdier guard.
+@export var guard_strength := 0.6
 ## Chance to hold a finished wind-up a moment longer before striking, so the
 ## rhythm cannot be timed by counting.
 @export var hesitate_chance := 0.25
@@ -37,6 +46,8 @@ extends Resource
 @export var move_speed := 1.0
 ## 0..1: tendency to press forward rather than circle and wait.
 @export var aggression := 0.5
+## Multiplies the damage a hit must do to interrupt a wind-up (poise).
+@export var interrupt_scale := 1.0
 ## Seconds staggered after the player parries an attack.
 @export var stagger_time := 1.3
 
@@ -52,11 +63,15 @@ static func preset(name: String) -> DuelistDifficulty:
 			d.combo_chance = 0.1
 			d.max_combo = 1
 			d.feint_chance = 0.0
-			d.block_chance = 0.2
+			d.block_chance = 0.35
 			d.evade_chance = 0.1
-			d.riposte_chance = 0.0
+			d.riposte_chance = 0.15
 			d.hesitate_chance = 0.1
-			d.reaction_time = 0.4
+			d.arm_speed = 0.7
+			d.guard_strength = 0.45
+			d.anticipation = 0.35
+			d.interrupt_scale = 0.8
+			d.reaction_time = 0.32
 			d.damage_scale = 0.6
 			d.move_speed = 0.8
 			d.aggression = 0.3
@@ -68,10 +83,14 @@ static func preset(name: String) -> DuelistDifficulty:
 			d.combo_chance = 0.6
 			d.max_combo = 3
 			d.feint_chance = 0.3
-			d.block_chance = 0.75
-			d.evade_chance = 0.15
-			d.riposte_chance = 0.6
+			d.block_chance = 0.88
+			d.evade_chance = 0.08
+			d.riposte_chance = 0.75
 			d.hesitate_chance = 0.35
+			d.arm_speed = 1.25
+			d.guard_strength = 0.75
+			d.anticipation = 1.0
+			d.interrupt_scale = 1.6
 			d.reaction_time = 0.14
 			d.damage_scale = 1.4
 			d.move_speed = 1.3
