@@ -61,6 +61,8 @@ const BODY_MASK := 1 | 2 | 4
 ## [member sway_poses]: a living guard instead of a frozen one.
 @export var idle_sway_deg := 0.0
 @export var sway_poses: PackedStringArray = ["guard", "idle"]
+## Seconds to fade procedural (IK) joint targets in or out.
+@export var ik_fade_time := 0.22
 
 var parts := {}  # name -> RagdollPart
 var state := State.STANDING
@@ -93,6 +95,13 @@ var _sway_time := 0.0
 var _sway_weight := 0.0  # 0..1, eases in and out with the sway poses
 var _sway_phase := {}  # part name -> Vector3 random phases
 var _pose_rng := RandomNumberGenerator.new()
+## Procedural joint targets (part -> Quaternion relative to the parent, e.g.
+## from [SwordArmIK]) that override the pose by [member ik_weight].
+var ik_targets := {}
+var ik_weight := 0.0
+var _ik_weight_target := 0.0
+var _final := {}  # part -> final local target this tick (pose, sway, IK)
+var _final_prev := {}
 
 const _EASES := ["inout", "in", "out"]
 
@@ -345,6 +354,13 @@ func set_pose(pose_name: String) -> void:
 		_variation[part_name] = Basis.from_euler(e).get_rotation_quaternion()
 
 
+## Drive [param targets] (part -> local Quaternion) instead of the pose for
+## those parts, fading to [param weight] over [member ik_fade_time].
+func set_ik(targets: Dictionary, weight: float) -> void:
+	ik_targets = targets
+	_ik_weight_target = clampf(weight, 0.0, 1.0)
+
+
 ## Seed the random pose variation and sway (tests, replays).
 func set_motion_seed(value: int) -> void:
 	_pose_rng.seed = value
@@ -365,6 +381,9 @@ func reset_body() -> void:
 	_target_yaw = _facing_yaw
 	_yaw_rate = 0.0
 	_joint_blends.clear()
+	_final.clear()
+	_final_prev.clear()
+	ik_weight = 0.0
 	var root_xf := Transform3D(Basis(Vector3.UP, _facing_yaw), global_position)
 	for part_name in _order:
 		var p: RagdollPart = parts[part_name]
@@ -449,6 +468,9 @@ func _drive_joints(delta: float) -> void:
 	_sway_time += delta
 	var sway_on := idle_sway_deg > 0.0 and state == State.STANDING and sway_poses.has(current_pose)
 	_sway_weight = move_toward(_sway_weight, 1.0 if sway_on else 0.0, delta * 1.5)
+	var ik_on := _ik_weight_target if state == State.STANDING else 0.0
+	ik_weight = move_toward(ik_weight, ik_on, delta / maxf(ik_fade_time, 0.01))
+	_update_final_targets()
 	for part_name in _order:
 		var def: Dictionary = _defs[part_name]
 		if def.get("parent", "") == "":
@@ -457,11 +479,10 @@ func _drive_joints(delta: float) -> void:
 		var parent: RagdollPart = parts[def.parent]
 		var blend: JointBlend = _joint_blends[part_name]
 		var q_parent := parent.global_basis.get_rotation_quaternion()
-		var q_target := q_parent * blend.now
-		if _sway_weight > 0.0:
-			q_target = q_target * _sway(part_name)
+		var q_local: Quaternion = _final[part_name]
+		var q_target := q_parent * q_local
 		# Feed-forward: follow the moving target instead of only chasing its error.
-		var omega_ff := q_parent * (_rotation_error(blend.now, blend.prev) / delta)
+		var omega_ff := q_parent * (_rotation_error(q_local, _final_prev.get(part_name, q_local)) / delta)
 		var omega_des := (omega_ff + _rotation_error(q_target, child.global_basis.get_rotation_quaternion()) * (joint_stiffness * k)).limit_length(max_speed)
 		var omega_rel := child.angular_velocity - parent.angular_velocity
 		var dw := (omega_des - omega_rel) * (joint_gain * muscle)
@@ -472,6 +493,24 @@ func _drive_joints(delta: float) -> void:
 		if muscle_reaction > 0.0:
 			parent.apply_impulse(-reaction[0] * muscle_reaction, pivot - parent.global_position)
 			parent.apply_torque_impulse(-reaction[1] * muscle_reaction)
+
+
+## Final local target of every joint this tick: the blended pose (with its
+## random variation), the guard's sway, then the procedural targets on top.
+func _update_final_targets() -> void:
+	_final_prev = _final.duplicate()
+	for part_name in _order:
+		var blend: JointBlend = _joint_blends.get(part_name)
+		if blend == null:
+			continue
+		var q: Quaternion = blend.now
+		if _sway_weight > 0.0:
+			q = q * _sway(part_name)
+		if ik_weight > 0.0 and ik_targets.has(part_name):
+			q = q.slerp(ik_targets[part_name], ik_weight)
+		_final[part_name] = q
+	if _final_prev.is_empty():
+		_final_prev = _final.duplicate()
 
 
 ## Smooth drift of one joint for the living guard: two slow sines per axis
@@ -581,8 +620,7 @@ func _drive_balance(delta: float) -> void:
 	var upper := _upright_part()
 	if upper != "":
 		var chest: RagdollPart = parts[upper]
-		var chest_blend: JointBlend = _joint_blends.get(upper)
-		var q_upper: Quaternion = q_facing * (chest_blend.now if chest_blend else Quaternion.IDENTITY)
+		var q_upper: Quaternion = q_facing * (_final.get(upper, Quaternion.IDENTITY) as Quaternion)
 		var dw_upper := (_rotation_error(q_upper, chest.global_basis.get_rotation_quaternion()) * upright_stiffness - chest.angular_velocity) * (upright_gain * balance)
 		_rotate_subtree(_subtree[upper], _joint_world(upper), dw_upper, 800.0 * delta)
 

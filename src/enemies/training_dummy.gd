@@ -25,6 +25,13 @@ const BURST_ACCEL := 25.0
 var hp := 100.0
 var brain: EnemyBrain
 var sword: BladeBody
+## Procedural sword arm: the brain asks for a blade line ("guard_line" intent)
+## and the arm reaches for it continuously instead of jumping between poses.
+var arm_ik: SwordArmIK
+## IK iterations per physics tick.
+var ik_iterations := 2
+## [start, dir] (world) that overrides the brain's blade line (tests, debug).
+var forced_blade_line: Array = []
 
 ## Spot the dummy returns to when not sparring, and how far it may roam from it.
 var home_position := Vector3.ZERO
@@ -81,6 +88,8 @@ func _ready() -> void:
 	brain.setup(self, profile)
 	if hold_sword:
 		equip_sword()
+	arm_ik = SwordArmIK.new()
+	arm_ik.setup(self, _rest_grip(), sword, _define_poses()["guard"])
 	state_changed.connect(_on_state_changed)
 
 
@@ -413,8 +422,23 @@ func equip_sword() -> void:
 ## forearm to horizontal, the blade ends up pointing up-forward.
 func _sword_grip_transform() -> Transform3D:
 	var forearm: RagdollPart = parts["lower_arm_r"]
-	var rest_grip := Transform3D(Basis.looking_at(Vector3(0, -0.71, 0.71), Vector3.BACK), Vector3(-0.25, 0.86, 0.02))
-	return forearm.global_transform * (_rest["lower_arm_r"].affine_inverse() * rest_grip)
+	return forearm.global_transform * (_rest["lower_arm_r"].affine_inverse() * _rest_grip())
+
+
+## The sword in the rest frame while the arm hangs in its rest pose.
+static func _rest_grip() -> Transform3D:
+	return Transform3D(Basis.looking_at(Vector3(0, -0.71, 0.71), Vector3.BACK), Vector3(-0.25, 0.86, 0.02))
+
+
+## Reach for a blade line in world space: [param start] where the blade begins
+## above the guard, [param dir] the blade direction. [param weight] fades the
+## procedural arm in (1) or back to the pose (0).
+func reach_blade_line(start: Vector3, dir: Vector3, weight: float = 1.0) -> void:
+	if arm_ik == null:
+		return
+	if weight > 0.0:
+		arm_ik.solve(arm_ik.to_rest_frame(start), arm_ik.dir_to_rest_frame(dir), ik_iterations)
+	set_ik(arm_ik.joint_targets(), weight)
 
 
 # --- Damage -------------------------------------------------------------------
@@ -545,6 +569,13 @@ func _physics_process(delta: float) -> void:
 	if intent.has("face_position") and state == State.STANDING:
 		face_toward(intent.face_position)
 	_apply_move(intent.get("move", Vector3.ZERO), delta, intent.get("plant", false))
+	if not forced_blade_line.is_empty():
+		reach_blade_line(forced_blade_line[0], forced_blade_line[1], 1.0)
+	elif intent.has("guard_line"):
+		var line: Array = intent.guard_line
+		reach_blade_line(line[0], line[1], 1.0)
+	else:
+		reach_blade_line(Vector3.ZERO, Vector3.FORWARD, 0.0)
 	_show_tell(float(intent.get("tell", 0.0)))
 	super._physics_process(delta)
 
