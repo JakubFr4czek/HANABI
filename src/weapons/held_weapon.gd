@@ -870,6 +870,7 @@ func _handle_clash(c: Dictionary) -> void:
 		if c.speed >= 2.0:
 			TimeController.micro_stop(0.025)
 		if other.wielder and other.wielder.has_method("on_blade_contact"):
+			clash["weapon"] = self  # not logged: lets the wielder answer this blade
 			other.wielder.on_blade_contact(clash)
 
 
@@ -884,6 +885,15 @@ func _parry(other: BladeBody, clash: Dictionary) -> void:
 	Sfx.play_at("clash", clash.point, linear_to_db(1.4))
 	if metal_ring:
 		Sfx.play_at("blade_ring", clash.point, linear_to_db(0.9))
+
+
+## The enemy parried this blade: a hard knock in the palm and a ring. Feedback
+## only; the clash itself already pushed the blade physically.
+func feel_deflected(point: Vector3) -> void:
+	_pulse_pattern([[1.0, 0.04], [0.0, 0.02], [0.7, 0.1]])
+	Sfx.play_at("clash", point, linear_to_db(1.2))
+	if metal_ring:
+		Sfx.play_at("blade_ring", point, linear_to_db(0.6))
 
 
 func _pulse(amplitude: float, duration: float) -> void:

@@ -170,9 +170,12 @@ func _start_fight(at: Vector3, difficulty: DuelistDifficulty = null) -> void:
 		d.feint_chance = 0.0
 		d.combo_chance = 0.0
 		d.block_chance = 0.0
+		d.evade_chance = 0.0
 		d.riposte_chance = 0.0
+		d.hesitate_chance = 0.0
 	dummy.set_difficulty(d)
 	brain.set_seed(7)
+	dummy.set_motion_seed(7)
 	await _wait(1.0)
 	dummy.set_attacks_enabled(true)
 
