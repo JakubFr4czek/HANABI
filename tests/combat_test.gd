@@ -172,6 +172,9 @@ func _run() -> void:
 	# 7. Free grip anywhere (handle, tsuba, blunt side of the blade) and two-handed grip.
 	await _test_free_and_two_handed_grip(lag_kanabo[0])
 
+	# 8. Dojo of the Storm arena elements & procedural Sakura tree / Storm lightning.
+	await _test_dojo_of_the_storm()
+
 
 func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 	player.holder.release()
@@ -337,6 +340,29 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 	xr_player.left_holder.release()
 	xr_player.queue_free()
 	player.take_weapon(katana)
+
+
+func _test_dojo_of_the_storm() -> void:
+	var disc := room.get_node_or_null("Arena/PlatformDisc") as MeshInstance3D
+	var water := room.get_node_or_null("Arena/WaterMirror") as MeshInstance3D
+	var seal := room.get_node_or_null("Arena/SpawnSeal") as MeshInstance3D
+	var giant_torii := room.get_node_or_null("Arena/ToriiGates/GiantTorii") as Node3D
+	var sakura := room.get_node_or_null("Arena/SakuraTree") as SakuraTreeGenerator
+	var petals := room.get_node_or_null("Arena/SakuraPetals") as GPUParticles3D
+	var lightmap := room.get_node_or_null("Arena/LightmapGI") as LightmapGI
+	_check("Dojo of the Storm core nodes present (disc, water mirror, seal, giant torii, LightmapGI)",
+		disc != null and water != null and seal != null and giant_torii != null and lightmap != null)
+	_check("procedural SakuraTree builds TrunkAndBranches & BlossomCanopy MultiMeshes (2 draw calls)",
+		sakura != null and sakura.bark_multimesh_instance != null and sakura.canopy_multimesh_instance != null
+		and sakura.bark_multimesh_instance.multimesh.instance_count > 40
+		and sakura.canopy_multimesh_instance.multimesh.instance_count >= 1000
+		and petals != null and petals.amount <= 80)
+	if room.lightning:
+		room.lightning.trigger_strike(-0.22)
+		await get_tree().process_frame
+		var flash_val: float = (water.material_override as ShaderMaterial).get_shader_parameter("lightning_flash")
+		_check("StormLightning builds procedural bolt mesh and drives water/sky flash (flash=%.2f)" % flash_val,
+			room.lightning.visible and flash_val > 0.1)
 
 
 ## Hold the weapon in a scripted holder, then jump the target 0.4 m sideways and
