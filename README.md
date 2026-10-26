@@ -4,12 +4,13 @@ VR melee survivor-like for Meta Quest: Blade & Sorcery–style physics swordplay
 
 The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [`docs/HANABI_agent_prompt.md`](docs/HANABI_agent_prompt.md).
 
-## Current state: milestone 1 (sword physics) — PD katana, hit-stop, trail, parry
+## Current state: milestone 1 (sword physics) — PD katana, free/two-handed grip, hit-stop, trail, parry
 
 | Works | Stubbed / temporary |
 |---|---|
-| OpenXR rig (godot-xr-tools): smooth move, snap turn, hands; the hand model stays on the hilt when the blade is stopped | Only one weapon per hand; no two-handed grip yet |
-| **Katana on a PD controller** (force + torque, stable PD): weight and inertia matter, a heavy **kanabō** visibly lags behind the hand with the same arm strength | Katana is the Grab3D model; kanabō is built from primitives |
+| OpenXR rig (godot-xr-tools): smooth move, snap turn, hands; the hand model stays pinned to the exact grip spot when the blade is stopped | |
+| **Free grip anywhere on the katana** (handle / *tsuka*, guard / *tsuba*, blunt spine of the blade / *mune*) and **two-handed grip** (including half-swording and seamless handoff when releasing either hand) | |
+| **Katana on a PD controller** (force + torque, stable PD): weight and inertia matter, a heavy **kanabō** visibly lags behind one hand and responds faster when held two-handed | Katana is the Grab3D model; kanabō is built from primitives |
 | No clipping (CCD) and **no bulldozing**: when the blade is held back the arm gives way (strength drops to 30%), with a light haptic buzz | |
 | **Hit-stop** 50–80 ms on hits ≥ 40 damage, haptics scaled by impact | |
 | **Blade trail** (CPU ribbon, works on Quest's Compatibility renderer) colored by element: none / sakura / storm / ink / shadow | Elements only change the trail color so far (abilities come in milestone 3) |
@@ -42,6 +43,8 @@ The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [
    | Mouse wheel | scripted swing duration (faster swings hit harder) |
    | Hold **Q** | high block (parry the dummy's overhead cut) |
    | **1 / 2** | katana / kanabō |
+   | **C** | cycle grip spot on the weapon (handle / tsuba / blunt blade spine) |
+   | **V** | toggle one-handed / two-handed grip |
    | E | drop / take the weapon |
    | Z | cycle the element (trail color) |
    | **P** | dummy attacks on / off |
@@ -60,7 +63,9 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/combat_test.tscn -- --desk
   - pushing into the dummy does not bulldoze it, and the arm gives way;
   - hit-stop timing and the trail;
   - parrying the dummy's strike leads to slow-mo, stun, counter window and a counter hit;
-  - the katana keeps real-time tracking during slow-mo.
+  - the katana keeps real-time tracking during slow-mo;
+  - free grip on the handle (*tsuka*), guard (*tsuba*) and blunt side of the blade (*mune*, snapping away from the cutting edge);
+  - two-handed grip (second hand attaches without releasing the first, steers the weapon between both hands, boosts force/torque on heavy weapons, and seamlessly hands off to the remaining hand when either hand lets go).
 
 Both exit with code 0 when all checks pass. `res://tests/screenshots.tscn -- --desktop --shots /tmp/shots` renders screenshots. `tests/diag/` holds small diagnostic scenes, e.g. the Jolt joint-limit sign check and slow-mo tracking.
 
@@ -140,8 +145,8 @@ On Quest the renderer switches to **Compatibility** automatically (`rendering_me
 |---|---|
 | Left stick | move (smooth locomotion) |
 | Right stick | snap turn |
-| **Grip** near a weapon (on the table) | take it; release grip to drop |
-| Grip + **B/Y** | recall the nearest weapon into the hand |
+| **Grip** near any part of a weapon (handle, tsuba, or blunt blade spine) | grab it there; squeeze grip with the other hand too for a **two-handed grip**; release grip to let go with that hand |
+| Grip + **B/Y** | recall the nearest free weapon into the hand |
 | **B/Y** (without grip) | dummy attacks on / off |
 | Thumbstick **click** | cycle the element of the weapon in that hand |
 | **A/X** | reset the dummy |
@@ -168,6 +173,7 @@ tests/             headless physics test, screenshots, diagnostics
 - **Katana:** a `RigidBody3D` driven by a stable PD controller.
   - Force goes on the center of mass toward the hand pose, torque toward the hand orientation, and the weapon's own weight is held.
   - Force and torque are capped by the player's arm strength (260 N, 40 N·m). A heavier weapon therefore accelerates less and lags.
+  - **Free & two-handed grip:** grabbing records a local grip transform clamped to the handle (*tsuka*), guard (*tsuba*), or blunt spine of the blade (*mune*, `+Y`, never the cutting edge `-Y`). With two hands attached, the target weapon pose aligns the line between both grip points with the line between both hands, blends wrist roll, and scales arm force/torque (`×1.6` / `×1.8`). Releasing either hand transfers control to the remaining hand at its grip point.
   - When the grip is held more than 10 cm away from the hand, strength drops to 30%, so the blade rests on obstacles instead of shoving them.
 - **Weapon hit speed:** each weapon stores its velocity before every physics step. On a new contact, the hit speed is the relative velocity of the two contact points *before* the solver slowed them down. Damage = `(speed − 1.5 m/s) × 9` (×13 for the kanabō), capped at 120, times the zone multiplier and ×1.5 for counters.
 - **Time effects (`TimeController`):**
