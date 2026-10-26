@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="EnemyProfile" format=3]
+
+[ext_resource type="Script" path="res://src/enemies/enemy_profile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+display_name = "Training Dummy"
+max_hp = 400.0
+zone_multipliers = {
+"head": 1.5,
+"limb": 0.7,
+"torso": 1.0
+}
+resistances = {}
+poise_damage_scale = 0.008
+muscle_damage_scale = 0.006
+balance_regen = 0.7
+muscle_regen = 0.9
+knockdown_time = 1.6
+getup_time = 1.8
+tactics = {
+"track_player": true
+}

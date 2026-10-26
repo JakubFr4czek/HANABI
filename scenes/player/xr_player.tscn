@@ -1,0 +1,48 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/player/xr_player.gd" id="1_player"]
+[ext_resource type="PackedScene" path="res://addons/godot-xr-tools/xr/start_xr.tscn" id="2_startxr"]
+[ext_resource type="PackedScene" path="res://addons/godot-xr-tools/hands/scenes/lowpoly/left_hand_low.tscn" id="3_lhand"]
+[ext_resource type="PackedScene" path="res://addons/godot-xr-tools/hands/scenes/lowpoly/right_hand_low.tscn" id="4_rhand"]
+[ext_resource type="PackedScene" path="res://addons/godot-xr-tools/functions/movement_direct.tscn" id="5_direct"]
+[ext_resource type="PackedScene" path="res://addons/godot-xr-tools/functions/movement_turn.tscn" id="6_turn"]
+[ext_resource type="PackedScene" path="res://addons/godot-xr-tools/player/player_body.tscn" id="7_body"]
+[ext_resource type="Script" path="res://src/player/weapon_holder.gd" id="8_holder"]
+
+[node name="XRPlayer" type="Node3D"]
+script = ExtResource("1_player")
+
+[node name="StartXR" parent="." instance=ExtResource("2_startxr")]
+
+[node name="XROrigin3D" type="XROrigin3D" parent="."]
+
+[node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D" groups=["player_head"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
+near = 0.03
+
+[node name="LeftHand" type="XRController3D" parent="XROrigin3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 1.1, -0.3)
+tracker = &"left_hand"
+
+[node name="LeftHandModel" parent="XROrigin3D/LeftHand" instance=ExtResource("3_lhand")]
+
+[node name="MovementDirect" parent="XROrigin3D/LeftHand" instance=ExtResource("5_direct")]
+strafe = true
+
+[node name="WeaponHolder" type="Node3D" parent="XROrigin3D/LeftHand"]
+script = ExtResource("8_holder")
+side = "left"
+
+[node name="RightHand" type="XRController3D" parent="XROrigin3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.25, 1.1, -0.3)
+tracker = &"right_hand"
+
+[node name="RightHandModel" parent="XROrigin3D/RightHand" instance=ExtResource("4_rhand")]
+
+[node name="MovementTurn" parent="XROrigin3D/RightHand" instance=ExtResource("6_turn")]
+
+[node name="WeaponHolder" type="Node3D" parent="XROrigin3D/RightHand"]
+script = ExtResource("8_holder")
+
+[node name="PlayerBody" parent="XROrigin3D" instance=ExtResource("7_body")]
+collision_mask = 11

@@ -1,0 +1,63 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="hanabi"
+config/description="HANABI (花火): VR Japanese dark-fantasy sword survivor."
+run/main_scene="res://scenes/test_room.tscn"
+config/features=PackedStringArray("4.7", "Mobile")
+
+[autoload]
+
+XRToolsUserSettings="*res://addons/godot-xr-tools/user_settings/user_settings.gd"
+XRToolsRumbleManager="*res://addons/godot-xr-tools/rumble/rumble_manager.gd"
+GameEvents="*res://src/core/game_events.gd"
+Sfx="*res://src/core/sfx.gd"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot-xr-tools/plugin.cfg")
+
+[layer_names]
+
+3d_physics/layer_1="static_world"
+3d_physics/layer_2="dynamic_props"
+3d_physics/layer_3="player_weapon"
+3d_physics/layer_4="enemy_body"
+3d_physics/layer_5="enemy_weapon"
+3d_physics/layer_20="player_body"
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+common/physics_ticks_per_second=90
+common/max_physics_steps_per_frame=12
+common/physics_interpolation=false
+
+[rendering]
+
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d=2
+
+[xr]
+
+openxr/enabled=true
+openxr/startup_alert=false
+openxr/foveation_level=3
+openxr/foveation_dynamic=true
+shaders/enabled=true
