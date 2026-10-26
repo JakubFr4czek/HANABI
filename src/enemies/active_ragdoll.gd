@@ -45,8 +45,15 @@ const BODY_MASK := 1 | 2 | 4
 ## How strongly the body is pulled back to its anchor point.
 @export var anchor_stiffness := 2.5
 @export var anchor_gain := 0.05
-## Max turning speed toward the facing target (deg/s).
+## Max turning speed toward the facing target (deg/s), how fast the turn
+## speed itself may change (deg/s²), and how quickly it closes the gap (1/s).
 @export var turn_speed_deg := 90.0
+@export var turn_accel_deg := 360.0
+@export var turn_response := 5.0
+## Seconds joint targets take to blend into a pose without its own "_blend",
+## and into or out of a leg overlay (walking steps).
+@export var default_pose_blend := 0.3
+@export var overlay_blend := 0.28
 
 var parts := {}  # name -> RagdollPart
 var state := State.STANDING
@@ -70,6 +77,29 @@ var _defs := {}  # name -> part definition Dictionary
 var _poses := {}  # pose name -> {part name -> Quaternion}
 var _pose_stiffness := {}  # pose name -> muscle stiffness multiplier ("_stiffness" key in the pose)
 var _pose_max_speed := {}  # pose name -> max joint speed in rad/s ("_max_speed" key)
+var _pose_blend := {}  # pose name -> Vector2(blend seconds, index in _EASES)
+var _joint_blends := {}  # part name -> JointBlend toward its current target
+var _stiffness_now := 1.0  # pose stiffness, blended like the joint targets
+var _yaw_rate := 0.0
+
+const _EASES := ["inout", "in", "out"]
+
+
+## One joint's target moving from where it was to the new pose's angle.
+class JointBlend:
+	var from := Quaternion.IDENTITY
+	var to := Quaternion.IDENTITY
+	var now := Quaternion.IDENTITY
+	var prev := Quaternion.IDENTITY
+	var t := 1.0
+	var duration := 0.0
+	var ease := 0
+	var by_overlay := false
+
+	func advance(delta: float) -> void:
+		prev = now
+		t = 1.0 if duration <= 0.0 else minf(t + delta / duration, 1.0)
+		now = from.slerp(to, ActiveRagdoll.ease_curve(t, ease))
 var _rest := {}  # name -> Transform3D relative to this node
 var _order: Array[String] = []  # parents before children
 var _children := {}  # part name -> Array of child part names
@@ -98,7 +128,7 @@ func _ready() -> void:
 ## rest pose), mass, zone, and for non-root parts: parent, joint (Vector3,
 ## joint point), limits ({x/y/z: Vector2(min_deg, max_deg)}, child relative to
 ## parent, same convention as poses). Optional: extra_shapes
-## ([{shape, size, offset}]), max_torque (N·m).
+## ([{shape, size, offset}]), max_torque (N·m), friction (default 0.9).
 ## The first part without a parent is the root (pelvis).
 func _define_parts() -> Dictionary:
 	return {}
@@ -106,7 +136,9 @@ func _define_parts() -> Dictionary:
 
 ## Return {pose_name: {part_name: Vector3 euler_deg relative to the parent}}.
 ## Optional "_stiffness": float key makes muscles faster/stronger in that pose
-## (e.g. a strike); "_max_speed": float caps how fast joints move (rad/s).
+## (e.g. a strike); "_max_speed": float caps how fast joints move (rad/s);
+## "_blend": seconds the joint targets take to move into the pose and "_ease":
+## the curve they follow ("inout", "in" = accelerate into it, "out" = settle).
 func _define_poses() -> Dictionary:
 	return {}
 
@@ -126,6 +158,7 @@ func _build() -> void:
 		var q := {}
 		_pose_stiffness[pose_name] = float(src.get("_stiffness", 1.0))
 		_pose_max_speed[pose_name] = float(src.get("_max_speed", INF))
+		_pose_blend[pose_name] = Vector2(float(src.get("_blend", default_pose_blend)), _EASES.find(String(src.get("_ease", "inout"))))
 		for part_name in src:
 			if part_name.begins_with("_"):
 				continue
@@ -186,7 +219,7 @@ func _create_part(part_name: String, def: Dictionary) -> void:
 	body.set_meta("body_part", part_name)
 	body.set_meta("zone", def.get("zone", "torso"))
 	var mat := PhysicsMaterial.new()
-	mat.friction = 0.9
+	mat.friction = def.get("friction", 0.9)
 	body.physics_material_override = mat
 
 	body.add_child(_make_shape(def))
@@ -303,6 +336,8 @@ func weaken(muscle_loss: float, balance_loss: float) -> void:
 func reset_body() -> void:
 	_facing_yaw = global_rotation.y
 	_target_yaw = _facing_yaw
+	_yaw_rate = 0.0
+	_joint_blends.clear()
 	var root_xf := Transform3D(Basis(Vector3.UP, _facing_yaw), global_position)
 	for part_name in _order:
 		var p: RagdollPart = parts[part_name]
@@ -371,16 +406,18 @@ func _getup_time() -> float: return 1.8
 
 
 func _turn_facing(delta: float) -> void:
-	var step := deg_to_rad(turn_speed_deg) * delta
-	_facing_yaw = rotate_toward(_facing_yaw, _target_yaw, step)
+	var max_rate := deg_to_rad(turn_speed_deg)
+	var wanted := clampf(wrapf(_target_yaw - _facing_yaw, -PI, PI) * turn_response, -max_rate, max_rate)
+	_yaw_rate = move_toward(_yaw_rate, wanted, deg_to_rad(turn_accel_deg) * delta)
+	_facing_yaw = wrapf(_facing_yaw + _yaw_rate * delta, -PI, PI)
 
 
 func _drive_joints(delta: float) -> void:
 	if muscle <= 0.0:
 		return
-	var pose: Dictionary = _poses.get(current_pose, {})
-	var overlay: Dictionary = _poses.get(overlay_pose, {}) if overlay_pose != "" else {}
-	var k: float = _pose_stiffness.get(current_pose, 1.0)
+	_update_joint_blends(delta)
+	_stiffness_now = lerpf(_stiffness_now, _pose_stiffness.get(current_pose, 1.0), 1.0 - exp(-8.0 * delta))
+	var k := _stiffness_now
 	var max_speed: float = _pose_max_speed.get(current_pose, INF)
 	for part_name in _order:
 		var def: Dictionary = _defs[part_name]
@@ -388,9 +425,12 @@ func _drive_joints(delta: float) -> void:
 			continue
 		var child: RagdollPart = parts[part_name]
 		var parent: RagdollPart = parts[def.parent]
-		var q_rel: Quaternion = overlay.get(part_name, pose.get(part_name, Quaternion.IDENTITY))
-		var q_target := parent.global_basis.get_rotation_quaternion() * q_rel
-		var omega_des := (_rotation_error(q_target, child.global_basis.get_rotation_quaternion()) * (joint_stiffness * k)).limit_length(max_speed)
+		var blend: JointBlend = _joint_blends[part_name]
+		var q_parent := parent.global_basis.get_rotation_quaternion()
+		var q_target := q_parent * blend.now
+		# Feed-forward: follow the moving target instead of only chasing its error.
+		var omega_ff := q_parent * (_rotation_error(blend.now, blend.prev) / delta)
+		var omega_des := (omega_ff + _rotation_error(q_target, child.global_basis.get_rotation_quaternion()) * (joint_stiffness * k)).limit_length(max_speed)
 		var omega_rel := child.angular_velocity - parent.angular_velocity
 		var dw := (omega_des - omega_rel) * (joint_gain * muscle)
 		var pivot := _joint_world(part_name)
@@ -400,6 +440,43 @@ func _drive_joints(delta: float) -> void:
 		if muscle_reaction > 0.0:
 			parent.apply_impulse(-reaction[0] * muscle_reaction, pivot - parent.global_position)
 			parent.apply_torque_impulse(-reaction[1] * muscle_reaction)
+
+
+## Retarget each joint whose pose (or leg overlay) angle changed: it blends
+## from where its target is now, over the pose's "_blend" time and "_ease" curve.
+func _update_joint_blends(delta: float) -> void:
+	var pose: Dictionary = _poses.get(current_pose, {})
+	var overlay: Dictionary = _poses.get(overlay_pose, {}) if overlay_pose != "" else {}
+	var timing: Vector2 = _pose_blend.get(current_pose, Vector2(default_pose_blend, 0))
+	for part_name in _order:
+		if _defs[part_name].get("parent", "") == "":
+			continue
+		var in_overlay := overlay.has(part_name)
+		var to: Quaternion = overlay.get(part_name, pose.get(part_name, Quaternion.IDENTITY))
+		var b: JointBlend = _joint_blends.get(part_name)
+		if b == null:
+			b = JointBlend.new()
+			b.from = to
+			b.to = to
+			b.now = to
+			_joint_blends[part_name] = b
+		elif not b.to.is_equal_approx(to):
+			var overlay_change := in_overlay or b.by_overlay
+			b.from = b.now
+			b.to = to
+			b.t = 0.0
+			b.duration = overlay_blend if overlay_change else timing.x
+			b.ease = 0 if overlay_change else int(timing.y)
+		b.by_overlay = in_overlay
+		b.advance(delta)
+
+
+## Easing curves for pose blends (see _EASES): smootherstep, cubic in, cubic out.
+static func ease_curve(t: float, kind: int) -> float:
+	match kind:
+		1: return t * t * t
+		2: return 1.0 - pow(1.0 - t, 3.0)
+	return t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
 
 
 ## World position of the joint above [param part_name] (moves with the parent).
@@ -450,9 +527,9 @@ func _drive_balance(delta: float) -> void:
 	_rotate_subtree(_all_bodies, pelvis.global_position, dw, 2000.0 * delta)
 	var upper := _upright_part()
 	if upper != "":
-		var pose: Dictionary = _poses.get(current_pose, {})
 		var chest: RagdollPart = parts[upper]
-		var q_upper: Quaternion = q_facing * pose.get(upper, Quaternion.IDENTITY)
+		var chest_blend: JointBlend = _joint_blends.get(upper)
+		var q_upper: Quaternion = q_facing * (chest_blend.now if chest_blend else Quaternion.IDENTITY)
 		var dw_upper := (_rotation_error(q_upper, chest.global_basis.get_rotation_quaternion()) * upright_stiffness - chest.angular_velocity) * (upright_gain * balance)
 		_rotate_subtree(_subtree[upper], _joint_world(upper), dw_upper, 800.0 * delta)
 
