@@ -41,7 +41,7 @@ const PLAYER_BODY_LAYER := 1 << 19
 ## Strength multiplier while the blade is held back by an obstacle.
 @export var blocked_strength := 0.3
 ## Grip-to-hand distance (m) above which the blade counts as held back.
-@export var blocked_distance := 0.1
+@export var blocked_distance := 0.045
 ## Max speed (real m/s) of the center of mass above the hand's own speed, and
 ## max spin (real rad/s) above the hand's own spin.
 @export var max_extra_speed := 4.0
@@ -55,6 +55,24 @@ const PLAYER_BODY_LAYER := 1 << 19
 ## hand. A blade merely lagging behind a fast hand is moving toward it, so it is left alone.
 @export var break_distance := 0.4
 @export var break_flee_speed := 0.5
+
+@export_group("Hand priority")
+## The grip may trail the hand by at most this much (m) and the weapon may twist
+## out of the hand's orientation by at most this much (degrees). Beyond that the
+## weapon is put back within the limit, unless static geometry (walls, floor,
+## props) is in the way: then the hand model stays on the hilt instead (ghost hand).
+@export var max_grip_offset := 0.035
+@export var max_grip_angle := 30.0
+## Against an enemy body the blade collides normally and may rest on it this far
+## (m) / this much (degrees) behind the hand (the arm gives way, no shoving). If
+## the hand goes deeper, the blade follows the hand into that body part instead of
+## wedging or being torn out of the hand, and ignores it until it is out again
+## (at least [member wedge_release_min_time] s).
+@export var max_contact_offset := 0.1
+## Fastest hand movement (m/s) handed on to a weapon pulled back into the hand.
+@export var hand_speed_limit := 8.0
+@export var max_contact_angle := 50.0
+@export var wedge_release_min_time := 0.1
 
 @export_group("Grip")
 ## Pommel end of the handle (tsuka) along local +Z (m).
@@ -93,6 +111,17 @@ const PLAYER_BODY_LAYER := 1 << 19
 @export var micro_stop_damage := 15.0
 ## Steel blades ring on clashes and cuts; wooden ones do not.
 @export var metal_ring := true
+## Bladed weapons deal full damage only with the cutting edge (ha) or a thrust
+## with the point; clubs (false) hit the same from every side.
+@export var has_edge := true
+## Damage multipliers by what met the target: the cutting edge or the point,
+## the flat of the blade, the blunt spine (mune), and the hilt.
+@export var edge_multiplier := 1.0
+@export var flat_multiplier := 0.3
+@export var spine_multiplier := 0.2
+@export var hilt_multiplier := 0.3
+## A contact this close to the tip (m) while moving along the blade is a thrust.
+@export var point_length := 0.14
 
 @export_group("Parry")
 ## A clash with an attacking enemy blade is a parry above this relative speed (m/s)...
@@ -127,6 +156,7 @@ var _local_grips := {}  # holder -> Transform3D in weapon local space
 var _grip_zones := {}   # holder -> String (ZONE_HANDLE / ZONE_TSUBA / ZONE_MUNE)
 var _prev_contacts := {}  # collider instance id -> true, contacts in previous tick
 var _receiver_cooldown := {}  # receiver instance id -> time left
+var _wedged := {}  # body instance id -> {"body": PhysicsBody3D, "time": float}
 var _stuck_timer := 0.0
 var _swing_cooldown := 0.0
 var _last_tip := Vector3.ZERO
@@ -228,11 +258,16 @@ func distance_to_grip(world_point: Vector3) -> float:
 
 
 ## Compute the local grip Transform3D for a hand grabbing at [param hand_global].
+## On the handle and guard the hand always takes the natural grip (blade out of
+## the fist along -Z, cutting edge on the fingers' side, i.e. leading a cut),
+## whatever angle the hand came in at; only grips on the blade spine keep it.
 func compute_local_grip(hand_global: Transform3D) -> Transform3D:
 	var raw_local := global_transform.affine_inverse() * hand_global
 	if raw_local.origin.length() < 0.005 and raw_local.basis.get_rotation_quaternion().angle_to(Quaternion.IDENTITY) < 0.01:
 		return Transform3D.IDENTITY
 	var origin := clamp_grip_point(raw_local.origin)
+	if classify_grip_zone(origin) != ZONE_MUNE:
+		return Transform3D(Basis.IDENTITY, origin)
 	return Transform3D(raw_local.basis.orthonormalized(), origin)
 
 
@@ -245,6 +280,8 @@ func on_grabbed(by: Node3D, local_grip: Transform3D = Transform3D.IDENTITY) -> v
 			prev_secondary.call("release")
 		holders.append(by)
 	var clamped_grip := Transform3D(local_grip.basis.orthonormalized(), clamp_grip_point(local_grip.origin))
+	if classify_grip_zone(clamped_grip.origin) != ZONE_MUNE:
+		clamped_grip.basis = Basis.IDENTITY
 	if local_grip.is_equal_approx(Transform3D.IDENTITY):
 		clamped_grip = Transform3D.IDENTITY
 	_local_grips[by] = clamped_grip
@@ -301,6 +338,7 @@ func register_player_collision_exceptions(player: Node) -> void:
 
 func _physics_process(delta: float) -> void:
 	_tick_cooldowns(delta)
+	_update_wedges(delta)
 	_impact_this_tick = false
 	_process_contacts()
 	if holder and delta > 0.0:
@@ -396,17 +434,20 @@ func _drive_to(target: Transform3D, delta: float) -> void:
 		var to_sim := c / TimeController.real_tick()
 		target_vel = (target * center_of_mass - _prev_target * center_of_mass) * to_sim
 		target_omega = ActiveRagdoll._rotation_error(target.basis.get_rotation_quaternion(), _prev_target.basis.get_rotation_quaternion()) * to_sim
+	var last_target := _prev_target if _has_prev_target else target
 	_prev_target = target
 	_has_prev_target = true
+	var held_back := _keep_in_hand(target, target_vel, last_target)
 
 	# Never faster or spinning harder than the hand by more than a margin.
 	linear_velocity = linear_velocity.limit_length(target_vel.length() + max_extra_speed * c)
 	angular_velocity = angular_velocity.limit_length(target_omega.length() + max_extra_spin * c)
 
 	# Held back by an obstacle -> the arm gives way (no infinite pushing).
-	var want_strength := blocked_strength if grip_error > blocked_distance else 1.0
+	var want_strength := blocked_strength if held_back else 1.0
 	strength = move_toward(strength, want_strength, delta * (6.0 if want_strength < strength else 3.0))
-	_buzz_when_blocked(delta)
+	if held_back:
+		_buzz_when_blocked(delta)
 
 	var limit_scale := minf(c * c, 16.0) * strength
 	var force_mult := two_hand_force_multiplier if holders.size() >= 2 else 1.0
@@ -438,6 +479,159 @@ func _drive_to(target: Transform3D, delta: float) -> void:
 	var torque: Vector3 = (st.inverse_inertia_tensor.inverse() * alpha).limit_length(max_torque * torque_mult * limit_scale)
 	apply_torque(torque)
 	_expected_dw = st.inverse_inertia_tensor * torque * delta
+
+
+## Hand priority: put the weapon back within [member max_grip_offset] /
+## [member max_grip_angle] of the hand and drop the velocity that carries it
+## farther out, also during a hit-stop (the world freezes, the hand doesn't). Not
+## when static geometry holds the blade back (ghost hand on the hilt), and an
+## enemy body may hold it back up to [member max_contact_offset]; past that the
+## blade follows the hand into that body part instead of wedging in it.
+## Returns true while something (a wall or an enemy body) holds the blade back.
+func _keep_in_hand(target: Transform3D, target_vel: Vector3, last_target: Transform3D) -> bool:
+	var g0: Transform3D = _local_grips.get(holder, Transform3D.IDENTITY)
+	var q := global_basis.get_rotation_quaternion()
+	var q_target := target.basis.get_rotation_quaternion()
+	var angle := rad_to_deg(q.angle_to(q_target))
+	var offset := global_transform * g0.origin - target * g0.origin
+	var max_angle := max_grip_angle
+	if holders.size() >= 2:
+		# Two hands hold the weapon at both grips: the second grip may not stray
+		# much more than the first, so the twist allowed shrinks with the hands' spread.
+		var g1: Transform3D = _local_grips.get(holders[1], Transform3D.IDENTITY)
+		var spread := g0.origin.distance_to(g1.origin)
+		if spread > 0.05:
+			max_angle = minf(max_angle, rad_to_deg(atan(max_grip_offset * 2.0 / spread)))
+	if offset.length() <= max_grip_offset and angle <= max_angle:
+		return false
+	var pose := _pose_within(target, g0, offset, q, q_target, angle, max_grip_offset, max_angle)
+	var hits := _overlaps_at(pose)
+	if hits.blocked_by_static:
+		return true
+	if not hits.enemy_bodies.is_empty():
+		if offset.length() <= max_contact_offset and angle <= max_contact_angle:
+			return true  # resting on the enemy: plain physics, the arm gives way
+		pose = _pose_within(target, g0, offset, q, q_target, angle, max_contact_offset, max_contact_angle)
+		for body in _overlaps_at(pose).enemy_bodies:
+			_cut_through(body, pose, target, last_target)
+			_release_wedge(body)
+	global_transform = pose
+	# Carried by the hand from here: no velocity away from it, at most a real
+	# hand's speed toward it (a tracking jump must not fling the weapon past the
+	# hand). Spin is only stopped, not given: the arm's limited torque still has
+	# to turn the weapon, which is where a heavy weapon's weight shows.
+	var hand_vel := target_vel.limit_length(hand_speed_limit * TimeController.compensation())
+	var out_dir := offset.normalized()
+	var out := (linear_velocity - hand_vel).dot(out_dir)
+	if out > 0.0:
+		linear_velocity -= out_dir * out
+	if angle > 0.01:
+		var back := ActiveRagdoll._rotation_error(q_target, q).normalized()
+		var spin_out := angular_velocity.dot(-back)
+		if spin_out > 0.0:
+			angular_velocity += back * spin_out
+	return false
+
+
+## The current pose pulled toward [param target] so the grip is at most
+## [param max_offset] from the hand and the weapon at most [param max_angle] twisted.
+func _pose_within(target: Transform3D, g0: Transform3D, offset: Vector3, q: Quaternion, q_target: Quaternion,
+		angle: float, max_offset: float, max_angle: float) -> Transform3D:
+	var basis := Basis(q)
+	if angle > max_angle:
+		basis = Basis(q_target.slerp(q, max_angle / angle).normalized())
+	var grip := target * g0.origin + offset.limit_length(max_offset)
+	return Transform3D(basis, grip - basis * g0.origin)
+
+
+## What the weapon would overlap at [param pose]: static geometry (walls, floor,
+## props) and enemy bodies (anything with a hit receiver). Loose dynamic bodies
+## and bodies we already slide through don't count.
+func _overlaps_at(pose: Transform3D) -> Dictionary:
+	var result := {"blocked_by_static": false, "enemy_bodies": []}
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.collision_mask = collision_mask
+	query.exclude = [get_rid()]
+	for owner_id in get_shape_owners():
+		var owner_xform := shape_owner_get_transform(owner_id)
+		for i in shape_owner_get_shape_count(owner_id):
+			query.shape = shape_owner_get_shape(owner_id, i)
+			query.transform = pose * owner_xform
+			for r in space.intersect_shape(query, 16):
+				var other: Object = r.collider
+				if other == null or _wedged.has(other.get_instance_id()):
+					continue
+				if other.has_meta("hit_receiver"):
+					if not result.enemy_bodies.has(other):
+						result.enemy_bodies.append(other)
+				elif not (other is RigidBody3D or other is CharacterBody3D or other is PhysicalBone3D):
+					result.blocked_by_static = true
+	return result
+
+
+# --- Wedge release ---------------------------------------------------------------
+
+## The hand carries the blade through [param body] faster than the physics
+## could report the contact: count it as a hit at the hand's speed there.
+func _cut_through(body: PhysicsBody3D, pose: Transform3D, target: Transform3D, last_target: Transform3D) -> void:
+	if not body.has_meta("hit_receiver"):
+		return
+	var rid: int = (body.get_meta("hit_receiver") as Object).get_instance_id()
+	if _receiver_cooldown.has(rid) or _wedged.has(body.get_instance_id()):
+		return
+	var point := Geometry3D.get_closest_point_to_segment(body.global_position, pose * blade_start, pose * blade_tip)
+	var local_point := pose.affine_inverse() * point
+	var hand_motion := (target * local_point - last_target * local_point) / TimeController.real_tick()
+	var other_vel := _pre_step_velocity_of(body, point)
+	var rel := hand_motion - TimeController.compensation() * other_vel
+	_handle_hit({"collider": body, "point": point, "speed": rel.length(),
+		"direction": rel.normalized() if rel.length() > 0.001 else Vector3.ZERO, "normal": -rel.normalized()})
+	_receiver_cooldown[rid] = 0.2
+
+
+## Stop colliding with [param body] until the blade is out of it again.
+func _release_wedge(body: PhysicsBody3D) -> void:
+	var id := body.get_instance_id()
+	if not _wedged.has(id):
+		add_collision_exception_with(body)
+		GameEvents.log_event("blade_wedge_release", {"weapon": weapon_name, "part": String(body.get_meta("body_part", body.name))})
+	_wedged[id] = {"body": body, "time": 0.0}
+
+
+func is_sliding_through(body: Object) -> bool:
+	return body != null and _wedged.has(body.get_instance_id())
+
+
+func _update_wedges(delta: float) -> void:
+	for id in _wedged.keys():
+		var entry: Dictionary = _wedged[id]
+		entry.time += delta
+		var body: PhysicsBody3D = entry.body
+		if not is_instance_valid(body):
+			_wedged.erase(id)
+			continue
+		if entry.time < wedge_release_min_time or _overlaps_body(body):
+			continue
+		remove_collision_exception_with(body)
+		_wedged.erase(id)
+
+
+func _overlaps_body(body: PhysicsBody3D) -> bool:
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.collision_mask = collision_mask
+	query.exclude = [get_rid()]
+	query.margin = 0.01
+	for owner_id in get_shape_owners():
+		var owner_xform := shape_owner_get_transform(owner_id)
+		for i in shape_owner_get_shape_count(owner_id):
+			query.shape = shape_owner_get_shape(owner_id, i)
+			query.transform = global_transform * owner_xform
+			for r in space.intersect_shape(query, 16):
+				if r.collider == body:
+					return true
+	return false
 
 
 ## A new impact with a moving body may only change our velocity by so much on
@@ -574,13 +768,16 @@ func _handle_hit(c: Dictionary) -> void:
 		return
 	var part: Node = c.collider
 	var receiver: Node = part.get_meta("hit_receiver")
-	var base_damage := clampf((c.speed - min_hit_speed) * damage_per_speed, 0.0, max_damage)
+	var strike := classify_strike(c.point, c.direction)
+	var base_damage := clampf((c.speed - min_hit_speed) * damage_per_speed, 0.0, max_damage) * float(strike.multiplier)
 	var hit := {
 		"attacker": weapon_name,
 		"element": element,
 		"part": String(part.get_meta("body_part", part.name)),
 		"zone": String(part.get_meta("zone", "body")),
 		"speed": snappedf(c.speed, 0.01),
+		"strike": strike.kind,
+		"edge_alignment": snappedf(strike.alignment, 0.01),
 		"base_damage": base_damage,
 		"point": c.point,
 		"direction": c.direction,
@@ -589,17 +786,60 @@ func _handle_hit(c: Dictionary) -> void:
 	if receiver.has_method("receive_hit"):
 		hit = receiver.receive_hit(part, hit)
 	var dmg: float = hit.get("damage", base_damage)
-	# Sharp bite, then a short body-felt tail on heavier hits.
-	var amp := clampf(0.25 + dmg / 80.0, 0.25, 1.0)
-	_pulse_pattern([[amp, 0.03], [amp * 0.45, 0.02 + clampf(dmg / 1000.0, 0.0, 0.08)]])
-	Sfx.play_at("impact_heavy" if dmg >= 30.0 else "impact_light", c.point, linear_to_db(clampf(0.4 + c.speed / 12.0, 0.4, 1.2)))
-	if metal_ring and dmg >= micro_stop_damage:
-		Sfx.play_at("blade_ring", c.point, linear_to_db(clampf(dmg / 120.0, 0.12, 0.45)))
+	var loud := linear_to_db(clampf(0.4 + c.speed / 12.0, 0.4, 1.2))
+	match strike.kind:
+		"edge", "thrust":
+			# Clean cut: crisp slice, bright thin sparks along the cut, a sharp bite in the palm.
+			var amp := clampf(0.3 + dmg / 70.0, 0.3, 1.0)
+			_pulse_pattern([[amp, 0.025], [amp * 0.35, 0.02 + clampf(dmg / 1000.0, 0.0, 0.08)]])
+			Sfx.play_at("cut", c.point, loud)
+			if dmg >= 30.0:
+				Sfx.play_at("impact_heavy", c.point, loud - 6.0)
+			SparkBurst.spawn(get_tree().current_scene, c.point, c.direction, Color(2.2, 2.1, 1.8), 18, 3.5)
+			if metal_ring and dmg >= micro_stop_damage:
+				Sfx.play_at("blade_ring", c.point, linear_to_db(clampf(dmg / 120.0, 0.12, 0.45)))
+		"blunt":
+			var amp := clampf(0.25 + dmg / 80.0, 0.25, 1.0)
+			_pulse_pattern([[amp, 0.03], [amp * 0.45, 0.02 + clampf(dmg / 1000.0, 0.0, 0.08)]])
+			Sfx.play_at("impact_heavy" if dmg >= 30.0 else "impact_light", c.point, loud)
+		_:
+			# Flat, spine or hilt: a dull slap with no bite and a few dim, slow sparks.
+			_pulse_pattern([[0.3, 0.05], [0.12, 0.06]])
+			Sfx.play_at("slap", c.point, loud)
+			SparkBurst.spawn(get_tree().current_scene, c.point, -c.direction, Color(0.9, 0.5, 0.25), 5, 1.2)
 	if dmg >= hit_stop_damage:
 		# 50 ms for a solid hit, up to 80 ms for the heaviest ones.
 		TimeController.hit_stop(lerpf(0.05, 0.08, clampf((dmg - hit_stop_damage) / 60.0, 0.0, 1.0)))
 	elif dmg >= micro_stop_damage:
 		TimeController.micro_stop(lerpf(0.025, 0.035, (dmg - micro_stop_damage) / (hit_stop_damage - micro_stop_damage)))
+
+
+## What part of the weapon met a target at world [param point] while moving in
+## world [param direction] (relative to the target), and the damage multiplier:
+## kind is "edge", "thrust", "flat", "spine", "hilt" or "blunt" (no edge). The
+## alignment is the cosine between the cutting edge's outward normal and the
+## motion across the blade (1 = edge first, -1 = spine first, 0 = flat).
+func classify_strike(point: Vector3, direction: Vector3) -> Dictionary:
+	if not has_edge:
+		return {"kind": "blunt", "multiplier": 1.0, "alignment": 0.0}
+	var local_point := global_transform.affine_inverse() * point
+	if local_point.z > guard_z - guard_half_length:
+		return {"kind": "hilt", "multiplier": hilt_multiplier, "alignment": 0.0}
+	var axis := get_blade_axis()
+	var dir := direction.normalized()
+	var along := dir.dot(axis)
+	if along > 0.75 and local_point.distance_to(blade_tip) < point_length + 0.03:
+		return {"kind": "thrust", "multiplier": edge_multiplier, "alignment": 1.0}
+	var across := dir - axis * along
+	if across.length() < 0.25:
+		return {"kind": "flat", "multiplier": flat_multiplier, "alignment": 0.0}
+	var edge_normal := (global_basis * -spine_direction).normalized()
+	var alignment := across.normalized().dot(edge_normal)
+	if alignment >= 0.5:
+		return {"kind": "edge", "multiplier": edge_multiplier, "alignment": alignment}
+	if alignment <= -0.5:
+		return {"kind": "spine", "multiplier": spine_multiplier, "alignment": alignment}
+	return {"kind": "flat", "multiplier": flat_multiplier, "alignment": alignment}
 
 
 func _handle_clash(c: Dictionary) -> void:

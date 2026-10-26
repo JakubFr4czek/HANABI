@@ -63,6 +63,8 @@ blade_start = Vector3(0, 0, -0.15)
 blade_tip = Vector3(0, 0, -1.05)
 weapon_name = "kanabo"
 metal_ring = false
+has_edge = false
+max_grip_angle = 40.0
 damage_per_speed = 13.0
 knockback_per_speed = 1.2
 

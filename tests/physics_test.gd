@@ -129,7 +129,9 @@ func _slash_and_get_hit(duration: float) -> Dictionary:
 	hits.clear()
 	player.swing_duration = duration
 	player.swing(DesktopPlayer.SLASH_HORIZONTAL)
-	await _wait(0.15 + duration + 0.3)
+	# Wait for the whole swing including the hand's way back, so it can't
+	# clip the next freshly reset dummy.
+	await _wait(0.15 + duration + 0.7)
 	return hits[0] if not hits.is_empty() else {}
 
 

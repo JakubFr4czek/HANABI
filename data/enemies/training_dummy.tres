@@ -12,9 +12,9 @@ zone_multipliers = {
 "torso": 1.0
 }
 resistances = {}
-poise_damage_scale = 0.008
+poise_damage_scale = 0.01
 muscle_damage_scale = 0.006
-balance_regen = 0.7
+balance_regen = 0.5
 muscle_regen = 0.9
 knockdown_time = 1.6
 getup_time = 1.8
