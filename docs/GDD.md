@@ -84,6 +84,7 @@ Near-realistic, in moody half-light. A dark sky, broken by a few bright events.
 - **Lightning:** branching bolts with a bright core and a glow, plus a brief scene-wide flash. Bolts are mesh and shader, not particles.
 - **Rain:** particles, with droplets that run down the blade.
 - **Blade:** the katana reflects the dark sky and flares on lightning. The sky reflection is a baked cubemap. No realtime reflections and no SSR.
+- **Sakura:** trees are over-the-top neon pink, with strong emission and glow. Falling petals read as slightly transparent liquid glass: a bright fresnel rim and a subtle iridescent sheen, faked in the shader (fresnel, alpha, emission). No real refraction and no screen-space effects. Petals count toward the particle budget.
 - **Quest 3:** the arena is static, so bake its lighting and shadows with `LightmapGI` (Mobile renderer). Realtime work is only the short lightning flashes, particles, and the blade trail. Shared `GPUParticles3D` budget: about 2–4k alive particles for rain, petals, and blade droplets.
 
 ### Training Arena (Dojo of the Storm)
