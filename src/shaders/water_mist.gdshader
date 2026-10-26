@@ -3,11 +3,10 @@ render_mode blend_mix, depth_draw_never, cull_disabled, unshaded, fog_disabled;
 
 // Low-cost drifting surface mist layer for Dojo of the Storm (Quest 3 Compatibility safe).
 // Renders a soft band of mist hovering just above the water around the platform rim,
-// around the Sakura trunk and Torii pillars, and fading seamlessly into the deep world fog.
+// around the Torii pillars, and fading seamlessly into the deep world fog.
 
 uniform vec4 mist_color : source_color = vec4(0.056, 0.044, 0.125, 1.0);
 uniform vec4 fog_color : source_color = vec4(0.032, 0.026, 0.072, 1.0);
-uniform vec4 sakura_tint : source_color = vec4(0.46, 0.12, 0.34, 1.0);
 uniform vec4 lightning_tint : source_color = vec4(0.45, 0.65, 1.0, 1.0);
 uniform float mist_opacity : hint_range(0.0, 1.0) = 0.44;
 uniform float inner_clear_radius : hint_range(2.0, 12.0) = 5.15;
@@ -44,19 +43,14 @@ void fragment() {
 	float n2 = mist_noise(p2);
 	float wisps = smoothstep(0.24, 0.82, n1 * 0.62 + n2 * 0.38);
 
-	// Extra mist plumes hugging the platform rim, Sakura trunk, and Giant Torii base
+	// Extra mist plumes hugging the platform rim and Giant Torii base
 	float rim_bank = exp(-max(r - 5.30, 0.0) * 0.45) * 0.48;
 	float d_torii = length((v_world_pos.xz - vec2(0.0, -10.5)) * vec2(0.45, 0.85));
 	float torii_bank = exp(-d_torii * 0.28) * 0.55;
 
-	// Subtle pink scatter near the western Sakura tree
-	float d_sakura = length(v_world_pos.xz - vec2(-9.2, -4.6));
-	float sakura_scatter = exp(-d_sakura * 0.18);
-
-	vec3 near_col = mix(mist_color.rgb, sakura_tint.rgb, sakura_scatter * 0.36);
 	// Blend mist color toward the deep world fog color with radial distance so there is no horizon band
 	float dist_blend = smoothstep(8.5, outer_fade_radius, r);
-	vec3 col = mix(near_col, fog_color.rgb, dist_blend);
+	vec3 col = mix(mist_color.rgb, fog_color.rgb, dist_blend);
 	// Lightning flash briefly illuminates the mist banks across the water
 	col += lightning_tint.rgb * (lightning_flash * (0.24 + 0.22 * wisps));
 

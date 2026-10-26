@@ -30,8 +30,8 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/models/environment/Lantern_KayLousberg.glb` | https://poly.pizza/m/CtHBJ1ufeW | Kay Lousberg | CC0 |
 
 ## Generated in-project (no third-party license)
-- Training dummy, the dummy's bokken, the kanabō, and the **Dojo of the Storm** training arena (`scenes/training_arena.tscn`): built from Godot primitives (`CylinderMesh`, `TorusMesh`, `PlaneMesh`, `SphereMesh`, `BoxMesh`), custom shaders (`src/shaders/*.gdshader`), and procedural `MultiMesh` / `ImmediateMesh` generators (`SakuraTreeGenerator` for the gnarled dark-bark sakura tree + lacy blossom clusters, `StormLightning` for branching storm bolts).
-- Blade trails, liquid-glass sakura petals, and spark bursts: generated at runtime (`ImmediateMesh`, `GPUParticles3D`, `CPUParticles3D`).
+- Training dummy, the dummy's bokken, the kanabō, and the **Dojo of the Storm** training arena (`scenes/training_arena.tscn`): built from Godot primitives (`CylinderMesh`, `TorusMesh`, `PlaneMesh`, `SphereMesh`, `BoxMesh`), custom shaders (`src/shaders/*.gdshader`), and the procedural `ImmediateMesh` generator `StormLightning` for branching storm bolts.
+- Blade trails and spark bursts: generated at runtime (`ImmediateMesh`, `CPUParticles3D`).
 
 ## Raw packs available locally (`assets_raw/`, not committed)
 

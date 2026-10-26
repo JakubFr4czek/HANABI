@@ -10,11 +10,9 @@
 [ext_resource type="Shader" path="res://src/shaders/water_mirror.gdshader" id="8_water_shader"]
 [ext_resource type="Shader" path="res://src/shaders/stone_platform.gdshader" id="9_stone_shader"]
 [ext_resource type="Shader" path="res://src/shaders/spawn_seal.gdshader" id="10_seal_shader"]
-[ext_resource type="Shader" path="res://src/shaders/sakura_petal.gdshader" id="11_petal_shader"]
 [ext_resource type="Script" path="res://src/core/storm_lightning.gd" id="12_lightning"]
 [ext_resource type="PackedScene" path="res://assets/models/environment/Torii_Gate_Quaternius.glb" id="13_torii"]
 [ext_resource type="PackedScene" path="res://assets/models/environment/Lantern_KayLousberg.glb" id="14_lantern"]
-[ext_resource type="Script" path="res://src/core/sakura_tree_generator.gd" id="15_sakura_gen"]
 [ext_resource type="Shader" path="res://src/shaders/water_mist.gdshader" id="16_mist_shader"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMat"]
@@ -156,27 +154,6 @@ shader = ExtResource("10_seal_shader")
 [sub_resource type="PlaneMesh" id="Mesh_SpawnSeal"]
 size = Vector2(3.4, 3.4)
 
-[sub_resource type="ShaderMaterial" id="Mat_SakuraPetal"]
-render_priority = 2
-shader = ExtResource("11_petal_shader")
-
-[sub_resource type="ParticleProcessMaterial" id="ProcMat_SakuraPetals"]
-emission_shape = 3
-emission_box_extents = Vector3(3.6, 1.4, 3.2)
-direction = Vector3(0.68, -0.72, 0.35)
-spread = 28.0
-initial_velocity_min = 0.42
-initial_velocity_max = 0.88
-angular_velocity_min = -80.0
-angular_velocity_max = 80.0
-gravity = Vector3(0.32, -0.24, 0.14)
-scale_min = 0.036
-scale_max = 0.065
-
-[sub_resource type="QuadMesh" id="Mesh_SakuraPetal"]
-material = SubResource("Mat_SakuraPetal")
-size = Vector2(0.07, 0.07)
-
 [sub_resource type="StandardMaterial3D" id="Mat_LacquerStand"]
 albedo_color = Color(0.09, 0.05, 0.06, 1)
 metallic = 0.25
@@ -228,14 +205,6 @@ light_color = Color(0.56, 0.64, 0.96, 1)
 light_energy = 0.52
 light_bake_mode = 1
 shadow_enabled = true
-
-[node name="SakuraGlowLight" type="OmniLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.2, 4.8, -3.4)
-light_color = Color(0.92, 0.22, 0.56, 1)
-light_energy = 0.72
-light_bake_mode = 1
-omni_range = 11.5
-omni_attenuation = 1.25
 
 [node name="ToriiAccentLight" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.2, -8.5)
@@ -343,20 +312,6 @@ transform = Transform3D(1.45, 0, 0, 0, 1.45, 0, 0, 0, 1.45, -2.35, 0, -4.65)
 
 [node name="LanternRight" parent="Arena/Lanterns" instance=ExtResource("14_lantern")]
 transform = Transform3D(1.45, 0, 0, 0, 1.45, 0, 0, 0, 1.45, 2.35, 0, -4.65)
-
-[node name="SakuraTree" type="Node3D" parent="Arena"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.2, -0.06, -4.6)
-script = ExtResource("15_sakura_gen")
-
-[node name="SakuraPetals" type="GPUParticles3D" parent="Arena"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.8, 5.2, -3.2)
-cast_shadow = 0
-amount = 72
-lifetime = 7.5
-preprocess = 3.5
-visibility_aabb = AABB(-10, -6, -8, 18, 9, 16)
-process_material = SubResource("ProcMat_SakuraPetals")
-draw_pass_1 = SubResource("Mesh_SakuraPetal")
 
 [node name="Room" type="Node3D" parent="."]
 
