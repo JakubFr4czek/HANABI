@@ -391,6 +391,27 @@ func _test_dojo_of_the_storm() -> void:
 		_check("Lightning flash fades out and its light pass is switched off (flash=%.3f)" % room.lightning.current_intensity,
 			room.lightning.current_intensity < 0.01
 			and (room.lightning.flash_light == null or not room.lightning.flash_light.visible))
+		var thunders_before: int = room.ambience.thunders_played if room.ambience else 0
+		await _wait(2.4)
+		_check("Distant thunder rolls in after the strike (%d played)" % (room.ambience.thunders_played if room.ambience else -1),
+			room.ambience != null and room.ambience.thunders_played > thunders_before)
+
+	var world_bus := AudioServer.get_bus_index(Sfx.WORLD_BUS)
+	var amb: StormAmbience = room.ambience
+	var rain_stream := amb.rain_player.stream as AudioStreamWAV if amb else null
+	_check("Audio: World bus with reverb, steel ring + thunder sounds, looping rain bed on Ambience bus",
+		world_bus >= 0 and AudioServer.get_bus_effect_count(world_bus) > 0
+		and AudioServer.get_bus_effect(world_bus, 0) is AudioEffectReverb
+		and Sfx._streams.has("blade_ring") and Sfx._streams.has("thunder")
+		and amb != null and amb.rain_player.playing and amb.rain_player.bus == Sfx.AMBIENCE_BUS
+		and rain_stream != null and rain_stream.loop_mode != AudioStreamWAV.LOOP_DISABLED)
+
+	TimeController.clear()
+	TimeController.micro_stop(0.03)
+	var micro_scale := Engine.time_scale
+	await _wait(0.1)
+	_check("Micro hit-stop is a brief partial slow-down (scale %.2f, then %.2f)" % [micro_scale, Engine.time_scale],
+		micro_scale > 0.1 and micro_scale < 0.6 and is_equal_approx(Engine.time_scale, 1.0))
 
 
 ## Hold the weapon in a scripted holder, then jump the target 0.4 m sideways and

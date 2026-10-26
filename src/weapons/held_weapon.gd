@@ -89,6 +89,10 @@ const PLAYER_BODY_LAYER := 1 << 19
 @export var knockback_per_speed := 0.6
 ## Hits doing at least this much damage trigger hit-stop.
 @export var hit_stop_damage := 40.0
+## Hits from this much damage up to [member hit_stop_damage] get a micro-stop.
+@export var micro_stop_damage := 15.0
+## Steel blades ring on clashes and cuts; wooden ones do not.
+@export var metal_ring := true
 
 @export_group("Parry")
 ## A clash with an attacking enemy blade is a parry above this relative speed (m/s)...
@@ -584,11 +588,17 @@ func _handle_hit(c: Dictionary) -> void:
 	if receiver.has_method("receive_hit"):
 		hit = receiver.receive_hit(part, hit)
 	var dmg: float = hit.get("damage", base_damage)
-	_pulse(clampf(0.25 + dmg / 80.0, 0.25, 1.0), 0.04 + clampf(dmg / 1000.0, 0.0, 0.08))
+	# Sharp bite, then a short body-felt tail on heavier hits.
+	var amp := clampf(0.25 + dmg / 80.0, 0.25, 1.0)
+	_pulse_pattern([[amp, 0.03], [amp * 0.45, 0.02 + clampf(dmg / 1000.0, 0.0, 0.08)]])
 	Sfx.play_at("impact_heavy" if dmg >= 30.0 else "impact_light", c.point, linear_to_db(clampf(0.4 + c.speed / 12.0, 0.4, 1.2)))
+	if metal_ring and dmg >= micro_stop_damage:
+		Sfx.play_at("blade_ring", c.point, linear_to_db(clampf(dmg / 120.0, 0.12, 0.45)))
 	if dmg >= hit_stop_damage:
 		# 50 ms for a solid hit, up to 80 ms for the heaviest ones.
 		TimeController.hit_stop(lerpf(0.05, 0.08, clampf((dmg - hit_stop_damage) / 60.0, 0.0, 1.0)))
+	elif dmg >= micro_stop_damage:
+		TimeController.micro_stop(lerpf(0.025, 0.035, (dmg - micro_stop_damage) / (hit_stop_damage - micro_stop_damage)))
 
 
 func _handle_clash(c: Dictionary) -> void:
@@ -611,8 +621,13 @@ func _handle_clash(c: Dictionary) -> void:
 	if is_parry:
 		_parry(other, clash)
 	else:
-		_pulse(clampf(0.4 + c.speed / 10.0, 0.4, 1.0), 0.06)
+		var amp := clampf(0.4 + c.speed / 10.0, 0.4, 1.0)
+		_pulse_pattern([[amp, 0.025], [amp * 0.3, 0.07]])
 		Sfx.play_at("clash", c.point, linear_to_db(clampf(0.3 + c.speed / 8.0, 0.3, 1.2)))
+		if metal_ring and other is HeldWeapon and (other as HeldWeapon).metal_ring:
+			Sfx.play_at("blade_ring", c.point, linear_to_db(clampf(0.2 + c.speed / 10.0, 0.2, 0.8)))
+		if c.speed >= 2.0:
+			TimeController.micro_stop(0.025)
 
 
 func _parry(other: BladeBody, clash: Dictionary) -> void:
@@ -621,14 +636,23 @@ func _parry(other: BladeBody, clash: Dictionary) -> void:
 		other.wielder.on_parried(clash)
 	GameEvents.report_parry(clash)
 	TimeController.slow_motion(parry_slowmo_scale, parry_slowmo_time, true)
-	_pulse(1.0, 0.15)
+	# Hard clang, a beat of silence, then the blade's ring in the palm.
+	_pulse_pattern([[1.0, 0.05], [0.0, 0.03], [0.6, 0.14]])
 	Sfx.play_at("clash", clash.point, linear_to_db(1.4))
+	if metal_ring:
+		Sfx.play_at("blade_ring", clash.point, linear_to_db(0.9))
 
 
 func _pulse(amplitude: float, duration: float) -> void:
 	for h in holders:
 		if h and h.has_method("pulse"):
 			h.pulse(amplitude, duration)
+
+
+func _pulse_pattern(steps: Array) -> void:
+	for h in holders:
+		if h and h.has_method("pulse_pattern"):
+			h.pulse_pattern(steps)
 
 
 func _update_swing_audio(delta: float) -> void:
