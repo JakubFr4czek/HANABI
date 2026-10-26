@@ -6,7 +6,7 @@ render_mode blend_add, depth_draw_never, cull_disabled, unshaded, fog_disabled;
 // scene-wide flash. Bolts are mesh and shader, not particles."
 
 uniform vec3 core_color : source_color = vec3(0.90, 0.96, 1.0);
-uniform vec3 glow_color : source_color = vec3(0.24, 0.62, 1.0);
+uniform vec3 glow_color : source_color = vec3(0.32, 0.58, 1.0);
 uniform float intensity : hint_range(0.0, 2.0) = 0.0;
 
 void fragment() {
@@ -14,9 +14,10 @@ void fragment() {
 	float x = abs(UV.x - 0.5) * 2.0;
 	float core = exp(-x * x * 22.0);
 	float corona = exp(-x * x * 3.8);
-	float tip_fade = smoothstep(0.0, 0.06, UV.y) * (1.0 - smoothstep(0.88, 1.0, UV.y));
+	// Fade the lower tail into the dense horizon fog behind the Torii
+	float tip_fade = smoothstep(0.0, 0.06, UV.y) * (1.0 - smoothstep(0.62, 0.94, UV.y));
 
-	vec3 col = (core_color * core * 3.6 + glow_color * corona * 1.6) * intensity * tip_fade;
+	vec3 col = (core_color * core * 3.4 + glow_color * corona * 1.5) * intensity * tip_fade;
 	ALBEDO = col;
 	ALPHA = clamp((core + corona * 0.65) * intensity * tip_fade, 0.0, 1.0);
 }
