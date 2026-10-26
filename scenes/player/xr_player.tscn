@@ -13,6 +13,7 @@
 script = ExtResource("1_player")
 
 [node name="StartXR" parent="." instance=ExtResource("2_startxr")]
+target_refresh_rate = 90.0
 
 [node name="XROrigin3D" type="XROrigin3D" parent="."]
 

@@ -8,7 +8,7 @@ The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [
 
 | Works | Stubbed / temporary |
 |---|---|
-| OpenXR rig (godot-xr-tools): smooth move, snap turn, hands; the hand model stays pinned to the exact grip spot when the blade is stopped | |
+| OpenXR rig (godot-xr-tools): smooth move, snap turn, hands; the hand model stays pinned to the exact grip spot when the blade is stopped (up to 0.3 m from the controller) | |
 | **Dojo of the Storm training arena** (`scenes/training_arena.tscn`, GDD §9): floating wet dark-stone disc on an endless water-mirror floor (shader-faked sky/torii/lightning reflections, no SSR), drifting surface mist, deep violet-to-navy storm sky with silent branching lightning (`StormLightning` mesh + shader), giant torii + tilted half-sunken torii, four-part `桜 雷 墨 影` floor seal, weapon stand, and `LightmapGI` setup | The sakura tree was removed until a better asset is available; run intro levitation and VR comfort options are deferred to later milestones |
 | **Free grip anywhere on the katana** (handle / *tsuka*, guard / *tsuba*, blunt spine of the blade / *mune*) and **two-handed grip** (including half-swording and seamless handoff when releasing either hand) | |
 | **Katana on a PD controller** (force + torque, stable PD): weight and inertia matter, a heavy **kanabō** visibly lags behind one hand and responds faster when held two-handed | Katana is the Grab3D model; kanabō is built from primitives |
@@ -57,6 +57,7 @@ GODOT=/Applications/Godot.app/Contents/MacOS/Godot
 $GODOT --headless --path . --import                  # first time / after adding assets
 $GODOT --headless --path . --fixed-fps 90 res://tests/physics_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/combat_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/grip_stability_test.tscn -- --desktop
 ```
 - `physics_test` checks the dummy (stands, staggers, knockdown, gets up), velocity-scaled damage, the wall stopping a thrust, and blade clashes.
 - `combat_test` checks:
@@ -68,8 +69,9 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/combat_test.tscn -- --desk
   - free grip on the handle (*tsuka*), guard (*tsuba*) and blunt side of the blade (*mune*, snapping away from the cutting edge);
   - two-handed grip (second hand attaches without releasing the first, steers the weapon between both hands, boosts force/torque on heavy weapons, and seamlessly hands off to the remaining hand when either hand lets go);
   - Dojo of the Storm arena nodes (water, mist, fog) and the procedural storm lightning flash.
+- `grip_stability_test` checks that the katana and kanabō (one- and two-handed, at 72 and 90 Hz, with simulated tracking noise) hold still without oscillating, that a heavy body slamming into the blade or a kick at the tip does not knock it out of the hand, that a weapon flying off past 0.4 m is put back in the hand, that weapons ignore the player's own bodies, and that the VR hand model never drifts more than 0.3 m from the controller.
 
-Both exit with code 0 when all checks pass. `res://tests/screenshots.tscn -- --desktop --shots /tmp/shots` renders screenshots. `tests/diag/` holds small diagnostic scenes, e.g. the Jolt joint-limit sign check and slow-mo tracking.
+All exit with code 0 when all checks pass. `res://tests/screenshots.tscn -- --desktop --shots /tmp/shots` renders screenshots. `tests/diag/` holds small diagnostic scenes, e.g. the Jolt joint-limit sign check and slow-mo tracking.
 
 ## Run on Meta Quest (standalone)
 
@@ -134,7 +136,7 @@ Then point *Editor Settings → Export → Android → Debug Keystore* at it (us
 - **Export an APK:** *Project → Export… → Meta Quest → Export Project* to `build/quest/hanabi.apk`, then `adb install -r build/quest/hanabi.apk`. Start it from *Library → Unknown Sources*.
 - Logs: `adb logcat -s godot`.
 
-On Quest the renderer switches to **Compatibility** automatically (`rendering_method.mobile` override; the Godot XR docs recommend it for Android XR). Physics runs at the headset refresh rate (72/90/120 Hz).
+On Quest the renderer switches to **Compatibility** automatically (`rendering_method.mobile` override; the Godot XR docs recommend it for Android XR). `StartXR` asks the headset for 90 Hz (Quest 3 defaults to 72 Hz) and runs physics at the refresh rate it gets.
 
 ## Run in PCVR (Windows, for recording)
 1. Install Godot 4.7.2 for Windows and the **Meta Quest Link** app. Connect the Quest with Link (cable) or Air Link.
@@ -178,9 +180,11 @@ tests/             headless physics test, screenshots, diagnostics
   - Force and torque are capped by the player's arm strength (260 N, 40 N·m). A heavier weapon therefore accelerates less and lags.
   - **Free & two-handed grip:** grabbing records a local grip transform clamped to the handle (*tsuka*), guard (*tsuba*), or blunt spine of the blade (*mune*, `+Y`, never the cutting edge `-Y`). With two hands attached, the target weapon pose aligns the line between both grip points with the line between both hands, blends wrist roll, and scales arm force/torque (`×1.6` / `×1.8`). Releasing either hand transfers control to the remaining hand at its grip point.
   - When the grip is held more than 10 cm away from the hand, strength drops to 30%, so the blade rests on obstacles instead of shoving them.
+  - The damping term is implicit (divided by `1 + kd·dt`), so the controller is critically damped at any tick rate. With explicit damping it rang every tick at 90 Hz and was unstable at 72 Hz, which showed up as a buzzing blade on Quest.
+  - **Never flies away:** the weapon's speed and spin are capped at the hand's own plus 4 m/s / 18 rad/s; a new impact with a moving body may change its velocity by at most 2 m/s / 12 rad/s beyond what the arm does; a weapon more than 0.4 m from the hand and still moving away is put back in the hand (unless the hand is behind something solid). The hand model follows the grip only within 0.3 m of the controller. Weapons never collide with the player's own bodies (`HeldWeapon.register_player_collision_exceptions`).
 - **Weapon hit speed:** each weapon stores its velocity before every physics step. On a new contact, the hit speed is the relative velocity of the two contact points *before* the solver slowed them down. Damage = `(speed − 1.5 m/s) × 9` (×13 for the kanabō), capped at 120, times the zone multiplier and ×1.5 for counters.
 - **Time effects (`TimeController`):**
-  - Hit-stop and slow-mo set `Engine.time_scale` and are timed in real time (counted in physics ticks, which stay at 90/s).
+  - Hit-stop and slow-mo set `Engine.time_scale` and are timed in real time (counted in physics ticks, which stay at 90/s). The hand's velocity fed to the weapon controller is measured over real time, so the blade freezes with the world in a hit-stop instead of being yanked forward.
   - In a parry slow-mo the player's weapon is compensated: its gains are scaled by real_tick / sim_delta. Your blade keeps real-time speed while the world moves at ×0.3.
   - Speeds of player hits are converted back to real m/s.
 - **Parry:** a new contact between the player's blade and an enemy blade flagged `attacking` (the enemy brain sets it during a strike), with relative speed ≥ 1.5 m/s and blades crossing at ≥ 25°.
