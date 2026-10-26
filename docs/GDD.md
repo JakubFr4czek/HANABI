@@ -97,7 +97,12 @@ Do not implement during prototyping. Prepare the architecture: swappable enemy b
 - **Stabbing / impaling (Blade & Sorcery style):** the blade tip enters a body when the hit velocity is along the blade axis; a slider joint locks it to that axis with friction; the blade is pulled out by retracting it past the entry point.
 
 ## 13. Open questions
-- Locomotion: smooth only, or teleport as a comfort option?
+- Locomotion: smooth only, or teleport as a comfort option? (Current build: smooth move on the left stick, snap turn on the right stick.)
+- Placeholders in the test room (2026-10-26): the training dummy and both bokken are built from Godot primitives; the Quaternius base character / katana models are not used yet. Skinning the Quaternius mesh onto the active ragdoll is planned with the yōkai (milestone 2).
+- Balance numbers for the dummy (first pass): damage = (relative speed − 1.5 m/s) × 9, cap 120; one full swing (~10 m/s) staggers, two quick heavy hits knock it down. Tune by feel in the headset.
+- Active ragdoll muscles currently act like animation (no reaction torque on the parent) for stability; full momentum-conserving muscles are a later polish item.
+- After a knockdown the dummy stands up where it fell instead of walking back; real stepping/locomotion comes with the enemy AI (NavigationAgent3D + FSM).
+- Godot docs recommend the Compatibility renderer for Android XR; the project uses Mobile on PC and Compatibility on Quest. Revisit if Mobile on Quest becomes recommended (needed for some VFX).
 - Number of upgrades per element for the hackathon version?
 - Exact element and evolution balance numbers?
 - Does Meta offer TTS, or do we use Piper?
