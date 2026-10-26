@@ -3,6 +3,17 @@
 [ext_resource type="Script" path="res://src/weapons/held_weapon.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://assets/models/weapons/katana_grab3d/katana.glb" id="2_model"]
 
+[ext_resource type="Shader" path="res://src/shaders/katana_steel.gdshader" id="3_steel"]
+[ext_resource type="Texture2D" path="res://assets/models/weapons/katana_grab3d/katana_katana_body_basecolor.jpg" id="4_albedo"]
+[ext_resource type="Texture2D" path="res://assets/models/weapons/katana_grab3d/katana_katana_body_normal.jpg" id="5_normal"]
+[ext_resource type="Texture2D" path="res://assets/models/weapons/katana_grab3d/katana_katana_body_metallic-katana_body_roughness.jpg" id="6_orm"]
+
+[sub_resource type="ShaderMaterial" id="Mat_katana"]
+shader = ExtResource("3_steel")
+shader_parameter/albedo_texture = ExtResource("4_albedo")
+shader_parameter/normal_texture = ExtResource("5_normal")
+shader_parameter/orm_texture = ExtResource("6_orm")
+
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_steel"]
 friction = 0.4
 
@@ -32,6 +43,9 @@ weapon_name = "katana"
 
 [node name="Model" parent="." instance=ExtResource("2_model")]
 transform = Transform3D(0, 1.05, 0, 0, 0, -1.05, -1.05, 0, 0, -0.04725, 0, -0.294)
+
+[node name="katana_body" parent="Model/katana" index="0"]
+surface_material_override/0 = SubResource("Mat_katana")
 
 [node name="BladeShape" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.025, 0.01, -0.445)

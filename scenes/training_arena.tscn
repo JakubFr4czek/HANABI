@@ -14,38 +14,45 @@
 [ext_resource type="PackedScene" path="res://assets/models/environment/Torii_Gate_Quaternius.glb" id="13_torii"]
 [ext_resource type="PackedScene" path="res://assets/models/environment/Lantern_KayLousberg.glb" id="14_lantern"]
 [ext_resource type="Shader" path="res://src/shaders/water_mist.gdshader" id="16_mist_shader"]
+[ext_resource type="Shader" path="res://src/shaders/storm_sky.gdshader" id="17_sky_radiance"]
+[ext_resource type="Shader" path="res://src/shaders/wet_surface.gdshader" id="18_wet"]
 
-[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMat"]
-sky_top_color = Color(0.028, 0.016, 0.072, 1)
-sky_horizon_color = Color(0.032, 0.026, 0.072, 1)
-ground_bottom_color = Color(0.005, 0.007, 0.02, 1)
-ground_horizon_color = Color(0.032, 0.026, 0.072, 1)
+[sub_resource type="ShaderMaterial" id="Mat_StormSky"]
+shader = ExtResource("17_sky_radiance")
 
 [sub_resource type="Sky" id="Sky_storm"]
-sky_material = SubResource("ProceduralSkyMat")
+sky_material = SubResource("Mat_StormSky")
+radiance_size = 2
 
 [sub_resource type="Environment" id="Env"]
-background_mode = 2
+background_mode = 1
+background_color = Color(0.16, 0.16, 0.27, 1)
 sky = SubResource("Sky_storm")
 ambient_light_source = 2
-ambient_light_color = Color(0.24, 0.22, 0.38, 1)
-ambient_light_energy = 0.65
-tonemap_mode = 2
+ambient_light_color = Color(0.36, 0.4, 0.62, 1)
+ambient_light_energy = 0.34
+reflected_light_source = 2
+tonemap_mode = 3
+tonemap_exposure = 1.1
+tonemap_white = 6.0
 glow_enabled = true
-glow_intensity = 0.34
-glow_strength = 0.78
-glow_bloom = 0.04
+glow_intensity = 0.55
+glow_strength = 0.9
+glow_bloom = 0.0
+glow_blend_mode = 1
+glow_hdr_threshold = 1.15
+glow_hdr_scale = 1.6
 fog_enabled = true
 fog_mode = 1
-fog_light_color = Color(0.032, 0.026, 0.072, 1)
+fog_light_color = Color(0.16, 0.16, 0.27, 1)
 fog_light_energy = 1.0
-fog_density = 0.98
-fog_sky_affect = 0.68
-fog_depth_curve = 0.88
-fog_depth_begin = 6.0
-fog_depth_end = 19.5
-fog_height = 0.55
-fog_height_density = 0.55
+fog_density = 1.0
+fog_sky_affect = 0.0
+fog_depth_curve = 1.6
+fog_depth_begin = 4.0
+fog_depth_end = 26.0
+fog_height = 0.4
+fog_height_density = 0.35
 
 [sub_resource type="ShaderMaterial" id="Mat_SkyDome"]
 render_priority = -100
@@ -94,8 +101,8 @@ shader_parameter/normal_map_b = SubResource("Tex_WaterNormalB")
 
 [sub_resource type="PlaneMesh" id="Mesh_WaterMirror"]
 size = Vector2(180, 180)
-subdivide_width = 96
-subdivide_depth = 96
+subdivide_width = 8
+subdivide_depth = 8
 
 [sub_resource type="ShaderMaterial" id="Mat_WaterMistLow"]
 render_priority = 1
@@ -131,10 +138,13 @@ height = 0.44
 radial_segments = 64
 rings = 1
 
-[sub_resource type="StandardMaterial3D" id="Mat_DarkStoneTrim"]
-albedo_color = Color(0.055, 0.06, 0.085, 1)
-metallic = 0.15
-roughness = 0.55
+[sub_resource type="ShaderMaterial" id="Mat_DarkStoneTrim"]
+shader = ExtResource("18_wet")
+shader_parameter/base_color = Color(0.06, 0.06, 0.07, 1)
+shader_parameter/roughness_dry = 0.5
+shader_parameter/roughness_wet = 0.1
+shader_parameter/wetness = 0.8
+shader_parameter/waterline_y = 0.0
 
 [sub_resource type="TorusMesh" id="Mesh_PlatformRim"]
 material = SubResource("Mat_DarkStoneTrim")
@@ -154,14 +164,22 @@ shader = ExtResource("10_seal_shader")
 [sub_resource type="PlaneMesh" id="Mesh_SpawnSeal"]
 size = Vector2(3.4, 3.4)
 
-[sub_resource type="StandardMaterial3D" id="Mat_LacquerStand"]
-albedo_color = Color(0.09, 0.05, 0.06, 1)
-metallic = 0.25
-roughness = 0.38
+[sub_resource type="ShaderMaterial" id="Mat_LacquerStand"]
+shader = ExtResource("18_wet")
+shader_parameter/base_color = Color(0.03, 0.025, 0.028, 1)
+shader_parameter/roughness_dry = 0.3
+shader_parameter/roughness_wet = 0.08
+shader_parameter/wetness = 0.7
+shader_parameter/waterline_y = -10.0
+shader_parameter/grain_amount = 0.35
 
-[sub_resource type="StandardMaterial3D" id="Mat_CrimsonTrim"]
-albedo_color = Color(0.55, 0.08, 0.09, 1)
-roughness = 0.45
+[sub_resource type="ShaderMaterial" id="Mat_CrimsonTrim"]
+shader = ExtResource("18_wet")
+shader_parameter/base_color = Color(0.2, 0.025, 0.03, 1)
+shader_parameter/roughness_dry = 0.3
+shader_parameter/roughness_wet = 0.1
+shader_parameter/wetness = 0.6
+shader_parameter/waterline_y = -10.0
 
 [sub_resource type="BoxShape3D" id="Shape_Floor"]
 size = Vector3(10.6, 1.0, 10.6)
@@ -200,25 +218,16 @@ script = ExtResource("1_room")
 environment = SubResource("Env")
 
 [node name="Moon" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.866, -0.4096, 0.2868, 0, 0.5736, 0.8192, -0.5, -0.7094, 0.4967, 0, 8, 0)
-light_color = Color(0.56, 0.64, 0.96, 1)
-light_energy = 0.52
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 0)
+rotation = Vector3(-0.419, 2.943, 0)
+light_color = Color(0.72, 0.8, 1, 1)
+light_energy = 1.35
+light_specular = 1.4
 light_bake_mode = 1
 shadow_enabled = true
-
-[node name="ToriiAccentLight" type="OmniLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.2, -8.5)
-light_color = Color(0.92, 0.24, 0.34, 1)
-light_energy = 1.15
-light_bake_mode = 1
-omni_range = 12.0
-
-[node name="StandWarmLight" type="OmniLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4, 1.85, 1.4)
-light_color = Color(0.95, 0.58, 0.35, 1)
-light_energy = 0.85
-light_bake_mode = 1
-omni_range = 4.5
+shadow_blur = 1.5
+directional_shadow_mode = 0
+directional_shadow_max_distance = 14.0
 
 [node name="Arena" type="Node3D" parent="."]
 

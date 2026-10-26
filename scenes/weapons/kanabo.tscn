@@ -14,20 +14,20 @@ height = 0.28
 radius = 0.02
 
 [sub_resource type="StandardMaterial3D" id="Mat_iron"]
-albedo_color = Color(0.11, 0.1, 0.1, 1)
-metallic = 0.85
-roughness = 0.45
+albedo_color = Color(0.2, 0.2, 0.21, 1)
+metallic = 0.9
+roughness = 0.32
 
 [sub_resource type="StandardMaterial3D" id="Mat_wrap"]
-albedo_color = Color(0.35, 0.06, 0.05, 1)
-roughness = 0.9
+albedo_color = Color(0.12, 0.025, 0.03, 1)
+roughness = 0.42
 
 [sub_resource type="CylinderMesh" id="Mesh_body"]
 material = SubResource("Mat_iron")
 top_radius = 0.035
 bottom_radius = 0.062
 height = 0.93
-radial_segments = 8
+radial_segments = 16
 rings = 1
 
 [sub_resource type="CylinderMesh" id="Mesh_handle"]
