@@ -334,14 +334,18 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 	await get_tree().physics_frame
 	katana.release_all()
 	katana.global_transform = base_pose
-	xr_player.right_controller.global_transform = base_pose * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 0.04))
-	xr_player.left_controller.global_transform = base_pose * Transform3D(Basis.IDENTITY, Vector3(-0.025, 0.018, -0.40))
+	# The holders sit in the fist, offset from the controllers: put the fists on the grip spots.
+	var grip_r := Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 0.04))
+	var grip_l := Transform3D(Basis.IDENTITY, Vector3(-0.025, 0.018, -0.40))
+	xr_player.right_controller.global_transform = base_pose * grip_r * xr_player.right_holder.transform.affine_inverse()
+	xr_player.left_controller.global_transform = base_pose * grip_l * xr_player.left_holder.transform.affine_inverse()
 	xr_player.right_holder.grab(katana)
 	xr_player.left_holder.grab(katana)
 	var anchor_r := katana.get_node_or_null("HandAnchor_right") as Node3D
 	var anchor_l := katana.get_node_or_null("HandAnchor_left") as Node3D
+	var expected_r := (grip_r * xr_player.right_holder.transform.affine_inverse()).origin
 	_check("VR hand models pin to both grip locations on the katana",
-		anchor_r != null and anchor_l != null and anchor_r.position.distance_to(Vector3(0.0, 0.0, 0.04)) < 0.01 and anchor_l.position.z < -0.35)
+		anchor_r != null and anchor_l != null and anchor_r.position.distance_to(expected_r) < 0.01 and anchor_l.position.z < -0.35)
 	xr_player.right_holder.release()
 	xr_player.left_holder.release()
 	xr_player.queue_free()
