@@ -56,6 +56,10 @@ There are four elements. Each has an upgrade tree, applies to the blade (trail, 
 - **Elite enemies:** have element resistances and weaknesses and require parries or specific elements.
 - **Oni boss:** appears periodically; heavy attacks, parryable combos.
 - Local AI uses NavigationAgent3D and a state machine (FSM), with tactics and resistances defined as data and a swappable "brain" component (prepared for the AI phase).
+- **Duelist behavior (implemented on the training dummy, reused by elites and the Oni):** states idle → stalk → attack (wind-up → strike) → block / stagger → recover. Attacks: vertical cut, horizontal cut, thrust; combos chain a follow-up with a shorter (but never below minimum) wind-up; a feint switches attacks mid wind-up. In stalk it closes to engage distance, backs off when crowded and circles. It blocks the player's swings by chance (after a reaction delay) and may riposte. A parry staggers it; a heavy hit during its wind-up interrupts it.
+- **Fairness rules (VR):** every strike shows at least 0.4 s of wind-up inside the player's view (±40° from where they look) with three tells (pose, glowing eyes, rising whoosh); a wind-up is dropped if the player looks away for 0.8 s; circling drifts back into view instead of flanking.
+- **Difficulty** is a data resource (wind-up and recovery scale, cooldowns, combo / feint / block / riposte chance, reaction time, damage scale, move speed, stagger time) with easy / normal / hard presets.
+- **Player HP:** 100, 0.6 s invulnerability after a hit; feedback is a red edge vignette, a heavy haptic pattern in both hands and a hurt sound. At 0 HP the player is down for 3 s, then revives at full health (run-over screen comes with the loop, milestone 2).
 
 ## 8. Meta AI features (LATER PHASE)
 Do not implement during prototyping. Prepare the architecture: swappable enemy brain, data-driven tactics, and one central gameplay event log.
@@ -137,8 +141,8 @@ At the start of a run the player hovers about 0.5–1 m above the arena in a med
 - Active ragdoll muscles currently act like animation (no reaction torque on the parent) for stability; full momentum-conserving muscles are a later polish item.
 - Combat feel, first pass (2026-10-26): player arm strength 260 N / 40 N·m (katana 1.1 kg settles in ~0.13 s, kanabō 4 kg in ~0.47 s); hit-stop on hits ≥ 40 damage; parry = clash with an *attacking* enemy blade at ≥ 1.5 m/s relative and ≥ 25° between blades, then slow-mo ×0.3 for 0.6 s with the player's blade kept real-time, enemy stunned 1.2 s, counter window 1.5 s at ×1.5 damage. Tune in the headset.
 - Hit-stop freezes the whole world (including the player's blade) for 50–80 ms; in VR the head and hands keep tracking. If it feels bad in the headset, switch to a local hit-stop (only the hit enemy and the blade).
-- Should enemy attacks that are *not* parried damage the player? Needs player HP (milestone 2).
-- After a knockdown the dummy stands up where it fell instead of walking back; real stepping/locomotion comes with the enemy AI (NavigationAgent3D + FSM).
+- Enemy damage, first pass (normal difficulty): vertical 18, horizontal 14, thrust 20 (easy ×0.6, hard ×1.4). Tune in the headset.
+- After a knockdown the dummy stands up where it fell instead of walking back; the duelist AI walks back home when not sparring, but obstacle-aware navigation (NavigationAgent3D) comes with the yōkai.
 - Godot docs recommend the Compatibility renderer for Android XR; the project uses Mobile on PC and Compatibility on Quest. Revisit if Mobile on Quest becomes recommended (needed for some VFX).
 - Number of upgrades per element for the hackathon version?
 - Exact element and evolution balance numbers?
