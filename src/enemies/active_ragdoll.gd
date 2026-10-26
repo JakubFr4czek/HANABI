@@ -54,6 +54,13 @@ const BODY_MASK := 1 | 2 | 4
 ## and into or out of a leg overlay (walking steps).
 @export var default_pose_blend := 0.3
 @export var overlay_blend := 0.28
+## Each time a pose starts, its joint targets get a random offset of up to this
+## many degrees, so a repeated move never looks exactly the same.
+@export var pose_variation_deg := 0.0
+## Slow, breathing-like drift of the joint targets (deg) in the poses listed in
+## [member sway_poses]: a living guard instead of a frozen one.
+@export var idle_sway_deg := 0.0
+@export var sway_poses: PackedStringArray = ["guard", "idle"]
 
 var parts := {}  # name -> RagdollPart
 var state := State.STANDING
@@ -81,6 +88,11 @@ var _pose_blend := {}  # pose name -> Vector2(blend seconds, index in _EASES)
 var _joint_blends := {}  # part name -> JointBlend toward its current target
 var _stiffness_now := 1.0  # pose stiffness, blended like the joint targets
 var _yaw_rate := 0.0
+var _variation := {}  # part name -> Quaternion offset for the current pose entry
+var _sway_time := 0.0
+var _sway_weight := 0.0  # 0..1, eases in and out with the sway poses
+var _sway_phase := {}  # part name -> Vector3 random phases
+var _pose_rng := RandomNumberGenerator.new()
 
 const _EASES := ["inout", "in", "out"]
 
@@ -115,6 +127,7 @@ var _total_mass := 0.0
 
 
 func _ready() -> void:
+	_pose_rng.randomize()
 	_facing_yaw = global_rotation.y
 	_target_yaw = _facing_yaw
 	anchor_position = global_position
@@ -320,8 +333,22 @@ func face_toward(world_pos: Vector3) -> void:
 
 
 func set_pose(pose_name: String) -> void:
-	if _poses.has(pose_name):
-		current_pose = pose_name
+	if not _poses.has(pose_name) or pose_name == current_pose:
+		return
+	current_pose = pose_name
+	_variation.clear()
+	if pose_variation_deg <= 0.0:
+		return
+	for part_name in _poses[pose_name]:
+		# Mostly in the swing plane (x), less twist (y) and side tilt (z).
+		var e := Vector3(_pose_rng.randf_range(-1.0, 1.0), _pose_rng.randf_range(-0.5, 0.5), _pose_rng.randf_range(-0.5, 0.5)) * deg_to_rad(pose_variation_deg)
+		_variation[part_name] = Basis.from_euler(e).get_rotation_quaternion()
+
+
+## Seed the random pose variation and sway (tests, replays).
+func set_motion_seed(value: int) -> void:
+	_pose_rng.seed = value
+	_sway_phase.clear()
 
 
 ## Reduce muscle/balance, e.g. from a hit. Values are 0..1 amounts.
@@ -419,6 +446,9 @@ func _drive_joints(delta: float) -> void:
 	_stiffness_now = lerpf(_stiffness_now, _pose_stiffness.get(current_pose, 1.0), 1.0 - exp(-8.0 * delta))
 	var k := _stiffness_now
 	var max_speed: float = _pose_max_speed.get(current_pose, INF)
+	_sway_time += delta
+	var sway_on := idle_sway_deg > 0.0 and state == State.STANDING and sway_poses.has(current_pose)
+	_sway_weight = move_toward(_sway_weight, 1.0 if sway_on else 0.0, delta * 1.5)
 	for part_name in _order:
 		var def: Dictionary = _defs[part_name]
 		if def.get("parent", "") == "":
@@ -428,6 +458,8 @@ func _drive_joints(delta: float) -> void:
 		var blend: JointBlend = _joint_blends[part_name]
 		var q_parent := parent.global_basis.get_rotation_quaternion()
 		var q_target := q_parent * blend.now
+		if _sway_weight > 0.0:
+			q_target = q_target * _sway(part_name)
 		# Feed-forward: follow the moving target instead of only chasing its error.
 		var omega_ff := q_parent * (_rotation_error(blend.now, blend.prev) / delta)
 		var omega_des := (omega_ff + _rotation_error(q_target, child.global_basis.get_rotation_quaternion()) * (joint_stiffness * k)).limit_length(max_speed)
@@ -442,6 +474,25 @@ func _drive_joints(delta: float) -> void:
 			parent.apply_torque_impulse(-reaction[1] * muscle_reaction)
 
 
+## Smooth drift of one joint for the living guard: two slow sines per axis
+## (breathing ~0.25 Hz plus a slower weight shift), different phase per joint.
+## Legs stay put so the feet do not shuffle; the chest is held by the
+## balance drive (it would only fight it).
+func _sway(part_name: String) -> Quaternion:
+	if part_name.contains("leg") or part_name == _upright_part():
+		return Quaternion.IDENTITY
+	if not _sway_phase.has(part_name):
+		_sway_phase[part_name] = Vector3(_pose_rng.randf() * TAU, _pose_rng.randf() * TAU, _pose_rng.randf() * TAU)
+	var ph: Vector3 = _sway_phase[part_name]
+	var t := _sway_time
+	var amp := deg_to_rad(idle_sway_deg) * _sway_weight
+	var e := Vector3(
+		sin(t * 1.6 + ph.x) * 0.7 + sin(t * 0.55 + ph.y) * 0.3,
+		sin(t * 0.7 + ph.y) * 0.5,
+		sin(t * 0.9 + ph.z) * 0.4) * amp
+	return Basis.from_euler(e).get_rotation_quaternion()
+
+
 ## Retarget each joint whose pose (or leg overlay) angle changed: it blends
 ## from where its target is now, over the pose's "_blend" time and "_ease" curve.
 func _update_joint_blends(delta: float) -> void:
@@ -453,6 +504,8 @@ func _update_joint_blends(delta: float) -> void:
 			continue
 		var in_overlay := overlay.has(part_name)
 		var to: Quaternion = overlay.get(part_name, pose.get(part_name, Quaternion.IDENTITY))
+		if not in_overlay and _variation.has(part_name):
+			to = to * (_variation[part_name] as Quaternion)
 		var b: JointBlend = _joint_blends.get(part_name)
 		if b == null:
 			b = JointBlend.new()

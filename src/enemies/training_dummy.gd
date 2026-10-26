@@ -16,6 +16,8 @@ const WET_SURFACE_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 ## How fast the walking speed may change (m/s²): the body leans into a step
 ## and carries its weight out of it instead of starting and stopping dead.
 const MOVE_ACCEL := 4.0
+## Acceleration (m/s²) of a planted burst: the strike's step in, an evade.
+const BURST_ACCEL := 25.0
 
 @export var profile: EnemyProfile
 @export var hold_sword := true
@@ -64,6 +66,9 @@ func _ready() -> void:
 	_eyes.emission_enabled = true
 	_eyes.emission = Color(1.0, 0.16, 0.08)
 	_eyes.emission_energy_multiplier = 0.0
+	# No two moves exactly alike, and a guard that breathes.
+	pose_variation_deg = 5.0
+	idle_sway_deg = 3.0
 	super._ready()
 	home_position = global_position
 	for child in get_children():
@@ -229,39 +234,54 @@ func _define_poses() -> Dictionary:
 			"upper_leg_r": Vector3(25, 0, -8),
 			"lower_leg_r": Vector3(8, 0, 0),
 		},
-		# Blocks: the bokken raised across the head, or held upright on one side.
+		# Blocks (solved with tests/diag/diag_block_ik.tscn): the bokken held in
+		# front of the body across the line of the player's cut, left hand on
+		# the handle, leaning in from the waist. High = across above the head;
+		# left / right = rising diagonally on that side; mid = diagonal across
+		# the chest (thrusts, centre cuts). Together they cover chest to head.
 		"block_high": {
-			"_stiffness": 1.6,
-			"_blend": 0.12,
+			"_stiffness": 1.8,
+			"_blend": 0.08,
 			"_ease": "out",
-			"chest": Vector3(0, 0, 0),
-			"head": Vector3(-4, 0, 0),
-			"upper_arm_r": Vector3(-130, 35, -25),
-			"lower_arm_r": Vector3(-45, 60, 0),
-			"upper_arm_l": Vector3(-120, -30, 20),
-			"lower_arm_l": Vector3(-60, 0, 0),
-		},
-		"block_right": {
-			"_stiffness": 1.6,
-			"_blend": 0.12,
-			"_ease": "out",
-			"chest": Vector3(4, -18, 0),
-			"head": Vector3(-4, 15, 0),
-			"upper_arm_r": Vector3(-45, -45, -35),
-			"lower_arm_r": Vector3(-75, 0, 0),
-			"upper_arm_l": Vector3(-50, -25, -20),
-			"lower_arm_l": Vector3(-70, 0, 0),
+			"chest": Vector3(8, 2, 0),
+			"head": Vector3(-4, -1, 0),
+			"upper_arm_r": Vector3(-10, 22, -104),
+			"lower_arm_r": Vector3(-99, -39, 0),
+			"upper_arm_l": Vector3(-110, -52, -17),
+			"lower_arm_l": Vector3(-1, -57, 0),
 		},
 		"block_left": {
-			"_stiffness": 1.6,
-			"_blend": 0.12,
+			"_stiffness": 1.8,
+			"_blend": 0.08,
 			"_ease": "out",
-			"chest": Vector3(4, 22, 0),
-			"head": Vector3(-4, -15, 0),
-			"upper_arm_r": Vector3(-55, 55, 5),
-			"lower_arm_r": Vector3(-85, 0, 0),
-			"upper_arm_l": Vector3(-40, 25, -10),
-			"lower_arm_l": Vector3(-60, 0, 0),
+			"chest": Vector3(24, 1, 0),
+			"head": Vector3(-4, -1, 0),
+			"upper_arm_r": Vector3(-13, 57, -25),
+			"lower_arm_r": Vector3(-90, -5, 0),
+			"upper_arm_l": Vector3(-40, -65, 45),
+			"lower_arm_l": Vector3(-65, -57, 0),
+		},
+		"block_right": {
+			"_stiffness": 1.8,
+			"_blend": 0.08,
+			"_ease": "out",
+			"chest": Vector3(24, 16, 0),
+			"head": Vector3(-4, -11, 0),
+			"upper_arm_r": Vector3(-26, 20, 17),
+			"lower_arm_r": Vector3(-112, -57, 0),
+			"upper_arm_l": Vector3(-60, -67, 5),
+			"lower_arm_l": Vector3(-17, 6, 0),
+		},
+		"block_mid": {
+			"_stiffness": 1.8,
+			"_blend": 0.08,
+			"_ease": "out",
+			"chest": Vector3(24, -10, 0),
+			"head": Vector3(-4, 7, 0),
+			"upper_arm_r": Vector3(-6, 39, -47),
+			"lower_arm_r": Vector3(-100, 7, 0),
+			"upper_arm_l": Vector3(-68, -67, 12),
+			"lower_arm_l": Vector3(-4, -15, 0),
 		},
 		# Leg overlays while walking (arms keep the main pose): low sliding
 		# steps (suri-ashi), the feet barely leave the floor.
@@ -451,7 +471,12 @@ func on_blade_contact(info: Dictionary) -> void:
 	if duelist == null:
 		return
 	if duelist.state == DuelistBrain.State.BLOCK:
-		duelist.on_block_contact(info)
+		if duelist.on_block_contact(info):
+			# Raised in time: the swing is deflected (the dummy's parry).
+			var weapon = info.get("weapon")
+			if weapon and weapon.has_method("feel_deflected"):
+				weapon.feel_deflected(info.get("point", sword.global_position if sword else global_position))
+			GameEvents.log_event("enemy_parry", {"enemy": profile.display_name})
 	elif sword and sword.attacking:
 		sword.attacking = false
 		duelist.on_strike_blocked(info)
@@ -516,7 +541,7 @@ func _physics_process(delta: float) -> void:
 		_try_hit_player(float(intent.get("damage", 10.0)), String(intent.get("attack", "")))
 	if intent.has("face_position") and state == State.STANDING:
 		face_toward(intent.face_position)
-	_apply_move(intent.get("move", Vector3.ZERO), delta)
+	_apply_move(intent.get("move", Vector3.ZERO), delta, intent.get("plant", false))
 	_show_tell(float(intent.get("tell", 0.0)))
 	super._physics_process(delta)
 
@@ -553,8 +578,9 @@ func _perceive(delta: float) -> Dictionary:
 	return ctx
 
 
-## Walk the anchor, but not into walls or props.
-func _apply_move(move: Vector3, delta: float) -> void:
+## Walk the anchor, but not into walls or props. [param planted]: the pose
+## owns the legs (wind-up, strike step, block), so no walking steps on top.
+func _apply_move(move: Vector3, delta: float, planted := false) -> void:
 	move.y = 0.0
 	if state != State.STANDING:
 		move_velocity = Vector3.ZERO
@@ -569,8 +595,8 @@ func _apply_move(move: Vector3, delta: float) -> void:
 	if _move_blocked:
 		move_velocity = Vector3.ZERO
 	else:
-		move_velocity = move_velocity.move_toward(move, MOVE_ACCEL * delta)
-	if move_velocity.length() > 0.15:
+		move_velocity = move_velocity.move_toward(move, (BURST_ACCEL if planted else MOVE_ACCEL) * delta)
+	if move_velocity.length() > 0.15 and not planted:
 		_step_time += delta
 		overlay_pose = "step_l" if fmod(_step_time, 0.56) < 0.28 else "step_r"
 	else:

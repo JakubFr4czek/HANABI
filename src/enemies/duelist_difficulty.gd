@@ -20,11 +20,17 @@ extends Resource
 ## Chance that a wind-up is a feint that switches into a different attack.
 @export var feint_chance := 0.15
 ## Chance to raise a block against an incoming player swing.
-@export var block_chance := 0.35
-## Chance to answer a successful block with an immediate counter-attack.
-@export var riposte_chance := 0.3
+@export var block_chance := 0.55
+## Chance to step back out of reach of a swing instead (rolled after the block).
+@export var evade_chance := 0.2
+## Chance to answer a successful block with an immediate counter-attack. A
+## block raised early enough to deflect the swing (a parry) doubles it.
+@export var riposte_chance := 0.4
 ## Seconds before the enemy reacts to a player swing (lower = sharper).
-@export var reaction_time := 0.22
+@export var reaction_time := 0.2
+## Chance to hold a finished wind-up a moment longer before striking, so the
+## rhythm cannot be timed by counting.
+@export var hesitate_chance := 0.25
 ## Multiplies the damage of each attack.
 @export var damage_scale := 1.0
 ## Walking speed (m/s) when closing in or backing off.
@@ -46,8 +52,10 @@ static func preset(name: String) -> DuelistDifficulty:
 			d.combo_chance = 0.1
 			d.max_combo = 1
 			d.feint_chance = 0.0
-			d.block_chance = 0.1
+			d.block_chance = 0.2
+			d.evade_chance = 0.1
 			d.riposte_chance = 0.0
+			d.hesitate_chance = 0.1
 			d.reaction_time = 0.4
 			d.damage_scale = 0.6
 			d.move_speed = 0.8
@@ -60,8 +68,10 @@ static func preset(name: String) -> DuelistDifficulty:
 			d.combo_chance = 0.6
 			d.max_combo = 3
 			d.feint_chance = 0.3
-			d.block_chance = 0.6
-			d.riposte_chance = 0.5
+			d.block_chance = 0.75
+			d.evade_chance = 0.15
+			d.riposte_chance = 0.6
+			d.hesitate_chance = 0.35
 			d.reaction_time = 0.14
 			d.damage_scale = 1.4
 			d.move_speed = 1.3

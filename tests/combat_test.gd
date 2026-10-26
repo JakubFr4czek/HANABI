@@ -462,7 +462,9 @@ static func calm_difficulty() -> DuelistDifficulty:
 	d.feint_chance = 0.0
 	d.combo_chance = 0.0
 	d.block_chance = 0.0
+	d.evade_chance = 0.0
 	d.riposte_chance = 0.0
+	d.hesitate_chance = 0.0
 	return d
 
 

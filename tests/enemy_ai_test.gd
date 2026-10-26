@@ -7,6 +7,8 @@ extends Node
 
 const ROOM := preload("res://scenes/test_room.tscn")
 const FIGHT_SPOT := Vector3(0.0, 0.0, 1.45)
+## The dummy's ma-ai (profile engage_distance), measured to the player's head.
+const MA_AI := 1.9
 
 var room: Node3D
 var dummy: TrainingDummy
@@ -38,7 +40,12 @@ func _run() -> void:
 	await _test_interrupt()
 	await _test_combo_and_feint()
 	await _test_block()
+	await _test_block_lands()
+	await _test_evade()
 	await _test_movement()
+	await _test_ma_ai_variety()
+	await _test_strike_step()
+	await _test_tempo_varies()
 	await _test_difficulty()
 	await _test_player_down()
 
@@ -231,6 +238,49 @@ func _test_block() -> void:
 	dummy.set_attacks_enabled(false)
 
 
+# --- The block meets the blade: cuts at the head and shoulders are stopped ------
+
+func _test_block_lands() -> void:
+	var d := _calm()
+	d.block_chance = 1.0
+	d.reaction_time = 0.05
+	d.attack_cooldown = Vector2(60.0, 60.0)
+	await _start_fight(d, Vector3(0.0, 0.0, 1.3), true)
+	await _wait(0.6)
+	events.clear()
+	player.swing_duration = 0.3
+	player.swing(DesktopPlayer.SLASH_OVERHEAD)
+	await _wait(1.0)
+	var block_events := events.filter(func(e): return e.type == "enemy_block")
+	print("    overhead cut vs. block: %s" % ", ".join(block_events.map(func(e): return "%s landed=%s parry=%s" % [e.pose, e.landed, e.get("parry", false)])))
+	_check("the block is in the cut's path: the blades meet, and raised in time it deflects the swing (enemy parry)",
+		block_events.any(func(e): return e.landed) and events.any(func(e): return e.type == "enemy_parry"))
+	dummy.set_attacks_enabled(false)
+
+
+# --- Evading: a step back out of reach instead of a block ----------------------
+
+func _test_evade() -> void:
+	var d := _calm()
+	d.evade_chance = 1.0
+	d.reaction_time = 0.05
+	d.attack_cooldown = Vector2(60.0, 60.0)
+	await _start_fight(d, Vector3(0.0, 0.0, 1.3), true)
+	await _wait(0.6)
+	events.clear()
+	var start := _distance()
+	player.swing_duration = 0.3
+	player.swing(DesktopPlayer.SLASH_HORIZONTAL)
+	var far := start
+	for i in 70:
+		await get_tree().physics_frame
+		far = maxf(far, _distance())
+	_check("evade: the dummy steps back out of reach of the swing (%.2f m -> %.2f m)" % [start, far],
+		events.any(func(e): return e.type == "enemy_evade") and far > start + 0.2 and brain.state != DuelistBrain.State.BLOCK)
+	await _wait(0.6)
+	dummy.set_attacks_enabled(false)
+
+
 # --- Movement: close in, back off, circle within the player's view ---------------
 
 func _test_movement() -> void:
@@ -246,7 +296,7 @@ func _test_movement() -> void:
 	await _wait(2.0)
 	_check("too close: the dummy backs off (%.2f m -> %.2f m)" % [start, _distance()], _distance() > start + 0.2)
 
-	await _start_fight(d, Vector3(0.0, 0.0, 1.55), false)
+	await _start_fight(d, Vector3(0.0, 0.0, MA_AI), false)
 	var bearing0 := _bearing()
 	var max_view := 0.0
 	for i in 4 * 90:
@@ -255,6 +305,97 @@ func _test_movement() -> void:
 	var turned := absf(wrapf(_bearing() - bearing0, -180.0, 180.0))
 	_check("at engage distance the dummy circles (%.0f° around the player) and stays in view (max %.0f° off-center)" % [turned, max_view],
 		turned > 10.0 and max_view <= DuelistBrain.VIEW_HALF_ANGLE and dummy.state == ActiveRagdoll.State.STANDING)
+	dummy.set_attacks_enabled(false)
+
+
+# --- Ma-ai: holds the distance and varies what it does there --------------------
+
+func _test_ma_ai_variety() -> void:
+	var d := DuelistDifficulty.preset("normal")
+	d.attack_cooldown = Vector2(60.0, 60.0)
+	d.block_chance = 0.0
+	d.evade_chance = 0.0
+	await _start_fight(d, Vector3(0.0, 0.0, MA_AI), false)
+	var tactics := {}
+	var too_close := 0
+	var pressing := 0
+	var prev := _distance()
+	var ticks := 14 * 90
+	for i in ticks:
+		await get_tree().physics_frame
+		var dist := _distance()
+		if dist < 1.35:
+			too_close += 1
+		if (prev - dist) * 90.0 > 0.3:
+			pressing += 1
+		prev = dist
+	for e in events:
+		if e.type == "enemy_tactic":
+			tactics[e.tactic] = true
+	print("    ma-ai: tactics used %s, %.0f%% of the time inside 1.35 m, %.0f%% walking in" % [tactics.keys(), 100.0 * too_close / ticks, 100.0 * pressing / ticks])
+	_check("at ma-ai the dummy mixes at least 3 tactics (%s)" % [tactics.keys()], tactics.size() >= 3)
+	_check("it keeps its distance instead of pressing in (inside 1.35 m %.0f%%, walking in %.0f%% of the time)" % [100.0 * too_close / ticks, 100.0 * pressing / ticks],
+		too_close < ticks * 0.05 and pressing < ticks * 0.2 and absf(_distance() - MA_AI) < 0.6)
+	dummy.set_attacks_enabled(false)
+
+
+# --- The attack: wind-up on planted feet, then one decisive step in -------------
+
+func _test_strike_step() -> void:
+	await _start_fight(_calm(), Vector3(0.0, 0.0, 2.15), false)
+	brain.force_attack("vertical")
+	var windup_anchor := Vector3.INF
+	var windup_drift := 0.0
+	var stepping := false
+	var strike_start := 0.0
+	var strike_end := 0.0
+	var recover_far := 0.0
+	for i in 5 * 90:
+		await get_tree().physics_frame
+		if brain.state == DuelistBrain.State.ATTACK and brain.attack_phase == DuelistBrain.AttackPhase.WINDUP:
+			if windup_anchor == Vector3.INF:
+				windup_anchor = dummy.anchor_position
+			windup_drift = maxf(windup_drift, dummy.anchor_position.distance_to(windup_anchor))
+			stepping = stepping or dummy.overlay_pose != ""
+		elif brain.state == DuelistBrain.State.ATTACK:
+			if strike_start == 0.0:
+				strike_start = _distance()
+			strike_end = _distance()
+			stepping = stepping or dummy.overlay_pose != ""
+		elif brain.state == DuelistBrain.State.RECOVER:
+			recover_far = maxf(recover_far, _distance())
+		elif brain.state == DuelistBrain.State.STALK and recover_far > 0.0:
+			# The step back may finish while settling into the guard.
+			for j in 90:
+				await get_tree().physics_frame
+				recover_far = maxf(recover_far, _distance())
+			break
+	var hits := events.filter(func(e): return e.type == "player_hit")
+	print("    strike step: wind-up drift %.3f m, %.2f m -> %.2f m during the strike, back to %.2f m after it, %d hit(s)" % [windup_drift, strike_start, strike_end, recover_far, hits.size()])
+	_check("the wind-up stands on planted feet (drift %.3f m, no walking steps)" % windup_drift, windup_drift < 0.06 and not stepping)
+	_check("the strike closes the gap in one step (%.2f m -> %.2f m) and lands (%d hit)" % [strike_start, strike_end, hits.size()],
+		strike_start - strike_end > 0.25 and hits.size() == 1)
+	_check("after the cut it steps back out toward ma-ai (zanshin, %.2f m)" % recover_far, recover_far > strike_end + 0.25)
+	dummy.set_attacks_enabled(false)
+
+
+# --- Tempo: wind-ups differ from attack to attack, never below the tell -------
+
+func _test_tempo_varies() -> void:
+	var times: Array[float] = []
+	for k in 6:
+		var d := _calm()
+		d.hesitate_chance = 0.3
+		await _start_fight(d, FIGHT_SPOT, false)
+		brain.set_seed(100 + k)
+		brain.force_attack("vertical")
+		for i in 3 * 90:
+			await get_tree().physics_frame
+			if brain.attack_phase == DuelistBrain.AttackPhase.STRIKE:
+				break
+		times.append(snappedf(brain.last_windup_time, 0.01))
+	_check("wind-up tempo varies %s (spread %.2f s >= 0.12) and never drops below %.1f s" % [times, times.max() - times.min(), DuelistBrain.MIN_TELL],
+		times.max() - times.min() >= 0.12 and times.min() >= DuelistBrain.MIN_TELL)
 	dummy.set_attacks_enabled(false)
 
 
@@ -325,7 +466,9 @@ func _calm() -> DuelistDifficulty:
 	d.feint_chance = 0.0
 	d.combo_chance = 0.0
 	d.block_chance = 0.0
+	d.evade_chance = 0.0
 	d.riposte_chance = 0.0
+	d.hesitate_chance = 0.0
 	return d
 
 
@@ -345,6 +488,7 @@ func _start_fight(difficulty: DuelistDifficulty, at: Vector3, armed: bool, yaw: 
 	player.teleport(at, yaw)
 	dummy.set_difficulty(difficulty)
 	brain.set_seed(7)
+	dummy.set_motion_seed(7)
 	await _wait(0.8)
 	events.clear()
 	dummy.set_attacks_enabled(true)
