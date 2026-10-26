@@ -40,7 +40,7 @@ func _run() -> void:
 	print("    step response: katana settles in %.3f s (tip err after 0.1 s %.2f m), kanabō %.3f s (%.2f m)" % [
 		lag_katana[0], lag_katana[1], lag_kanabo[0], lag_kanabo[1]])
 	_check("katana follows the hand quickly (settles < 0.25 s)", lag_katana[0] < 0.25)
-	_check("heavier kanabō lags behind more than the katana", lag_kanabo[0] > lag_katana[0] * 1.3 and lag_kanabo[1] > lag_katana[1])
+	_check("heavier kanabō lags behind more than the katana", lag_kanabo[0] > lag_katana[0] * 1.3 and lag_kanabo[1] > lag_kanana_tip(lag_katana[1]))
 
 	# 2. No bulldozing: keep thrusting into the dummy's chest.
 	player.take_weapon(katana)
@@ -172,8 +172,12 @@ func _run() -> void:
 	# 7. Free grip anywhere (handle, tsuba, blunt side of the blade) and two-handed grip.
 	await _test_free_and_two_handed_grip(lag_kanabo[0])
 
-	# 8. Dojo of the Storm arena elements & procedural Sakura tree / Storm lightning.
+	# 8. Dojo of the Storm arena elements & procedural Sakura tree / Storm lightning / Water & Fog.
 	await _test_dojo_of_the_storm()
+
+
+func lag_kanana_tip(v: float) -> float:
+	return v
 
 
 func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
@@ -345,13 +349,29 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 func _test_dojo_of_the_storm() -> void:
 	var disc := room.get_node_or_null("Arena/PlatformDisc") as MeshInstance3D
 	var water := room.get_node_or_null("Arena/WaterMirror") as MeshInstance3D
+	var mist_low := room.get_node_or_null("Arena/WaterMistLow") as MeshInstance3D
+	var mist_high := room.get_node_or_null("Arena/WaterMistHigh") as MeshInstance3D
 	var seal := room.get_node_or_null("Arena/SpawnSeal") as MeshInstance3D
 	var giant_torii := room.get_node_or_null("Arena/ToriiGates/GiantTorii") as Node3D
 	var sakura := room.get_node_or_null("Arena/SakuraTree") as SakuraTreeGenerator
 	var petals := room.get_node_or_null("Arena/SakuraPetals") as GPUParticles3D
 	var lightmap := room.get_node_or_null("Arena/LightmapGI") as LightmapGI
-	_check("Dojo of the Storm core nodes present (disc, water mirror, seal, giant torii, LightmapGI)",
-		disc != null and water != null and seal != null and giant_torii != null and lightmap != null)
+	var we := room.get_node_or_null("WorldEnvironment") as WorldEnvironment
+	_check("Dojo of the Storm core nodes present (disc, water mirror, mist layers, seal, giant torii, LightmapGI)",
+		disc != null and water != null and mist_low != null and mist_high != null and seal != null and giant_torii != null and lightmap != null)
+	var water_mat := water.material_override as ShaderMaterial if water else null
+	var water_plane := water.mesh as PlaneMesh if water else null
+	_check("Water shader has subdivided wave mesh, dual normal maps, and baked sky panorama",
+		water_mat != null and water_plane != null and water_plane.subdivide_width >= 64
+		and water_mat.get_shader_parameter("normal_map_a") != null
+		and water_mat.get_shader_parameter("normal_map_b") != null
+		and water_mat.get_shader_parameter("sky_panorama") != null)
+	_check("WorldEnvironment uses depth+height fog ending past the giant torii (begin=%.1f m, end=%.1f m)" % [
+		we.environment.fog_depth_begin if we and we.environment else -1.0,
+		we.environment.fog_depth_end if we and we.environment else -1.0],
+		we != null and we.environment != null and we.environment.fog_enabled
+		and we.environment.fog_mode == Environment.FOG_MODE_DEPTH
+		and we.environment.fog_depth_end <= 30.0 and we.environment.fog_height_density > 0.1)
 	var sakura_dist := Vector2(sakura.global_position.x, sakura.global_position.z).length() if sakura else 0.0
 	_check("monumental SakuraTree stands in the water outside the stone disc (dist=%.1f m > 5.25 m) and builds 2 MultiMeshes" % sakura_dist,
 		sakura != null and sakura_dist > 8.0 and sakura.bark_multimesh_instance != null and sakura.canopy_multimesh_instance != null
@@ -361,9 +381,10 @@ func _test_dojo_of_the_storm() -> void:
 	if room.lightning:
 		room.lightning.trigger_strike(-0.22)
 		await get_tree().process_frame
-		var flash_val: float = (water.material_override as ShaderMaterial).get_shader_parameter("lightning_flash")
-		_check("StormLightning builds procedural bolt mesh and drives water/sky flash (flash=%.2f)" % flash_val,
-			room.lightning.visible and flash_val > 0.1)
+		var flash_val: float = water_mat.get_shader_parameter("lightning_flash")
+		var mist_flash: float = (mist_low.material_override as ShaderMaterial).get_shader_parameter("lightning_flash")
+		_check("StormLightning builds procedural bolt mesh and illuminates water, sky, and fog/mist (flash=%.2f, mist=%.2f)" % [flash_val, mist_flash],
+			room.lightning.visible and flash_val > 0.1 and mist_flash > 0.1 and we.environment.fog_light_energy > 1.1)
 
 
 ## Hold the weapon in a scripted holder, then jump the target 0.4 m sideways and

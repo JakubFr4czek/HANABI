@@ -12,6 +12,7 @@ const SAKURA_PETAL_SHADER := preload("res://src/shaders/sakura_petal.gdshader")
 const SPAWN_SEAL_SHADER := preload("res://src/shaders/spawn_seal.gdshader")
 const STONE_PLATFORM_SHADER := preload("res://src/shaders/stone_platform.gdshader")
 const WATER_MIRROR_SHADER := preload("res://src/shaders/water_mirror.gdshader")
+const WATER_MIST_SHADER := preload("res://src/shaders/water_mist.gdshader")
 const STORM_SKY_SHADER := preload("res://src/shaders/storm_sky_dome.gdshader")
 
 @onready var dummy: TrainingDummy = $TrainingDummy
@@ -98,15 +99,31 @@ func _setup_dojo_visuals() -> void:
 	if arena == null:
 		return
 
+	var water_mi := get_node_or_null("Arena/WaterMirror") as MeshInstance3D
+	if water_mi and water_mi.material_override is ShaderMaterial:
+		_setup_water_baked_panorama(water_mi.material_override as ShaderMaterial)
+
 	var flash_mats: Array[ShaderMaterial] = []
-	for path in ["Arena/SkyDome", "Arena/WaterMirror", "Arena/PlatformDisc"]:
+	for path in [
+		"Arena/SkyDome",
+		"Arena/WaterMirror",
+		"Arena/PlatformDisc",
+		"Arena/WaterMistLow",
+		"Arena/WaterMistHigh",
+	]:
 		var mi := get_node_or_null(path) as MeshInstance3D
 		if mi and mi.material_override is ShaderMaterial:
-			flash_mats.append(mi.material_override as ShaderMaterial)
+			var sm := mi.material_override as ShaderMaterial
+			if not flash_mats.has(sm):
+				flash_mats.append(sm)
 
 	if lightning:
 		lightning.flash_materials = flash_mats
 		lightning.flash_light = get_node_or_null("Arena/LightningFlashLight") as Light3D
+		var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
+		if we and we.environment:
+			lightning.world_environment = we.environment
+			lightning.base_fog_light_color = we.environment.fog_light_color
 
 	var seal_mesh := get_node_or_null("Arena/SpawnSeal") as MeshInstance3D
 	if seal_mesh:
@@ -116,6 +133,48 @@ func _setup_dojo_visuals() -> void:
 	_style_torii_gates(arena)
 	_style_lanterns(arena)
 	_update_seal_element(Elements.NONE)
+
+
+## Bake a lightweight equirectangular storm-sky panorama once at startup so the
+## water shader can sample distorted sky reflections (`reflect(-VIEW, NORMAL)`)
+## without any realtime reflection probes or screen-space effects on Quest 3.
+func _setup_water_baked_panorama(water_mat: ShaderMaterial) -> void:
+	if water_mat.get_shader_parameter("sky_panorama") != null:
+		return
+	var w := 128
+	var h := 64
+	var img := Image.create(w, h, true, Image.FORMAT_RGBA8)
+	var zenith := Color(0.028, 0.016, 0.072)
+	var mid_sky := Color(0.056, 0.040, 0.138)
+	var horizon := Color(0.032, 0.026, 0.072)
+	var cloud_col := Color(0.18, 0.11, 0.34)
+	var sakura_glow := Color(0.72, 0.14, 0.42)
+	var torii_glow := Color(0.50, 0.08, 0.09)
+
+	for y in h:
+		var v := float(y) / float(h - 1)  # 0 = zenith, 1 = horizon
+		var elev := pow(1.0 - v, 1.4)
+		var base_row := horizon.lerp(mid_sky, clampf(elev * 2.2, 0.0, 1.0)).lerp(zenith, clampf((elev - 0.25) / 0.75, 0.0, 1.0))
+		for x in w:
+			var u := float(x) / float(w)
+			var az := (u - 0.5) * TAU
+			# Multi-band storm cloud formations baked into the panorama so normal map waves distort them visibly
+			var c_wave := 0.5 + 0.5 * sin(az * 4.0 + v * 6.5) * cos(az * 3.0 - v * 4.8)
+			var c_fine := 0.5 + 0.5 * sin(az * 9.0 - v * 11.0)
+			var cloud_amt := smoothstep(0.28, 0.78, c_wave * 0.7 + c_fine * 0.3) * sin(v * PI)
+			var col := base_row.lerp(cloud_col, cloud_amt * 0.68)
+			# Directional horizon glow from the off-platform sakura (west-northwest) and giant torii (north)
+			var horizon_band := smoothstep(0.30, 1.0, v)
+			var sakura_align := maxf(0.0, cos(az - (-1.12)))
+			var torii_align := maxf(0.0, cos(az - 0.0))
+			col += sakura_glow * (pow(sakura_align, 3.8) * horizon_band * 0.32)
+			col += torii_glow * (pow(torii_align, 4.5) * horizon_band * 0.24)
+			col.a = 1.0
+			img.set_pixel(x, y, col)
+
+	img.generate_mipmaps()
+	var tex := ImageTexture.create_from_image(img)
+	water_mat.set_shader_parameter("sky_panorama", tex)
 
 
 func _setup_seal_kanji(seal_root: Node3D) -> void:
@@ -173,23 +232,33 @@ func _style_torii_gates(arena: Node) -> void:
 	var torii_group := arena.get_node_or_null("ToriiGates")
 	if torii_group == null:
 		return
-	var shared_mat: StandardMaterial3D = null
+	var hero_mat: StandardMaterial3D = null
+	var sunken_mat: StandardMaterial3D = null
 	for child in torii_group.find_children("*", "MeshInstance3D", true, false):
 		var mi := child as MeshInstance3D
 		mi.gi_mode = GeometryInstance3D.GI_MODE_STATIC
-		if shared_mat == null and mi.mesh and mi.mesh.get_surface_count() > 0:
+		if hero_mat == null and mi.mesh and mi.mesh.get_surface_count() > 0:
 			var orig := mi.mesh.surface_get_material(0) as StandardMaterial3D
-			shared_mat = StandardMaterial3D.new()
+			hero_mat = StandardMaterial3D.new()
 			if orig and orig.albedo_texture:
-				shared_mat.albedo_texture = orig.albedo_texture
-			# Deep weathered vermilion lacquer tuned for the moody violet night.
-			shared_mat.albedo_color = Color(0.76, 0.16, 0.18, 1.0)
-			shared_mat.roughness = 0.42
-			shared_mat.metallic = 0.08
-			shared_mat.emission_enabled = true
-			shared_mat.emission = Color(0.11, 0.015, 0.02)
-		if shared_mat:
-			mi.material_override = shared_mat
+				hero_mat.albedo_texture = orig.albedo_texture
+			# Deep weathered vermilion lacquer for the hero Giant Torii.
+			hero_mat.albedo_color = Color(0.74, 0.15, 0.17, 1.0)
+			hero_mat.roughness = 0.42
+			hero_mat.metallic = 0.08
+			hero_mat.emission_enabled = true
+			hero_mat.emission = Color(0.075, 0.010, 0.014)
+
+			sunken_mat = hero_mat.duplicate() as StandardMaterial3D
+			# Distant crooked torii gates are darker and less emissive so they fade into the storm fog.
+			sunken_mat.albedo_color = Color(0.38, 0.09, 0.13, 1.0)
+			sunken_mat.roughness = 0.62
+			sunken_mat.emission = Color(0.012, 0.002, 0.004)
+		var is_giant := mi.get_path().get_concatenated_names().contains("GiantTorii")
+		if is_giant and hero_mat:
+			mi.material_override = hero_mat
+		elif sunken_mat:
+			mi.material_override = sunken_mat
 
 
 func _style_lanterns(arena: Node) -> void:

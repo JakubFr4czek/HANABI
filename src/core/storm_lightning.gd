@@ -3,7 +3,7 @@ extends MeshInstance3D
 ## Procedural distant branching lightning for the Dojo of the Storm (GDD §9).
 ## Builds a multi-branch 3D ribbon mesh with `lightning_bolt.gdshader` (no particles)
 ## and drives the brief scene-wide flash on the sky dome, water mirror, stone
-## platform, and optional flash light.
+## platform, fog environment, water mist layers, and optional flash light.
 
 const BOLT_SHADER := preload("res://src/shaders/lightning_bolt.gdshader")
 
@@ -16,6 +16,9 @@ const BOLT_SHADER := preload("res://src/shaders/lightning_bolt.gdshader")
 
 var flash_materials: Array[ShaderMaterial] = []
 var flash_light: Light3D = null
+var world_environment: Environment = null
+var base_fog_light_color := Color(0.032, 0.026, 0.072, 1.0)
+var flash_fog_tint := Color(0.45, 0.65, 1.0, 1.0)
 var current_intensity := 0.0
 
 var _mesh := ImmediateMesh.new()
@@ -77,6 +80,7 @@ func trigger_strike(azimuth_rad: float = INF) -> void:
 	for mat in flash_materials:
 		if mat:
 			mat.set_shader_parameter("lightning_dir_xz", dir_xz)
+			mat.set_shader_parameter("lightning_dir", dir_xz)
 	_strike_age = 0.0
 	_set_flash(1.0)
 
@@ -89,6 +93,15 @@ func _set_flash(value: float) -> void:
 			mat.set_shader_parameter("lightning_flash", value)
 	if flash_light:
 		flash_light.light_energy = value * 1.15
+	if world_environment:
+		var delta_col := flash_fog_tint * (value * 0.14)
+		world_environment.fog_light_color = Color(
+			base_fog_light_color.r + delta_col.r,
+			base_fog_light_color.g + delta_col.g,
+			base_fog_light_color.b + delta_col.b,
+			1.0
+		)
+		world_environment.fog_light_energy = 1.0 + value * 0.18
 
 
 func _build_bolt_mesh(top: Vector3, bottom: Vector3, tangent: Vector3) -> void:
