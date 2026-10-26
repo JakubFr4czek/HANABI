@@ -13,6 +13,8 @@ const CATEGORIES := {
 	"impact_heavy": ["res://assets/audio/sfx/impact", "impactPunch"],
 	"blade_ring": ["res://assets/audio/generated", "blade_ring"],
 	"thunder": ["res://assets/audio/generated", "thunder"],
+	"enemy_tell": ["res://assets/audio/generated", "enemy_tell"],
+	"player_hurt": ["res://assets/audio/generated", "player_hurt"],
 }
 const POOL_SIZE := 12
 const WORLD_BUS := &"World"

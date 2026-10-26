@@ -14,11 +14,19 @@ signal toggle_attacks_requested
 @onready var left_holder: WeaponHolder = $XROrigin3D/LeftHand/WeaponHolder
 @onready var right_holder: WeaponHolder = $XROrigin3D/RightHand/WeaponHolder
 
+var health := PlayerHealth.new()
+var hurt_feedback := HurtFeedback.new()
+
 var _was_pressed := {}
 
 
 func _ready() -> void:
 	GameEvents.parry.connect(_on_parry)
+	var camera := $XROrigin3D/XRCamera3D as Node3D
+	health.head = camera
+	add_child(health)
+	hurt_feedback.setup(health, camera, [left_holder, right_holder])
+	add_child(hurt_feedback)
 
 
 ## The weapon hand(s) get the full parry pattern from the weapon; a free hand

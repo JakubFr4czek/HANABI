@@ -123,9 +123,38 @@ def blade_ring(index, seconds=1.6):
     write_wav(f"blade_ring_{index}.wav", normalize(x, 0.8))
 
 
+def enemy_tell(index, seconds=0.45):
+    """Audio tell of a wind-up: a blade drawn up through the air, rising."""
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    env = np.sin(np.pi * np.clip(t / seconds, 0, 1)) ** 1.5
+    x = np.zeros(n)
+    # Swept band of noise, rising in pitch.
+    for k in range(6):
+        seg = slice(k * n // 6, (k + 1) * n // 6)
+        lo = 700 + k * 450 + index * 120
+        x[seg] = fft_band(rng.standard_normal(n), lo, lo * 2.2)[seg]
+    ring = np.sin(2 * np.pi * (2600 + 900 * t / seconds + index * 80) * t) * 0.15 * (t / seconds)
+    write_wav(f"enemy_tell_{index}.wav", normalize((x * 0.8 + ring) * env, 0.6))
+
+
+def player_hurt(index, seconds=0.5):
+    """The player is cut: a dull body thump with a short torn-cloth rasp."""
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    f = rng.uniform(55, 75)
+    thump = np.sin(2 * np.pi * f * t * (1.0 - 0.3 * t)) * np.exp(-t / 0.09)
+    body = fft_band(rng.standard_normal(n), 80.0, 700.0, tilt=-3.0) * np.exp(-t / 0.06) * 0.8
+    rasp = fft_band(rng.standard_normal(n), 1500.0, 6000.0) * np.exp(-t / 0.035) * 0.35
+    write_wav(f"player_hurt_{index}.wav", normalize(thump + body + rasp, 0.85))
+
+
 if __name__ == "__main__":
     rain_loop()
     for i in range(3):
         thunder(i)
     for i in range(4):
         blade_ring(i)
+    for i in range(3):
+        enemy_tell(i)
+        player_hurt(i)
