@@ -71,35 +71,28 @@ func _ready() -> void:
 	await _frames(90)
 	await _shot("6_kanabo")
 
-	# 7. Dedicated view of the monumental off-platform Sakura tree rising from the water mirror
-	# beside the stone disc, with sweeping boughs reaching toward the dojo edge.
 	var debug_panel := room.get_node_or_null("HitDebugPanel") as Node3D
 	if debug_panel:
 		debug_panel.visible = false
 	player.take_weapon(room.katana)
-	room.katana.set_element(Elements.SAKURA)
-	player.teleport(Vector3(2.2, 0, 2.8), deg_to_rad(46))
-	player.camera.rotation.x = deg_to_rad(8)
-	await _frames(60)
-	await _shot("7_sakura_tree")
 
-	# 8. Wide Dojo of the Storm vista with silent branching lightning illuminating the fog & water.
+	# 7. Wide Dojo of the Storm vista with silent branching lightning illuminating the fog & water.
 	room.katana.set_element(Elements.STORM)
 	player.teleport(Vector3(1.1, 0, 3.8), deg_to_rad(14))
 	player.camera.rotation.x = deg_to_rad(-2)
 	if room.lightning:
 		room.lightning.trigger_strike(-0.22)
 	await _frames(2)
-	await _shot("8_dojo_storm_vista")
+	await _shot("7_dojo_storm_vista")
 
-	# 9. Close-up right at the north-western edge of the stone platform looking down & out over the water:
+	# 8. Close-up right at the north-western edge of the stone platform looking down & out over the water:
 	# clearly shows the stone rim, dark Fresnel depth drop-off at the edge, shore & pillar ripples,
-	# wave-broken reflections of the sakura tree and giant torii, and the surface mist fading into dense fog.
+	# wave-broken reflections of the giant torii, and the surface mist fading into dense fog.
 	await _frames(45)
 	player.teleport(Vector3(-2.6, 0, -3.6), deg_to_rad(28))
 	player.camera.rotation.x = deg_to_rad(-19)
 	await _frames(10)
-	await _shot("9_water_and_fog")
+	await _shot("8_water_and_fog")
 	if debug_panel:
 		debug_panel.visible = true
 

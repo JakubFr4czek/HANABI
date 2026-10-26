@@ -8,7 +8,6 @@ extends Node3D
 ## Pass `-- --desktop` on the command line to force the desktop rig.
 
 const XR_PLAYER := preload("res://scenes/player/xr_player.tscn")
-const SAKURA_PETAL_SHADER := preload("res://src/shaders/sakura_petal.gdshader")
 const SPAWN_SEAL_SHADER := preload("res://src/shaders/spawn_seal.gdshader")
 const STONE_PLATFORM_SHADER := preload("res://src/shaders/stone_platform.gdshader")
 const WATER_MIRROR_SHADER := preload("res://src/shaders/water_mirror.gdshader")
@@ -148,7 +147,6 @@ func _setup_water_baked_panorama(water_mat: ShaderMaterial) -> void:
 	var mid_sky := Color(0.056, 0.040, 0.138)
 	var horizon := Color(0.032, 0.026, 0.072)
 	var cloud_col := Color(0.18, 0.11, 0.34)
-	var sakura_glow := Color(0.72, 0.14, 0.42)
 	var torii_glow := Color(0.50, 0.08, 0.09)
 
 	for y in h:
@@ -158,16 +156,12 @@ func _setup_water_baked_panorama(water_mat: ShaderMaterial) -> void:
 		for x in w:
 			var u := float(x) / float(w)
 			var az := (u - 0.5) * TAU
-			# Multi-band storm cloud formations baked into the panorama so normal map waves distort them visibly
 			var c_wave := 0.5 + 0.5 * sin(az * 4.0 + v * 6.5) * cos(az * 3.0 - v * 4.8)
 			var c_fine := 0.5 + 0.5 * sin(az * 9.0 - v * 11.0)
 			var cloud_amt := smoothstep(0.28, 0.78, c_wave * 0.7 + c_fine * 0.3) * sin(v * PI)
 			var col := base_row.lerp(cloud_col, cloud_amt * 0.68)
-			# Directional horizon glow from the off-platform sakura (west-northwest) and giant torii (north)
 			var horizon_band := smoothstep(0.30, 1.0, v)
-			var sakura_align := maxf(0.0, cos(az - (-1.12)))
 			var torii_align := maxf(0.0, cos(az - 0.0))
-			col += sakura_glow * (pow(sakura_align, 3.8) * horizon_band * 0.32)
 			col += torii_glow * (pow(torii_align, 4.5) * horizon_band * 0.24)
 			col.a = 1.0
 			img.set_pixel(x, y, col)
