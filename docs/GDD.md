@@ -78,6 +78,13 @@ Do not implement during prototyping. Prepare the architecture: swappable enemy b
 - **VFX:** GPU particles for petals, procedural lightning, an ink/darkness shader with noise, and blade trails (GPUTrail).
 - **Performance:** on standalone Quest use simple fog and particles. Volumetric fog is a PCVR-only setting for recording.
 
+### Art direction rule: premium, never cheap/kitschy
+Neon is a sparse accent on a dark, moody, desaturated base. Every new VFX is checked against this rule.
+
+- **Palette:** violet/navy base, neon pink sakura, electric blue lightning, ink black. Stay inside it.
+- **Focus:** a few strong focal accents, not glow everywhere. Restrained bloom. Contrast and silhouettes over rainbow effects.
+- **Impact:** timing, easing, and sound design sell the hit.
+
 ### VFX target & performance
 Near-realistic, in moody half-light. A dark sky, broken by a few bright events.
 
