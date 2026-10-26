@@ -2,8 +2,11 @@ class_name StormLightning
 extends MeshInstance3D
 ## Procedural distant branching lightning for the Dojo of the Storm (GDD §9).
 ## Builds a multi-branch 3D ribbon mesh with `lightning_bolt.gdshader` (no particles)
-## and drives the brief scene-wide flash on the sky dome, water mirror, stone
-## platform, fog environment, water mist layers, and optional flash light.
+## and drives the brief scene-wide flash: the `storm_flash` / `storm_flash_dir`
+## global shader uniforms (sky, water, mist, seal, katana), the fog and ambient
+## light, and an optional flash light that is only switched on during a strike.
+
+signal struck(direction: Vector2)
 
 const BOLT_SHADER := preload("res://src/shaders/lightning_bolt.gdshader")
 
@@ -14,11 +17,11 @@ const BOLT_SHADER := preload("res://src/shaders/lightning_bolt.gdshader")
 @export var top_height := 36.0
 @export var bottom_height := -0.5
 
-var flash_materials: Array[ShaderMaterial] = []
 var flash_light: Light3D = null
 var world_environment: Environment = null
-var base_fog_light_color := Color(0.032, 0.026, 0.072, 1.0)
-var flash_fog_tint := Color(0.45, 0.65, 1.0, 1.0)
+var base_fog_light_color := Color(0.16, 0.16, 0.27, 1.0)
+var base_ambient_energy := 0.22
+var flash_fog_tint := Color(0.55, 0.72, 1.0, 1.0)
 var current_intensity := 0.0
 
 var _mesh := ImmediateMesh.new()
@@ -77,31 +80,22 @@ func trigger_strike(azimuth_rad: float = INF) -> void:
 		dir_xz.y * strike_distance + _rng.randf_range(-2.0, 2.0)
 	)
 	_build_bolt_mesh(origin_top, origin_bot, Vector3(-dir_xz.y, 0.0, dir_xz.x))
-	for mat in flash_materials:
-		if mat:
-			mat.set_shader_parameter("lightning_dir_xz", dir_xz)
-			mat.set_shader_parameter("lightning_dir", dir_xz)
+	RenderingServer.global_shader_parameter_set("storm_flash_dir", dir_xz)
 	_strike_age = 0.0
 	_set_flash(1.0)
+	struck.emit(dir_xz)
 
 
 func _set_flash(value: float) -> void:
 	current_intensity = value
 	_material.set_shader_parameter("intensity", value)
-	for mat in flash_materials:
-		if mat:
-			mat.set_shader_parameter("lightning_flash", value)
+	RenderingServer.global_shader_parameter_set("storm_flash", value)
 	if flash_light:
-		flash_light.light_energy = value * 1.15
+		flash_light.visible = value > 0.01
+		flash_light.light_energy = value * 1.6
 	if world_environment:
-		var delta_col := flash_fog_tint * (value * 0.14)
-		world_environment.fog_light_color = Color(
-			base_fog_light_color.r + delta_col.r,
-			base_fog_light_color.g + delta_col.g,
-			base_fog_light_color.b + delta_col.b,
-			1.0
-		)
-		world_environment.fog_light_energy = 1.0 + value * 0.18
+		world_environment.fog_light_color = base_fog_light_color.lerp(flash_fog_tint, value * 0.22)
+		world_environment.ambient_light_energy = base_ambient_energy * (1.0 + value * 1.5)
 
 
 func _build_bolt_mesh(top: Vector3, bottom: Vector3, tangent: Vector3) -> void:
