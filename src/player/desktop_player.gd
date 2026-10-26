@@ -8,7 +8,8 @@ extends CharacterBody3D
 ## walk. F / G / T play a scripted horizontal slash / overhead cut / thrust,
 ## mouse wheel changes their speed. Hold Q to raise a high block (parry the
 ## dummy's overhead cut). E grabs or drops the weapon, 1 / 2 pick katana /
-## kanabō, Z cycles the element, P toggles the dummy's attacks.
+## kanabō, C cycles grip location (handle / tsuba / blunt blade spine),
+## V toggles two-handed grip, Z cycles the element, P toggles the dummy's attacks.
 
 signal toggle_attacks_requested
 
@@ -21,6 +22,12 @@ const SLASH_OVERHEAD := [Vector3(0.05, 0.5, 0), Vector3(0.0, -0.5, 0)]
 const THRUST := [Vector3(0, -0.2, -0.05), Vector3(0, -0.15, 0.42)]
 ## Hand pose (camera space) of the high block: blade across, above the eyes.
 var BLOCK_HIGH := Transform3D(Basis.from_euler(Vector3(deg_to_rad(12.0), deg_to_rad(90.0), 0.0), EULER_ORDER_YXZ), Vector3(0.3, 0.12, -0.42))
+## Preset local grip points cycled with C on desktop (handle, tsuba, blunt spine).
+const GRIP_PRESETS := [
+	Vector3.ZERO,
+	Vector3(0.0, 0.0, -0.085),
+	Vector3(-0.025, 0.018, -0.40),
+]
 
 @export var move_speed := 3.0
 @export var mouse_look_sensitivity := 0.0025
@@ -28,7 +35,9 @@ var BLOCK_HIGH := Transform3D(Basis.from_euler(Vector3(deg_to_rad(12.0), deg_to_
 
 var camera := Camera3D.new()
 var hand := Node3D.new()
+var off_hand := Node3D.new()
 var holder := WeaponHolder.new()
+var left_holder := WeaponHolder.new()
 ## Hand offset from HAND_REST in camera space (x right, y up, z forward).
 var hand_offset := Vector3.ZERO
 ## Seconds a scripted swing takes (changed with the mouse wheel).
@@ -39,6 +48,10 @@ var weapons: Array = []
 var block_amount := 0.0
 ## Force the block on (tests), regardless of the Q key.
 var force_block := false
+## Current desktop grip preset index (0 = handle, 1 = tsuba, 2 = mune).
+var grip_preset_index := 0
+## Whether the off-hand holder also grips the weapon on desktop.
+var two_handed := false
 
 var _pitch := 0.0
 var _swing_tween: Tween
@@ -67,6 +80,11 @@ func _ready() -> void:
 	holder.name = "RightHolder"
 	holder.side = "right"
 	hand.add_child(holder)
+
+	hand.add_child(off_hand)
+	left_holder.name = "LeftHolder"
+	left_holder.side = "left"
+	off_hand.add_child(left_holder)
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -107,13 +125,20 @@ func _unhandled_input(event: InputEvent) -> void:
 				swing(THRUST)
 			KEY_E:
 				if holder.held:
+					left_holder.release()
 					holder.release()
 				else:
 					holder.recall()
+					if two_handed and holder.held:
+						_apply_desktop_grip(holder.held)
 			KEY_1, KEY_2, KEY_3:
 				var i: int = event.physical_keycode - KEY_1
 				if i < weapons.size():
 					take_weapon(weapons[i])
+			KEY_C:
+				cycle_grip_preset()
+			KEY_V:
+				set_two_handed(not two_handed)
 			KEY_Z:
 				if holder.held:
 					holder.held.set_element(XRPlayer.next_element(holder.held.element))
@@ -134,13 +159,46 @@ func teleport(position_: Vector3, yaw: float = 0.0) -> void:
 
 ## Drop what we hold and pull [param weapon] into the hand.
 func take_weapon(weapon: HeldWeapon) -> void:
-	if holder.held == weapon:
+	if holder.held == weapon and not two_handed and grip_preset_index == 0:
 		return
+	left_holder.release()
 	holder.release()
 	weapon.global_transform = holder.get_grip_transform()
 	weapon.linear_velocity = Vector3.ZERO
 	weapon.angular_velocity = Vector3.ZERO
-	holder.grab(weapon)
+	_apply_desktop_grip(weapon)
+	weapon.snap_to_hand()
+
+
+func cycle_grip_preset() -> void:
+	grip_preset_index = (grip_preset_index + 1) % GRIP_PRESETS.size()
+	if holder.held:
+		_apply_desktop_grip(holder.held)
+
+
+func set_two_handed(enabled: bool) -> void:
+	two_handed = enabled
+	if holder.held:
+		_apply_desktop_grip(holder.held)
+	else:
+		left_holder.release()
+
+
+func _apply_desktop_grip(weapon: HeldWeapon) -> void:
+	left_holder.release()
+	var primary_local: Vector3 = weapon.clamp_grip_point(GRIP_PRESETS[grip_preset_index])
+	holder.grab(weapon, Transform3D(Basis.IDENTITY, primary_local))
+	if two_handed:
+		# Place the second hand either at the pommel (when main hand is on the
+		# handle) or on the blunt blade spine (half-swording).
+		var secondary_target := Vector3(0.0, 0.0, 0.16) if grip_preset_index == 0 else Vector3(-0.025, 0.018, -0.42)
+		if grip_preset_index == 2:
+			secondary_target = Vector3(0.0, 0.0, 0.05)
+		var secondary_local: Vector3 = weapon.clamp_grip_point(secondary_target)
+		off_hand.position = secondary_local - primary_local
+		left_holder.grab(weapon, Transform3D(Basis.IDENTITY, secondary_local))
+	else:
+		off_hand.position = Vector3.ZERO
 
 
 ## Play a scripted swing through the given hand offsets, then return to rest.
@@ -167,7 +225,7 @@ func _physics_process(delta: float) -> void:
 	if Input.is_physical_key_pressed(KEY_W): input.y += 1
 	if Input.is_physical_key_pressed(KEY_S): input.y -= 1
 	if Input.is_physical_key_pressed(KEY_A): input.x -= 1
-	if Input.is_physical_key_pressed(KEY_D): input.x += 1
+	if Input.is_physical_key_pressed(KEY_D): input.x -= 1
 	var dir := (global_basis.x * input.x - global_basis.z * input.y).normalized() if input != Vector2.ZERO else Vector3.ZERO
 	velocity.x = dir.x * move_speed
 	velocity.z = dir.z * move_speed
@@ -196,11 +254,12 @@ func _hud_text() -> String:
 	var t := "HANABI desktop test rig (no XR runtime found)\n"
 	t += "Click: capture mouse   Esc: release   WASD: walk   Mouse: look\n"
 	t += "Hold RMB + mouse: move the weapon   F/G/T: slash / overhead / thrust   hold Q: high block\n"
-	t += "Wheel: scripted swing time %.2f s   1/2: katana / kanabō   E: drop/take   Z: element\n" % swing_duration
+	t += "Wheel: scripted swing time %.2f s   1/2: katana / kanabō   C: grip spot   V: 1H/2H   E: drop/take   Z: element\n" % swing_duration
 	t += "P: dummy attacks on/off   R: reset dummy\n"
 	if holder.held:
 		var w := holder.held
-		t += "%s [%s]   tip %.1f m/s   arm strength %.0f%%" % [w.weapon_name, w.element, w.measured_tip_speed, w.strength * 100.0]
+		var grip_info := "%s, %s" % [w.get_grip_zone(holder), "2H" if w.is_two_handed() else "1H"]
+		t += "%s [%s] (%s)   tip %.1f m/s   arm strength %.0f%%" % [w.weapon_name, w.element, grip_info, w.measured_tip_speed, w.strength * 100.0]
 	else:
 		t += "No weapon in hand (press 1 or 2)"
 	if TimeController.time_scale < 1.0:
