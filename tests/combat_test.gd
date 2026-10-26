@@ -352,10 +352,11 @@ func _test_dojo_of_the_storm() -> void:
 	var lightmap := room.get_node_or_null("Arena/LightmapGI") as LightmapGI
 	_check("Dojo of the Storm core nodes present (disc, water mirror, seal, giant torii, LightmapGI)",
 		disc != null and water != null and seal != null and giant_torii != null and lightmap != null)
-	_check("procedural SakuraTree builds TrunkAndBranches & BlossomCanopy MultiMeshes (2 draw calls)",
-		sakura != null and sakura.bark_multimesh_instance != null and sakura.canopy_multimesh_instance != null
+	var sakura_dist := Vector2(sakura.global_position.x, sakura.global_position.z).length() if sakura else 0.0
+	_check("monumental SakuraTree stands in the water outside the stone disc (dist=%.1f m > 5.25 m) and builds 2 MultiMeshes" % sakura_dist,
+		sakura != null and sakura_dist > 8.0 and sakura.bark_multimesh_instance != null and sakura.canopy_multimesh_instance != null
 		and sakura.bark_multimesh_instance.multimesh.instance_count > 40
-		and sakura.canopy_multimesh_instance.multimesh.instance_count >= 1000
+		and sakura.canopy_multimesh_instance.multimesh.instance_count >= 2000
 		and petals != null and petals.amount <= 80)
 	if room.lightning:
 		room.lightning.trigger_strike(-0.22)
