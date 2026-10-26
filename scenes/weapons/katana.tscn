@@ -1,32 +1,32 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://src/weapons/held_weapon.gd" id="1_script"]
-[ext_resource type="PackedScene" path="res://assets/models/weapons/katana_grab3d/katana.glb" id="2_model"]
+[ext_resource type="PackedScene" path="res://assets/models/weapons/antique_katana_01/antique_katana_01_2k.gltf" id="2_model"]
 
 [ext_resource type="Shader" path="res://src/shaders/katana_steel.gdshader" id="3_steel"]
-[ext_resource type="Texture2D" path="res://assets/models/weapons/katana_grab3d/katana_katana_body_basecolor.jpg" id="4_albedo"]
-[ext_resource type="Texture2D" path="res://assets/models/weapons/katana_grab3d/katana_katana_body_normal.jpg" id="5_normal"]
-[ext_resource type="Texture2D" path="res://assets/models/weapons/katana_grab3d/katana_katana_body_metallic-katana_body_roughness.jpg" id="6_orm"]
+[ext_resource type="Texture2D" path="res://assets/models/weapons/antique_katana_01/textures/antique_katana_01_diff_2k.jpg" id="4_albedo"]
+[ext_resource type="Texture2D" path="res://assets/models/weapons/antique_katana_01/textures/antique_katana_01_nor_gl_2k.jpg" id="5_normal"]
+[ext_resource type="Texture2D" path="res://assets/models/weapons/antique_katana_01/textures/antique_katana_01_arm_2k.jpg" id="6_arm"]
 
 [sub_resource type="ShaderMaterial" id="Mat_katana"]
 shader = ExtResource("3_steel")
 shader_parameter/albedo_texture = ExtResource("4_albedo")
 shader_parameter/normal_texture = ExtResource("5_normal")
-shader_parameter/orm_texture = ExtResource("6_orm")
+shader_parameter/arm_texture = ExtResource("6_arm")
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_steel"]
 friction = 0.4
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_blade"]
-size = Vector3(0.02, 0.036, 0.72)
+size = Vector3(0.02, 0.034, 0.7)
 
 [sub_resource type="CylinderShape3D" id="CylinderShape3D_handle"]
-height = 0.3
-radius = 0.018
+height = 0.31
+radius = 0.016
 
 [sub_resource type="CylinderShape3D" id="CylinderShape3D_guard"]
 height = 0.012
-radius = 0.04
+radius = 0.046
 
 [node name="Katana" type="RigidBody3D"]
 collision_layer = 4
@@ -35,24 +35,25 @@ mass = 1.1
 physics_material_override = SubResource("PhysicsMaterial_steel")
 center_of_mass_mode = 1
 center_of_mass = Vector3(0, 0, -0.15)
+inertia = Vector3(0.1045, 0.0935, 0.002)
 continuous_cd = true
 script = ExtResource("1_script")
-blade_start = Vector3(-0.012, 0.0, -0.09)
-blade_tip = Vector3(-0.043, 0.02, -0.795)
+blade_start = Vector3(0, 0.002, -0.095)
+blade_tip = Vector3(0, 0.038, -0.796)
 weapon_name = "katana"
 
 [node name="Model" parent="." instance=ExtResource("2_model")]
-transform = Transform3D(0, 1.05, 0, 0, 0, -1.05, -1.05, 0, 0, -0.04725, 0, -0.294)
+transform = Transform3D(0, 0, -1.03, 1.03, 0, 0, 0, -1.03, 0, 0, 0, -0.0788)
 
-[node name="katana_body" parent="Model/katana" index="0"]
+[node name="antique_katana_01" parent="Model" index="0"]
 surface_material_override/0 = SubResource("Mat_katana")
 
 [node name="BladeShape" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.025, 0.01, -0.445)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.013, -0.445)
 shape = SubResource("BoxShape3D_blade")
 
 [node name="HandleShape" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0.065)
+transform = Transform3D(1, 0, 0, 0, 0.0906, -0.9959, 0, 0.9959, 0.0906, 0, 0.014, 0.079)
 shape = SubResource("CylinderShape3D_handle")
 
 [node name="GuardShape" type="CollisionShape3D" parent="."]
