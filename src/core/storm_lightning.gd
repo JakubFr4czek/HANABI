@@ -19,7 +19,7 @@ const BOLT_SHADER := preload("res://src/shaders/lightning_bolt.gdshader")
 
 var flash_light: Light3D = null
 var world_environment: Environment = null
-var base_fog_light_color := Color(0.16, 0.16, 0.27, 1.0)
+var base_fog_light_color := Color(0.115, 0.115, 0.2, 1.0)
 var base_ambient_energy := 0.22
 var flash_fog_tint := Color(0.55, 0.72, 1.0, 1.0)
 var current_intensity := 0.0
