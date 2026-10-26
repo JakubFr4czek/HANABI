@@ -88,6 +88,14 @@ The physics-test mannequin lives here. It is the dummy test level: its own scene
 - **Implementation:** use assets from `assets/` first; if something is missing, build a procedural Godot stand-in. Quest / Mobile renderer: fake the reflection in the floor material, no screen-space effects, cheap fog, and a tight `GPUParticles3D` budget. Keep the arena a separate scene so it can load alone as the dummy test level.
 - **IP:** our own shapes and our own palette. No form, symbol or music that would be recognizable from another game.
 
+### Run intro
+At the start of a run the player hovers about 0.5–1 m above the arena in a meditative cross-legged pose (seiza / lotus-like), then descends onto the 桜雷墨影 seal.
+
+- **Descent:** slow and smooth. The seal glows below, and sakura petals swirl around the player.
+- **Touchdown:** a ripple of lightning runs across the water-mirror floor, and the katana materializes in the hand.
+- **Body:** no visible legs. The pose shows only as a shadow, or as a reflection in the water.
+- **Comfort:** linear motion, no sudden deceleration, horizon stable. Nothing takes over the camera beyond the vertical offset. A few seconds at most, and skippable.
+
 ## 10. Audio
 - Sword swings, clashes and slices; thunder; wind; temple bell (bonshō); night ambience.
 - Music: dark Japanese style (shakuhachi, koto, taiko).
