@@ -26,7 +26,7 @@ radiance_size = 2
 
 [sub_resource type="Environment" id="Env"]
 background_mode = 1
-background_color = Color(0.16, 0.16, 0.27, 1)
+background_color = Color(0.115, 0.115, 0.2, 1)
 sky = SubResource("Sky_storm")
 ambient_light_source = 2
 ambient_light_color = Color(0.36, 0.4, 0.62, 1)
@@ -44,15 +44,15 @@ glow_hdr_threshold = 1.15
 glow_hdr_scale = 1.6
 fog_enabled = true
 fog_mode = 1
-fog_light_color = Color(0.16, 0.16, 0.27, 1)
+fog_light_color = Color(0.115, 0.115, 0.2, 1)
 fog_light_energy = 1.0
 fog_density = 1.0
 fog_sky_affect = 0.0
-fog_depth_curve = 1.6
-fog_depth_begin = 4.0
-fog_depth_end = 26.0
+fog_depth_curve = 1.4
+fog_depth_begin = 3.5
+fog_depth_end = 16.0
 fog_height = 0.4
-fog_height_density = 0.35
+fog_height_density = 0.45
 
 [sub_resource type="ShaderMaterial" id="Mat_SkyDome"]
 render_priority = -100
