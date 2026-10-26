@@ -240,6 +240,41 @@ func _test_scanned_assets(room: Node) -> void:
 						or m.get_shader_parameter("normal_depth") <= 0.0 or m.get_shader_parameter("orm_mode") <= 0:
 					bare.append(mi.get_path())
 	_check("torii, rocks and the stand keep albedo, normal and roughness maps %s" % [bare], bare.is_empty())
+	_test_matte_materials(room)
+
+
+## Rain must not turn everything into glossy plastic: the moon's specular is
+## not boosted, and every rain-soaked material stays matte outside its water
+## film (dry roughness >= 0.6, film roughness >= 0.25; scanned maps scale 1.0).
+func _test_matte_materials(room: Node) -> void:
+	var moon := room.get_node("Moon") as DirectionalLight3D
+	_check("moon specular is not boosted above its diffuse (%.2f <= 0.8)" % moon.light_specular, moon.light_specular <= 0.8)
+	var glossy := []
+	var seen := {}
+	for gi: GeometryInstance3D in room.find_children("*", "GeometryInstance3D", true, false):
+		var mats: Array = [gi.material_override]
+		var mi := gi as MeshInstance3D
+		if mi and mi.mesh:
+			for s in mi.mesh.get_surface_count():
+				mats.append(mi.get_surface_override_material(s))
+				mats.append(mi.mesh.surface_get_material(s))
+		for m in mats:
+			var sm := m as ShaderMaterial
+			if sm == null or seen.has(sm) or sm.shader == null or not sm.shader.resource_path.ends_with("wet_surface.gdshader"):
+				continue
+			seen[sm] = true
+			var dry := _param(sm, "roughness_dry")
+			var wet := _param(sm, "roughness_wet")
+			if dry < 0.6 or wet < 0.25:
+				glossy.append("%s dry %.2f wet %.2f" % [gi.name, dry, wet])
+	_check("%d rain-soaked materials stay matte outside the water film %s" % [seen.size(), glossy], seen.size() >= 4 and glossy.is_empty())
+
+
+func _param(m: ShaderMaterial, name: String) -> float:
+	var v = m.get_shader_parameter(name)
+	if v == null:
+		v = RenderingServer.shader_get_parameter_default(m.shader.get_rid(), name)
+	return float(v)
 
 
 func _check(label: String, ok: bool) -> void:
