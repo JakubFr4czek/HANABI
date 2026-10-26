@@ -78,6 +78,16 @@ Do not implement during prototyping. Prepare the architecture: swappable enemy b
 - **VFX:** GPU particles for petals, procedural lightning, an ink/darkness shader with noise, and blade trails (GPUTrail).
 - **Performance:** on standalone Quest use simple fog and particles. Volumetric fog is a PCVR-only setting for recording.
 
+### Training Arena (Dojo of the Storm)
+The physics-test mannequin lives here. It is the dummy test level: its own scene, separate from the run's shrine. A serene, endless void under a slow purple storm.
+
+- **Platform:** a circular dark-stone disc floating in the void. The floor and the surroundings read as a still mirror of water, reflecting the sky.
+- **Sky:** deep violet fading to navy, clouds drifting slowly, and occasional silent lightning far off (Storm 雷).
+- **Composition:** one giant torii behind the mannequin; several smaller torii around the disc, tilted and half-sunken; a single sakura tree shedding neon-pink petals (Sakura 桜).
+- **Center:** the spawn seal on the floor, 桜雷墨影 — the same four-part mark as the run spawn.
+- **Implementation:** use assets from `assets/` first; if something is missing, build a procedural Godot stand-in. Quest / Mobile renderer: fake the reflection in the floor material, no screen-space effects, cheap fog, and a tight `GPUParticles3D` budget. Keep the arena a separate scene so it can load alone as the dummy test level.
+- **IP:** our own shapes and our own palette. No form, symbol or music that would be recognizable from another game.
+
 ## 10. Audio
 - Sword swings, clashes and slices; thunder; wind; temple bell (bonshō); night ambience.
 - Music: dark Japanese style (shakuhachi, koto, taiko).
