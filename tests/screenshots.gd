@@ -74,6 +74,46 @@ func _ready() -> void:
 	player.force_block = false
 	await _frames(120)
 
+	# 10-12. Other telegraphs from the player's eyes, then the hurt vignette.
+	var brain := dummy.brain as DuelistBrain
+	var hurt := [false]
+	player.health.damaged.connect(func(_a, _h, _s): hurt[0] = true)
+	for attack in ["horizontal", "thrust"]:
+		room.reset_room()
+		player.health.heal_full()
+		player.teleport(Vector3(0.0, 0, 1.45))
+		await _frames(60)
+		dummy.set_attacks_enabled(true)
+		brain.force_attack(attack)
+		hurt[0] = false
+		for k in 600:
+			await get_tree().process_frame
+			if brain.attack_phase == DuelistBrain.AttackPhase.WINDUP and brain._timer > 0.4:
+				await _shot("10_windup_horizontal" if attack == "horizontal" else "11_windup_thrust")
+				break
+		for k in 600:
+			await get_tree().process_frame
+			if hurt[0]:
+				await _frames(4)
+				if attack == "thrust":
+					await _shot("12_hurt_vignette")
+				break
+		dummy.set_attacks_enabled(false)
+	await _frames(60)
+
+	# 13. The dummy's high block.
+	room.reset_room()
+	player.teleport(Vector3(0.0, 0, 1.6))
+	dummy.set_attacks_enabled(true)
+	await _frames(30)
+	brain._block_pose = "block_high"
+	brain._enter(DuelistBrain.State.BLOCK)
+	await _frames(20)
+	await _shot("13_dummy_block")
+	dummy.set_attacks_enabled(false)
+	player.health.heal_full()
+	await _frames(60)
+
 	# 6. Heavy kanabō in hand.
 	player.take_weapon(room.kanabo)
 	player.teleport(Vector3(1.6, 0, 1.6), deg_to_rad(35))
