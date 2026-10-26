@@ -33,7 +33,7 @@ float noise2(vec2 p) {
 void vertex() {
 	v_custom = INSTANCE_CUSTOM;
 	// Subtle sway in high thin twigs only (v_custom.x stores branch height tier 0..1).
-	float sway = smoothstep(0.45, 1.0, v_custom.x) * 0.018;
+	float sway = smoothstep(0.45, 1.0, v_custom.x) * 0.022;
 	VERTEX.x += sin(TIME * 1.15 + VERTEX.y * 2.0 + v_custom.y * 6.28) * sway;
 	VERTEX.z += cos(TIME * 0.95 + VERTEX.x * 2.0 + v_custom.y * 6.28) * sway * 0.8;
 	v_world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -42,7 +42,7 @@ void vertex() {
 
 void fragment() {
 	// Gnarled vertical/spiral bark ridges.
-	vec2 bark_uv = vec2(UV.x * 9.0 + v_world_pos.y * 1.3, v_world_pos.y * 4.5);
+	vec2 bark_uv = vec2(UV.x * 9.0 + v_world_pos.y * 0.8, v_world_pos.y * 2.6);
 	float n1 = noise2(bark_uv);
 	float n2 = noise2(bark_uv * 2.7 + vec2(3.1, 1.7));
 	float ridge = smoothstep(0.25, 0.78, n1 * 0.65 + n2 * 0.35);
@@ -50,11 +50,11 @@ void fragment() {
 	vec3 base_col = mix(bark_dark, bark_crevice, ridge);
 
 	// Soft magenta bounce from the blossom canopy onto upper/inner bark surfaces
-	// + subtle ground bounce near the roots.
-	float height_UnderCanopy = smoothstep(0.6, 2.7, v_world_pos.y) * (1.0 - smoothstep(3.8, 4.8, v_world_pos.y));
+	// + subtle water-mirror bounce near the roots.
+	float height_under_canopy = smoothstep(1.2, 5.8, v_world_pos.y) * (1.0 - smoothstep(8.2, 10.5, v_world_pos.y));
 	float up_facing = clamp(v_world_normal.y * 0.65 + 0.35, 0.0, 1.0);
-	float root_glow = exp(-max(v_world_pos.y, 0.0) * 2.6) * 0.35;
-	float canopy_bounce = (height_UnderCanopy * up_facing * 0.65 + root_glow) * (0.65 + 0.35 * ridge);
+	float root_glow = exp(-max(v_world_pos.y, 0.0) * 1.4) * 0.35;
+	float canopy_bounce = (height_under_canopy * up_facing * 0.65 + root_glow) * (0.65 + 0.35 * ridge);
 
 	float ndotv = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
 	float fresnel = pow(1.0 - ndotv, 3.2);
