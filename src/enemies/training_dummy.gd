@@ -9,6 +9,7 @@ extends ActiveRagdoll
 signal hit_received(hit: Dictionary)
 
 const DUMMY_SWORD := preload("res://scenes/weapons/dummy_sword.tscn")
+const WET_SURFACE_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 
 @export var profile: EnemyProfile
 @export var hold_sword := true
@@ -17,7 +18,7 @@ var hp := 100.0
 var brain: EnemyBrain
 var sword: BladeBody
 
-var _straw := StandardMaterial3D.new()
+var _straw := ShaderMaterial.new()  # dark lacquered wood (wet_surface shader)
 var _sash := StandardMaterial3D.new()
 var _ink := StandardMaterial3D.new()
 var _flash_time := 0.0
@@ -29,11 +30,20 @@ func _ready() -> void:
 	if profile == null:
 		profile = EnemyProfile.new()
 	hp = profile.max_hp
-	_straw.albedo_color = Color(0.70, 0.58, 0.36)
-	_straw.roughness = 0.95
-	_sash.albedo_color = Color(0.75, 0.06, 0.08)
-	_sash.roughness = 0.6
-	_ink.albedo_color = Color(0.03, 0.03, 0.04)
+	_straw.shader = WET_SURFACE_SHADER
+	_straw.set_shader_parameter("base_color", Color(0.17, 0.11, 0.08))
+	_straw.set_shader_parameter("roughness_dry", 0.38)
+	_straw.set_shader_parameter("roughness_wet", 0.12)
+	_straw.set_shader_parameter("wetness", 0.45)
+	_straw.set_shader_parameter("waterline_y", -10.0)
+	_straw.set_shader_parameter("grain_amount", 0.6)
+	_straw.set_shader_parameter("grain_scale", 40.0)
+	_straw.set_shader_parameter("rim_amount", 1.0)
+	_straw.set_shader_parameter("fill", 1.8)
+	_sash.albedo_color = Color(0.3, 0.02, 0.035)
+	_sash.roughness = 0.45
+	_ink.albedo_color = Color(0.015, 0.015, 0.02)
+	_ink.roughness = 0.3
 	super._ready()
 	for child in get_children():
 		if child is EnemyBrain:
@@ -332,4 +342,4 @@ func _process(delta: float) -> void:
 	# Brief red flash on hit.
 	if _flash_time > 0.0:
 		_flash_time -= delta
-		_straw.albedo_color = Color(0.95, 0.35, 0.3) if _flash_time > 0.0 else Color(0.70, 0.58, 0.36)
+		_straw.set_shader_parameter("flash", clampf(_flash_time / 0.12, 0.0, 1.0) * 0.6)

@@ -17,6 +17,13 @@ func _ready() -> void:
 	add_child(room)
 	player = room.player
 	var dummy: TrainingDummy = room.dummy
+	# Judge the image, not the debug UI.
+	for layer in player.find_children("*", "CanvasLayer", true, false):
+		(layer as CanvasLayer).visible = false
+	for dev_ui in ["HitDebugPanel", "HelpLabel"]:
+		var n := room.get_node_or_null(dev_ui) as Node3D
+		if n:
+			n.visible = false
 
 	# 1. Katana in hand, dummy on guard.
 	player.teleport(Vector3(0.3, 0, 2.2))
@@ -71,9 +78,6 @@ func _ready() -> void:
 	await _frames(90)
 	await _shot("6_kanabo")
 
-	var debug_panel := room.get_node_or_null("HitDebugPanel") as Node3D
-	if debug_panel:
-		debug_panel.visible = false
 	player.take_weapon(room.katana)
 
 	# 7. Wide Dojo of the Storm vista with silent branching lightning illuminating the fog & water.
@@ -93,8 +97,24 @@ func _ready() -> void:
 	player.camera.rotation.x = deg_to_rad(-19)
 	await _frames(10)
 	await _shot("8_water_and_fog")
-	if debug_panel:
-		debug_panel.visible = true
+
+	# 9. Macro on the held katana: wet steel, rain beads, black silk wrap.
+	room.katana.set_element(Elements.NONE)
+	player.teleport(Vector3(0.0, 0, 2.0))
+	player.camera.rotation.x = 0.0
+	await _frames(60)
+	var body := room.katana.get_node("Model/katana/katana_body") as Node3D
+	var macro := Camera3D.new()
+	macro.fov = 40.0
+	macro.near = 0.02
+	room.add_child(macro)
+	var focus := body.global_transform * Vector3(0.05, 0.035, 0.0)
+	var side := (body.global_basis * Vector3.UP).normalized()
+	macro.look_at_from_position(focus + side * 0.55 + Vector3(0.0, 0.12, 0.0), focus)
+	macro.make_current()
+	await _frames(3)
+	await _shot("9_katana_macro")
+	macro.queue_free()
 
 	get_tree().quit()
 

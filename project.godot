@@ -56,6 +56,25 @@ renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=2
 
+[shader_globals]
+
+moon_direction={
+"type": "vec3",
+"value": Vector3(0.18, 0.407, -0.896)
+}
+storm_fog_color={
+"type": "color",
+"value": Color(0.16, 0.16, 0.27, 1)
+}
+storm_flash={
+"type": "float",
+"value": 0.0
+}
+storm_flash_dir={
+"type": "vec2",
+"value": Vector2(-0.25, -0.96)
+}
+
 [xr]
 
 openxr/enabled=true

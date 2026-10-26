@@ -1,18 +1,19 @@
 shader_type spatial;
 render_mode blend_mix, depth_draw_never, cull_disabled, unshaded, fog_disabled;
 
-// Low-cost drifting surface mist layer for Dojo of the Storm (Quest 3 Compatibility safe).
-// Renders a soft band of mist hovering just above the water around the platform rim,
-// around the Torii pillars, and fading seamlessly into the deep world fog.
+// Drifting surface mist for the Dojo of the Storm (Quest 3 Compatibility safe).
+// A soft band of moonlit mist above the water around the platform rim and the
+// torii base, fading into the world fog color with distance.
 
-uniform vec4 mist_color : source_color = vec4(0.056, 0.044, 0.125, 1.0);
-uniform vec4 fog_color : source_color = vec4(0.032, 0.026, 0.072, 1.0);
-uniform vec4 lightning_tint : source_color = vec4(0.45, 0.65, 1.0, 1.0);
+global uniform vec4 storm_fog_color;
+global uniform float storm_flash;
+
+uniform vec3 mist_color : source_color = vec3(0.2, 0.2, 0.3);
+uniform vec3 lightning_tint : source_color = vec3(0.55, 0.72, 1.0);
 uniform float mist_opacity : hint_range(0.0, 1.0) = 0.44;
 uniform float inner_clear_radius : hint_range(2.0, 12.0) = 5.15;
 uniform float outer_fade_radius : hint_range(10.0, 40.0) = 16.5;
-uniform vec2 drift_velocity = vec2(0.18, -0.11);
-uniform float lightning_flash : hint_range(0.0, 2.0) = 0.0;
+uniform vec2 drift_velocity = vec2(0.12, -0.07);
 
 varying vec3 v_world_pos;
 
@@ -33,29 +34,21 @@ void vertex() {
 
 void fragment() {
 	float r = length(v_world_pos.xz);
-	// Keep the stone platform floor clear while letting mist curl right up to the platform rim
 	float inner_mask = smoothstep(inner_clear_radius - 0.25, inner_clear_radius + 1.85, r);
 	float outer_mask = 1.0 - smoothstep(outer_fade_radius * 0.58, outer_fade_radius, r);
 
-	vec2 p1 = v_world_pos.xz * 0.28 + TIME * drift_velocity;
-	vec2 p2 = v_world_pos.xz * 0.55 - TIME * drift_velocity.yx * 0.75;
-	float n1 = mist_noise(p1);
-	float n2 = mist_noise(p2);
-	float wisps = smoothstep(0.24, 0.82, n1 * 0.62 + n2 * 0.38);
+	float n1 = mist_noise(v_world_pos.xz * 0.22 + TIME * drift_velocity);
+	float n2 = mist_noise(v_world_pos.xz * 0.5 - TIME * drift_velocity.yx * 0.75);
+	float wisps = smoothstep(0.3, 0.85, n1 * 0.62 + n2 * 0.38);
 
-	// Extra mist plumes hugging the platform rim and Giant Torii base
-	float rim_bank = exp(-max(r - 5.30, 0.0) * 0.45) * 0.48;
+	float rim_bank = exp(-max(r - 5.3, 0.0) * 0.45) * 0.4;
 	float d_torii = length((v_world_pos.xz - vec2(0.0, -10.5)) * vec2(0.45, 0.85));
-	float torii_bank = exp(-d_torii * 0.28) * 0.55;
+	float torii_bank = exp(-d_torii * 0.28) * 0.5;
 
-	// Blend mist color toward the deep world fog color with radial distance so there is no horizon band
-	float dist_blend = smoothstep(8.5, outer_fade_radius, r);
-	vec3 col = mix(mist_color.rgb, fog_color.rgb, dist_blend);
-	// Lightning flash briefly illuminates the mist banks across the water
-	col += lightning_tint.rgb * (lightning_flash * (0.24 + 0.22 * wisps));
+	vec3 col = mix(mist_color, storm_fog_color.rgb, smoothstep(8.5, outer_fade_radius, r));
+	col += lightning_tint * storm_flash * (0.2 + 0.25 * wisps);
 
 	float density = clamp((wisps * 0.78 + rim_bank + torii_bank) * inner_mask * outer_mask, 0.0, 1.0);
-	float alpha = density * mist_opacity * (1.0 + lightning_flash * 0.28);
 	ALBEDO = col;
-	ALPHA = clamp(alpha, 0.0, 0.72);
+	ALPHA = clamp(density * mist_opacity * (1.0 + storm_flash * 0.3), 0.0, 0.7);
 }

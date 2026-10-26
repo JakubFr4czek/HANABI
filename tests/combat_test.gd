@@ -359,8 +359,8 @@ func _test_dojo_of_the_storm() -> void:
 		disc != null and water != null and mist_low != null and mist_high != null and seal != null and giant_torii != null and lightmap != null)
 	var water_mat := water.material_override as ShaderMaterial if water else null
 	var water_plane := water.mesh as PlaneMesh if water else null
-	_check("Water shader has subdivided wave mesh, dual normal maps, and baked sky panorama",
-		water_mat != null and water_plane != null and water_plane.subdivide_width >= 64
+	_check("Water shader has a light mesh (normal-mapped swell, no vertex waves), dual normal maps, and baked sky panorama",
+		water_mat != null and water_plane != null and water_plane.subdivide_width <= 16
 		and water_mat.get_shader_parameter("normal_map_a") != null
 		and water_mat.get_shader_parameter("normal_map_b") != null
 		and water_mat.get_shader_parameter("sky_panorama") != null)
@@ -373,10 +373,16 @@ func _test_dojo_of_the_storm() -> void:
 	if room.lightning:
 		room.lightning.trigger_strike(-0.22)
 		await get_tree().process_frame
-		var flash_val: float = water_mat.get_shader_parameter("lightning_flash")
-		var mist_flash: float = (mist_low.material_override as ShaderMaterial).get_shader_parameter("lightning_flash")
-		_check("StormLightning builds procedural bolt mesh and illuminates water, sky, and fog/mist (flash=%.2f, mist=%.2f)" % [flash_val, mist_flash],
-			room.lightning.visible and flash_val > 0.1 and mist_flash > 0.1 and we.environment.fog_light_energy > 1.1)
+		var flash_val: float = room.lightning.current_intensity
+		var base_fog: Color = room.lightning.base_fog_light_color
+		_check("StormLightning drives the global storm_flash (water, clouds, mist) and brightens fog + ambient (flash=%.2f)" % flash_val,
+			room.lightning.visible and flash_val > 0.1
+			and we.environment.fog_light_color.get_luminance() > base_fog.get_luminance() + 0.01
+			and we.environment.ambient_light_energy > room.lightning.base_ambient_energy * 1.2)
+		await _wait(0.45)
+		_check("Lightning flash fades out and its light pass is switched off (flash=%.3f)" % room.lightning.current_intensity,
+			room.lightning.current_intensity < 0.01
+			and (room.lightning.flash_light == null or not room.lightning.flash_light.visible))
 
 
 ## Hold the weapon in a scripted holder, then jump the target 0.4 m sideways and
