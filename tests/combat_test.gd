@@ -372,6 +372,13 @@ func _test_dojo_of_the_storm() -> void:
 		we != null and we.environment != null and we.environment.fog_enabled
 		and we.environment.fog_mode == Environment.FOG_MODE_DEPTH
 		and we.environment.fog_depth_end <= 30.0 and we.environment.fog_height_density > 0.1)
+	if we and we.environment:
+		var env := we.environment
+		var fog_at := func(d: float) -> float:
+			return pow(clampf((d - env.fog_depth_begin) / (env.fog_depth_end - env.fog_depth_begin), 0.0, 1.0), env.fog_depth_curve) * env.fog_density
+		var torii_d := giant_torii.global_position.length() if giant_torii else 10.5
+		_check("Dense distance fog, clear arena (fog %.0f%% at 3 m, %.0f%% at the giant torii %.1f m, %.0f%% at 15 m)" % [fog_at.call(3.0) * 100.0, fog_at.call(torii_d) * 100.0, torii_d, fog_at.call(15.0) * 100.0],
+			fog_at.call(3.0) < 0.01 and fog_at.call(torii_d) >= 0.3 and fog_at.call(15.0) >= 0.85)
 	var rain: StormRain = room.rain
 	await get_tree().process_frame
 	var cam := room.get_viewport().get_camera_3d()
