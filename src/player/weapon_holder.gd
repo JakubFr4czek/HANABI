@@ -19,6 +19,9 @@ extends Node3D
 @export var recall_action := "by_button"
 @export var grip_press_threshold := 0.6
 @export var grip_release_threshold := 0.35
+## The hand model shows on the weapon's grip only while that grip is within
+## this distance (m) of the controller; farther away it goes back to the controller.
+@export var hand_pin_max_distance := 0.3
 
 var held: HeldWeapon = null
 
@@ -26,6 +29,7 @@ var _controller: XRController3D = null
 var _recall_was_pressed := false
 var _hand: Node3D = null  # XR Tools hand model next to us, if any
 var _hand_anchor: Node3D = null  # follows the weapon; the hand model is pinned to it
+var _hand_pinned := false
 
 
 func _ready() -> void:
@@ -86,15 +90,35 @@ func _pin_hand_to(weapon: HeldWeapon, local_grip: Transform3D = Transform3D.IDEN
 	_hand_anchor.name = "HandAnchor_" + side
 	weapon.add_child(_hand_anchor)
 	_hand_anchor.transform = local_grip * transform.affine_inverse()
-	_hand.add_target_override(_hand_anchor, 10)
+	_set_hand_pinned(true)
 
 
 func _unpin_hand() -> void:
 	if _hand_anchor:
-		if _hand:
-			_hand.remove_target_override(_hand_anchor)
+		_set_hand_pinned(false)
 		_hand_anchor.queue_free()
 		_hand_anchor = null
+
+
+func _set_hand_pinned(pinned: bool) -> void:
+	if pinned == _hand_pinned or _hand == null or _hand_anchor == null:
+		return
+	_hand_pinned = pinned
+	if pinned:
+		_hand.add_target_override(_hand_anchor, 10)
+	else:
+		_hand.remove_target_override(_hand_anchor)
+
+
+func _physics_process(_delta: float) -> void:
+	if _hand_anchor == null:
+		return
+	# The anchor is where the controller would be if the weapon sat exactly in the hand.
+	var gap := _hand_anchor.global_position.distance_to(get_parent_node_3d().global_position)
+	if _hand_pinned and gap > hand_pin_max_distance:
+		_set_hand_pinned(false)
+	elif not _hand_pinned and gap < hand_pin_max_distance * 0.5:
+		_set_hand_pinned(true)
 
 
 ## Teleport the nearest free weapon into the hand and grab it at its main grip.

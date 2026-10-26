@@ -50,6 +50,8 @@ func _ready() -> void:
 		player.toggle_attacks_requested.connect(toggle_dummy_attacks)
 	add_child(player)
 	player.global_transform = spawn.global_transform
+	for w in [katana, kanabo]:
+		w.register_player_collision_exceptions(player)
 	if player is DesktopPlayer:
 		(player as DesktopPlayer).holder.grab(katana)
 

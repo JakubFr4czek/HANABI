@@ -10,8 +10,13 @@ extends BladeBody
 ##   while the hand keeps moving.
 ## - No bulldozing: when the blade is held back by something (grip far from the
 ##   hand) the arm "gives": force and torque drop to [member blocked_strength].
-## - Stable PD (Tan et al.): position error is predicted one step ahead, which
-##   keeps high gains stable at 72–120 Hz.
+## - Stable PD (Tan et al.): position error is predicted one step ahead and the
+##   damping term is implicit, so the discrete controller stays critically damped
+##   (no tick-to-tick ringing) at any tick rate from 72 to 120 Hz.
+## - Never flies away: speed and spin are capped relative to the hand, the
+##   velocity kick of a new impact against a moving body is limited, and if the
+##   grip gets farther than [member break_distance] from the hand the weapon is
+##   put back in the hand (unless something solid is in the way).
 ## - Slow motion: in a compensated slow-mo (parry) gains are scaled by
 ##   [method TimeController.compensation] so the blade keeps real-time speed.
 ## - Free & two-handed grip: each hand grabs at a local grip transform clamped to
@@ -22,6 +27,8 @@ extends BladeBody
 const ZONE_HANDLE := "handle"
 const ZONE_TSUBA := "tsuba"
 const ZONE_MUNE := "mune"
+## Physics layer of the player's own bodies (layer 20, "player_body").
+const PLAYER_BODY_LAYER := 1 << 19
 
 ## Spring frequency (Hz) and damping ratio of the linear / angular controller.
 @export var follow_frequency := 9.0
@@ -35,6 +42,19 @@ const ZONE_MUNE := "mune"
 @export var blocked_strength := 0.3
 ## Grip-to-hand distance (m) above which the blade counts as held back.
 @export var blocked_distance := 0.1
+## Max speed (real m/s) of the center of mass above the hand's own speed, and
+## max spin (real rad/s) above the hand's own spin.
+@export var max_extra_speed := 4.0
+@export var max_extra_spin := 18.0
+## Max velocity change (real m/s, rad/s) a new impact with a moving body may
+## give the weapon in one tick, on top of what the arm itself does.
+@export var max_impact_speed_change := 2.0
+@export var max_impact_spin_change := 12.0
+## Grip-to-hand distance (m) above which a weapon that is still moving away from
+## the hand faster than [member break_flee_speed] (real m/s) is put back in the
+## hand. A blade merely lagging behind a fast hand is moving toward it, so it is left alone.
+@export var break_distance := 0.4
+@export var break_flee_speed := 0.5
 
 @export_group("Grip")
 ## Pommel end of the handle (tsuka) along local +Z (m).
@@ -109,6 +129,10 @@ var _last_tip := Vector3.ZERO
 var _prev_target := Transform3D()
 var _has_prev_target := false
 var _blocked_buzz := 0.0
+var _impact_this_tick := false
+# Velocity change the arm and gravity were expected to cause in the last step.
+var _expected_dv := Vector3.ZERO
+var _expected_dw := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -116,6 +140,7 @@ func _ready() -> void:
 	# We detect hits ourselves and snapshot at the end of our own tick.
 	process_physics_priority = 0
 	add_to_group("player_weapons")
+	collision_mask &= ~PLAYER_BODY_LAYER
 	contact_monitor = true
 	max_contacts_reported = 16
 	_last_tip = get_tip_global()
@@ -263,10 +288,19 @@ func release_all() -> void:
 			h.release()
 
 
+## Never collide with the player's own rig (body, hands), whatever its layers are.
+func register_player_collision_exceptions(player: Node) -> void:
+	for body in player.find_children("*", "PhysicsBody3D", true, false):
+		add_collision_exception_with(body)
+
+
 func _physics_process(delta: float) -> void:
 	_tick_cooldowns(delta)
+	_impact_this_tick = false
 	_process_contacts()
 	if holder and delta > 0.0:
+		if _impact_this_tick and _has_prev_target:
+			_limit_impact_kick(delta)
 		_drive_to(_compute_target_transform(), delta)
 	_update_swing_audio(delta)
 	_snapshot_velocity()
@@ -316,10 +350,14 @@ static func _shortest_arc(from_dir: Vector3, to_dir: Vector3) -> Quaternion:
 	return Quaternion(from_dir, to_dir)
 
 
+func _primary_grip_error(target: Transform3D) -> float:
+	var g0: Transform3D = _local_grips.get(holder, Transform3D.IDENTITY)
+	return (global_transform * g0.origin).distance_to(target * g0.origin)
+
+
 func _compute_grip_error(target: Transform3D) -> float:
 	if holders.size() <= 1:
-		var g0: Transform3D = _local_grips.get(holder, Transform3D.IDENTITY)
-		return (global_transform * g0.origin).distance_to(target * g0.origin)
+		return _primary_grip_error(target)
 	var err := 0.0
 	for h in holders:
 		var g: Transform3D = _local_grips.get(h, Transform3D.IDENTITY)
@@ -331,6 +369,12 @@ func _compute_grip_error(target: Transform3D) -> float:
 
 func _drive_to(target: Transform3D, delta: float) -> void:
 	grip_error = _compute_grip_error(target)
+	var c := TimeController.compensation_for(delta)
+	# Knocked out of the hand: put it back rather than letting it (and the hand
+	# model pinned to it) fly off. Not when the hand is behind a wall or a body.
+	if _is_flying_off(target, c) and _fits_at(target):
+		_teleport_to(target)
+		return
 	if grip_error > stuck_distance:
 		_stuck_timer += TimeController.real_tick()
 		if _stuck_timer > stuck_time:
@@ -339,45 +383,95 @@ func _drive_to(target: Transform3D, delta: float) -> void:
 	else:
 		_stuck_timer = 0.0
 
-	# Target velocity of the hand, from how the target moved since last tick.
+	# Hand velocity in simulation units, measured over real time: in a hit-stop
+	# the hand keeps moving in real time but the blade must freeze with the world.
 	var target_vel := Vector3.ZERO
 	var target_omega := Vector3.ZERO
 	if _has_prev_target:
-		target_vel = (target * center_of_mass - _prev_target * center_of_mass) / delta
-		target_omega = ActiveRagdoll._rotation_error(target.basis.get_rotation_quaternion(), _prev_target.basis.get_rotation_quaternion()) / delta
+		var to_sim := c / TimeController.real_tick()
+		target_vel = (target * center_of_mass - _prev_target * center_of_mass) * to_sim
+		target_omega = ActiveRagdoll._rotation_error(target.basis.get_rotation_quaternion(), _prev_target.basis.get_rotation_quaternion()) * to_sim
 	_prev_target = target
 	_has_prev_target = true
+
+	# Never faster or spinning harder than the hand by more than a margin.
+	linear_velocity = linear_velocity.limit_length(target_vel.length() + max_extra_speed * c)
+	angular_velocity = angular_velocity.limit_length(target_omega.length() + max_extra_spin * c)
 
 	# Held back by an obstacle -> the arm gives way (no infinite pushing).
 	var want_strength := blocked_strength if grip_error > blocked_distance else 1.0
 	strength = move_toward(strength, want_strength, delta * (6.0 if want_strength < strength else 3.0))
 	_buzz_when_blocked(delta)
 
-	var c := TimeController.compensation_for(delta)
 	var limit_scale := minf(c * c, 16.0) * strength
 	var force_mult := two_hand_force_multiplier if holders.size() >= 2 else 1.0
 	var torque_mult := two_hand_torque_multiplier if holders.size() >= 2 else 1.0
 
 	# Linear: stable PD on the center of mass, plus holding the weapon's weight.
+	# Dividing by (1 + kd·dt) makes the damping implicit, which keeps the
+	# discrete loop from overshooting every tick at low tick rates.
 	var w := TAU * follow_frequency * c
+	var kd := 2.0 * follow_damping * w
 	var com := get_com_global()
 	var com_target := target * center_of_mass
-	var accel := (com_target - (com + linear_velocity * delta)) * (w * w) + (target_vel - linear_velocity) * (2.0 * follow_damping * w)
-	var force := mass * accel - mass * get_gravity()
-	apply_central_force(force.limit_length(max_force * force_mult * limit_scale))
+	var accel := ((com_target - (com + linear_velocity * delta)) * (w * w) + (target_vel - linear_velocity) * kd) / (1.0 + kd * delta)
+	var force := (mass * accel - mass * get_gravity()).limit_length(max_force * force_mult * limit_scale)
+	apply_central_force(force)
+	_expected_dv = (force / mass + get_gravity() * gravity_scale) * delta
 
 	# Angular: stable PD on orientation (error to the orientation one step ahead).
 	var wa := TAU * angular_frequency * c
+	var kda := 2.0 * angular_damping * wa
 	var q := global_basis.get_rotation_quaternion()
 	var spin := angular_velocity * delta
 	var q_pred := q
 	if spin.length_squared() > 1e-12:
 		q_pred = Quaternion(spin.normalized(), spin.length()) * q
 	var err := ActiveRagdoll._rotation_error(target.basis.get_rotation_quaternion(), q_pred)
-	var alpha := err * (wa * wa) + (target_omega - angular_velocity) * (2.0 * angular_damping * wa)
+	var alpha := (err * (wa * wa) + (target_omega - angular_velocity) * kda) / (1.0 + kda * delta)
 	var st := PhysicsServer3D.body_get_direct_state(get_rid())
-	var torque: Vector3 = st.inverse_inertia_tensor.inverse() * alpha
-	apply_torque(torque.limit_length(max_torque * torque_mult * limit_scale))
+	var torque: Vector3 = (st.inverse_inertia_tensor.inverse() * alpha).limit_length(max_torque * torque_mult * limit_scale)
+	apply_torque(torque)
+	_expected_dw = st.inverse_inertia_tensor * torque * delta
+
+
+## A new impact with a moving body may only change our velocity by so much on
+## top of what the arm did; the rest of the blow goes into the other body.
+func _limit_impact_kick(delta: float) -> void:
+	var c := TimeController.compensation_for(delta)
+	var dv := linear_velocity - _snap_linear - _expected_dv
+	var cap := max_impact_speed_change * c
+	if dv.length() > cap:
+		linear_velocity = _snap_linear + _expected_dv + dv.limit_length(cap)
+	var dw := angular_velocity - _snap_angular - _expected_dw
+	var spin_cap := max_impact_spin_change * c
+	if dw.length() > spin_cap:
+		angular_velocity = _snap_angular + _expected_dw + dw.limit_length(spin_cap)
+
+
+func _is_flying_off(target: Transform3D, c: float) -> bool:
+	var g0: Transform3D = _local_grips.get(holder, Transform3D.IDENTITY)
+	var grip_point := global_transform * g0.origin
+	var away := grip_point - target * g0.origin
+	if away.length() <= break_distance:
+		return false
+	return get_point_velocity(grip_point).dot(away.normalized()) > break_flee_speed * c
+
+
+## True when the weapon at [param pose] would not overlap anything it collides with.
+func _fits_at(pose: Transform3D) -> bool:
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.collision_mask = collision_mask
+	query.exclude = [get_rid()]
+	for owner_id in get_shape_owners():
+		var owner_xform := shape_owner_get_transform(owner_id)
+		for i in shape_owner_get_shape_count(owner_id):
+			query.shape = shape_owner_get_shape(owner_id, i)
+			query.transform = pose * owner_xform
+			if not space.intersect_shape(query, 1).is_empty():
+				return false
+	return true
 
 
 ## Put the weapon exactly in the hand (e.g. after the player teleported).
@@ -428,6 +522,8 @@ func _process_contacts() -> void:
 		now_contacts[cid] = true
 		if _prev_contacts.has(cid):
 			continue  # still touching from before, not a new impact
+		if collider is RigidBody3D:
+			_impact_this_tick = true
 		var point := state.get_contact_local_position(i)
 		var my_vel := get_pre_step_point_velocity(point)
 		var other_vel := _pre_step_velocity_of(collider, point)
