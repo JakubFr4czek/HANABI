@@ -110,7 +110,9 @@ func _run() -> void:
 	await _wait(2.0)
 	events.clear()
 	time_effects.clear()
+	dummy.set_difficulty(calm_difficulty())
 	dummy.set_attacks_enabled(true)
+	(dummy.brain as DuelistBrain).force_attack("vertical")
 	var parry: Dictionary = {}
 	var max_enemy_tip := 0.0
 	var last_tip := dummy.sword.get_tip_global()
@@ -132,7 +134,7 @@ func _run() -> void:
 		await get_tree().physics_frame
 		_check("parry starts compensated slow motion (scale %.2f, compensated %s)" % [TimeController.time_scale, TimeController.player_compensated],
 			TimeController.time_scale < 0.5 and TimeController.player_compensated)
-		_check("dummy is stunned with a counter window (%.2f s)" % dummy.counter_time_left(), dummy.counter_time_left() > 0.5 and (dummy.brain as DummyBrain).phase == DummyBrain.Phase.STUNNED)
+		_check("dummy is stunned with a counter window (%.2f s)" % dummy.counter_time_left(), dummy.counter_time_left() > 0.5 and (dummy.brain as DuelistBrain).state == DuelistBrain.State.STAGGER)
 
 		player.force_block = false
 
@@ -441,6 +443,16 @@ func _step_response(weapon: HeldWeapon) -> Array:
 	holder.release()
 	holder.queue_free()
 	return [settle if settle >= 0.0 else 9.9, tip_err_01]
+
+
+## Normal difficulty without feints, combos or blocks: one predictable attack.
+static func calm_difficulty() -> DuelistDifficulty:
+	var d := DuelistDifficulty.preset("normal")
+	d.feint_chance = 0.0
+	d.combo_chance = 0.0
+	d.block_chance = 0.0
+	d.riposte_chance = 0.0
+	return d
 
 
 func _wait(seconds: float) -> void:

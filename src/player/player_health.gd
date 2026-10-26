@@ -1,0 +1,77 @@
+class_name PlayerHealth
+extends Node
+## The player's hit points and hurtbox (group "player_health"). Enemies test
+## their blades against [method hurt_capsule] and call [method take_hit].
+##
+## Timers run in real time (hit-stop and slow-mo do not stretch them). In the
+## training arena a defeat is not the end: after [member revive_time] the
+## player is back at full health.
+
+signal damaged(amount: float, hp_left: float, source: Vector3)
+signal died
+signal revived
+
+@export var max_hp := 100.0
+## Seconds of invulnerability after a hit, so one cut cannot hit twice.
+@export var invulnerable_time := 0.6
+@export var revive_time := 3.0
+## Hurtbox: a capsule from just above the eyes down this far, this thick.
+@export var torso_length := 0.75
+@export var radius := 0.2
+
+var hp := 100.0
+## Eyes of the player (camera). Set by the rig.
+var head: Node3D
+
+var _invulnerable := 0.0
+var _down_time := 0.0
+
+
+func _ready() -> void:
+	add_to_group("player_health")
+	hp = max_hp
+
+
+func is_alive() -> bool:
+	return hp > 0.0
+
+
+## [top, bottom, radius] of the body capsule in world space.
+func hurt_capsule() -> Array:
+	var h := head.global_position if head else Vector3.ZERO
+	return [h + Vector3(0.0, 0.08, 0.0), h - Vector3(0.0, torso_length, 0.0), radius]
+
+
+## Apply a hit. Returns false when it was ignored (down, or just hit).
+func take_hit(amount: float, source: Vector3, info: Dictionary = {}) -> bool:
+	if not is_alive() or _invulnerable > 0.0 or amount <= 0.0:
+		return false
+	hp = maxf(hp - amount, 0.0)
+	_invulnerable = invulnerable_time
+	var event := info.duplicate()
+	event["damage"] = snappedf(amount, 0.1)
+	event["hp_left"] = snappedf(hp, 0.1)
+	GameEvents.log_event("player_hit", event)
+	damaged.emit(amount, hp, source)
+	if hp <= 0.0:
+		_down_time = revive_time
+		GameEvents.log_event("player_defeated", {"attacker": info.get("attacker", "")})
+		died.emit()
+	return true
+
+
+func heal_full() -> void:
+	hp = max_hp
+	_down_time = 0.0
+	_invulnerable = 0.0
+
+
+func _physics_process(_delta: float) -> void:
+	var dt := TimeController.real_tick()
+	_invulnerable = maxf(_invulnerable - dt, 0.0)
+	if not is_alive():
+		_down_time -= dt
+		if _down_time <= 0.0:
+			heal_full()
+			GameEvents.log_event("player_revived", {})
+			revived.emit()

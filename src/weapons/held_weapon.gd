@@ -140,6 +140,7 @@ var _expected_dw := Vector3.ZERO
 
 
 func _ready() -> void:
+	add_to_group("player_weapons")
 	super._ready()
 	# We detect hits ourselves and snapshot at the end of our own tick.
 	process_physics_priority = 0
@@ -628,6 +629,8 @@ func _handle_clash(c: Dictionary) -> void:
 			Sfx.play_at("blade_ring", c.point, linear_to_db(clampf(0.2 + c.speed / 10.0, 0.2, 0.8)))
 		if c.speed >= 2.0:
 			TimeController.micro_stop(0.025)
+		if other.wielder and other.wielder.has_method("on_blade_contact"):
+			other.wielder.on_blade_contact(clash)
 
 
 func _parry(other: BladeBody, clash: Dictionary) -> void:

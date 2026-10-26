@@ -26,6 +26,8 @@ extends Resource
 @export var counter_multiplier := 1.5
 ## Free-form tactic parameters read by the enemy's brain.
 @export var tactics := {}
+## How hard a sword duelist fights (null = the "difficulty" preset named in tactics).
+@export var difficulty: DuelistDifficulty
 
 
 func damage_multiplier(zone: String, element: String = "physical") -> float:
