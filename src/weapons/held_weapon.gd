@@ -14,6 +14,14 @@ extends BladeBody
 ##   keeps high gains stable at 72–120 Hz.
 ## - Slow motion: in a compensated slow-mo (parry) gains are scaled by
 ##   [method TimeController.compensation] so the blade keeps real-time speed.
+## - Free & two-handed grip: each hand grabs at a local grip transform clamped to
+##   the handle (tsuka), guard (tsuba), or blunt spine of the blade (mune, never
+##   the cutting edge ha). A second hand can grab the weapon simultaneously,
+##   steering the blade axis between the two hands and adding second-arm strength.
+
+const ZONE_HANDLE := "handle"
+const ZONE_TSUBA := "tsuba"
+const ZONE_MUNE := "mune"
 
 ## Spring frequency (Hz) and damping ratio of the linear / angular controller.
 @export var follow_frequency := 9.0
@@ -27,6 +35,28 @@ extends BladeBody
 @export var blocked_strength := 0.3
 ## Grip-to-hand distance (m) above which the blade counts as held back.
 @export var blocked_distance := 0.1
+
+@export_group("Grip")
+## Pommel end of the handle (tsuka) along local +Z (m).
+@export var handle_back_z := 0.21
+## Local Z of the guard (tsuba), its half-length along Z, and its outer radius (m).
+@export var guard_z := -0.085
+@export var guard_half_length := 0.02
+@export var guard_radius := 0.04
+## Distance from [member blade_tip] (m) where the blunt spine stops being grabbable.
+@export var blade_grip_margin := 0.06
+## Local direction from the blade centerline toward the blunt spine (mune).
+## On the katana mesh, -Y is the sharp cutting edge (ha) and +Y is the blunt spine (mune).
+@export var spine_direction := Vector3(0, 1, 0)
+## Offset from the blade centerline onto the blunt spine surface (m).
+@export var spine_offset := 0.018
+## Arm strength multipliers when held with two hands.
+@export var two_hand_force_multiplier := 1.6
+@export var two_hand_torque_multiplier := 1.8
+## How much the second hand contributes to blade twist/roll (0 = primary only, 0.5 = equal).
+@export var two_hand_twist_blend := 0.4
+## Longitudinal position blend between primary (0.0) and secondary (1.0) hand.
+@export var two_hand_position_blend := 0.0
 
 @export_group("Damage")
 ## Hits slower than this (relative m/s at the contact point) do nothing.
@@ -57,8 +87,10 @@ extends BladeBody
 ## Tip speed (real m/s) that triggers a swing "whoosh".
 @export var swing_sound_speed := 7.0
 
-## The WeaponHolder currently holding us, or null.
+## Primary WeaponHolder currently holding us, or null.
 var holder: Node3D = null
+## All active WeaponHolders (1 = one-handed, 2 = two-handed).
+var holders: Array[Node3D] = []
 ## How fast the tip actually moved during the last physics step (real m/s).
 ## Unlike the body velocity, this stays honest when the blade is blocked.
 var measured_tip_speed := 0.0
@@ -67,6 +99,8 @@ var strength := 1.0
 ## Distance between where the grip is and where the hand wants it (m).
 var grip_error := 0.0
 
+var _local_grips := {}  # holder -> Transform3D in weapon local space
+var _grip_zones := {}   # holder -> String (ZONE_HANDLE / ZONE_TSUBA / ZONE_MUNE)
 var _prev_contacts := {}  # collider instance id -> true, contacts in previous tick
 var _receiver_cooldown := {}  # receiver instance id -> time left
 var _stuck_timer := 0.0
@@ -88,37 +122,215 @@ func _ready() -> void:
 
 
 func is_held() -> bool:
-	return holder != null
+	return not holders.is_empty()
 
 
-func on_grabbed(by: Node3D) -> void:
-	holder = by
-	wielder = by
+func is_two_handed() -> bool:
+	return holders.size() >= 2
+
+
+func is_held_by(by: Node3D) -> bool:
+	return holders.has(by)
+
+
+func get_local_grip(by: Node3D = null) -> Transform3D:
+	var key: Node3D = by if by != null else holder
+	return _local_grips.get(key, Transform3D.IDENTITY)
+
+
+func get_grip_zone(by: Node3D = null) -> String:
+	var key: Node3D = by if by != null else holder
+	return _grip_zones.get(key, ZONE_HANDLE)
+
+
+func get_grip_point_global(by: Node3D = null) -> Vector3:
+	return global_transform * get_local_grip(by).origin
+
+
+## Classify which grabbable region a local-space point falls into.
+func classify_grip_zone(local_point: Vector3) -> String:
+	if local_point.z > guard_z + guard_half_length:
+		return ZONE_HANDLE
+	if local_point.z >= guard_z - guard_half_length:
+		return ZONE_TSUBA
+	return ZONE_MUNE
+
+
+## Clamp an arbitrary local-space point onto the nearest valid grip surface:
+## the handle (tsuka), the guard (tsuba), or the blunt spine of the blade (mune).
+## Points along the blade are always placed on the blunt spine, never on the cutting edge.
+func clamp_grip_point(local_point: Vector3) -> Vector3:
+	var min_z := minf(blade_start.z, blade_tip.z) + blade_grip_margin
+	var z := clampf(local_point.z, min_z, handle_back_z)
+	var zone := classify_grip_zone(Vector3(local_point.x, local_point.y, z))
+	match zone:
+		ZONE_HANDLE:
+			return Vector3(0.0, 0.0, clampf(z, guard_z + guard_half_length, handle_back_z))
+		ZONE_TSUBA:
+			var xy := Vector2(local_point.x, local_point.y)
+			if xy.length() > guard_radius:
+				xy = xy.normalized() * guard_radius
+			return Vector3(xy.x, xy.y, clampf(z, guard_z - guard_half_length, guard_z + guard_half_length))
+		_:
+			var z_mune := clampf(z, min_z, guard_z - guard_half_length)
+			var center := _blade_centerline_at_z(z_mune)
+			return center + spine_direction.normalized() * spine_offset
+
+
+func _blade_centerline_at_z(z: float) -> Vector3:
+	var span := blade_tip.z - blade_start.z
+	var t := clampf((z - blade_start.z) / span, 0.0, 1.0) if absf(span) > 1e-5 else 0.0
+	return blade_start.lerp(blade_tip, t)
+
+
+## True when [param local_point] along the blade is on the blunt spine (mune) side
+## of the blade centerline rather than the sharp cutting edge (ha).
+func is_on_blunt_side(local_point: Vector3) -> bool:
+	var center := _blade_centerline_at_z(local_point.z)
+	return (local_point - center).dot(spine_direction.normalized()) >= -0.002
+
+
+## World-space distance from [param world_point] to the nearest grabbable point on this weapon.
+func distance_to_grip(world_point: Vector3) -> float:
+	var local_pt := global_transform.affine_inverse() * world_point
+	var clamped := clamp_grip_point(local_pt)
+	return world_point.distance_to(global_transform * clamped)
+
+
+## Compute the local grip Transform3D for a hand grabbing at [param hand_global].
+func compute_local_grip(hand_global: Transform3D) -> Transform3D:
+	var raw_local := global_transform.affine_inverse() * hand_global
+	if raw_local.origin.length() < 0.005 and raw_local.basis.get_rotation_quaternion().angle_to(Quaternion.IDENTITY) < 0.01:
+		return Transform3D.IDENTITY
+	var origin := clamp_grip_point(raw_local.origin)
+	return Transform3D(raw_local.basis.orthonormalized(), origin)
+
+
+func on_grabbed(by: Node3D, local_grip: Transform3D = Transform3D.IDENTITY) -> void:
+	if by == null:
+		return
+	if not holders.has(by):
+		if holders.size() >= 2:
+			var prev_secondary: Node3D = holders[-1]
+			prev_secondary.call("release")
+		holders.append(by)
+	var clamped_grip := Transform3D(local_grip.basis.orthonormalized(), clamp_grip_point(local_grip.origin))
+	if local_grip.is_equal_approx(Transform3D.IDENTITY):
+		clamped_grip = Transform3D.IDENTITY
+	_local_grips[by] = clamped_grip
+	_grip_zones[by] = classify_grip_zone(clamped_grip.origin)
+	holder = holders[0]
+	wielder = holder
 	gravity_scale = 1.0
 	_stuck_timer = 0.0
 	_has_prev_target = false
-	GameEvents.log_event("weapon_grabbed", {"weapon": weapon_name, "hand": str(by.get("side"))})
+	GameEvents.log_event("weapon_grabbed", {
+		"weapon": weapon_name,
+		"hand": str(by.get("side")),
+		"zone": _grip_zones[by],
+		"two_handed": holders.size() >= 2,
+	})
 
 
-func on_released() -> void:
-	GameEvents.log_event("weapon_released", {"weapon": weapon_name})
-	holder = null
-	wielder = null
+func on_released(by: Node3D = null) -> void:
+	if by == null:
+		holders.clear()
+		_local_grips.clear()
+		_grip_zones.clear()
+		holder = null
+		wielder = null
+		_has_prev_target = false
+		GameEvents.log_event("weapon_released", {"weapon": weapon_name, "remaining_hands": 0})
+		return
+	if not holders.has(by):
+		return
+	holders.erase(by)
+	_local_grips.erase(by)
+	_grip_zones.erase(by)
+	holder = holders[0] if not holders.is_empty() else null
+	wielder = holder
+	_has_prev_target = false
+	GameEvents.log_event("weapon_released", {
+		"weapon": weapon_name,
+		"hand": str(by.get("side")),
+		"remaining_hands": holders.size(),
+	})
+
+
+func release_all() -> void:
+	for h in holders.duplicate():
+		if h and h.has_method("release"):
+			h.release()
 
 
 func _physics_process(delta: float) -> void:
 	_tick_cooldowns(delta)
 	_process_contacts()
 	if holder and delta > 0.0:
-		_drive_to(holder.call("get_grip_transform"), delta)
+		_drive_to(_compute_target_transform(), delta)
 	_update_swing_audio(delta)
 	_snapshot_velocity()
+
+
+## Desired weapon-root transform in world space from the active holder(s).
+func _compute_target_transform() -> Transform3D:
+	var h0: Node3D = holders[0]
+	var g0: Transform3D = _local_grips.get(h0, Transform3D.IDENTITY)
+	var H0: Transform3D = h0.call("get_grip_transform")
+	var T0: Transform3D = H0 * g0.affine_inverse()
+	if holders.size() == 1:
+		return T0
+
+	var h1: Node3D = holders[1]
+	var g1: Transform3D = _local_grips.get(h1, Transform3D.IDENTITY)
+	var H1: Transform3D = h1.call("get_grip_transform")
+	var T1: Transform3D = H1 * g1.affine_inverse()
+
+	var q0 := T0.basis.get_rotation_quaternion()
+	var q1 := T1.basis.get_rotation_quaternion()
+	var q_base := q0.slerp(q1, two_hand_twist_blend).normalized()
+	var v_local := g1.origin - g0.origin
+	var v_world := H1.origin - H0.origin
+	var basis: Basis
+	if v_local.length() > 0.025 and v_world.length() > 0.025:
+		var dir_base := (Basis(q_base) * v_local).normalized()
+		var dir_world := v_world.normalized()
+		var swing := _shortest_arc(dir_base, dir_world)
+		basis = Basis((swing * q_base).normalized()).orthonormalized()
+	else:
+		basis = Basis(q_base).orthonormalized()
+	var origin_0 := H0.origin - basis * g0.origin
+	var origin_1 := H1.origin - basis * g1.origin
+	return Transform3D(basis, origin_0.lerp(origin_1, two_hand_position_blend))
+
+
+static func _shortest_arc(from_dir: Vector3, to_dir: Vector3) -> Quaternion:
+	var d := from_dir.dot(to_dir)
+	if d >= 0.99999:
+		return Quaternion.IDENTITY
+	if d <= -0.99999:
+		var ortho := from_dir.cross(Vector3.UP)
+		if ortho.length_squared() < 1e-4:
+			ortho = from_dir.cross(Vector3.RIGHT)
+		return Quaternion(ortho.normalized(), PI)
+	return Quaternion(from_dir, to_dir)
+
+
+func _compute_grip_error(target: Transform3D) -> float:
+	if holders.size() <= 1:
+		var g0: Transform3D = _local_grips.get(holder, Transform3D.IDENTITY)
+		return (global_transform * g0.origin).distance_to(target * g0.origin)
+	var err := 0.0
+	for h in holders:
+		var g: Transform3D = _local_grips.get(h, Transform3D.IDENTITY)
+		err = maxf(err, (global_transform * g.origin).distance_to(target * g.origin))
+	return err
 
 
 # --- PD controller -------------------------------------------------------------
 
 func _drive_to(target: Transform3D, delta: float) -> void:
-	grip_error = global_position.distance_to(target.origin)
+	grip_error = _compute_grip_error(target)
 	if grip_error > stuck_distance:
 		_stuck_timer += TimeController.real_tick()
 		if _stuck_timer > stuck_time:
@@ -143,6 +355,8 @@ func _drive_to(target: Transform3D, delta: float) -> void:
 
 	var c := TimeController.compensation_for(delta)
 	var limit_scale := minf(c * c, 16.0) * strength
+	var force_mult := two_hand_force_multiplier if holders.size() >= 2 else 1.0
+	var torque_mult := two_hand_torque_multiplier if holders.size() >= 2 else 1.0
 
 	# Linear: stable PD on the center of mass, plus holding the weapon's weight.
 	var w := TAU * follow_frequency * c
@@ -150,7 +364,7 @@ func _drive_to(target: Transform3D, delta: float) -> void:
 	var com_target := target * center_of_mass
 	var accel := (com_target - (com + linear_velocity * delta)) * (w * w) + (target_vel - linear_velocity) * (2.0 * follow_damping * w)
 	var force := mass * accel - mass * get_gravity()
-	apply_central_force(force.limit_length(max_force * limit_scale))
+	apply_central_force(force.limit_length(max_force * force_mult * limit_scale))
 
 	# Angular: stable PD on orientation (error to the orientation one step ahead).
 	var wa := TAU * angular_frequency * c
@@ -163,13 +377,13 @@ func _drive_to(target: Transform3D, delta: float) -> void:
 	var alpha := err * (wa * wa) + (target_omega - angular_velocity) * (2.0 * angular_damping * wa)
 	var st := PhysicsServer3D.body_get_direct_state(get_rid())
 	var torque: Vector3 = st.inverse_inertia_tensor.inverse() * alpha
-	apply_torque(torque.limit_length(max_torque * limit_scale))
+	apply_torque(torque.limit_length(max_torque * torque_mult * limit_scale))
 
 
 ## Put the weapon exactly in the hand (e.g. after the player teleported).
 func snap_to_hand() -> void:
 	if holder:
-		_teleport_to(holder.call("get_grip_transform"))
+		_teleport_to(_compute_target_transform())
 
 
 func _teleport_to(target: Transform3D) -> void:
@@ -316,8 +530,9 @@ func _parry(other: BladeBody, clash: Dictionary) -> void:
 
 
 func _pulse(amplitude: float, duration: float) -> void:
-	if holder and holder.has_method("pulse"):
-		holder.pulse(amplitude, duration)
+	for h in holders:
+		if h and h.has_method("pulse"):
+			h.pulse(amplitude, duration)
 
 
 func _update_swing_audio(delta: float) -> void:

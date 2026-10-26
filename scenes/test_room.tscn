@@ -253,7 +253,7 @@ dummy_path = NodePath("../TrainingDummy")
 [node name="HelpLabel" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.6, 2.9, -4.95)
 pixel_size = 0.0022
-text = "CONTROLS\nVR: left stick move, right stick turn\n    hold GRIP near a weapon to take it\n    GRIP + B/Y: recall a weapon\n    B/Y (no grip): dummy attacks on/off\n    stick click: change element\n    A/X: reset the dummy\nDesktop: see the top-left of the window"
+text = "CONTROLS\nVR: left stick move, right stick turn\n    hold GRIP on handle/tsuba/blade spine (1H or 2H)\n    GRIP + B/Y: recall a weapon\n    B/Y (no grip): dummy attacks on/off\n    stick click: change element\n    A/X: reset the dummy\nDesktop: see the top-left of the window"
 font_size = 32
 outline_size = 8
 horizontal_alignment = 0
