@@ -22,6 +22,13 @@ uniform float fill = 0.0;
 // 0..1, flashes the surface (e.g. a hit on the training dummy).
 uniform float flash = 0.0;
 uniform vec3 flash_color : source_color = vec3(1.0, 0.55, 0.6);
+// Optional PBR maps from scanned assets. With orm_mode > 0 roughness_dry and
+// metallic scale the texture: 1 = glTF metal/rough (G, B), 2 = ARM (R = AO too).
+uniform sampler2D normal_texture : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform float normal_depth : hint_range(0.0, 2.0) = 0.0;
+uniform sampler2D orm_texture : hint_default_white, filter_linear_mipmap, repeat_enable;
+uniform int orm_mode : hint_range(0, 2) = 0;
+uniform vec3 emission_tint : source_color = vec3(0.0);
 
 varying vec3 v_world_pos;
 varying vec3 v_local_pos;
@@ -47,7 +54,22 @@ void vertex() {
 
 void fragment() {
 	vec3 wp = v_world_pos;
-	vec3 col = base_color * texture(albedo_texture, UV).rgb;
+	vec3 tex = texture(albedo_texture, UV).rgb;
+	vec3 col = base_color * tex;
+	float rough_dry = roughness_dry;
+	float metal = metallic;
+	if (orm_mode > 0) {
+		vec3 orm = texture(orm_texture, UV).rgb;
+		rough_dry *= orm.g;
+		metal *= orm.b;
+		if (orm_mode == 2) {
+			AO = orm.r;
+		}
+	}
+	if (normal_depth > 0.0) {
+		NORMAL_MAP = texture(normal_texture, UV).rgb;
+		NORMAL_MAP_DEPTH = normal_depth;
+	}
 
 	// Vertical rain streaks: thin columns, stretched along Y, crawling down.
 	float column = noise2(vec2((wp.x + wp.z) * streak_scale, 0.5));
@@ -67,8 +89,8 @@ void fragment() {
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0) * rim_amount;
 
 	ALBEDO = col;
-	ROUGHNESS = mix(roughness_dry, roughness_wet, wet * (1.0 - waterline * 0.5));
-	METALLIC = metallic;
+	ROUGHNESS = mix(rough_dry, min(roughness_wet, rough_dry), wet * (1.0 - waterline * 0.5));
+	METALLIC = metal;
 	SPECULAR = 0.5 + 0.2 * wet;
-	EMISSION = flash_color * flash + vec3(0.18, 0.2, 0.32) * rim * 0.35 + col * vec3(0.45, 0.5, 0.75) * fill;
+	EMISSION = flash_color * flash + vec3(0.18, 0.2, 0.32) * rim * 0.35 + col * vec3(0.45, 0.5, 0.75) * fill + tex * emission_tint;
 }

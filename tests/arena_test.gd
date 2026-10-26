@@ -6,6 +6,8 @@ extends Node
 ## - The fight zone is a clean circle: nothing to bump into or trip over inside
 ##   it, a round boundary at its rim, and the weapons rest on a stand at the
 ##   edge (which the player and the dummy pass through) and go back there on reset.
+## - Scanned assets: PBR maps survive the rain material, the katana lies in the
+##   stand model's notch, and the arena fits the Quest 3 triangle budget.
 ## Run:
 ##   godot --headless --path . --fixed-fps 90 res://tests/arena_test.tscn -- --desktop
 ## Exit code 0 when everything passed.
@@ -177,6 +179,8 @@ func _test_clean_circle_physics() -> void:
 	for w: HeldWeapon in homes:
 		drift[w.weapon_name] = snappedf(w.global_position.distance_to(homes[w]), 0.001)
 	_check("both weapons lie still on the stand (drift %s m)" % [drift], drift.values().max() < 0.03)
+	_test_katana_in_stand_notch(rest, room.katana)
+	_test_scanned_assets(room)
 
 	room.katana.global_position += Vector3(-2.0, 0.5, -1.0)
 	room.kanabo.global_position += Vector3(-2.5, 0.5, -1.5)
@@ -188,6 +192,54 @@ func _test_clean_circle_physics() -> void:
 		back[w.weapon_name] = snappedf(w.global_position.distance_to(homes[w]), 0.001)
 	_check("reset puts the weapons back on the stand (%s m)" % [back], back.values().max() < 0.03)
 	room.queue_free()
+
+
+## The visible katana stand (scaled 1.6×) has its handle-side arm at rest-local
+## x = -0.171 with the notch floor at y = 0.166, centred on z = 0. The handle's
+## spine (radius 0.016 under its curved axis) must sit in that notch, and the
+## tsuba between the arms.
+func _test_katana_in_stand_notch(rest: Node3D, katana: HeldWeapon) -> void:
+	_check("the katana stand model is on the weapon rest", rest.get_node_or_null("KatanaStand") != null)
+	var to_rest := rest.global_transform.affine_inverse() * katana.global_transform
+	var best := Vector3.INF
+	for i in 47:
+		var z := i * 0.005
+		var p := to_rest * Vector3(0.0, 0.001 + 0.09 * z, z)
+		if absf(p.x + 0.171) < absf(best.x + 0.171):
+			best = p
+	var guard := to_rest * Vector3(0, 0, -0.085)
+	_check("the katana handle lies in the stand's notch (rest-local %s)" % [best.snapped(Vector3.ONE * 0.001)],
+		absf(best.x + 0.171) < 0.006 and absf(best.z) < 0.008 and best.y - 0.016 > 0.155 and best.y - 0.016 < 0.185)
+	_check("the tsuba sits between the stand's arms (x %.3f)" % guard.x, absf(guard.x) < 0.14)
+
+
+## Scanned assets keep their PBR maps under the rain treatment, and the whole
+## arena stays inside a Quest 3 triangle budget (LOD0, i.e. worst case).
+func _test_scanned_assets(room: Node) -> void:
+	const TRI_BUDGET := 300000
+	var tris := 0
+	for mi: MeshInstance3D in room.find_children("*", "MeshInstance3D", true, false):
+		if not mi.is_visible_in_tree() or mi.mesh == null:
+			continue
+		for s in mi.mesh.get_surface_count():
+			var arrays := mi.mesh.surface_get_arrays(s)
+			var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+			tris += idx.size() / 3 if idx.size() > 0 else (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+	_check("arena triangles at LOD0 within the Quest budget (%d < %d)" % [tris, TRI_BUDGET], tris < TRI_BUDGET)
+
+	var bare := []
+	for path in ["Arena/ToriiGates", "Arena/Rocks", "Room/WeaponRest/KatanaStand"]:
+		var group := room.get_node_or_null(path)
+		if group == null:
+			bare.append(path)
+			continue
+		for mi: MeshInstance3D in group.find_children("*", "MeshInstance3D", true, false):
+			for s in mi.mesh.get_surface_count():
+				var m := mi.get_surface_override_material(s) as ShaderMaterial
+				if m == null or m.get_shader_parameter("albedo_texture") == null \
+						or m.get_shader_parameter("normal_depth") <= 0.0 or m.get_shader_parameter("orm_mode") <= 0:
+					bare.append(mi.get_path())
+	_check("torii, rocks and the stand keep albedo, normal and roughness maps %s" % [bare], bare.is_empty())
 
 
 func _check(label: String, ok: bool) -> void:

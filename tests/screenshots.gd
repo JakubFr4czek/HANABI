@@ -140,22 +140,35 @@ func _ready() -> void:
 	await _frames(90)  # let the camera-following rain refill after the teleport
 	await _shot("8_water_and_fog")
 
-	# 9. Macro on the held katana: wet steel, rain beads, black silk wrap.
+	# 9. Macro on the held katana: wet steel, rain beads, tsuba and handle wrap.
 	room.katana.set_element(Elements.NONE)
 	player.teleport(Vector3(0.0, 0, 2.0))
 	player.camera.rotation.x = 0.0
 	await _frames(60)
-	var body := room.katana.get_node("Model/katana/katana_body") as Node3D
+	# Model mesh-local: blade along +Y, flat of the blade in XY.
+	var body := room.katana.get_node("Model/antique_katana_01") as Node3D
 	var macro := Camera3D.new()
 	macro.fov = 40.0
 	macro.near = 0.02
 	room.add_child(macro)
-	var focus := body.global_transform * Vector3(0.05, 0.035, 0.0)
-	var side := (body.global_basis * Vector3.UP).normalized()
+	var focus := body.global_transform * Vector3(0.0, 0.06, 0.0)
+	var side := (body.global_basis * Vector3.BACK).normalized()
 	macro.look_at_from_position(focus + side * 0.55 + Vector3(0.0, 0.12, 0.0), focus)
 	macro.make_current()
 	await _frames(3)
 	await _shot("9_katana_macro")
+
+	# 14. The weapon stand at the rim (katana in the kake, kanabo beside it).
+	room.katana.release_all()
+	room.kanabo.release_all()
+	await _frames(10)
+	room.reset_room()
+	await _frames(90)
+	var rest := room.get_node("Room/WeaponRest") as Node3D
+	var at := rest.global_transform * Vector3(0.1, 0.18, 0.0)
+	macro.look_at_from_position(rest.global_transform * Vector3(0.25, 0.6, -0.8), at)
+	await _frames(3)
+	await _shot("14_weapon_stand")
 	macro.queue_free()
 
 	get_tree().quit()

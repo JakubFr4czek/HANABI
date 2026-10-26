@@ -136,6 +136,8 @@ func _setup_dojo_visuals() -> void:
 		_setup_seal_kanji(seal_mesh)
 
 	_style_torii_gates(arena)
+	_style_scanned_props(arena, "Rocks", Color(0.55, 0.55, 0.6), 0.22, 0.75)
+	_style_scanned_props(self, "Room/WeaponRest/KatanaStand", Color(0.85, 0.82, 0.8), 0.3, 0.45)
 	_update_seal_element(Elements.NONE)
 
 
@@ -221,28 +223,57 @@ func _style_torii_gates(arena: Node) -> void:
 	var torii_group := arena.get_node_or_null("ToriiGates")
 	if torii_group == null:
 		return
-	var hero_mat: ShaderMaterial = null
-	var sunken_mat: ShaderMaterial = null
+	var cache := {}
 	for child in torii_group.find_children("*", "MeshInstance3D", true, false):
 		var mi := child as MeshInstance3D
 		mi.gi_mode = GeometryInstance3D.GI_MODE_STATIC
-		if hero_mat == null and mi.mesh and mi.mesh.get_surface_count() > 0:
-			var orig := mi.mesh.surface_get_material(0) as StandardMaterial3D
-			# Deep vermilion lacquer, soaked and glossy, darkened at the water line.
-			# Vermilion lacquer: the scene's one big red accent. A faint self-glow keeps
-			# the red readable when the moon backlights it.
-			hero_mat = _wet_material(Color(0.5, 0.05, 0.035), 0.5, 0.3, 0.55, 0.0)
-			hero_mat.set_shader_parameter("rim_amount", 0.6)
-			hero_mat.set_shader_parameter("flash_color", Color(0.55, 0.04, 0.02))
-			hero_mat.set_shader_parameter("flash", 0.2)
-			if orig and orig.albedo_texture:
-				hero_mat.set_shader_parameter("albedo_texture", orig.albedo_texture)
-			# Distant tilted torii are darker so they sink into the fog as silhouettes.
-			sunken_mat = hero_mat.duplicate() as ShaderMaterial
-			sunken_mat.set_shader_parameter("base_color", Color(0.16, 0.03, 0.035))
-			sunken_mat.set_shader_parameter("flash", 0.0)
 		var is_giant := mi.get_path().get_concatenated_names().contains("GiantTorii")
-		mi.material_override = hero_mat if is_giant else sunken_mat
+		for s in mi.mesh.get_surface_count():
+			var orig := mi.mesh.surface_get_material(s) as StandardMaterial3D
+			var key := [orig, is_giant]
+			if not cache.has(key):
+				# The hero gate's vermilion lacquer is the scene's one big red accent:
+				# a faint self-glow from its own albedo keeps the red readable when the
+				# moon backlights it. Distant tilted gates are darker so they sink into
+				# the fog as silhouettes.
+				var m := _scanned_wet_material(orig, Color(0.9, 0.86, 0.86) if is_giant else Color(0.42, 0.38, 0.4), 0.3 if is_giant else 0.35, 0.55 if is_giant else 0.6)
+				m.set_shader_parameter("rim_amount", 0.6)
+				if is_giant:
+					m.set_shader_parameter("emission_tint", Color(0.18, 0.035, 0.03))
+				cache[key] = m
+			mi.set_surface_override_material(s, cache[key])
+
+
+func _style_scanned_props(root: Node, path: String, tint: Color, rough_wet: float, wetness: float) -> void:
+	var group := root.get_node_or_null(path)
+	if group == null:
+		return
+	var cache := {}
+	for child in group.find_children("*", "MeshInstance3D", true, false):
+		var mi := child as MeshInstance3D
+		mi.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+		for s in mi.mesh.get_surface_count():
+			var orig := mi.mesh.surface_get_material(s) as StandardMaterial3D
+			if not cache.has(orig):
+				cache[orig] = _scanned_wet_material(orig, tint, rough_wet, wetness)
+			mi.set_surface_override_material(s, cache[orig])
+
+
+# Scanned assets keep their PBR maps (albedo, normal, metal/rough, AO) under
+# the shared rain treatment.
+static func _scanned_wet_material(orig: StandardMaterial3D, tint: Color, rough_wet: float, wetness: float) -> ShaderMaterial:
+	var m := _wet_material(tint, 1.0, rough_wet, wetness, 0.0)
+	if orig == null:
+		return m
+	m.set_shader_parameter("albedo_texture", orig.albedo_texture)
+	m.set_shader_parameter("metallic", orig.metallic)
+	if orig.normal_enabled and orig.normal_texture:
+		m.set_shader_parameter("normal_texture", orig.normal_texture)
+		m.set_shader_parameter("normal_depth", 1.0)
+	if orig.roughness_texture:
+		m.set_shader_parameter("orm_texture", orig.roughness_texture)
+		m.set_shader_parameter("orm_mode", 2 if orig.ao_enabled and orig.ao_texture == orig.roughness_texture else 1)
+	return m
 
 
 static func _wet_material(color: Color, rough_dry: float, rough_wet: float, wetness: float, waterline_y: float) -> ShaderMaterial:
