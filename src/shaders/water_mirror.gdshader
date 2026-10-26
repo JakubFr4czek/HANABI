@@ -9,7 +9,7 @@ uniform vec3 deep_water_color : source_color = vec3(0.012, 0.016, 0.036);
 uniform vec3 sky_zenith_color : source_color = vec3(0.04, 0.025, 0.095);
 uniform vec3 sky_horizon_color : source_color = vec3(0.035, 0.04, 0.10);
 uniform vec3 torii_reflection_color : source_color = vec3(0.42, 0.05, 0.06);
-uniform vec3 sakura_reflection_color : source_color = vec3(0.72, 0.13, 0.42);
+uniform vec3 sakura_reflection_color : source_color = vec3(0.76, 0.14, 0.44);
 uniform vec3 lightning_color : source_color = vec3(0.35, 0.68, 1.0);
 uniform float lightning_flash : hint_range(0.0, 2.0) = 0.0;
 uniform float platform_radius = 5.25;
@@ -41,7 +41,7 @@ void fragment() {
 	vec2 xz = v_world_pos.xz;
 	float dist = length(xz);
 
-	// Gentle ripples on the water mirror + faint concentric rings around the stone disc.
+	// Gentle ripples on the water mirror + faint concentric rings around the stone disc & sakura trunk.
 	float n1 = noise2(xz * 1.8 + vec2(TIME * 0.08, -TIME * 0.06));
 	float n2 = noise2(xz * 4.2 - vec2(TIME * 0.11, TIME * 0.09));
 	float edge_dist = max(dist - platform_radius, 0.0);
@@ -64,11 +64,11 @@ void fragment() {
 	float torii_pool = exp(-dot(torii_delta, torii_delta) * 1.8) * (0.65 + 0.35 * sin(xz.x * 3.0 + n1 * 2.5));
 	refl += torii_reflection_color * torii_pool * 0.45;
 
-	// Mirrored dappled magenta-pink reflection below the overhanging sakura boughs (around (-4.6, -2.9)).
-	vec2 sakura_delta = (xz - vec2(-4.4, -2.8)) / vec2(3.8, 3.4);
-	float ripple_shimmer = 0.55 + 0.45 * sin(xz.x * 4.5 + xz.y * 3.5 + n2 * 4.0);
-	float sakura_pool = exp(-dot(sakura_delta, sakura_delta) * 1.35) * ripple_shimmer;
-	refl += sakura_reflection_color * sakura_pool * 0.48;
+	// Mirrored dappled magenta-pink reflection below the monumental sakura canopy in the water (around (-7.8, -3.8)).
+	vec2 sakura_delta = (xz - vec2(-7.8, -3.8)) / vec2(5.8, 4.8);
+	float ripple_shimmer = 0.52 + 0.48 * sin(xz.x * 3.8 + xz.y * 3.2 + n2 * 4.2);
+	float sakura_pool = exp(-dot(sakura_delta, sakura_delta) * 1.25) * ripple_shimmer;
+	refl += sakura_reflection_color * sakura_pool * 0.56;
 
 	// Lightning reflection streak across the water mirror.
 	float bolt_streak = exp(-pow((xz.x + 2.5) * 0.14, 2.0)) * smoothstep(-2.0, -35.0, xz.y);

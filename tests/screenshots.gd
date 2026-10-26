@@ -71,24 +71,24 @@ func _ready() -> void:
 	await _frames(90)
 	await _shot("6_kanabo")
 
-	# 7. Dedicated view of the Sakura tree, water mirror reflection, and falling petals
-	# (hide debug panel briefly so the gnarled trunk and branches are unobstructed).
+	# 7. Dedicated view of the monumental off-platform Sakura tree rising from the water mirror
+	# beside the stone disc, with sweeping boughs reaching toward the dojo edge.
 	var debug_panel := room.get_node_or_null("HitDebugPanel") as Node3D
 	if debug_panel:
 		debug_panel.visible = false
 	player.take_weapon(room.katana)
 	room.katana.set_element(Elements.SAKURA)
-	player.teleport(Vector3(-0.3, 0, 1.9), deg_to_rad(38))
-	player.camera.rotation.x = deg_to_rad(5)
+	player.teleport(Vector3(2.2, 0, 2.8), deg_to_rad(46))
+	player.camera.rotation.x = deg_to_rad(8)
 	await _frames(60)
 	await _shot("7_sakura_tree")
 	if debug_panel:
 		debug_panel.visible = true
 
-	# 8. Wide Dojo of the Storm vista with silent branching lightning & 4-element floor seal.
+	# 8. Wide Dojo of the Storm vista with silent branching lightning, giant torii, off-platform sakura & floor seal.
 	room.katana.set_element(Elements.STORM)
-	player.teleport(Vector3(0.5, 0, 3.6), deg_to_rad(8))
-	player.camera.rotation.x = deg_to_rad(-4)
+	player.teleport(Vector3(1.1, 0, 3.8), deg_to_rad(14))
+	player.camera.rotation.x = deg_to_rad(-2)
 	if room.lightning:
 		room.lightning.trigger_strike(-0.22)
 	await _frames(2)

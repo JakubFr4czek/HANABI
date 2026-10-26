@@ -3,7 +3,7 @@ render_mode blend_mix, depth_draw_opaque, cull_back, specular_schlick_ggx;
 
 // Wet dark-stone disc platform floating in the Dojo of the Storm (GDD §9).
 // Carved concentric dojo rings, radial slab joints, damp mirror sheen, and
-// soft baked-style sakura canopy bounce under the tree at (-3.55, -2.35).
+// soft baked-style sakura canopy bounce on the western rim under the overhanging boughs.
 
 uniform vec3 stone_base : source_color = vec3(0.075, 0.08, 0.11);
 uniform vec3 stone_dark : source_color = vec3(0.04, 0.045, 0.065);
@@ -62,14 +62,15 @@ void fragment() {
 	float ndotv = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
 	float fresnel = pow(1.0 - ndotv, 4.0) * (0.35 + 0.65 * puddle);
 
-	// Soft magenta canopy bounce + dappled shadow Pool on the stone beneath the sakura boughs.
-	vec2 sakura_delta = (xz - vec2(-3.0, -1.9)) / vec2(2.6, 2.3);
+	// Soft magenta canopy bounce on the western/north-western edge of the stone disc
+	// where the monumental off-platform sakura tree's boughs reach across the water.
+	vec2 sakura_delta = (xz - vec2(-4.2, -2.2)) / vec2(3.2, 2.8);
 	float sakura_pool = exp(-dot(sakura_delta, sakura_delta) * 1.25) * top_mask;
 	float dappled = 0.55 + 0.45 * smoothstep(0.3, 0.7, n_fine);
 	float sakura_bounce = sakura_pool * dappled * (0.45 + 0.55 * puddle);
 
 	vec3 wet_refl = vec3(0.05, 0.04, 0.11) * fresnel;
-	wet_refl += sakura_tint * sakura_bounce * (0.16 + 0.22 * fresnel);
+	wet_refl += sakura_tint * sakura_bounce * (0.15 + 0.22 * fresnel);
 	wet_refl += ring_glow_color * (ring1 * 0.45 + ring2 * 0.25 + ring3 * 0.35);
 	wet_refl += lightning_tint * lightning_flash * (0.12 + 0.28 * fresnel);
 
