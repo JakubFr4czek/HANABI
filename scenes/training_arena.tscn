@@ -15,12 +15,13 @@
 [ext_resource type="PackedScene" path="res://assets/models/environment/Torii_Gate_Quaternius.glb" id="13_torii"]
 [ext_resource type="PackedScene" path="res://assets/models/environment/Lantern_KayLousberg.glb" id="14_lantern"]
 [ext_resource type="Script" path="res://src/core/sakura_tree_generator.gd" id="15_sakura_gen"]
+[ext_resource type="Shader" path="res://src/shaders/water_mist.gdshader" id="16_mist_shader"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMat"]
-sky_top_color = Color(0.035, 0.02, 0.085, 1)
-sky_horizon_color = Color(0.03, 0.04, 0.095, 1)
-ground_bottom_color = Color(0.012, 0.016, 0.036, 1)
-ground_horizon_color = Color(0.03, 0.04, 0.095, 1)
+sky_top_color = Color(0.028, 0.016, 0.072, 1)
+sky_horizon_color = Color(0.032, 0.026, 0.072, 1)
+ground_bottom_color = Color(0.005, 0.007, 0.02, 1)
+ground_horizon_color = Color(0.032, 0.026, 0.072, 1)
 
 [sub_resource type="Sky" id="Sky_storm"]
 sky_material = SubResource("ProceduralSkyMat")
@@ -37,9 +38,16 @@ glow_intensity = 0.34
 glow_strength = 0.78
 glow_bloom = 0.04
 fog_enabled = true
-fog_light_color = Color(0.035, 0.03, 0.075, 1)
-fog_density = 0.014
-fog_sky_affect = 0.25
+fog_mode = 1
+fog_light_color = Color(0.032, 0.026, 0.072, 1)
+fog_light_energy = 1.0
+fog_density = 0.98
+fog_sky_affect = 0.68
+fog_depth_curve = 0.88
+fog_depth_begin = 6.0
+fog_depth_end = 19.5
+fog_height = 0.55
+fog_height_density = 0.55
 
 [sub_resource type="ShaderMaterial" id="Mat_SkyDome"]
 render_priority = -100
@@ -51,15 +59,69 @@ height = 250.0
 radial_segments = 48
 rings = 24
 
+[sub_resource type="FastNoiseLite" id="Noise_WaterA"]
+noise_type = 3
+seed = 101
+frequency = 0.036
+fractal_type = 1
+fractal_octaves = 3
+
+[sub_resource type="NoiseTexture2D" id="Tex_WaterNormalA"]
+width = 256
+height = 256
+seamless = true
+as_normal_map = true
+bump_strength = 11.5
+noise = SubResource("Noise_WaterA")
+
+[sub_resource type="FastNoiseLite" id="Noise_WaterB"]
+noise_type = 2
+seed = 207
+frequency = 0.052
+fractal_type = 1
+fractal_octaves = 3
+
+[sub_resource type="NoiseTexture2D" id="Tex_WaterNormalB"]
+width = 256
+height = 256
+seamless = true
+as_normal_map = true
+bump_strength = 10.0
+noise = SubResource("Noise_WaterB")
+
 [sub_resource type="ShaderMaterial" id="Mat_WaterMirror"]
 shader = ExtResource("8_water_shader")
+shader_parameter/normal_map_a = SubResource("Tex_WaterNormalA")
+shader_parameter/normal_map_b = SubResource("Tex_WaterNormalB")
 
-[sub_resource type="CylinderMesh" id="Mesh_WaterMirror"]
-top_radius = 110.0
-bottom_radius = 110.0
-height = 0.02
-radial_segments = 64
-rings = 1
+[sub_resource type="PlaneMesh" id="Mesh_WaterMirror"]
+size = Vector2(180, 180)
+subdivide_width = 96
+subdivide_depth = 96
+
+[sub_resource type="ShaderMaterial" id="Mat_WaterMistLow"]
+render_priority = 1
+shader = ExtResource("16_mist_shader")
+shader_parameter/mist_opacity = 0.44
+shader_parameter/inner_clear_radius = 5.15
+shader_parameter/outer_fade_radius = 16.5
+
+[sub_resource type="PlaneMesh" id="Mesh_WaterMistLow"]
+size = Vector2(44, 44)
+subdivide_width = 16
+subdivide_depth = 16
+
+[sub_resource type="ShaderMaterial" id="Mat_WaterMistHigh"]
+render_priority = 1
+shader = ExtResource("16_mist_shader")
+shader_parameter/mist_opacity = 0.28
+shader_parameter/inner_clear_radius = 6.4
+shader_parameter/outer_fade_radius = 18.0
+
+[sub_resource type="PlaneMesh" id="Mesh_WaterMistHigh"]
+size = Vector2(48, 48)
+subdivide_width = 16
+subdivide_depth = 16
 
 [sub_resource type="ShaderMaterial" id="Mat_StonePlatform"]
 shader = ExtResource("9_stone_shader")
@@ -201,10 +263,22 @@ cast_shadow = 0
 mesh = SubResource("Mesh_SkyDome")
 
 [node name="WaterMirror" type="MeshInstance3D" parent="Arena"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
 material_override = SubResource("Mat_WaterMirror")
 cast_shadow = 0
 mesh = SubResource("Mesh_WaterMirror")
+
+[node name="WaterMistLow" type="MeshInstance3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
+material_override = SubResource("Mat_WaterMistLow")
+cast_shadow = 0
+mesh = SubResource("Mesh_WaterMistLow")
+
+[node name="WaterMistHigh" type="MeshInstance3D" parent="Arena"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.44, 0)
+material_override = SubResource("Mat_WaterMistHigh")
+cast_shadow = 0
+mesh = SubResource("Mesh_WaterMistHigh")
 
 [node name="PlatformDisc" type="MeshInstance3D" parent="Arena"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.22, 0)
@@ -242,10 +316,10 @@ light_energy = 0.0
 transform = Transform3D(2.35, 0, 0, 0, 2.35, 0, 0, 0, 2.35, 0, -0.45, -10.5)
 
 [node name="SunkenTorii0" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(0.8229, -0.1813, -0.4366, 0.1602, 0.9325, -0.085, 0.4448, -0.0052, 0.8388, -5.8, -1.35, -10.8)
+transform = Transform3D(0.8229, -0.1813, -0.4366, 0.1602, 0.9325, -0.085, 0.4448, -0.0052, 0.8388, -5.4, -1.45, -12.4)
 
 [node name="SunkenTorii1" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(0.7946, 0.2025, 0.3705, -0.1835, 0.8769, -0.0856, -0.3803, -0.004, 0.8157, 8.8, -1.55, -6.8)
+transform = Transform3D(0.7946, 0.2025, 0.3705, -0.1835, 0.8769, -0.0856, -0.3803, -0.004, 0.8157, 5.8, -1.65, -13.2)
 
 [node name="SunkenTorii2" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
 transform = Transform3D(0.3134, -0.2718, -0.9642, 0.2585, 1.0142, -0.1862, 0.9679, -0.1661, 0.3027, -13.5, -1.8, 3.2)
@@ -260,7 +334,7 @@ transform = Transform3D(-0.5488, 0.1935, -0.5488, 0.1369, 0.7761, -0.1369, 0.565
 transform = Transform3D(-0.6782, -0.183, 0.53, -0.1442, 0.8607, 0.1127, -0.5419, 0, -0.6935, 7.6, -1.75, 9.2)
 
 [node name="SunkenTorii6" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(1.1736, 0.1877, 0.1649, -0.1859, 1.1852, -0.0261, -0.167, 0, 1.1883, 4.2, -2.1, -17.5)
+transform = Transform3D(1.1736, 0.1877, 0.1649, -0.1859, 1.1852, -0.0261, -0.167, 0, 1.1883, -2.4, -2.2, -16.8)
 
 [node name="Lanterns" type="Node3D" parent="Arena"]
 
@@ -363,7 +437,14 @@ dummy_path = NodePath("../TrainingDummy")
 [node name="HelpLabel" type="Label3D" parent="."]
 transform = Transform3D(0.9397, 0, -0.342, 0, 1, 0, 0.342, 0, 0.9397, 2.3, 2.35, -4.3)
 pixel_size = 0.0022
-text = "DOJO OF THE STORM — CONTROLS\nVR: left stick move, right stick turn\n    hold GRIP on handle/tsuba/blade spine (1H or 2H)\n    GRIP + B/Y: recall a weapon\n    B/Y (no grip): dummy attacks on/off\n    stick click: change element\n    A/X: reset the dummy\nDesktop: see the top-left of the window"
+text = "DOJO OF THE STORM — CONTROLS
+VR: left stick move, right stick turn
+    hold GRIP on handle/tsuba/blade spine (1H or 2H)
+    GRIP + B/Y: recall a weapon
+    B/Y (no grip): dummy attacks on/off
+    stick click: change element
+    A/X: reset the dummy
+Desktop: see the top-left of the window"
 font_size = 32
 outline_size = 8
 horizontal_alignment = 0

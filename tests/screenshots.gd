@@ -82,10 +82,8 @@ func _ready() -> void:
 	player.camera.rotation.x = deg_to_rad(8)
 	await _frames(60)
 	await _shot("7_sakura_tree")
-	if debug_panel:
-		debug_panel.visible = true
 
-	# 8. Wide Dojo of the Storm vista with silent branching lightning, giant torii, off-platform sakura & floor seal.
+	# 8. Wide Dojo of the Storm vista with silent branching lightning illuminating the fog & water.
 	room.katana.set_element(Elements.STORM)
 	player.teleport(Vector3(1.1, 0, 3.8), deg_to_rad(14))
 	player.camera.rotation.x = deg_to_rad(-2)
@@ -93,6 +91,17 @@ func _ready() -> void:
 		room.lightning.trigger_strike(-0.22)
 	await _frames(2)
 	await _shot("8_dojo_storm_vista")
+
+	# 9. Close-up right at the north-western edge of the stone platform looking down & out over the water:
+	# clearly shows the stone rim, dark Fresnel depth drop-off at the edge, shore & pillar ripples,
+	# wave-broken reflections of the sakura tree and giant torii, and the surface mist fading into dense fog.
+	await _frames(45)
+	player.teleport(Vector3(-2.6, 0, -3.6), deg_to_rad(28))
+	player.camera.rotation.x = deg_to_rad(-19)
+	await _frames(10)
+	await _shot("9_water_and_fog")
+	if debug_panel:
+		debug_panel.visible = true
 
 	get_tree().quit()
 
