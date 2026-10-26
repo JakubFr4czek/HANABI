@@ -12,7 +12,9 @@ uniform vec3 water_color : source_color = vec3(0.004, 0.005, 0.012);
 
 void sky() {
 	vec3 d = normalize(EYEDIR);
-	vec3 fog = storm_fog_color.rgb;
+	// Dimmer than the visible fog: this only feeds reflections, and a bright
+	// horizon would put a lilac sheen on every rough surface at grazing angles.
+	vec3 fog = storm_fog_color.rgb * 0.55;
 	vec3 col = mix(fog, zenith_color, smoothstep(0.02, 0.55, d.y));
 	// Below the horizon: the dark water mirror.
 	col = mix(col, mix(fog * 0.5, water_color, smoothstep(0.0, 0.25, -d.y)), step(d.y, 0.0));

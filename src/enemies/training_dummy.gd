@@ -27,7 +27,7 @@ var sword: BladeBody
 ## Spot the dummy returns to when not sparring, and how far it may roam from it.
 var home_position := Vector3.ZERO
 
-var _straw := ShaderMaterial.new()  # dark lacquered wood (wet_surface shader)
+var _straw := ShaderMaterial.new()  # weathered wood (wet_surface shader)
 var _sash := StandardMaterial3D.new()
 var _ink := StandardMaterial3D.new()
 var _eyes := StandardMaterial3D.new()  # glow up during a wind-up (the tell)
@@ -47,19 +47,19 @@ func _ready() -> void:
 		profile = EnemyProfile.new()
 	hp = profile.max_hp
 	_straw.shader = WET_SURFACE_SHADER
-	_straw.set_shader_parameter("base_color", Color(0.17, 0.11, 0.08))
-	_straw.set_shader_parameter("roughness_dry", 0.38)
-	_straw.set_shader_parameter("roughness_wet", 0.12)
+	# Weathered, oiled wood: matte with a soft sheen only where rain runs.
+	_straw.set_shader_parameter("base_color", Color(0.3, 0.19, 0.12))
+	_straw.set_shader_parameter("roughness_dry", 0.7)
+	_straw.set_shader_parameter("roughness_wet", 0.38)
 	_straw.set_shader_parameter("wetness", 0.45)
 	_straw.set_shader_parameter("waterline_y", -10.0)
 	_straw.set_shader_parameter("grain_amount", 0.6)
 	_straw.set_shader_parameter("grain_scale", 40.0)
-	_straw.set_shader_parameter("rim_amount", 1.0)
-	_straw.set_shader_parameter("fill", 1.8)
+	_straw.set_shader_parameter("fill", 1.6)
 	_sash.albedo_color = Color(0.3, 0.02, 0.035)
-	_sash.roughness = 0.45
+	_sash.roughness = 0.85
 	_ink.albedo_color = Color(0.015, 0.015, 0.02)
-	_ink.roughness = 0.3
+	_ink.roughness = 0.6
 	_eyes.albedo_color = Color(0.02, 0.01, 0.01)
 	_eyes.emission_enabled = true
 	_eyes.emission = Color(1.0, 0.16, 0.08)

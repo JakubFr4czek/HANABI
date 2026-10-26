@@ -136,8 +136,8 @@ func _setup_dojo_visuals() -> void:
 		_setup_seal_kanji(seal_mesh)
 
 	_style_torii_gates(arena)
-	_style_scanned_props(arena, "Rocks", Color(0.55, 0.55, 0.6), 0.22, 0.75)
-	_style_scanned_props(self, "Room/WeaponRest/KatanaStand", Color(0.85, 0.82, 0.8), 0.3, 0.45)
+	_style_scanned_props(arena, "Rocks", Color(0.6, 0.6, 0.64), 0.4, 0.75)
+	_style_scanned_props(self, "Room/WeaponRest/KatanaStand", Color(0.85, 0.82, 0.8), 0.42, 0.45)
 	_update_seal_element(Elements.NONE)
 
 
@@ -236,8 +236,7 @@ func _style_torii_gates(arena: Node) -> void:
 				# a faint self-glow from its own albedo keeps the red readable when the
 				# moon backlights it. Distant tilted gates are darker so they sink into
 				# the fog as silhouettes.
-				var m := _scanned_wet_material(orig, Color(0.9, 0.86, 0.86) if is_giant else Color(0.42, 0.38, 0.4), 0.3 if is_giant else 0.35, 0.55 if is_giant else 0.6)
-				m.set_shader_parameter("rim_amount", 0.6)
+				var m := _scanned_wet_material(orig, Color(0.9, 0.86, 0.86) if is_giant else Color(0.42, 0.38, 0.4), 0.42 if is_giant else 0.5, 0.55 if is_giant else 0.6)
 				if is_giant:
 					m.set_shader_parameter("emission_tint", Color(0.18, 0.035, 0.03))
 				cache[key] = m
