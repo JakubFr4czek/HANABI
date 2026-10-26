@@ -1,0 +1,26 @@
+# Godot
+.godot/
+.import/
+*.translation
+export_presets.cfg.bak
+/android/
+/build/
+*.apk
+*.aab
+
+# Raw downloaded asset packs: keep local only (size, and the Vacuous BGM
+# license forbids redistributing the raw audio files). Copy used files into assets/.
+/assets_raw/
+
+# Never commit the Vacuous BGM music, even if it gets copied by mistake
+**/vacuous_horror_bgm*/
+
+# Local secrets / config (LLM keys etc. come later from env or this file)
+/config/local.cfg
+.env
+
+# OS / editor
+.DS_Store
+*.swp
+.vscode/
+.idea/
