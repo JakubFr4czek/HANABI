@@ -25,8 +25,13 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/audio/sfx/sword_swing/sword.*.ogg` | https://opengameart.org/content/20-sword-sound-effects-attacks-and-clashes | StarNinjas | CC0 |
 | `assets/audio/sfx/sword_clash/sword_clash.*.ogg` | same pack | StarNinjas | CC0 |
 | `assets/audio/sfx/impact/impactPlank_medium_*.ogg`, `impactPunch_heavy_*.ogg` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 |
-| `assets/models/weapons/katana_grab3d/katana.glb` | https://grab3d.com/models/weapons/katana/ | Grab3D | CC0 1.0 |
-| `assets/models/environment/Torii_Gate_Quaternius.glb` | https://poly.pizza/m/7SyXZ62xR5 | Quaternius | CC0 |
+| `assets/models/environment/torii_bazylonator/` ("Japanese Torii gate Game Asset", hero torii) | https://sketchfab.com/3d-models/japanese-torii-gate-game-asset-e12d2fa1b2b94928b8b87cb7787e2462 | Bazylonator | **CC BY 4.0**, modified (rescaled, rain/wet shading); credited in `CREDITS.md` and in game |
+| `assets/models/environment/torii_old_primagenevieve/` ("Old Torii", sunken torii) | https://sketchfab.com/3d-models/old-torii-34f21f85784a4dcf9e0f9c6b9d772e37 | Sarah Nguyen (Nguyen Phuong Hoa) (primagenevieve) | **CC BY 4.0**, modified (rescaled, darkened, wet shading); credited in `CREDITS.md` and in game |
+| `assets/models/weapons/antique_katana_01/` (glTF, 2K) | https://polyhaven.com/a/antique_katana_01 | Tal Swicegood (Poly Haven) | CC0 1.0 |
+| `assets/models/props/katana_stand_01/` (glTF, textures downscaled to 1K) | https://polyhaven.com/a/katana_stand_01 | Rico Cilliers (Poly Haven) | CC0 1.0 |
+| `assets/models/environment/rocks/rock_face_01/` (glTF, textures 1K) | https://polyhaven.com/a/rock_face_01 | Dario Barresi (Poly Haven) | CC0 1.0 |
+| `assets/models/environment/rocks/rock_face_02/` (glTF, textures 1K) | https://polyhaven.com/a/rock_face_02 | Dario Barresi, Rico Cilliers (Poly Haven) | CC0 1.0 |
+| `assets/textures/japanese_stone_wall/` (diff, nor_gl, arm; 1K) | https://polyhaven.com/a/japanese_stone_wall | Rico Cilliers, Charlotte Baglioni, Dario Barresi (Poly Haven) | CC0 1.0 |
 
 ## Generated in-project (no third-party license)
 - Training dummy, the dummy's bokken, the kanabō, and the **Dojo of the Storm** training arena (`scenes/training_arena.tscn`): built from Godot primitives (`CylinderMesh`, `TorusMesh`, `PlaneMesh`, `SphereMesh`, `BoxMesh`), custom shaders (`src/shaders/*.gdshader`), and the procedural `ImmediateMesh` generator `StormLightning` for branching storm bolts.
@@ -38,6 +43,7 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 
 | Folder | Source | Author | License |
 |---|---|---|---|
+| `HANABI_assets_midpoly/` (Sketchfab CC BY 4.0 sakura trees, torii, stone lanterns, platform, dummy; Poly Haven CC0 rocks, katana, stand, textures, sky) | per-asset links in `assets_raw/HANABI_assets_midpoly/CREDITS.md` | see that file | CC BY 4.0 / CC0 1.0 (each CC BY model needs an in-game credit if used) |
 | `katana/Katana_ColoradoStark/` | https://opengameart.org/content/katana-2 | Colorado Stark | CC0 |
 | `katana/grab3d_katana/` | https://grab3d.com/models/weapons/katana/ | Grab3D | CC0 1.0 |
 | `environment/polypizza/Torii_Gate_Quaternius.glb` | https://poly.pizza/m/7SyXZ62xR5 | Quaternius | CC0 |
@@ -62,4 +68,4 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `music/ruskerdax_-_kamogawa_nightbreak.mp3` | https://opengameart.org/content/kamogawa-nightbreak | Ruskerdax | CC0 |
 | `fonts/yujisyuku`, `yujiboku`, `yujimai`, `zenantique` | https://github.com/google/fonts/tree/main/ofl | Kinuta Font Factory / Yoshimichi Ohira | SIL OFL 1.1 |
 
-Not downloaded (need a login, see `assets_raw/*/MANUAL_DOWNLOADS.md`): Sketchfab CC-BY models, Mixamo, Freesound sounds. If any of them is added, it needs a row here and a CC-BY credit in `CREDITS.md`.
+Not downloaded (need a login, see `assets_raw/*/MANUAL_DOWNLOADS.md`): Mixamo, Freesound sounds. Any CC BY asset added to `assets/` needs a row here, a credit in `CREDITS.md`, and a line in the in-game `CreditsLabel` (`scenes/training_arena.tscn`).

@@ -1,19 +1,21 @@
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, specular_schlick_ggx;
 
-// Katana (Grab3D model, one PBR surface): polished steel that mirrors the dark
-// storm sky (sky radiance = baked cubemap) with rain beads on the blade, a
-// black silk handle wrap, and a brief flare along the steel on lightning.
-// Blade = mesh-local X > 0.035; wrap = bluish texels on the handle.
+// Katana (Poly Haven antique_katana_01, one PBR surface, ARM texture):
+// polished steel that mirrors the dark storm sky (sky radiance = baked
+// cubemap) with rain beads on the blade, rain-darkened handle and fittings,
+// and a brief flare along the steel on lightning.
+// Blade = mesh-local Y > 0.014 (tsuba ends at 0.012); flat of the blade = XY.
 
 global uniform float storm_flash;
 
 uniform sampler2D albedo_texture : source_color, filter_linear_mipmap;
 uniform sampler2D normal_texture : hint_normal, filter_linear_mipmap;
-uniform sampler2D orm_texture : hint_default_white, filter_linear_mipmap; // G = roughness, B = metallic
-uniform vec3 wrap_color : source_color = vec3(0.03, 0.028, 0.034);
-uniform vec3 steel_tint : source_color = vec3(0.78, 0.8, 0.84);
+uniform sampler2D arm_texture : hint_default_white, filter_linear_mipmap; // R = AO, G = roughness, B = metallic
+uniform vec3 steel_tint : source_color = vec3(0.86, 0.87, 0.9);
 uniform vec3 lightning_tint : source_color = vec3(0.55, 0.72, 1.0);
+uniform float blade_polish : hint_range(0.0, 1.0) = 0.55;
+uniform float fittings_wet : hint_range(0.0, 1.0) = 0.35;
 uniform float droplets : hint_range(0.0, 1.0) = 1.0;
 
 varying vec3 v_local;
@@ -30,32 +32,26 @@ void vertex() {
 
 void fragment() {
 	vec3 albedo = texture(albedo_texture, UV).rgb;
-	vec3 orm = texture(orm_texture, UV).rgb;
-	float rough = orm.g;
-	float metal = orm.b;
+	vec3 arm = texture(arm_texture, UV).rgb;
+	float rough = arm.g;
+	float metal = arm.b;
 	NORMAL_MAP = texture(normal_texture, UV).rgb;
+	AO = arm.r;
 
-	float x = v_local.x;
-	float blade = smoothstep(0.03, 0.045, x);
-	// The wrap texture is blue/white silk, the fittings are brass: split by hue.
-	float wrap = step(-0.26, x) * step(x, 0.0) * smoothstep(-0.01, 0.06, albedo.b - albedo.r);
+	float blade = smoothstep(0.012, 0.02, v_local.y);
 
-	// Black silk wrap: keep the diamond pattern as a faint sheen only.
-	float lum = dot(albedo, vec3(0.3, 0.59, 0.11));
-	albedo = mix(albedo, wrap_color * (0.6 + 0.8 * lum), wrap);
-	rough = mix(rough, 0.55, wrap);
-	metal = mix(metal, 0.0, wrap);
-	// Fittings: darker antique brass.
-	albedo = mix(albedo, albedo * vec3(0.55, 0.5, 0.45), (1.0 - wrap) * (1.0 - blade));
+	// Handle and fittings: darker and a little glossier from the rain.
+	albedo *= mix(1.0, 0.8, fittings_wet * (1.0 - blade));
+	rough = mix(rough, rough * 0.7, fittings_wet * (1.0 - blade));
 
-	// Polished steel; keep the texture's hamon/polish variation.
-	albedo = mix(albedo, steel_tint * (0.75 + 0.45 * lum), blade);
-	rough = mix(rough, 0.1 + 0.14 * (1.0 - lum), blade);
-	metal = mix(metal, 1.0, blade);
+	// Steel: keep the texture's hamon and polish marks, push towards a mirror.
+	albedo = mix(albedo, albedo * steel_tint, blade);
+	rough = mix(rough, rough * (1.0 - blade_polish), blade);
+	metal = mix(metal, max(metal, 0.9), blade);
 
-	// Rain beads on the flat of the blade (mesh XZ plane), a few slowly sliding.
+	// Rain beads on the flat of the blade, a few slowly sliding towards the guard.
 	if (blade > 0.0 && droplets > 0.0) {
-		vec2 q = vec2(x * 90.0, v_local.z * 90.0);
+		vec2 q = vec2(v_local.y * 90.0, v_local.x * 90.0);
 		vec2 cell = floor(q);
 		float h = hash21(cell);
 		float slide = step(0.85, h) * fract(TIME * 0.05 + h) * 3.0;

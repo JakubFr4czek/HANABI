@@ -11,7 +11,14 @@
 [ext_resource type="Shader" path="res://src/shaders/stone_platform.gdshader" id="9_stone_shader"]
 [ext_resource type="Shader" path="res://src/shaders/spawn_seal.gdshader" id="10_seal_shader"]
 [ext_resource type="Script" path="res://src/core/storm_lightning.gd" id="12_lightning"]
-[ext_resource type="PackedScene" path="res://assets/models/environment/Torii_Gate_Quaternius.glb" id="13_torii"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/torii_bazylonator/torii_game_asset_bazylonator.glb" id="13_torii"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/torii_old_primagenevieve/old_torii_primagenevieve.glb" id="13_old_torii"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/rocks/rock_face_01/rock_face_01.gltf" id="40_rock01"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/rocks/rock_face_02/rock_face_02.gltf" id="41_rock02"]
+[ext_resource type="PackedScene" path="res://assets/models/props/katana_stand_01/katana_stand_01.gltf" id="42_stand"]
+[ext_resource type="Texture2D" path="res://assets/textures/japanese_stone_wall/japanese_stone_wall_diff_1k.jpg" id="43_stone_diff"]
+[ext_resource type="Texture2D" path="res://assets/textures/japanese_stone_wall/japanese_stone_wall_nor_gl_1k.jpg" id="44_stone_nor"]
+[ext_resource type="Texture2D" path="res://assets/textures/japanese_stone_wall/japanese_stone_wall_arm_1k.jpg" id="45_stone_arm"]
 [ext_resource type="Shader" path="res://src/shaders/water_mist.gdshader" id="16_mist_shader"]
 [ext_resource type="Shader" path="res://src/shaders/storm_sky.gdshader" id="17_sky_radiance"]
 [ext_resource type="Shader" path="res://src/shaders/wet_surface.gdshader" id="18_wet"]
@@ -129,6 +136,9 @@ subdivide_depth = 16
 
 [sub_resource type="ShaderMaterial" id="Mat_StonePlatform"]
 shader = ExtResource("9_stone_shader")
+shader_parameter/stone_albedo = ExtResource("43_stone_diff")
+shader_parameter/stone_normal = ExtResource("44_stone_nor")
+shader_parameter/stone_arm = ExtResource("45_stone_arm")
 
 [sub_resource type="CylinderMesh" id="Mesh_PlatformDisc"]
 top_radius = 5.25
@@ -173,10 +183,10 @@ size = Vector3(10.6, 1.0, 10.6)
 size = Vector3(1.5, 3.5, 0.3)
 
 [sub_resource type="BoxShape3D" id="Shape_RestSlotFloor"]
-size = Vector3(0.03, 0.02, 0.07)
+size = Vector3(0.04, 0.02, 0.07)
 
 [sub_resource type="BoxShape3D" id="Shape_RestProng"]
-size = Vector3(0.03, 0.07, 0.012)
+size = Vector3(0.04, 0.05, 0.012)
 
 [node name="TestRoom" type="Node3D"]
 script = ExtResource("1_room")
@@ -264,28 +274,39 @@ light_energy = 0.0
 [node name="ToriiGates" type="Node3D" parent="Arena"]
 
 [node name="GiantTorii" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(2.35, 0, 0, 0, 2.35, 0, 0, 0, 2.35, 0, -0.45, -10.5)
+transform = Transform3D(1.55, 0, 0, 0, 1.55, 0, 0, 0, 1.55, 0, -0.45, -10.5)
 
-[node name="SunkenTorii0" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(0.8229, -0.1813, -0.4366, 0.1602, 0.9325, -0.085, 0.4448, -0.0052, 0.8388, -5.4, -1.45, -12.4)
+[node name="SunkenTorii0" parent="Arena/ToriiGates" instance=ExtResource("13_old_torii")]
+transform = Transform3D(0.4748, -0.1046, -0.2519, 0.0924, 0.5381, -0.049, 0.2567, -0.003, 0.484, -5.4, -1.45, -12.4)
 
-[node name="SunkenTorii1" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(0.7946, 0.2025, 0.3705, -0.1835, 0.8769, -0.0856, -0.3803, -0.004, 0.8157, 5.8, -1.65, -13.2)
+[node name="SunkenTorii1" parent="Arena/ToriiGates" instance=ExtResource("13_old_torii")]
+transform = Transform3D(0.4585, 0.1169, 0.2138, -0.1059, 0.506, -0.0494, -0.2194, -0.0023, 0.4707, 5.8, -1.65, -13.2)
 
-[node name="SunkenTorii2" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(0.3134, -0.2718, -0.9642, 0.2585, 1.0142, -0.1862, 0.9679, -0.1661, 0.3027, -13.5, -1.8, 3.2)
+[node name="SunkenTorii2" parent="Arena/ToriiGates" instance=ExtResource("13_old_torii")]
+transform = Transform3D(0.1808, -0.1568, -0.5564, 0.1492, 0.5852, -0.1074, 0.5585, -0.0958, 0.1747, -13.5, -1.8, 3.2)
 
-[node name="SunkenTorii3" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(0.3136, 0.1476, 0.7763, -0.1369, 0.8371, -0.0553, -0.7783, -0.0205, 0.3177, 11.8, -1.65, 1.5)
+[node name="SunkenTorii3" parent="Arena/ToriiGates" instance=ExtResource("13_old_torii")]
+transform = Transform3D(0.181, 0.0852, 0.448, -0.079, 0.483, -0.0319, -0.4491, -0.0118, 0.1833, 11.8, -1.65, 1.5)
 
-[node name="SunkenTorii4" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(-0.5488, 0.1935, -0.5488, 0.1369, 0.7761, -0.1369, 0.5657, 0, -0.5657, -7.2, -1.95, 8.6)
+[node name="SunkenTorii4" parent="Arena/ToriiGates" instance=ExtResource("13_old_torii")]
+transform = Transform3D(-0.3167, 0.1117, -0.3167, 0.079, 0.4478, -0.079, 0.3264, 0, -0.3264, -7.2, -1.95, 8.6)
 
-[node name="SunkenTorii5" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(-0.6782, -0.183, 0.53, -0.1442, 0.8607, 0.1127, -0.5419, 0, -0.6935, 7.6, -1.75, 9.2)
+[node name="SunkenTorii5" parent="Arena/ToriiGates" instance=ExtResource("13_old_torii")]
+transform = Transform3D(-0.3913, -0.1056, 0.3058, -0.0832, 0.4967, 0.065, -0.3127, 0, -0.4002, 7.6, -1.75, 9.2)
 
-[node name="SunkenTorii6" parent="Arena/ToriiGates" instance=ExtResource("13_torii")]
-transform = Transform3D(1.1736, 0.1877, 0.1649, -0.1859, 1.1852, -0.0261, -0.167, 0, 1.1883, -2.4, -2.2, -16.8)
+[node name="SunkenTorii6" parent="Arena/ToriiGates" instance=ExtResource("13_old_torii")]
+transform = Transform3D(0.6772, 0.1083, 0.0952, -0.1073, 0.6839, -0.0151, -0.0964, 0, 0.6857, -2.4, -2.2, -16.8)
+
+[node name="Rocks" type="Node3D" parent="Arena"]
+
+[node name="RockFaceWest" parent="Arena/Rocks" instance=ExtResource("40_rock01")]
+transform = Transform3D(0.5299, 0, 0.8480, 0, 1, 0, -0.8480, 0, 0.5299, -10.5, -0.9, -6.5)
+
+[node name="RockFaceEast" parent="Arena/Rocks" instance=ExtResource("41_rock02")]
+transform = Transform3D(-0.6250, 0, -1.0825, 0, 1.2500, 0, 1.0825, 0, -0.6250, 9.8, -1, -6.8)
+
+[node name="RockFaceSouth" parent="Arena/Rocks" instance=ExtResource("41_rock02")]
+transform = Transform3D(-1.3156, 0, -0.4788, 0, 1.4000, 0, 0.4788, 0, -1.3156, -11, -1.4, 10)
 
 [node name="Room" type="Node3D" parent="."]
 
@@ -399,35 +420,38 @@ collision_layer = 32
 collision_mask = 0
 
 [node name="HandleSlot" type="CollisionShape3D" parent="Room/WeaponRest"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.12, 0.12, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.171, 0.156, 0)
 shape = SubResource("Shape_RestSlotFloor")
 
 [node name="HandleProngFront" type="CollisionShape3D" parent="Room/WeaponRest"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.12, 0.165, -0.027)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.171, 0.19, -0.023)
 shape = SubResource("Shape_RestProng")
 
 [node name="HandleProngBack" type="CollisionShape3D" parent="Room/WeaponRest"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.12, 0.165, 0.027)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.171, 0.19, 0.023)
 shape = SubResource("Shape_RestProng")
 
 [node name="BladeSlot" type="CollisionShape3D" parent="Room/WeaponRest"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.12, 0.11, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.171, 0.167, 0)
 shape = SubResource("Shape_RestSlotFloor")
 
 [node name="BladeProngFront" type="CollisionShape3D" parent="Room/WeaponRest"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.12, 0.155, -0.027)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.171, 0.19, -0.023)
 shape = SubResource("Shape_RestProng")
 
 [node name="BladeProngBack" type="CollisionShape3D" parent="Room/WeaponRest"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.12, 0.155, 0.027)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.171, 0.19, 0.023)
 shape = SubResource("Shape_RestProng")
+
+[node name="KatanaStand" parent="Room/WeaponRest" instance=ExtResource("42_stand")]
+transform = Transform3D(-1.6, 0, 0, 0, 1.6, 0, 0, 0, -1.6, 0, 0, 0.04)
 
 [node name="TrainingDummy" type="Node3D" parent="."]
 script = ExtResource("2_dummy")
 profile = ExtResource("3_profile")
 
 [node name="Katana" parent="." instance=ExtResource("4_sword")]
-transform = Transform3D(-0.4766, 0, -0.8791, 0, -1, 0, -0.8791, 0, 0.4766, 2.1973, 0.15, 4.1786)
+transform = Transform3D(-0.4766, 0, -0.8791, 0, -1, 0, -0.8791, 0, 0.4766, 2.2236, 0.197, 4.1643)
 
 [node name="Kanabo" parent="." instance=ExtResource("6_kanabo")]
 transform = Transform3D(0.4766, 0, -0.8791, 0, 1, 0, 0.8791, 0, 0.4766, 1.57, 0.056, 4.1547)
@@ -456,3 +480,20 @@ outline_size = 8
 horizontal_alignment = 0
 vertical_alignment = 0
 modulate = Color(0.8, 0.85, 0.95, 1)
+
+[node name="CreditsLabel" type="Label3D" parent="."]
+transform = Transform3D(0.9397, 0, -0.342, 0, 1, 0, 0.342, 0, 0.9397, 2.3, 1.62, -4.3)
+pixel_size = 0.0016
+text = "ASSET CREDITS (full list: CREDITS.md)
+\"Japanese Torii gate Game Asset\" by Bazylonator — sketchfab.com/3d-models/e12d2fa1b2b94928b8b87cb7787e2462
+    CC BY 4.0 (creativecommons.org/licenses/by/4.0), modified: rescaled, rain/wet shading
+\"Old Torii\" by Sarah Nguyen (primagenevieve) — sketchfab.com/3d-models/34f21f85784a4dcf9e0f9c6b9d772e37
+    CC BY 4.0 (creativecommons.org/licenses/by/4.0), modified: rescaled, darkened, wet shading
+Antique Katana 01 (Tal Swicegood), Katana Stand 01 (Rico Cilliers), Rock Face 01/02
+    (Dario Barresi, Rico Cilliers), Japanese Stone Wall (R. Cilliers, C. Baglioni, D. Barresi):
+    Poly Haven, CC0"
+font_size = 26
+outline_size = 6
+horizontal_alignment = 0
+vertical_alignment = 0
+modulate = Color(0.62, 0.66, 0.76, 1)
