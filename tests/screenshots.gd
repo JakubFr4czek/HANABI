@@ -95,7 +95,7 @@ func _ready() -> void:
 	await _frames(45)
 	player.teleport(Vector3(-2.6, 0, -3.6), deg_to_rad(28))
 	player.camera.rotation.x = deg_to_rad(-19)
-	await _frames(10)
+	await _frames(90)  # let the camera-following rain refill after the teleport
 	await _shot("8_water_and_fog")
 
 	# 9. Macro on the held katana: wet steel, rain beads, black silk wrap.
