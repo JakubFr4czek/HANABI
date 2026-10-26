@@ -9,7 +9,7 @@ The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [
 | Works | Stubbed / temporary |
 |---|---|
 | OpenXR rig (godot-xr-tools): smooth move, snap turn, hands; the hand model stays pinned to the exact grip spot when the blade is stopped | |
-| **Dojo of the Storm training arena** (`scenes/training_arena.tscn`, GDD §9): floating wet dark-stone disc on an endless water-mirror floor (shader-faked sky/torii/sakura/lightning reflections, no SSR), deep violet-to-navy storm sky with silent branching lightning (`StormLightning` mesh + shader), giant torii + tilted half-sunken torii, procedural gnarled dark-bark **sakura tree** (`SakuraTreeGenerator` MultiMesh + lacy blossom clusters + `GPUParticles3D` liquid-glass falling petals), four-part `桜 雷 墨 影` floor seal, weapon stand, and `LightmapGI` setup | Run intro levitation and VR comfort options are deferred to later milestones |
+| **Dojo of the Storm training arena** (`scenes/training_arena.tscn`, GDD §9): floating wet dark-stone disc on an endless water-mirror floor (shader-faked sky/torii/lightning reflections, no SSR), drifting surface mist, deep violet-to-navy storm sky with silent branching lightning (`StormLightning` mesh + shader), giant torii + tilted half-sunken torii, four-part `桜 雷 墨 影` floor seal, weapon stand, and `LightmapGI` setup | The sakura tree was removed until a better asset is available; run intro levitation and VR comfort options are deferred to later milestones |
 | **Free grip anywhere on the katana** (handle / *tsuka*, guard / *tsuba*, blunt spine of the blade / *mune*) and **two-handed grip** (including half-swording and seamless handoff when releasing either hand) | |
 | **Katana on a PD controller** (force + torque, stable PD): weight and inertia matter, a heavy **kanabō** visibly lags behind one hand and responds faster when held two-handed | Katana is the Grab3D model; kanabō is built from primitives |
 | No clipping (CCD) and **no bulldozing**: when the blade is held back the arm gives way (strength drops to 30%), with a light haptic buzz | |
@@ -67,7 +67,7 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/combat_test.tscn -- --desk
   - the katana keeps real-time tracking during slow-mo;
   - free grip on the handle (*tsuka*), guard (*tsuba*) and blunt side of the blade (*mune*, snapping away from the cutting edge);
   - two-handed grip (second hand attaches without releasing the first, steers the weapon between both hands, boosts force/torque on heavy weapons, and seamlessly hands off to the remaining hand when either hand lets go);
-  - Dojo of the Storm arena nodes, 2-draw-call `MultiMesh` procedural sakura tree + falling petals, and procedural storm lightning flash.
+  - Dojo of the Storm arena nodes (water, mist, fog) and the procedural storm lightning flash.
 
 Both exit with code 0 when all checks pass. `res://tests/screenshots.tscn -- --desktop --shots /tmp/shots` renders screenshots. `tests/diag/` holds small diagnostic scenes, e.g. the Jolt joint-limit sign check and slow-mo tracking.
 
@@ -163,8 +163,8 @@ assets_raw/        original downloaded packs (git-ignored, Godot-ignored)
 data/enemies/      EnemyProfile resources (stats, resistances, tactics as data)
 docs/              GDD and brief
 scenes/            training_arena, test_room, player rigs, weapons
-src/core/          GameEvents (event log), TimeController (hit-stop, slow-mo), Elements, Sfx, test room, SakuraTreeGenerator, StormLightning
-src/shaders/       Dojo of the Storm shaders (sky dome, water mirror, stone platform, spawn seal, sakura bark/canopy/petals, lightning bolt)
+src/core/          GameEvents (event log), TimeController (hit-stop, slow-mo), Elements, Sfx, test room, StormLightning
+src/shaders/       Dojo of the Storm shaders (sky dome, water mirror, water mist, stone platform, spawn seal, lightning bolt)
 src/player/        XR rig, desktop rig, WeaponHolder (grab/recall/haptics)
 src/weapons/       BladeBody (blade, element, pre-impact velocity), HeldWeapon (PD follow, hits, clashes, parry), BladeTrail
 src/enemies/       ActiveRagdoll, TrainingDummy, EnemyBrain / DummyBrain, EnemyProfile

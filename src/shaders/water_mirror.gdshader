@@ -5,18 +5,17 @@ render_mode blend_mix, depth_draw_opaque, cull_back, specular_schlick_ggx, fog_d
 // Features:
 // 1. Summed Gerstner/sine vertex displacement (dampened under the stone platform).
 // 2. Dual scrolling normal maps in crossing directions + procedural capillary wave normals.
-// 3. Concentric ripples around the stone platform rim, torii pillars, sakura trunk, and raindrops.
+// 3. Concentric ripples around the stone platform rim, torii pillars, and raindrops.
 // 4. True Schlick Fresnel: dark/translucent abyssal depth when looking down near the platform edge,
 //    sky/neon reflection at grazing angles.
 // 5. Normal-distorted equirectangular baked storm sky panorama + ray-projected reflections of
-//    the Sakura tree, Giant Torii, and lightning bolts broken into liquid wave facets.
+//    the Giant Torii and lightning bolts broken into liquid wave facets.
 
 uniform vec4 deep_water_color : source_color = vec4(0.005, 0.007, 0.020, 1.0);
 uniform vec4 shallow_edge_color : source_color = vec4(0.014, 0.022, 0.052, 1.0);
 uniform vec4 abyss_edge_color : source_color = vec4(0.002, 0.003, 0.009, 1.0);
 uniform vec4 horizon_sky_color : source_color = vec4(0.058, 0.042, 0.135, 1.0);
 uniform vec4 zenith_sky_color : source_color = vec4(0.015, 0.010, 0.040, 1.0);
-uniform vec4 sakura_reflection_color : source_color = vec4(0.96, 0.22, 0.58, 1.0);
 uniform vec4 torii_reflection_color : source_color = vec4(0.90, 0.16, 0.08, 1.0);
 uniform vec4 lightning_reflection_color : source_color = vec4(0.45, 0.65, 1.0, 1.0);
 uniform vec4 fog_color : source_color = vec4(0.032, 0.026, 0.072, 1.0);
@@ -63,7 +62,6 @@ vec3 rain_ripple_cell(vec2 p, float t, float seed_shift) {
 	float phase = fract(t * (0.58 + 0.32 * h1) + h2);
 	float radius = phase * 0.88;
 	float ring_dist = dist - radius;
-	// Double-ring packet per raindrop impact
 	float env = exp(-abs(ring_dist) * 16.0) * pow(1.0 - phase, 1.35) * smoothstep(0.015, 0.08, radius);
 	float wave = sin(ring_dist * 54.0);
 	float d_wave = cos(ring_dist * 54.0) * env;
@@ -133,7 +131,7 @@ vec2 dir_to_equirect_uv(vec3 dir) {
 	return vec2(u, v);
 }
 
-// Helper for obstacle ring ripples (torii pillars, sakura trunk)
+// Helper for obstacle ring ripples (torii pillars)
 void add_obstacle_ripple(vec2 world_xz, vec2 center, float radius, float freq, float falloff, float t, inout vec2 ripple_grad, inout float ripple_crest) {
 	vec2 d = world_xz - center;
 	float dist = max(length(d) - radius, 0.0);
@@ -175,15 +173,13 @@ void fragment() {
 	float shore_phase = edge_dist * 12.5 - t * 2.9 + (n_a.x + n_b.y) * 1.8;
 	float shore_wave = cos(shore_phase) * shore_env;
 	float shore_crest = pow(max(0.0, sin(shore_phase)), 3.5) * shore_env;
-	// Immediate meniscus/foam line hugging the wet stone rim (0..18 cm from platform edge)
 	float rim_meniscus = exp(-edge_dist * 11.0) * (0.65 + 0.35 * sin(atan(world_pos.z, world_pos.x) * 18.0 + t * 2.0));
 
-	// 3. Concentric ripples around Giant Torii pillars, sunken torii, and Sakura trunk
+	// 3. Concentric ripples around Giant Torii pillars and sunken torii
 	vec2 pillar_grad = vec2(0.0);
 	float pillar_crest = 0.0;
 	add_obstacle_ripple(world_pos.xz, vec2(-3.2, -10.5), 0.38, 14.0, 0.85, t, pillar_grad, pillar_crest);
 	add_obstacle_ripple(world_pos.xz, vec2( 3.2, -10.5), 0.38, 14.0, 0.85, t, pillar_grad, pillar_crest);
-	add_obstacle_ripple(world_pos.xz, vec2(-9.2,  -4.6), 0.68, 11.0, 0.68, t, pillar_grad, pillar_crest);
 	add_obstacle_ripple(world_pos.xz, vec2(-5.4, -12.4), 0.30, 13.0, 0.90, t, pillar_grad, pillar_crest);
 	add_obstacle_ripple(world_pos.xz, vec2( 5.8, -13.2), 0.30, 13.0, 0.90, t, pillar_grad, pillar_crest);
 
@@ -213,14 +209,12 @@ void fragment() {
 	float ndotv = clamp(dot(world_normal, world_view), 0.0, 1.0);
 	float flat_ndotv = clamp(world_view.y, 0.0, 1.0);
 	float fresnel = clamp(fresnel_bias + (1.0 - fresnel_bias) * pow(1.0 - ndotv, fresnel_power), 0.0, 1.0);
-	// Suppress reflection when looking down into the water near the platform edge so the dark depth reads clearly
 	float near_rim_depth_view = exp(-edge_dist * 0.48) * smoothstep(0.14, 0.48, flat_ndotv);
 	fresnel *= mix(1.0, 0.18, near_rim_depth_view);
 
 	// 6. Dark water depth & submerged platform drop-off shelf near the rim
 	vec2 refracted_xz = world_pos.xz + total_slope * 0.28;
 	float refracted_edge = max(length(refracted_xz) - platform_radius, 0.0);
-	// Underwater stone shelf extending ~0.75 m past the rim before dropping into the dark abyss
 	float submerged_shelf = exp(-refracted_edge * 2.4) * (0.6 + 0.4 * n_a.x);
 	float shallow_band = exp(-edge_dist * 0.45);
 	float abyss_trench = smoothstep(0.25, 1.2, edge_dist) * exp(-edge_dist * 0.45);
@@ -243,31 +237,11 @@ void fragment() {
 	vec3 analytic_sky = mix(horizon_sky_color.rgb, zenith_sky_color.rgb, pow(sky_elev, 0.55));
 	vec3 sky_refl = mix(analytic_sky, baked_sky, 0.84);
 
-	// Wave-facet contrast: wave slopes tilted toward the camera catch sky/neon glints,
-	// while back-slopes and troughs remain deep dark indigo
 	float facet_tilt = dot(total_slope, normalize(world_view.xz + vec2(0.0001)));
 	float wave_facet = smoothstep(-0.22, 0.24, facet_tilt + v_wave_height * 3.5);
 	sky_refl *= mix(0.38, 1.55, wave_facet);
 
-	// 8. Ray-projected Sakura Tree reflection (-9.2, y, -4.6) distorted by wave normals:
-	// Project the normal-perturbed reflection ray onto the vertical plane of the Sakura tree.
-	vec2 sakura_center = vec2(-9.2, -4.6);
-	vec2 to_sakura = sakura_center - world_pos.xz;
-	float dist_to_sakura = length(to_sakura);
-	vec2 sakura_dir = to_sakura / max(dist_to_sakura, 0.001);
-	float ray_toward_sakura = max(0.0, dot(normalize(warped_refl_dir.xz + vec2(0.0001)), sakura_dir));
-	vec3 sakura_hit = world_pos + warped_refl_dir * min(dist_to_sakura, 18.0);
-	// Radial distance in the virtual vertical reflection plane to the blossom canopy (centered at y = 4.6)
-	float canopy_horiz = length(sakura_hit.xz - sakura_center);
-	float canopy_vert = abs(sakura_hit.y - 4.4);
-	// Blossom cluster noise in the reflected image so it reads as broken petal clusters, not a flat gradient
-	float cluster_pattern = 0.5 + 0.5 * sin(sakura_hit.x * 2.8 + sakura_hit.y * 3.4) * cos(sakura_hit.z * 2.6 - sakura_hit.y * 2.9);
-	float sakura_canopy_mask = exp(-canopy_horiz * 0.28) * exp(-canopy_vert * 0.36) * pow(ray_toward_sakura, 2.2);
-	float sakura_shatter = smoothstep(0.18, 0.82, wave_facet * 0.65 + cluster_pattern * 0.55);
-	float sakura_refl = sakura_canopy_mask * sakura_shatter * (1.0 - smoothstep(14.0, 24.0, dist_to_sakura));
-	sky_refl += sakura_reflection_color.rgb * sakura_refl * 1.35;
-
-	// 9. Ray-projected Giant Torii reflection (x in [-4.2, 4.2], z = -10.5) distorted by wave normals:
+	// 8. Ray-projected Giant Torii reflection (x in [-4.2, 4.2], z = -10.5) distorted by wave normals:
 	if (world_pos.z > -10.5 && warped_refl_dir.z < -0.05) {
 		float t_torii = clamp((-10.5 - world_pos.z) / warped_refl_dir.z, 0.0, 26.0);
 		vec3 torii_hit = world_pos + warped_refl_dir * t_torii;
@@ -278,34 +252,30 @@ void fragment() {
 		sky_refl += torii_reflection_color.rgb * torii_mask * mix(0.35, 1.45, wave_facet) * 0.85;
 	}
 
-	// 10. Silent storm lightning reflection streak across the wave facets
+	// 9. Silent storm lightning reflection streak across the wave facets
 	vec2 refl_xz_dir = normalize(warped_refl_dir.xz + vec2(0.0001));
 	float bolt_align = pow(max(0.0, dot(refl_xz_dir, normalize(lightning_dir))), 6.0);
 	vec3 flash_refl = lightning_reflection_color.rgb * lightning_flash * (0.28 + 1.15 * bolt_align * mix(0.35, 1.45, wave_facet));
 	sky_refl += flash_refl;
 
-	// 11. Crisp shoreline, pillar, and raindrop crest highlights
+	// 10. Crisp shoreline, pillar, and raindrop crest highlights
 	float ripple_highlights = (
 		rim_meniscus * 0.55 +
 		shore_crest * 0.72 +
 		pillar_crest * 0.68 +
 		rain_rip.z * 0.85
 	) * (1.0 - smoothstep(12.0, 19.5, cam_dist));
-	vec3 crest_tint = mix(vec3(0.26, 0.24, 0.48), sakura_reflection_color.rgb * 0.65, exp(-dist_to_sakura * 0.15));
+	vec3 crest_tint = vec3(0.26, 0.24, 0.48) + lightning_reflection_color.rgb * (lightning_flash * 0.35);
 
 	// Combine dark water depth and Fresnel-weighted reflection
 	vec3 surface_color = mix(water_body, sky_refl, fresnel) + crest_tint * ripple_highlights;
 
-	// 12. Atmospheric depth fog matching WorldEnvironment & StormSkyDome:
-	// Starts at 6.0 m and reaches full opacity right behind the Torii (~19.5 m) so everything
-	// beyond the Torii dissolves into the dark violet-navy storm haze with zero horizon line.
+	// 11. Atmospheric depth fog matching WorldEnvironment & StormSkyDome
 	float depth_fog = pow(smoothstep(6.0, 19.5, cam_dist), 0.92);
 	float radial_fog = smoothstep(12.5, 20.5, r);
 	float fog_factor = clamp(max(depth_fog, radial_fog), 0.0, 1.0);
 	vec3 active_fog_color = fog_color.rgb + lightning_reflection_color.rgb * (lightning_flash * 0.14);
 
-	// Fade diffuse/specular lighting to 0 as fog_factor -> 1 and drive EMISSION to active_fog_color
-	// so the distant fogged water matches the unshaded sky dome horizon to the exact RGB value.
 	float clear_vis = 1.0 - fog_factor;
 	ALBEDO = surface_color * clear_vis;
 	METALLIC = mix(0.08, 0.48, fresnel) * clear_vis;

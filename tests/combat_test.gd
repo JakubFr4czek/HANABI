@@ -172,7 +172,7 @@ func _run() -> void:
 	# 7. Free grip anywhere (handle, tsuba, blunt side of the blade) and two-handed grip.
 	await _test_free_and_two_handed_grip(lag_kanabo[0])
 
-	# 8. Dojo of the Storm arena elements & procedural Sakura tree / Storm lightning / Water & Fog.
+	# 8. Dojo of the Storm arena elements: storm lightning, water and fog.
 	await _test_dojo_of_the_storm()
 
 
@@ -353,8 +353,6 @@ func _test_dojo_of_the_storm() -> void:
 	var mist_high := room.get_node_or_null("Arena/WaterMistHigh") as MeshInstance3D
 	var seal := room.get_node_or_null("Arena/SpawnSeal") as MeshInstance3D
 	var giant_torii := room.get_node_or_null("Arena/ToriiGates/GiantTorii") as Node3D
-	var sakura := room.get_node_or_null("Arena/SakuraTree") as SakuraTreeGenerator
-	var petals := room.get_node_or_null("Arena/SakuraPetals") as GPUParticles3D
 	var lightmap := room.get_node_or_null("Arena/LightmapGI") as LightmapGI
 	var we := room.get_node_or_null("WorldEnvironment") as WorldEnvironment
 	_check("Dojo of the Storm core nodes present (disc, water mirror, mist layers, seal, giant torii, LightmapGI)",
@@ -372,12 +370,6 @@ func _test_dojo_of_the_storm() -> void:
 		we != null and we.environment != null and we.environment.fog_enabled
 		and we.environment.fog_mode == Environment.FOG_MODE_DEPTH
 		and we.environment.fog_depth_end <= 30.0 and we.environment.fog_height_density > 0.1)
-	var sakura_dist := Vector2(sakura.global_position.x, sakura.global_position.z).length() if sakura else 0.0
-	_check("monumental SakuraTree stands in the water outside the stone disc (dist=%.1f m > 5.25 m) and builds 2 MultiMeshes" % sakura_dist,
-		sakura != null and sakura_dist > 8.0 and sakura.bark_multimesh_instance != null and sakura.canopy_multimesh_instance != null
-		and sakura.bark_multimesh_instance.multimesh.instance_count > 40
-		and sakura.canopy_multimesh_instance.multimesh.instance_count >= 2000
-		and petals != null and petals.amount <= 80)
 	if room.lightning:
 		room.lightning.trigger_strike(-0.22)
 		await get_tree().process_frame
