@@ -78,6 +78,22 @@ Do not implement during prototyping. Prepare the architecture: swappable enemy b
 - **VFX:** GPU particles for petals, procedural lightning, an ink/darkness shader with noise, and blade trails (GPUTrail).
 - **Performance:** on standalone Quest use simple fog and particles. Volumetric fog is a PCVR-only setting for recording.
 
+### Art direction rule: premium, never cheap/kitschy
+Neon is a sparse accent on a dark, moody, desaturated base. Every new VFX is checked against this rule.
+
+- **Palette:** violet/navy base, neon pink sakura, electric blue lightning, ink black. Stay inside it.
+- **Focus:** a few strong focal accents, not glow everywhere. Restrained bloom. Contrast and silhouettes over rainbow effects.
+- **Impact:** timing, easing, and sound design sell the hit.
+
+### VFX target & performance
+Near-realistic, in moody half-light. A dark sky, broken by a few bright events.
+
+- **Lightning:** branching bolts with a bright core and a glow, plus a brief scene-wide flash. Bolts are mesh and shader, not particles.
+- **Rain:** particles, with droplets that run down the blade.
+- **Blade:** the katana reflects the dark sky and flares on lightning. The sky reflection is a baked cubemap. No realtime reflections and no SSR.
+- **Sakura:** trees are over-the-top neon pink, with strong emission and glow. Falling petals read as slightly transparent liquid glass: a bright fresnel rim and a subtle iridescent sheen, faked in the shader (fresnel, alpha, emission). No real refraction and no screen-space effects. Petals count toward the particle budget.
+- **Quest 3:** the arena is static, so bake its lighting and shadows with `LightmapGI` (Mobile renderer). Realtime work is only the short lightning flashes, particles, and the blade trail. Shared `GPUParticles3D` budget: about 2–4k alive particles for rain, petals, and blade droplets.
+
 ### Training Arena (Dojo of the Storm)
 The physics-test mannequin lives here. It is the dummy test level: its own scene, separate from the run's shrine. A serene, endless void under a slow purple storm.
 
@@ -87,6 +103,14 @@ The physics-test mannequin lives here. It is the dummy test level: its own scene
 - **Center:** the spawn seal on the floor, 桜雷墨影 — the same four-part mark as the run spawn.
 - **Implementation:** use assets from `assets/` first; if something is missing, build a procedural Godot stand-in. Quest / Mobile renderer: fake the reflection in the floor material, no screen-space effects, cheap fog, and a tight `GPUParticles3D` budget. Keep the arena a separate scene so it can load alone as the dummy test level.
 - **IP:** our own shapes and our own palette. No form, symbol or music that would be recognizable from another game.
+
+### Run intro
+At the start of a run the player hovers about 0.5–1 m above the arena in a meditative cross-legged pose (seiza / lotus-like), then descends onto the 桜雷墨影 seal.
+
+- **Descent:** slow and smooth. The seal glows below, and sakura petals swirl around the player.
+- **Touchdown:** a ripple of lightning runs across the water-mirror floor, and the katana materializes in the hand.
+- **Body:** no visible legs. The pose shows only as a shadow, or as a reflection in the water.
+- **Comfort:** linear motion, no sudden deceleration, horizon stable. Nothing takes over the camera beyond the vertical offset. A few seconds at most, and skippable.
 
 ## 10. Audio
 - Sword swings, clashes and slices; thunder; wind; temple bell (bonshō); night ambience.
@@ -99,7 +123,7 @@ The physics-test mannequin lives here. It is the dummy test level: its own scene
 3. **Elements:** ofuda level-up, upgrade trees, slot limit and evolutions.
 4. **World:** procedural torii, fog, VFX and the spawn symbol.
 5. **Meta AI:** `call_llm`, telemetry, awakened enemies, Oni brain and run memory. Reserve about 2 days before the deadline.
-6. **Demo:** polish and record a 2–3 minute video, write the description and submit.
+6. **Demo:** VR comfort and accessibility, polish, record a 2–3 minute video, write the description and submit.
 
 **Cut rule:** if behind schedule, cut content (fewer upgrades, simpler world), never the sword physics or the AI enemies.
 
@@ -107,7 +131,7 @@ The physics-test mannequin lives here. It is the dummy test level: its own scene
 - **Stabbing / impaling (Blade & Sorcery style):** the blade tip enters a body when the hit velocity is along the blade axis; a slider joint locks it to that axis with friction; the blade is pulled out by retracting it past the entry point.
 
 ## 13. Open questions
-- Locomotion: smooth only, or teleport as a comfort option? (Current build: smooth move on the left stick, snap turn on the right stick.)
+- Locomotion: decided in VR Comfort & Accessibility; build it in the final phase. Current build: smooth move on the left stick, snap turn on the right stick.
 - Placeholders in the test room (2026-10-26): the training dummy and both bokken are built from Godot primitives; the Quaternius base character / katana models are not used yet. Skinning the Quaternius mesh onto the active ragdoll is planned with the yōkai (milestone 2).
 - Balance numbers for the dummy (first pass): damage = (relative speed − 1.5 m/s) × 9, cap 120; one full swing (~10 m/s) staggers, two quick heavy hits knock it down. Tune by feel in the headset.
 - Active ragdoll muscles currently act like animation (no reaction torque on the parent) for stability; full momentum-conserving muscles are a later polish item.
@@ -120,3 +144,12 @@ The physics-test mannequin lives here. It is the dummy test level: its own scene
 - Exact element and evolution balance numbers?
 - Does Meta offer TTS, or do we use Piper?
 - Which fields does the hackathon submission form require?
+
+## 14. VR Comfort & Accessibility (LATE)
+End of project, after core gameplay (roadmap phase 6). Do not implement during prototyping. `godot-xr-tools` already provides most of this.
+
+- **Turning:** smooth or snap, with an adjustable snap angle and smooth turn speed (`movement_turn`).
+- **Locomotion:** stick (smooth, `movement_direct`) or teleport (`function_teleport`). Teleport conflicts with fast survivor-style combat, so also offer a short dash/blink as the combat-friendly alternative.
+- **Vignette:** a comfort vignette while moving, with a toggle and a strength setting (`vignette`).
+- **Body:** player height and seated-mode calibration.
+- **Hands:** dominant-hand swap.
