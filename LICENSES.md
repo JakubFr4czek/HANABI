@@ -27,7 +27,6 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/audio/sfx/impact/impactPlank_medium_*.ogg`, `impactPunch_heavy_*.ogg` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 |
 | `assets/models/weapons/katana_grab3d/katana.glb` | https://grab3d.com/models/weapons/katana/ | Grab3D | CC0 1.0 |
 | `assets/models/environment/Torii_Gate_Quaternius.glb` | https://poly.pizza/m/7SyXZ62xR5 | Quaternius | CC0 |
-| `assets/models/environment/Lantern_KayLousberg.glb` | https://poly.pizza/m/CtHBJ1ufeW | Kay Lousberg | CC0 |
 
 ## Generated in-project (no third-party license)
 - Training dummy, the dummy's bokken, the kanabō, and the **Dojo of the Storm** training arena (`scenes/training_arena.tscn`): built from Godot primitives (`CylinderMesh`, `TorusMesh`, `PlaneMesh`, `SphereMesh`, `BoxMesh`), custom shaders (`src/shaders/*.gdshader`), and the procedural `ImmediateMesh` generator `StormLightning` for branching storm bolts.
