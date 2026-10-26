@@ -12,6 +12,7 @@ const WET_SURFACE_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 
 @onready var dummy: TrainingDummy = $TrainingDummy
 @onready var katana: HeldWeapon = $Katana
+var rain: StormRain
 @onready var kanabo: HeldWeapon = $Kanabo
 @onready var spawn: Marker3D = $PlayerSpawn
 @onready var lightning: StormLightning = get_node_or_null("Arena/StormLightning") as StormLightning
@@ -116,6 +117,12 @@ func _setup_dojo_visuals() -> void:
 			lightning.world_environment = env
 			lightning.base_fog_light_color = env.fog_light_color
 			lightning.base_ambient_energy = env.ambient_light_energy
+
+	rain = StormRain.new()
+	rain.name = "StormRain"
+	arena.add_child(rain)
+	if katana:
+		StormRain.add_blade_drips(katana, katana.blade_tip)
 
 	var seal_mesh := get_node_or_null("Arena/SpawnSeal") as MeshInstance3D
 	if seal_mesh:
