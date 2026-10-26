@@ -16,11 +16,13 @@ The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [
 | **Hit-stop** 50–80 ms on hits ≥ 40 damage, **micro hit-stop** 25–35 ms (partial slow-down) on medium hits and blade clashes; **haptic patterns** per event (hit, clash, parry with a softer echo in the free hand) | |
 | **Storm audio**: stereo rain bed, distant thunder 1–2.5 s after each flash from the bolt's direction, steel ring on metal clashes/parries/cuts, open-air reverb on all positional sounds | Rain, thunder and steel ring are synthesized placeholders (`tools/gen_storm_audio.py`) until real recordings are added |
 | **Blade trail** (CPU ribbon, works on Quest's Compatibility renderer) colored by element: none / sakura / storm / ink / shadow | Elements change the trail color and highlight their quadrant on the `桜 雷 墨 影` floor seal (abilities come in milestone 3) |
-| **Parry**: the dummy can attack (telegraphed overhead cut); meeting its attacking blade fast enough and across it (≥ 25°) is a parry: sparks, compensated slow-mo ×0.3 for 0.6 s (your blade stays real-time), dummy stunned, **counter window** 1.5 s with ×1.5 damage | Only the dummy attacks; it does not damage the player (no player HP yet) |
+| **Parry**: meeting the dummy's attacking blade fast enough and across it (≥ 25°) is a parry: sparks, compensated slow-mo ×0.3 for 0.6 s (your blade stays real-time), dummy **staggered**, **counter window** 1.5 s with ×1.5 damage | |
+| **Duelist AI** (`DuelistBrain`, readable state machine idle → stalk → attack → block / stagger → recover): vertical cut, horizontal cut and thrust, combos and feints; closes in, backs off and circles; blocks your swings by chance and may riposte; a heavy hit during its wind-up interrupts it. **Fair by rule**: every strike shows at least 0.4 s of wind-up (pose + glowing eyes + rising whoosh) inside your view, a wind-up is dropped if you look away, and it never flanks out of view. Difficulty presets easy / normal / hard are data (`DuelistDifficulty`) | Poses are hand-tuned on the primitive dummy |
+| **Player HP** 100 with feedback: red edge vignette (pulses below 35 %), heavy haptic pattern in both hands, hurt sound; at 0 HP you are down for 3 s, the dummy backs off and you get back up at full health | No death / run-over screen yet (milestone 2) |
 | **Active ragdoll training dummy** with its own physics bokken: staggers, falls, gets up | Dummy is built from primitives, not the Quaternius mesh |
 | Damage from the relative speed at the contact point, zone multipliers; debug panel (hits, COUNTER, PARRY!, counter window), damage numbers, SFX | |
 | Desktop test rig for machines without a headset (e.g. macOS) | |
-| Central event log (`GameEvents`), data-driven enemy profile, swappable enemy brain (DummyBrain has a small attack FSM) | No AI/LLM features yet (later phase, see GDD §8) |
+| Central event log (`GameEvents`), data-driven enemy profile, swappable enemy brain (`DuelistBrain`) | No AI/LLM features yet (later phase, see GDD §8) |
 
 ## Requirements
 - **Godot 4.7.2** (standard build, not .NET): https://godotengine.org/download. On macOS, move `Godot.app` to `/Applications`.
@@ -59,6 +61,7 @@ $GODOT --headless --path . --import                  # first time / after adding
 $GODOT --headless --path . --fixed-fps 90 res://tests/physics_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/combat_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/grip_stability_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/enemy_ai_test.tscn -- --desktop
 ```
 - `physics_test` checks the dummy (stands, staggers, knockdown, gets up), velocity-scaled damage, the wall stopping a thrust, and blade clashes.
 - `combat_test` checks:
@@ -71,6 +74,8 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/grip_stability_test.tscn -
   - two-handed grip (second hand attaches without releasing the first, steers the weapon between both hands, boosts force/torque on heavy weapons, and seamlessly hands off to the remaining hand when either hand lets go);
   - Dojo of the Storm arena nodes (water, mist, fog), the lightning flash (global `storm_flash`, fog and ambient brighten, flash light switched off afterwards), rain setup, thunder after a strike, audio buses, and the micro hit-stop.
 - `grip_stability_test` checks that the katana and kanabō (one- and two-handed, at 72 and 90 Hz, with simulated tracking noise) hold still without oscillating, that a heavy body slamming into the blade or a kick at the tip does not knock it out of the hand, that a weapon flying off past 0.4 m is put back in the hand, that weapons ignore the player's own bodies, and that the VR hand model never drifts more than 0.3 m from the controller.
+
+- `enemy_ai_test` checks that each attack (vertical, horizontal, thrust) has its own blade path, a visible tell of at least 0.4 s and hurts an unguarded player exactly once; that a parry interrupts the attack into a stagger with no damage and the dummy then recovers; the fairness rules (no wind-up out of view, wind-up dropped when the player turns away); that a heavy hit interrupts a wind-up; combos, feints, chance-based blocks; approaching, backing off and circling within view; difficulty presets; and the player's hurt vignette, defeat and revive.
 
 All exit with code 0 when all checks pass. `res://tests/screenshots.tscn -- --desktop --shots /tmp/shots` renders screenshots. `tests/diag/` holds small diagnostic scenes, e.g. the Jolt joint-limit sign check and slow-mo tracking.
 
@@ -156,7 +161,7 @@ On Quest the renderer switches to **Compatibility** automatically (`rendering_me
 | Thumbstick **click** | cycle the element of the weapon in that hand |
 | **A/X** | reset the dummy |
 
-To practice parries: turn the dummy's attacks on, stand about 1.3 m in front of it, and meet its overhead cut with your blade held across it.
+To practice parries: turn the dummy's attacks on, stand about 1.3–1.5 m in front of it, watch for the glowing eyes and meet the cut with your blade held across it (vertical cut: blade horizontal above your head; horizontal cut: blade upright on that side; thrust: knock the point aside).
 
 ## Project layout
 ```
@@ -170,9 +175,9 @@ src/core/          GameEvents (event log), TimeController (hit-stop, micro-stop,
 src/shaders/       Dojo of the Storm shaders (sky, sky dome, water mirror, water mist, stone platform, spawn seal, lightning bolt, rain) and shared materials (wet_surface, katana_steel)
 src/vfx/           StormRain (rain streaks, splashes, blade drips)
 tools/             offline generators (gen_storm_audio.py → assets/audio/generated/)
-src/player/        XR rig, desktop rig, WeaponHolder (grab/recall/haptics)
+src/player/        XR rig, desktop rig, WeaponHolder (grab/recall/haptics), PlayerHealth, HurtFeedback
 src/weapons/       BladeBody (blade, element, pre-impact velocity), HeldWeapon (PD follow, hits, clashes, parry), BladeTrail
-src/enemies/       ActiveRagdoll, TrainingDummy, EnemyBrain / DummyBrain, EnemyProfile
+src/enemies/       ActiveRagdoll, TrainingDummy, EnemyBrain / DuelistBrain (+ DuelistDifficulty), EnemyProfile
 src/debug/         hit debug panel, damage numbers, spark bursts
 tests/             headless physics test, screenshots, diagnostics
 ```
