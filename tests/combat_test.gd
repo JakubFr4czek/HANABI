@@ -370,6 +370,14 @@ func _test_dojo_of_the_storm() -> void:
 		we != null and we.environment != null and we.environment.fog_enabled
 		and we.environment.fog_mode == Environment.FOG_MODE_DEPTH
 		and we.environment.fog_depth_end <= 30.0 and we.environment.fog_height_density > 0.1)
+	var rain: StormRain = room.rain
+	await get_tree().process_frame
+	var cam := room.get_viewport().get_camera_3d()
+	_check("Rain: streaks follow the camera, splashes on the platform, drips on the katana blade",
+		rain != null and rain.rain.amount >= 1000 and rain.rain.emitting and rain.splashes.emitting
+		and cam != null and absf(rain.rain.global_position.x - cam.global_position.x) < 0.01
+		and absf(rain.rain.global_position.z - cam.global_position.z) < 0.01
+		and katana.get_node_or_null("BladeDrips") is GPUParticles3D)
 	if room.lightning:
 		room.lightning.trigger_strike(-0.22)
 		await get_tree().process_frame
