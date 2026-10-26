@@ -40,6 +40,7 @@ func _run() -> void:
 	player.teleport(Vector3(3.5, 0, 3.5))
 	_test_strike_classification()
 	await _test_fixed_handle_grip()
+	await _test_xr_fist_grip()
 	await _test_edge_vs_flat_on_the_dummy()
 	await _test_desktop_slash_leads_with_edge()
 	await _test_no_wedging()
@@ -119,6 +120,59 @@ func _test_fixed_handle_grip() -> void:
 		katana.get_grip_zone(holder) == HeldWeapon.ZONE_MUNE and not spine_grip.basis.is_equal_approx(Basis.IDENTITY))
 	holder.release()
 	holder.queue_free()
+
+
+## In VR the handle runs through the closed XR Tools fist, so the blade leaves the
+## fist on the thumb side nearly perpendicular to the forearm (the controller's
+## aim -Z), with the edge facing forward, toward the opponent.
+func _test_xr_fist_grip() -> void:
+	for side in ["right", "left"]:
+		var ctrl := XRController3D.new()
+		room.add_child(ctrl)
+		ctrl.global_transform = Transform3D(Basis(Vector3.UP, deg_to_rad(30.0)), Vector3(-3.0, 1.2, 3.0))
+		var hand := (load("res://addons/godot-xr-tools/hands/scenes/lowpoly/%s_hand_low.tscn" % side) as PackedScene).instantiate() as Node3D
+		ctrl.add_child(hand)
+		var holder := WeaponHolder.new()
+		holder.side = side
+		ctrl.add_child(holder)
+		var joints := await _closed_fist_joints(hand, "R" if side == "right" else "L")
+		katana.global_transform = holder.global_transform * Transform3D(Basis.IDENTITY, Vector3(0, 0, 0.1)).affine_inverse()
+		katana.linear_velocity = Vector3.ZERO
+		katana.angular_velocity = Vector3.ZERO
+		holder.grab(katana)
+		await _wait(0.5)
+		var forearm := -ctrl.global_basis.z
+		var blade := -katana.global_basis.z
+		var edge := katana.global_basis * Vector3.DOWN
+		var pitch := rad_to_deg(blade.angle_to(forearm))
+		var axis_point := katana.global_transform * Vector3(0, 0, 0.1)
+		var dists: Array[float] = []
+		for j: Vector3 in joints:
+			var rel := j - axis_point
+			dists.append((rel - blade * rel.dot(blade)).length())
+		var in_fist: bool = dists.max() < 0.04 and dists.min() > 0.008
+		_check("%s hand: blade leaves the fist on the thumb side %.0f° from the forearm, edge forward (%.2f), handle through the fingers (%.3f-%.3f m)"
+				% [side, pitch, edge.dot(forearm), dists.min(), dists.max()],
+			pitch > 70.0 and pitch < 95.0 and blade.dot(ctrl.global_basis.y) > 0.9 and edge.dot(forearm) > 0.9 and in_fist)
+		holder.release()
+		ctrl.queue_free()
+	katana.global_transform = Transform3D(Basis.IDENTITY, Vector3(-3.0, 1.3, 3.0))
+	await _wait(0.1)
+
+
+## World positions of the finger joints that wrap the handle, with the hand closed.
+func _closed_fist_joints(hand: Node3D, suffix: String) -> Array[Vector3]:
+	(hand.find_children("*", "AnimationTree", true, false)[0] as AnimationTree).active = false
+	var anim := hand.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
+	anim.play("Grip")
+	anim.seek(anim.current_animation_length, true)
+	await get_tree().process_frame
+	var sk := hand.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var out: Array[Vector3] = []
+	for finger in ["Index", "Middle", "Ring", "Little"]:
+		for joint in ["Proximal", "Intermediate"]:
+			out.append(sk.global_transform * sk.get_bone_global_pose(sk.find_bone("%s_%s_%s" % [finger, joint, suffix])).origin)
+	return out
 
 
 # --- 3. Edge vs flat vs spine on the dummy ----------------------------------------------

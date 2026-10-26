@@ -22,6 +22,17 @@ extends Node3D
 ## The hand model shows on the weapon's grip only while that grip is within
 ## this distance (m) of the controller; farther away it goes back to the controller.
 @export var hand_pin_max_distance := 0.3
+## Under an XR controller (aim pose: -Z runs along the forearm, as the XR Tools
+## hand shows) the handle sits in the closed fist's channel: the blade leaves the
+## fist on the thumb side, pitched this far up from the forearm, edge forward.
+## 76° is the knuckle line of the XR Tools hand's closed grip.
+@export_range(0.0, 120.0) var xr_blade_pitch_degrees := 76.0
+## Center of the closed fist in the controller's aim frame (right hand; the
+## left hand mirrors it about [constant XR_HANDS_MIRROR_X]).
+@export var xr_fist_center := Vector3(-0.003, -0.01, -0.012)
+
+## The XR Tools left hand mirrors the right one about the plane x = 0.01 m.
+const XR_HANDS_MIRROR_X := 0.01
 
 var held: HeldWeapon = null
 
@@ -36,6 +47,7 @@ var _pattern_id := 0
 func _ready() -> void:
 	_controller = get_parent() as XRController3D
 	if _controller:
+		transform = xr_grip_transform()
 		for sibling in _controller.get_children():
 			if sibling is XRToolsHand:
 				_hand = sibling
@@ -43,6 +55,14 @@ func _ready() -> void:
 
 func get_grip_transform() -> Transform3D:
 	return global_transform
+
+
+## The holder's pose relative to its XR controller.
+func xr_grip_transform() -> Transform3D:
+	var center := xr_fist_center
+	if side == "left":
+		center.x = 2.0 * XR_HANDS_MIRROR_X - center.x
+	return Transform3D(Basis(Vector3.RIGHT, deg_to_rad(xr_blade_pitch_degrees)), center)
 
 
 ## Grab [param weapon].
