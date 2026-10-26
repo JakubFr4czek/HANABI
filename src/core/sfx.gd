@@ -15,6 +15,8 @@ const CATEGORIES := {
 	"thunder": ["res://assets/audio/generated", "thunder"],
 	"enemy_tell": ["res://assets/audio/generated", "enemy_tell"],
 	"player_hurt": ["res://assets/audio/generated", "player_hurt"],
+	"cut": ["res://assets/audio/generated", "cut"],
+	"slap": ["res://assets/audio/generated", "slap"],
 }
 const POOL_SIZE := 12
 const WORLD_BUS := &"World"

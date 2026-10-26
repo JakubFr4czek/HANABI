@@ -56,6 +56,8 @@ var grip_preset_index := 0
 var two_handed := false
 
 var _pitch := 0.0
+var _swing_roll := 0.0
+var _prev_hand_pos := HAND_REST
 var _swing_tween: Tween
 var _hud := Label.new()
 
@@ -252,6 +254,18 @@ func _update_hand() -> void:
 	var yaw := -hand_offset.x * 1.4
 	var pitch := deg_to_rad(40.0) + hand_offset.y * 2.0
 	var local := Transform3D(Basis.from_euler(Vector3(pitch, yaw, 0.0), EULER_ORDER_YXZ), pos)
+	# Turn the wrist so the cutting edge (the hand's -Y) leads the swing, as a
+	# player does without thinking in VR.
+	var dt := TimeController.real_tick()
+	var motion := (pos - _prev_hand_pos) / dt
+	_prev_hand_pos = pos
+	var blade := -local.basis.z
+	var across := motion - blade * motion.dot(blade)
+	var want_roll := 0.0
+	if across.length() > 0.8:
+		want_roll = (-local.basis.y).signed_angle_to(across.normalized(), blade)
+	_swing_roll = lerp_angle(_swing_roll, want_roll, clampf(dt * 25.0, 0.0, 1.0))
+	local.basis = Basis(blade, _swing_roll) * local.basis
 	if block_amount > 0.0:
 		local = local.interpolate_with(BLOCK_HIGH, block_amount)
 	hand.global_transform = camera.global_transform * local
