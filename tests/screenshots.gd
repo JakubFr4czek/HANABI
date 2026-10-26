@@ -54,13 +54,15 @@ func _ready() -> void:
 	player.teleport(Vector3(0.0, 0, 1.3))
 	player.force_block = true
 	await _frames(90)
+	dummy.set_difficulty(preload("res://tests/combat_test.gd").calm_difficulty())
 	dummy.set_attacks_enabled(true)
+	(dummy.brain as DuelistBrain).force_attack("vertical")
 	var parried := [false]  # array: lambdas capture locals by value
 	var got_windup := false
 	GameEvents.parry.connect(func(_p): parried[0] = true)
 	for k in 600:
 		await get_tree().process_frame
-		if not got_windup and (dummy.brain as DummyBrain).phase == DummyBrain.Phase.WINDUP:
+		if not got_windup and (dummy.brain as DuelistBrain).attack_phase == DuelistBrain.AttackPhase.WINDUP:
 			await _frames(25)
 			await _shot("4_dummy_windup")
 			got_windup = true

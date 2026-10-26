@@ -38,6 +38,8 @@ var hand := Node3D.new()
 var off_hand := Node3D.new()
 var holder := WeaponHolder.new()
 var left_holder := WeaponHolder.new()
+var health := PlayerHealth.new()
+var hurt_feedback := HurtFeedback.new()
 ## Hand offset from HAND_REST in camera space (x right, y up, z forward).
 var hand_offset := Vector3.ZERO
 ## Seconds a scripted swing takes (changed with the mouse wheel).
@@ -85,6 +87,11 @@ func _ready() -> void:
 	left_holder.name = "LeftHolder"
 	left_holder.side = "left"
 	off_hand.add_child(left_holder)
+
+	health.head = camera
+	add_child(health)
+	hurt_feedback.setup(health, camera, [holder, left_holder])
+	add_child(hurt_feedback)
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -264,4 +271,5 @@ func _hud_text() -> String:
 		t += "No weapon in hand (press 1 or 2)"
 	if TimeController.time_scale < 1.0:
 		t += "   TIME x%.2f" % TimeController.time_scale
+	t += "\nHP %d / %d%s" % [ceili(health.hp), int(health.max_hp), "   DOWN" if not health.is_alive() else ""]
 	return t

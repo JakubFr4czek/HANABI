@@ -59,6 +59,12 @@ var current_pose := "guard"
 ## origin; after a knockdown it moves to where the body got up (it is not
 ## dragged back with its feet scraping the floor). [method reset_body] restores it.
 var anchor_position := Vector3.ZERO
+## Walking: the anchor glides at this world velocity (XZ) while standing, and
+## the balance help carries the body along with it.
+var move_velocity := Vector3.ZERO
+## Optional pose whose parts override [member current_pose] (e.g. legs taking
+## a step while the arms hold a guard or a wind-up). "" = none.
+var overlay_pose := ""
 
 var _defs := {}  # name -> part definition Dictionary
 var _poses := {}  # pose name -> {part name -> Quaternion}
@@ -306,6 +312,8 @@ func reset_body() -> void:
 	muscle = 1.0
 	balance = 1.0
 	anchor_position = global_position
+	move_velocity = Vector3.ZERO
+	overlay_pose = ""
 	_set_state(State.STANDING)
 
 
@@ -320,6 +328,8 @@ func _set_state(new_state: State) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if state == State.STANDING:
+		anchor_position += Vector3(move_velocity.x, 0.0, move_velocity.z) * delta
 	_update_state(delta)
 	_turn_facing(delta)
 	_drive_joints(delta)
@@ -369,6 +379,7 @@ func _drive_joints(delta: float) -> void:
 	if muscle <= 0.0:
 		return
 	var pose: Dictionary = _poses.get(current_pose, {})
+	var overlay: Dictionary = _poses.get(overlay_pose, {}) if overlay_pose != "" else {}
 	var k: float = _pose_stiffness.get(current_pose, 1.0)
 	var max_speed: float = _pose_max_speed.get(current_pose, INF)
 	for part_name in _order:
@@ -377,7 +388,7 @@ func _drive_joints(delta: float) -> void:
 			continue
 		var child: RagdollPart = parts[part_name]
 		var parent: RagdollPart = parts[def.parent]
-		var q_rel: Quaternion = pose.get(part_name, Quaternion.IDENTITY)
+		var q_rel: Quaternion = overlay.get(part_name, pose.get(part_name, Quaternion.IDENTITY))
 		var q_target := parent.global_basis.get_rotation_quaternion() * q_rel
 		var omega_des := (_rotation_error(q_target, child.global_basis.get_rotation_quaternion()) * (joint_stiffness * k)).limit_length(max_speed)
 		var omega_rel := child.angular_velocity - parent.angular_velocity
@@ -457,7 +468,7 @@ func _drive_balance(delta: float) -> void:
 	# Anchor: gently pull back toward the spot we stand on.
 	var offset := anchor_position - pelvis.global_position
 	offset.y = 0.0
-	var v_des := (offset * anchor_stiffness).limit_length(2.0)
+	var v_des := (offset * anchor_stiffness + move_velocity).limit_length(2.5)
 	var v_xz := Vector3(pelvis.linear_velocity.x, 0, pelvis.linear_velocity.z)
 	var push := (v_des - v_xz) * (anchor_gain * balance)
 

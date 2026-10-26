@@ -1,8 +1,10 @@
 class_name TrainingDummy
 extends ActiveRagdoll
-## Straw training dummy (kakashi) for testing sword physics: an active ragdoll
-## that staggers, falls and gets up, holding a physics bokken in its right hand
-## so blade-vs-blade clashes (future parries) can be tested.
+## Wooden training dummy: an active ragdoll that staggers, falls and gets up,
+## holding a physics bokken in its right hand. Its [DuelistBrain] spars with
+## the player when attacks are on (P / B / Y): it stalks, circles, blocks and
+## attacks with telegraphed cuts and thrusts that hurt the player
+## ([PlayerHealth]); parrying them staggers it.
 ##
 ## It never dies for good: at 0 HP it collapses, then gets up with full HP.
 
@@ -18,9 +20,19 @@ var hp := 100.0
 var brain: EnemyBrain
 var sword: BladeBody
 
+## Spot the dummy returns to when not sparring, and how far it may roam from it.
+var home_position := Vector3.ZERO
+
 var _straw := ShaderMaterial.new()  # dark lacquered wood (wet_surface shader)
 var _sash := StandardMaterial3D.new()
 var _ink := StandardMaterial3D.new()
+var _eyes := StandardMaterial3D.new()  # glow up during a wind-up (the tell)
+var _prev_tips := {}  # player weapon -> tip position last tick
+var _move_blocked := false
+var _step_time := 0.0
+var _was_attacking := false
+var _hit_player_this_strike := false
+var _last_tell := 0.0
 var _flash_time := 0.0
 var _revive_on_getup := false
 var _counter_time := 0.0  # > 0 while open to a counter after being parried
@@ -44,12 +56,17 @@ func _ready() -> void:
 	_sash.roughness = 0.45
 	_ink.albedo_color = Color(0.015, 0.015, 0.02)
 	_ink.roughness = 0.3
+	_eyes.albedo_color = Color(0.02, 0.01, 0.01)
+	_eyes.emission_enabled = true
+	_eyes.emission = Color(1.0, 0.16, 0.08)
+	_eyes.emission_energy_multiplier = 0.0
 	super._ready()
+	home_position = global_position
 	for child in get_children():
 		if child is EnemyBrain:
 			brain = child
 	if brain == null:
-		brain = DummyBrain.new()
+		brain = DuelistBrain.new()
 		brain.name = "Brain"
 		add_child(brain)
 	brain.setup(self, profile)
@@ -138,6 +155,105 @@ func _define_poses() -> Dictionary:
 			"upper_leg_r": Vector3(15, 0, -6),
 			"lower_leg_r": Vector3(10, 0, 0),
 		},
+		# Horizontal cut, right to left: sword drawn back past the right shoulder...
+		"windup_h": {
+			"_stiffness": 1.3,
+			"chest": Vector3(4, -14, 0),
+			"head": Vector3(-6, 20, 0),
+			"upper_arm_r": Vector3(-67, -61, -39),
+			"lower_arm_r": Vector3(-35, 50, 0),
+			"upper_arm_l": Vector3(-60, -20, -20),
+			"lower_arm_l": Vector3(-70, 0, 0),
+			"upper_leg_l": Vector3(-12, 0, 8),
+			"lower_leg_l": Vector3(16, 0, 0),
+			"upper_leg_r": Vector3(10, 0, -8),
+			"lower_leg_r": Vector3(10, 0, 0),
+		},
+		# ...then swept across at chest height.
+		"strike_h": {
+			"_stiffness": 1.5,
+			"_max_speed": 7.0,
+			"chest": Vector3(10, 13, 0),
+			"head": Vector3(-8, -20, 0),
+			"upper_arm_r": Vector3(-85, 30, -34),
+			"lower_arm_r": Vector3(-10, 74, 0),
+			"upper_arm_l": Vector3(-40, 30, -30),
+			"lower_arm_l": Vector3(-40, 0, 0),
+			"upper_leg_l": Vector3(-22, 0, 8),
+			"lower_leg_l": Vector3(22, 0, 0),
+			"upper_leg_r": Vector3(14, 0, -8),
+			"lower_leg_r": Vector3(10, 0, 0),
+		},
+		# Thrust: fist pulled back to the hip, point aimed at the player...
+		"windup_t": {
+			"_stiffness": 1.3,
+			"chest": Vector3(-4, 2, 0),
+			"head": Vector3(-6, 18, 0),
+			"upper_arm_r": Vector3(49, -1, -26),
+			"lower_arm_r": Vector3(-99, -12, 0),
+			"upper_arm_l": Vector3(-50, 20, -30),
+			"lower_arm_l": Vector3(-60, 0, 0),
+			"upper_leg_l": Vector3(-20, 0, 8),
+			"lower_leg_l": Vector3(20, 0, 0),
+			"upper_leg_r": Vector3(18, 0, -8),
+			"lower_leg_r": Vector3(12, 0, 0),
+		},
+		# ...then driven straight forward with a lunge.
+		"strike_t": {
+			"_stiffness": 1.6,
+			"_max_speed": 8.0,
+			"chest": Vector3(18, 8, 0),
+			"head": Vector3(-14, -6, 0),
+			"upper_arm_r": Vector3(-74, 0, 8),
+			"lower_arm_r": Vector3(-5, -12, 0),
+			"upper_arm_l": Vector3(-20, 0, -15),
+			"lower_arm_l": Vector3(-30, 0, 0),
+			"upper_leg_l": Vector3(-35, 0, 8),
+			"lower_leg_l": Vector3(30, 0, 0),
+			"upper_leg_r": Vector3(25, 0, -8),
+			"lower_leg_r": Vector3(8, 0, 0),
+		},
+		# Blocks: the bokken raised across the head, or held upright on one side.
+		"block_high": {
+			"_stiffness": 1.6,
+			"chest": Vector3(0, 0, 0),
+			"head": Vector3(-4, 0, 0),
+			"upper_arm_r": Vector3(-130, 35, -25),
+			"lower_arm_r": Vector3(-45, 60, 0),
+			"upper_arm_l": Vector3(-120, -30, 20),
+			"lower_arm_l": Vector3(-60, 0, 0),
+		},
+		"block_right": {
+			"_stiffness": 1.6,
+			"chest": Vector3(4, -18, 0),
+			"head": Vector3(-4, 15, 0),
+			"upper_arm_r": Vector3(-45, -45, -35),
+			"lower_arm_r": Vector3(-75, 0, 0),
+			"upper_arm_l": Vector3(-50, -25, -20),
+			"lower_arm_l": Vector3(-70, 0, 0),
+		},
+		"block_left": {
+			"_stiffness": 1.6,
+			"chest": Vector3(4, 22, 0),
+			"head": Vector3(-4, -15, 0),
+			"upper_arm_r": Vector3(-55, 55, 5),
+			"lower_arm_r": Vector3(-85, 0, 0),
+			"upper_arm_l": Vector3(-40, 25, -10),
+			"lower_arm_l": Vector3(-60, 0, 0),
+		},
+		# Leg overlays while walking (arms keep the main pose).
+		"step_l": {
+			"upper_leg_l": Vector3(-30, 0, 6),
+			"lower_leg_l": Vector3(40, 0, 0),
+			"upper_leg_r": Vector3(8, 0, -6),
+			"lower_leg_r": Vector3(6, 0, 0),
+		},
+		"step_r": {
+			"upper_leg_l": Vector3(8, 0, 6),
+			"lower_leg_l": Vector3(6, 0, 0),
+			"upper_leg_r": Vector3(-30, 0, -6),
+			"lower_leg_r": Vector3(40, 0, 0),
+		},
 		# Thrown off balance after a parry: arms flung up and back.
 		"staggered": {
 			"_stiffness": 0.7,
@@ -205,7 +321,7 @@ func _decorate_part(part_name: String, part: RagdollPart, def: Dictionary) -> vo
 				eb.size = Vector3(0.035, 0.012, 0.01)
 				eye.mesh = eb
 				eye.position = Vector3(ex, 0.0, 0.11)
-				eye.material_override = _ink
+				eye.material_override = _eyes
 				part.add_child(eye)
 		"pelvis":
 			var obi := MeshInstance3D.new()
@@ -287,21 +403,42 @@ func counter_time_left() -> float:
 	return _counter_time
 
 
+## The player's blade met ours without a parry: a block on either side.
+func on_blade_contact(info: Dictionary) -> void:
+	var duelist := brain as DuelistBrain
+	if duelist == null:
+		return
+	if duelist.state == DuelistBrain.State.BLOCK:
+		duelist.on_block_contact(info)
+	elif sword and sword.attacking:
+		sword.attacking = false
+		duelist.on_strike_blocked(info)
+
+
 func set_attacks_enabled(enabled: bool) -> void:
-	if brain is DummyBrain:
-		(brain as DummyBrain).attacks_enabled = enabled
+	if brain is DuelistBrain:
+		(brain as DuelistBrain).attacks_enabled = enabled
 		GameEvents.log_event("dummy_attacks", {"enabled": enabled})
 
 
 func attacks_enabled() -> bool:
-	return brain is DummyBrain and (brain as DummyBrain).attacks_enabled
+	return brain is DuelistBrain and (brain as DuelistBrain).attacks_enabled
+
+
+func set_difficulty(difficulty: DuelistDifficulty) -> void:
+	if brain is DuelistBrain:
+		(brain as DuelistBrain).difficulty = difficulty
+		GameEvents.log_event("dummy_difficulty", {"level": difficulty.level})
 
 
 func reset_dummy() -> void:
 	hp = profile.max_hp
 	_revive_on_getup = false
 	_counter_time = 0.0
+	global_position = home_position
 	reset_body()
+	if brain is DuelistBrain:
+		(brain as DuelistBrain).reset()
 	if sword:
 		sword.global_transform = _sword_grip_transform()
 		sword.linear_velocity = Vector3.ZERO
@@ -325,17 +462,109 @@ func _getup_time() -> float: return profile.getup_time
 
 func _physics_process(delta: float) -> void:
 	_counter_time = maxf(_counter_time - delta, 0.0)
-	var context := {"self_position": root_part().global_position, "can_act": state == State.STANDING}
-	var players := get_tree().get_nodes_in_group("player_head")
-	if not players.is_empty():
-		context["player_position"] = (players[0] as Node3D).global_position
-	var intent := brain.think(delta, context)
+	var intent := brain.think(delta, _perceive(delta))
 	set_pose(intent.get("pose", "guard"))
+	var attacking: bool = intent.get("attacking", false) and state == State.STANDING
 	if sword:
-		sword.attacking = intent.get("attacking", false) and state == State.STANDING
+		sword.attacking = attacking
+	if attacking and not _was_attacking:
+		_hit_player_this_strike = false
+	_was_attacking = attacking
+	if attacking:
+		_try_hit_player(float(intent.get("damage", 10.0)), String(intent.get("attack", "")))
 	if intent.has("face_position") and state == State.STANDING:
 		face_toward(intent.face_position)
+	_apply_move(intent.get("move", Vector3.ZERO), delta)
+	_show_tell(float(intent.get("tell", 0.0)))
 	super._physics_process(delta)
+
+
+## What the brain gets to know this tick (see [method EnemyBrain.think]).
+func _perceive(delta: float) -> Dictionary:
+	var pelvis := root_part()
+	var ctx := {
+		"self_position": pelvis.global_position,
+		"self_forward": Vector3(sin(_facing_yaw), 0.0, cos(_facing_yaw)),
+		"chest_position": (parts["chest"] as RagdollPart).global_position,
+		"home_position": home_position,
+		"anchor_position": anchor_position,
+		"can_act": state == State.STANDING,
+		"move_blocked": _move_blocked,
+	}
+	var head := get_tree().get_first_node_in_group("player_head") as Node3D
+	if head:
+		ctx["player_position"] = head.global_position
+		ctx["player_forward"] = -head.global_basis.z
+	var health := get_tree().get_first_node_in_group("player_health") as PlayerHealth
+	ctx["player_alive"] = health == null or health.is_alive()
+	var blades: Array[Dictionary] = []
+	for w in get_tree().get_nodes_in_group("player_weapons"):
+		var weapon := w as HeldWeapon
+		if weapon == null or not weapon.is_held():
+			_prev_tips.erase(w)
+			continue
+		var tip := weapon.get_tip_global()
+		var prev: Vector3 = _prev_tips.get(w, tip)
+		_prev_tips[w] = tip
+		blades.append({"tip": tip, "velocity": (tip - prev) / maxf(delta, 1e-4)})
+	ctx["player_blades"] = blades
+	return ctx
+
+
+## Walk the anchor, but not into walls, props or the table.
+func _apply_move(move: Vector3, delta: float) -> void:
+	move.y = 0.0
+	if state != State.STANDING or move.length() < 0.02:
+		move_velocity = Vector3.ZERO
+		overlay_pose = ""
+		_move_blocked = false
+		return
+	_move_blocked = _blocked_toward(move.normalized())
+	move_velocity = Vector3.ZERO if _move_blocked else move
+	if move_velocity.length() > 0.15:
+		_step_time += delta
+		overlay_pose = "step_l" if fmod(_step_time, 0.56) < 0.28 else "step_r"
+	else:
+		overlay_pose = ""
+
+
+func _blocked_toward(dir: Vector3) -> bool:
+	var space := get_world_3d().direct_space_state
+	var from := root_part().global_position
+	var own: Array[RID] = []
+	for p: RagdollPart in parts.values():
+		own.append(p.get_rid())
+	if sword:
+		own.append(sword.get_rid())
+	for h in [-0.6, -0.1]:
+		var a := Vector3(from.x, from.y + h, from.z)
+		var q := PhysicsRayQueryParameters3D.create(a, a + dir * 0.5, 1, own)
+		if not space.intersect_ray(q).is_empty():
+			return true
+	return false
+
+
+## The blade cuts the player if it passes through their body during a strike.
+func _try_hit_player(damage: float, attack: String) -> void:
+	if _hit_player_this_strike or sword == null:
+		return
+	var health := get_tree().get_first_node_in_group("player_health") as PlayerHealth
+	if health == null or not health.is_alive():
+		return
+	var body := health.hurt_capsule()  # [top, bottom, radius]
+	var a := sword.global_transform * sword.blade_start
+	var b := sword.get_tip_global()
+	var pts := Geometry3D.get_closest_points_between_segments(a, b, body[0], body[1])
+	if pts[0].distance_to(pts[1]) <= float(body[2]):
+		_hit_player_this_strike = true
+		health.take_hit(damage, pts[0], {"attacker": profile.display_name, "attack": attack})
+
+
+func _show_tell(tell: float) -> void:
+	_eyes.emission_energy_multiplier = tell * tell * 4.0
+	if tell > 0.0 and _last_tell <= 0.0 and sword:
+		Sfx.play_at("enemy_tell", sword.global_position, -4.0)
+	_last_tell = tell
 
 
 func _process(delta: float) -> void:

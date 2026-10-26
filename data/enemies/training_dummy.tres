@@ -21,12 +21,13 @@ getup_time = 1.8
 counter_window = 1.5
 counter_multiplier = 1.5
 tactics = {
-"attack_interval": 2.2,
-"attack_range": 2.4,
+"attack_set": ["vertical", "horizontal", "thrust"],
 "attacks": false,
-"parry_stun_time": 1.2,
-"recover_time": 0.6,
-"strike_time": 0.45,
-"track_player": true,
-"windup_time": 0.55
+"block_time": 0.7,
+"difficulty": "normal",
+"engage_distance": 1.55,
+"interrupt_damage": 25.0,
+"leash_radius": 3.0,
+"min_distance": 0.95,
+"track_player": true
 }
