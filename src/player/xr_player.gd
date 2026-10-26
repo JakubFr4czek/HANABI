@@ -17,6 +17,18 @@ signal toggle_attacks_requested
 var _was_pressed := {}
 
 
+func _ready() -> void:
+	GameEvents.parry.connect(_on_parry)
+
+
+## The weapon hand(s) get the full parry pattern from the weapon; a free hand
+## feels a softer echo so the parry lands in the whole body.
+func _on_parry(_info: Dictionary) -> void:
+	for h in [left_holder, right_holder]:
+		if h.held == null:
+			h.pulse_pattern([[0.0, 0.03], [0.45, 0.1]])
+
+
 func _process(_delta: float) -> void:
 	if _pressed_once("ax", left_controller.is_button_pressed("ax_button") or right_controller.is_button_pressed("ax_button")):
 		reset_requested.emit()
