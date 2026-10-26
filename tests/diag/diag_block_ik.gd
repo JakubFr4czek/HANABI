@@ -7,6 +7,8 @@ extends Node
 ## pose dictionaries to paste into training_dummy.gd.
 const ROOM := preload("res://scenes/test_room.tscn")
 const TARGETS := {
+	"block_low_left": [Vector3(0.1, 1.22, 0.45), Vector3(0.5, -0.65, 0.35)],
+	"block_low_right": [Vector3(-0.2, 1.22, 0.48), Vector3(-0.5, -0.65, 0.35)],
 	# start of the blade (just above the guard) and the blade direction
 	"block_high": [Vector3(-0.28, 1.78, 0.38), Vector3(1.0, 0.18, 0.0)],
 	"block_left": [Vector3(0.05, 1.0, 0.45), Vector3(0.45, 1.0, 0.25)],
@@ -25,7 +27,10 @@ func _ready() -> void:
 	add_child(room)
 	d = room.dummy
 	rng.seed = 11
+	var only := Array(OS.get_cmdline_user_args()).filter(func(a): return a.begins_with("block"))
 	for name in TARGETS:
+		if not only.is_empty() and not only.has(name):
+			continue
 		var tgt: Array = TARGETS[name]
 		var best := {}
 		var best_cost := INF

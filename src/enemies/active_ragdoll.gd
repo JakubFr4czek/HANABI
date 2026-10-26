@@ -45,6 +45,9 @@ const BODY_MASK := 1 | 2 | 4
 ## How strongly the body is pulled back to its anchor point.
 @export var anchor_stiffness := 2.5
 @export var anchor_gain := 0.05
+## Anchor gain multiplier during a burst (a strike's step in, an evade): the
+## body really goes where the feet push it instead of drifting after them.
+@export var burst_gain_multiplier := 4.0
 ## Max turning speed toward the facing target (deg/s), how fast the turn
 ## speed itself may change (deg/s²), and how quickly it closes the gap (1/s).
 @export var turn_speed_deg := 90.0
@@ -78,6 +81,8 @@ var anchor_position := Vector3.ZERO
 ## Walking: the anchor glides at this world velocity (XZ) while standing, and
 ## the balance help carries the body along with it.
 var move_velocity := Vector3.ZERO
+## True while the body bursts (see [member burst_gain_multiplier]).
+var burst := false
 ## Optional pose whose parts override [member current_pose] (e.g. legs taking
 ## a step while the arms hold a guard or a wind-up). "" = none.
 var overlay_pose := ""
@@ -638,7 +643,7 @@ func _drive_balance(delta: float) -> void:
 	offset.y = 0.0
 	var v_des := (offset * anchor_stiffness + move_velocity).limit_length(2.5)
 	var v_xz := Vector3(pelvis.linear_velocity.x, 0, pelvis.linear_velocity.z)
-	var push := (v_des - v_xz) * (anchor_gain * balance)
+	var push := (v_des - v_xz) * (anchor_gain * (burst_gain_multiplier if burst else 1.0) * balance)
 
 	for body in _all_bodies:
 		body.apply_central_impulse(body.mass * Vector3(push.x, lift, push.z))

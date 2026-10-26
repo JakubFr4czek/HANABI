@@ -9,6 +9,10 @@ const ROOM := preload("res://scenes/test_room.tscn")
 const FIGHT_SPOT := Vector3(0.0, 0.0, 1.45)
 ## The dummy's ma-ai (profile engage_distance), measured to the player's head.
 const MA_AI := 1.9
+## Close enough that the player's cuts really reach the dummy's body.
+const CLOSE := 1.25
+## A light overhead cut: the hand barely travels (little arm behind it).
+const LIGHT_OVERHEAD := [Vector3(0.03, 0.05, 0), Vector3(0.0, -0.05, 0)]
 
 var room: Node3D
 var dummy: TrainingDummy
@@ -43,7 +47,11 @@ func _run() -> void:
 	await _test_block_lands()
 	await _test_evade()
 	await _test_movement()
-	await _test_ma_ai_variety()
+	await _test_footwork()
+	await _test_guard_tracks_blade()
+	await _test_openings()
+	await _test_riposte()
+	await _test_defence_rate()
 	await _test_strike_step()
 	await _test_tempo_varies()
 	await _test_difficulty()
@@ -219,16 +227,16 @@ func _test_block() -> void:
 		d.block_chance = chance
 		d.reaction_time = 0.05
 		d.attack_cooldown = Vector2(60.0, 60.0)
-		await _start_fight(d, Vector3(0.0, 0.0, 1.3), true)
+		await _start_fight(d, Vector3(0.0, 0.0, MA_AI), true)
 		await _wait(0.6)
 		events.clear()
-		player.swing_duration = 0.3
-		player.swing(DesktopPlayer.SLASH_HORIZONTAL)
+		_step_in_and_swing(DesktopPlayer.SLASH_HORIZONTAL, 0.3)
 		var blocked := false
 		for i in 90:
 			await get_tree().physics_frame
 			blocked = blocked or brain.state == DuelistBrain.State.BLOCK
-		var block_events := events.filter(func(e): return e.type == "enemy_block")
+		# Raised blocks (a passive guard may still catch the blade).
+		var block_events := events.filter(func(e): return e.type == "enemy_block" and not e.landed)
 		print("    block chance %.0f%%: %s" % [chance * 100.0, ", ".join(block_events.map(func(e): return "%s landed=%s" % [e.pose, e.landed]))])
 		if chance > 0.5:
 			_check("block chance 100%: the dummy raises a block against the swing", blocked and not block_events.is_empty())
@@ -238,23 +246,29 @@ func _test_block() -> void:
 	dummy.set_attacks_enabled(false)
 
 
-# --- The block meets the blade: cuts at the head and shoulders are stopped ------
+# --- The block meets the blade: light cuts are parried, full swings break it ---
 
 func _test_block_lands() -> void:
-	var d := _calm()
-	d.block_chance = 1.0
-	d.reaction_time = 0.05
-	d.attack_cooldown = Vector2(60.0, 60.0)
-	await _start_fight(d, Vector3(0.0, 0.0, 1.3), true)
-	await _wait(0.6)
-	events.clear()
-	player.swing_duration = 0.3
-	player.swing(DesktopPlayer.SLASH_OVERHEAD)
-	await _wait(1.0)
-	var block_events := events.filter(func(e): return e.type == "enemy_block")
-	print("    overhead cut vs. block: %s" % ", ".join(block_events.map(func(e): return "%s landed=%s parry=%s" % [e.pose, e.landed, e.get("parry", false)])))
-	_check("the block is in the cut's path: the blades meet, and raised in time it deflects the swing (enemy parry)",
-		block_events.any(func(e): return e.landed) and events.any(func(e): return e.type == "enemy_parry"))
+	var results := {}
+	for kind in ["light", "full"]:
+		var d := _calm()
+		d.block_chance = 1.0
+		d.anticipation = 1.0
+		d.riposte_chance = 0.0
+		d.attack_cooldown = Vector2(60.0, 60.0)
+		await _start_fight(d, Vector3(0.0, 0.0, MA_AI), true)
+		await _wait(0.6)
+		events.clear()
+		_step_in_and_swing(DesktopPlayer.SLASH_HORIZONTAL if kind == "full" else LIGHT_OVERHEAD, 0.3 if kind == "full" else 0.22)
+		await _wait(1.0)
+		var landed := events.filter(func(e): return e.type == "enemy_block" and e.landed)
+		results[kind] = landed[0] if not landed.is_empty() else {}
+		print("      events: %s" % ", ".join(events.filter(func(e): return e.type in ["enemy_block", "enemy_state", "enemy_evade", "clash", "hit", "enemy_opening", "enemy_phase"]).map(func(e): return "%s %s%s" % [e.type, e.get("state", e.get("result", e.get("part", e.get("opening", "")))), " cd %.2f pat %.2f" % [e.cooldown, e.patience] if e.has("cooldown") else ""])))
+		print("    %s cut vs. guard: %s" % [kind, "no contact" if landed.is_empty() else "%s, arm %.0f%%" % [landed[0].result, float(landed[0].power) * 100.0]])
+	_check("a light cut into the guard is parried (%s)" % results.light.get("result", "no contact"),
+		results.light.get("result", "") == "parry")
+	_check("a full-arm cut beats the guard aside and staggers the dummy (%s)" % results.full.get("result", "no contact"),
+		results.full.get("result", "") == "broken")
 	dummy.set_attacks_enabled(false)
 
 
@@ -265,12 +279,11 @@ func _test_evade() -> void:
 	d.evade_chance = 1.0
 	d.reaction_time = 0.05
 	d.attack_cooldown = Vector2(60.0, 60.0)
-	await _start_fight(d, Vector3(0.0, 0.0, 1.3), true)
+	await _start_fight(d, Vector3(0.0, 0.0, MA_AI), true)
 	await _wait(0.6)
 	events.clear()
+	_step_in_and_swing(DesktopPlayer.SLASH_HORIZONTAL, 0.3)
 	var start := _distance()
-	player.swing_duration = 0.3
-	player.swing(DesktopPlayer.SLASH_HORIZONTAL)
 	var far := start
 	for i in 70:
 		await get_tree().physics_frame
@@ -308,34 +321,164 @@ func _test_movement() -> void:
 	dummy.set_attacks_enabled(false)
 
 
-# --- Ma-ai: holds the distance and varies what it does there --------------------
+# --- Footwork: calm when nothing happens, answers the player's steps ---------
 
-func _test_ma_ai_variety() -> void:
+func _test_footwork() -> void:
 	var d := DuelistDifficulty.preset("normal")
 	d.attack_cooldown = Vector2(60.0, 60.0)
 	d.block_chance = 0.0
 	d.evade_chance = 0.0
 	await _start_fight(d, Vector3(0.0, 0.0, MA_AI), false)
-	var tactics := {}
+	brain._patience = 60.0
+	# Player stands still: no fidgeting, no pressing in.
+	var reversals := 0
+	var prev_v := Vector3.ZERO
+	var fast := 0
 	var too_close := 0
-	var pressing := 0
-	var prev := _distance()
-	var ticks := 14 * 90
+	var ticks := 6 * 90
 	for i in ticks:
 		await get_tree().physics_frame
-		var dist := _distance()
-		if dist < 1.35:
+		var v := dummy.move_velocity
+		if v.length() > 0.1 and prev_v.length() > 0.1 and v.dot(prev_v) < 0.0:
+			reversals += 1
+		if v.length() > 0.1:
+			prev_v = v
+		if v.length() > 0.45:
+			fast += 1
+		if _distance() < 1.35:
 			too_close += 1
-		if (prev - dist) * 90.0 > 0.3:
-			pressing += 1
-		prev = dist
-	for e in events:
-		if e.type == "enemy_tactic":
-			tactics[e.tactic] = true
-	print("    ma-ai: tactics used %s, %.0f%% of the time inside 1.35 m, %.0f%% walking in" % [tactics.keys(), 100.0 * too_close / ticks, 100.0 * pressing / ticks])
-	_check("at ma-ai the dummy mixes at least 3 tactics (%s)" % [tactics.keys()], tactics.size() >= 3)
-	_check("it keeps its distance instead of pressing in (inside 1.35 m %.0f%%, walking in %.0f%% of the time)" % [100.0 * too_close / ticks, 100.0 * pressing / ticks],
-		too_close < ticks * 0.05 and pressing < ticks * 0.2 and absf(_distance() - MA_AI) < 0.6)
+	print("    player still: %d direction reversals in 6 s, fast %.0f%% of the time, inside 1.35 m %.0f%%" % [reversals, 100.0 * fast / ticks, 100.0 * too_close / ticks])
+	_check("calm guard while the player waits (%d reversals, fast %.0f%%, never pressing in)" % [reversals, 100.0 * fast / ticks],
+		reversals <= 2 and fast < ticks * 0.1 and too_close == 0)
+	# Player backs off 0.8 m: it follows to ma-ai.
+	var at := player.global_position
+	player.teleport(at + (at - dummy.root_part().global_position * Vector3(1, 0, 1)).normalized() * 0.8)
+	await _wait(2.5)
+	_check("follows a player who backs off back to ma-ai (%.2f m)" % _distance(), absf(_distance() - MA_AI) < 0.35)
+	dummy.set_attacks_enabled(false)
+
+
+# --- The guard follows the player's blade -------------------------------------------
+
+func _test_guard_tracks_blade() -> void:
+	var d := _calm()
+	d.attack_cooldown = Vector2(60.0, 60.0)
+	await _start_fight(d, Vector3(0.0, 0.0, MA_AI), true)
+	brain._patience = 60.0
+	var tips := {}
+	var aims := []
+	for side in [-0.2, 0.2]:
+		player.hand_offset = Vector3(side, 0.0, 0.0)
+		await _wait(1.2)
+		tips[side] = _local(dummy.sword.get_tip_global()).x
+		var throat := player.camera.global_position + Vector3.DOWN * 0.25
+		var fist := dummy.sword.global_position
+		aims.append(snappedf(rad_to_deg(dummy.sword.get_blade_axis().angle_to((throat - fist).normalized())), 1.0))
+	player.hand_offset = Vector3.ZERO
+	print("    guard tip x (dummy's left +): player blade to its right %.2f m, to its left %.2f m; blade off the line to the throat %s°" % [tips[-0.2], tips[0.2], aims])
+	# The player's hand to their right (+) is the dummy's left (+x).
+	_check("the guard leans toward the player's blade (%.2f m -> %.2f m)" % [tips[-0.2], tips[0.2]], tips[0.2] - tips[-0.2] > 0.05)
+	_check("the point stays on the player (%s° off the line to the throat)" % [aims], aims.all(func(a): return a < 35.0))
+	dummy.set_attacks_enabled(false)
+
+
+# --- Openings: it punishes a missed swing and a raised blade -------------------------
+
+func _test_openings() -> void:
+	# A full swing that falls short: the dummy answers while the player recovers.
+	var d := _calm()
+	d.block_chance = 0.0
+	d.attack_cooldown = Vector2(0.0, 0.0)
+	await _start_fight(d, Vector3(0.0, 0.0, 2.15), true)
+	brain._cooldown = 0.0
+	brain._patience = 60.0
+	events.clear()
+	player.swing_duration = 0.25
+	player.swing(DesktopPlayer.SLASH_HORIZONTAL)
+	var opening := ""
+	var waited := 0.0
+	for i in int(1.6 * 90):
+		await get_tree().physics_frame
+		waited += 1.0 / 90.0
+		if brain.state == DuelistBrain.State.ATTACK:
+			opening = brain.last_opening
+			break
+	# Whether it reads the miss itself or the blade swinging wide, it attacks
+	# while the player is still busy with the swing.
+	_check("a swing that falls short is punished at once (attack after %.2f s on opening '%s')" % [waited, opening],
+		opening in ["whiff", "wide", "raised"] and waited < 1.0)
+
+	# The player lifts the blade high and holds it: the body is open for a thrust.
+	await _start_fight(d, Vector3(0.0, 0.0, 2.0), true)
+	brain._cooldown = 0.0
+	brain._patience = 60.0
+	# Lift it slowly: no swing, just an open guard.
+	var lift := create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	lift.tween_property(player, "hand_offset", Vector3(0.0, 0.5, 0.0), 0.8)
+	var attack := ""
+	opening = ""
+	for i in int(1.5 * 90):
+		await get_tree().physics_frame
+		if brain.state == DuelistBrain.State.ATTACK:
+			opening = brain.last_opening
+			attack = brain.current_attack
+			break
+	print("    raised: swing end %.2f s ago, peak %.1f, opening events %s" % [brain._clock - brain._swing_end, brain._swing_peak, events.filter(func(e): return e.type == "enemy_opening").map(func(e): return e.opening)])
+	player.hand_offset = Vector3.ZERO
+	_check("a raised blade opens the body: it attacks the opening (%s with a %s)" % [opening, attack], opening == "raised")
+	dummy.set_attacks_enabled(false)
+
+
+# --- Riposte: a parried light cut is answered at once --------------------------------
+
+func _test_riposte() -> void:
+	var d := _calm()
+	d.block_chance = 1.0
+	d.riposte_chance = 1.0
+	d.attack_cooldown = Vector2(60.0, 60.0)
+	await _start_fight(d, Vector3(0.0, 0.0, MA_AI), true)
+	await _wait(0.6)
+	events.clear()
+	_step_in_and_swing(LIGHT_OVERHEAD, 0.22)
+	var opening := ""
+	for i in int(1.2 * 90):
+		await get_tree().physics_frame
+		if brain.state == DuelistBrain.State.ATTACK:
+			opening = brain.last_opening
+			break
+	print("    riposte events: %s" % ", ".join(events.filter(func(e): return e.type in ["enemy_block", "enemy_state", "enemy_parry", "clash", "enemy_opening"]).map(func(e): return "%s %s %s" % [e.type, e.get("state", e.get("result", "")), e.get("riposte", "")])))
+	_check("after parrying a light cut it ripostes at once (%s)" % (opening if opening != "" else "no attack"), opening == "riposte")
+	dummy.set_attacks_enabled(false)
+
+
+# --- Defence rate: with a sure read it stops most cuts that would land ---------------
+
+func _test_defence_rate() -> void:
+	var d := _calm()
+	d.block_chance = 1.0
+	d.anticipation = 1.0
+	d.attack_cooldown = Vector2(60.0, 60.0)
+	var swings := [DesktopPlayer.SLASH_HORIZONTAL, LIGHT_OVERHEAD, DesktopPlayer.SLASH_OVERHEAD, DesktopPlayer.SLASH_HORIZONTAL, LIGHT_OVERHEAD, DesktopPlayer.SLASH_OVERHEAD]
+	var met := 0
+	var hits := 0
+	var reached := 0
+	for k in swings.size():
+		await _start_fight(d, Vector3(0.0, 0.0, MA_AI), true)
+		brain.set_seed(40 + k)
+		await _wait(0.5)
+		events.clear()
+		_step_in_and_swing(swings[k], 0.3)
+		await _wait(0.9)
+		var was_met := events.any(func(e): return e.type == "enemy_block" and e.landed)
+		var was_hit := events.any(func(e): return e.type == "hit")
+		if was_met:
+			met += 1
+		if was_met or was_hit:
+			reached += 1
+		hits += events.filter(func(e): return e.type == "hit").size()
+		print("      cut %d: %s" % [k, ", ".join(events.filter(func(e): return e.type in ["enemy_block", "hit", "enemy_evade", "enemy_opening"]).map(func(e): return "%s %s" % [e.type, e.get("result", e.get("part", e.get("pose", e.get("opening", ""))))]))])
+	print("    defence: %d of %d cuts reached the dummy, the guard met %d of them; %d hit(s) (full-arm cuts may break through)" % [reached, swings.size(), met, hits])
+	_check("with a sure read the guard meets the cuts that reach it (%d of %d)" % [met, reached], reached >= 3 and met >= reached - 1)
 	dummy.set_attacks_enabled(false)
 
 
@@ -476,6 +619,8 @@ func _calm() -> DuelistDifficulty:
 func _start_fight(difficulty: DuelistDifficulty, at: Vector3, armed: bool, yaw: float = 0.0) -> void:
 	dummy.set_attacks_enabled(false)
 	player.force_block = false
+	player._kill_swing()
+	player.hand_offset = Vector3.ZERO
 	room.reset_room()
 	health.heal_full()
 	if armed:
@@ -492,6 +637,15 @@ func _start_fight(difficulty: DuelistDifficulty, at: Vector3, armed: bool, yaw: 
 	await _wait(0.8)
 	events.clear()
 	dummy.set_attacks_enabled(true)
+
+
+## Step in from ma-ai to cutting distance and cut at once (as a player does).
+func _step_in_and_swing(points: Array, duration: float) -> void:
+	var toward := dummy.root_part().global_position - player.global_position
+	toward.y = 0.0
+	player.teleport(dummy.root_part().global_position * Vector3(1, 0, 1) - toward.normalized() * CLOSE, player.rotation.y)
+	player.swing_duration = duration
+	player.swing(points)
 
 
 ## World point in the dummy's frame: x = its left, y = up, z = toward its front.

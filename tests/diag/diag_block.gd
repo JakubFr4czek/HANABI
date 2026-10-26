@@ -19,6 +19,10 @@ func _ready() -> void:
 	brain = dummy.brain as DuelistBrain
 	player = room.player
 	await _wait(0.5)
+	if OS.get_cmdline_user_args().has("--reach"):
+		await _reach()
+		get_tree().quit()
+		return
 	if OS.get_cmdline_user_args().has("--natural"):
 		await _natural()
 		get_tree().quit()
@@ -77,16 +81,43 @@ func _try(pose: String, swing_name: String) -> void:
 	await _wait(0.4)
 
 
+## Which scripted cuts reach the dummy's body from which distance (no defence).
+func _reach() -> void:
+	var swings := {"horizontal": DesktopPlayer.SLASH_HORIZONTAL, "overhead": DesktopPlayer.SLASH_OVERHEAD, "light": [Vector3(0.05, 0.12, 0), Vector3(0.0, -0.08, 0)]}
+	for dist in [0.8, 0.95, 1.1, 1.25]:
+		for sname in swings:
+			dummy.set_attacks_enabled(false)
+			room.reset_room()
+			player.take_weapon(room.katana)
+			player.teleport(Vector3(0.0, 0.0, dist))
+			await _wait(0.8)
+			var hits := []
+			var cb := func(e): if e.type == "hit": hits.append("%s %.0f" % [e.part, e.damage])
+			GameEvents.event_logged.connect(cb)
+			var closest := INF
+			player.swing_duration = 0.3
+			player.swing(swings[sname])
+			for i in 70:
+				await get_tree().physics_frame
+				var w := room.katana as HeldWeapon
+				var chest := (dummy.parts["chest"] as Node3D).global_position
+				var pts := Geometry3D.get_closest_points_between_segments(w.get_blade_start_global(), w.get_tip_global(), dummy.root_part().global_position, chest + Vector3.UP * 0.42)
+				closest = minf(closest, pts[0].distance_to(pts[1]))
+			GameEvents.event_logged.disconnect(cb)
+			print("reach %.2f m %-10s closest to centre line %.2f m, hits %s" % [dist, sname, closest, hits])
+
+
 ## The real reaction: block chance 100 %, the dummy decides on its own.
 func _natural() -> void:
 	dummy.set_attacks_enabled(false)
 	room.reset_room()
 	player.take_weapon(room.katana)
-	player.teleport(Vector3(0.0, 0.0, 1.3))
+	player.teleport(Vector3(0.0, 0.0, 1.9))
 	var d := DuelistDifficulty.preset("normal")
-	d.block_chance = 1.0
-	d.evade_chance = 0.0
-	d.reaction_time = 0.05
+	var evade := OS.get_cmdline_user_args().has("--evade")
+	d.block_chance = 0.0 if evade else 1.0
+	d.evade_chance = 1.0 if evade else 0.0
+	d.anticipation = 1.0
 	d.attack_cooldown = Vector2(60, 60)
 	d.feint_chance = 0.0
 	d.combo_chance = 0.0
@@ -98,11 +129,13 @@ func _natural() -> void:
 	await _wait(0.8)
 	dummy.set_attacks_enabled(true)
 	await _wait(0.6)
-	print("dist before swing %.2f, tactic %s" % [Vector2(player.camera.global_position.x - dummy.root_part().global_position.x, player.camera.global_position.z - dummy.root_part().global_position.z).length(), DuelistBrain.TACTIC_NAMES[brain.tactic]])
+	print("dist before swing %.2f, state %s" % [Vector2(player.camera.global_position.x - dummy.root_part().global_position.x, player.camera.global_position.z - dummy.root_part().global_position.z).length(), brain.state_name()])
 	GameEvents.event_logged.connect(func(e): if e.type in ["enemy_block", "clash", "enemy_parry"]: print("      event ", e.type, " ", e.get("pose", ""), " landed=", e.get("landed", "")))
+	var kind := "overhead" if OS.get_cmdline_user_args().has("--overhead") else "horizontal"
+	player.teleport(Vector3(0.0, 0.0, 1.25))
 	player.swing_duration = 0.3
-	player.swing(DesktopPlayer.SLASH_HORIZONTAL)
-	for i in 45:
+	player.swing(DesktopPlayer.SLASH_OVERHEAD if kind == "overhead" else DesktopPlayer.SLASH_HORIZONTAL)
+	for i in 50:
 		await get_tree().physics_frame
 		var w := room.katana as HeldWeapon
 		var pa := w.get_blade_start_global()
@@ -110,8 +143,10 @@ func _natural() -> void:
 		var da := dummy.sword.global_transform * dummy.sword.blade_start
 		var db := dummy.sword.get_tip_global()
 		var pts := Geometry3D.get_closest_points_between_segments(pa, pb, da, db)
-		print("%2d %-7s %-11s player tip %s  dummy blade %s->%s  gap %.3f" % [i, brain.state_name(), brain._block_pose, _local(pb).snapped(Vector3.ONE * 0.01),
-			_local(da).snapped(Vector3.ONE * 0.01), _local(db).snapped(Vector3.ONE * 0.01), pts[0].distance_to(pts[1])])
+		var gl := brain.guard_line()
+		var want := "-" if gl.is_empty() else "%s dir %s" % [_local(gl[0]).snapped(Vector3.ONE * 0.01), (Basis(Vector3.UP, dummy._facing_yaw).inverse() * gl[1]).snapped(Vector3.ONE * 0.01)]
+		print("%2d d %.2f ld %s dec %s ev %.2f mv %s | ik %.2f err %.3f/%.0f° %-7s %-11s thr %s player %s->%s  dummy %s->%s want %s gap %.3f" % [i, Vector2(player.camera.global_position.x - dummy.root_part().global_position.x, player.camera.global_position.z - dummy.root_part().global_position.z).length(), brain._loading, brain._swing_decision, brain._evade_time, dummy.move_velocity.snapped(Vector3.ONE * 0.01), dummy.ik_weight, dummy.arm_ik.error_position, rad_to_deg(dummy.arm_ik.error_angle), brain.state_name(), brain._block_pose, "Y" if not brain._threat.is_empty() else "-", _local(pa).snapped(Vector3.ONE * 0.01), _local(pb).snapped(Vector3.ONE * 0.01),
+			_local(da).snapped(Vector3.ONE * 0.01), _local(db).snapped(Vector3.ONE * 0.01), want, pts[0].distance_to(pts[1])])
 
 
 func _local(p: Vector3) -> Vector3:

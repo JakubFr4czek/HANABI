@@ -32,6 +32,8 @@ var arm_ik: SwordArmIK
 var ik_iterations := 2
 ## [start, dir] (world) that overrides the brain's blade line (tests, debug).
 var forced_blade_line: Array = []
+var _pose_degrees := {}  # pose name -> {part: Vector3 euler degrees}
+var _ik_comfort := ""
 
 ## Spot the dummy returns to when not sparring, and how far it may roam from it.
 var home_position := Vector3.ZERO
@@ -40,9 +42,10 @@ var _straw := ShaderMaterial.new()  # weathered wood (wet_surface shader)
 var _sash := StandardMaterial3D.new()
 var _ink := StandardMaterial3D.new()
 var _eyes := StandardMaterial3D.new()  # glow up during a wind-up (the tell)
-var _prev_tips := {}  # player weapon -> tip position last tick
+var _prev_tips := {}  # player weapon -> [tip, blade start] last tick
 var _move_blocked := false
 var _step_time := 0.0
+var _stepping := false
 var _was_attacking := false
 var _hit_player_this_strike := false
 var _last_tell := 0.0
@@ -88,8 +91,10 @@ func _ready() -> void:
 	brain.setup(self, profile)
 	if hold_sword:
 		equip_sword()
+	_pose_degrees = _define_poses()
 	arm_ik = SwordArmIK.new()
-	arm_ik.setup(self, _rest_grip(), sword, _define_poses()["guard"])
+	arm_ik.setup(self, _rest_grip(), sword, _pose_degrees["guard"])
+	_ik_comfort = "guard"
 	state_changed.connect(_on_state_changed)
 
 
@@ -292,6 +297,29 @@ func _define_poses() -> Dictionary:
 			"upper_arm_l": Vector3(-68, -67, 12),
 			"lower_arm_l": Vector3(-4, -15, 0),
 		},
+		# Low side guards (hanging blade, point down) for cuts at the waist.
+		"block_low_left": {
+			"_stiffness": 1.8,
+			"_blend": 0.08,
+			"_ease": "out",
+			"chest": Vector3(-8, 14, 0),
+			"head": Vector3(-4, -9, 0),
+			"upper_arm_r": Vector3(57, 67, -107),
+			"lower_arm_r": Vector3(-48, -2, 0),
+			"upper_arm_l": Vector3(-88, -47, 4),
+			"lower_arm_l": Vector3(0, -15, 0),
+		},
+		"block_low_right": {
+			"_stiffness": 1.8,
+			"_blend": 0.08,
+			"_ease": "out",
+			"chest": Vector3(-8, 21, 0),
+			"head": Vector3(-4, -15, 0),
+			"upper_arm_r": Vector3(57, 67, -107),
+			"lower_arm_r": Vector3(-52, 57, 0),
+			"upper_arm_l": Vector3(-86, -67, 15),
+			"lower_arm_l": Vector3(1, 40, 0),
+		},
 		# Leg overlays while walking (arms keep the main pose): low sliding
 		# steps (suri-ashi), the feet barely leave the floor.
 		"step_l": {
@@ -438,6 +466,8 @@ func reach_blade_line(start: Vector3, dir: Vector3, weight: float = 1.0) -> void
 		return
 	if weight > 0.0:
 		arm_ik.solve(arm_ik.to_rest_frame(start), arm_ik.dir_to_rest_frame(dir), ik_iterations)
+	elif ik_weight <= 0.0:
+		arm_ik.sync_from_body()
 	set_ik(arm_ik.joint_targets(), weight)
 
 
@@ -497,13 +527,18 @@ func on_blade_contact(info: Dictionary) -> void:
 	var duelist := brain as DuelistBrain
 	if duelist == null:
 		return
-	if duelist.state == DuelistBrain.State.BLOCK:
-		if duelist.on_block_contact(info):
-			# Raised in time: the swing is deflected (the dummy's parry).
-			var weapon = info.get("weapon")
-			if weapon and weapon.has_method("feel_deflected"):
-				weapon.feel_deflected(info.get("point", sword.global_position if sword else global_position))
-			GameEvents.log_event("enemy_parry", {"enemy": profile.display_name})
+	if duelist.state in [DuelistBrain.State.BLOCK, DuelistBrain.State.STALK] or (duelist.state == DuelistBrain.State.RECOVER and not (sword and sword.attacking)):
+		match duelist.on_block_contact(info):
+			"parry":
+				# Raised in time against a light swing: deflected (the dummy's parry).
+				var weapon = info.get("weapon")
+				if weapon and weapon.has_method("feel_deflected"):
+					weapon.feel_deflected(info.get("point", sword.global_position if sword else global_position))
+				GameEvents.log_event("enemy_parry", {"enemy": profile.display_name})
+			"broken":
+				# A committed swing beat the guard aside: open for a moment.
+				_counter_time = profile.counter_window * 0.5
+				weaken(0.15, 0.25)
 	elif sword and sword.attacking:
 		sword.attacking = false
 		duelist.on_strike_blocked(info)
@@ -569,6 +604,12 @@ func _physics_process(delta: float) -> void:
 	if intent.has("face_position") and state == State.STANDING:
 		face_toward(intent.face_position)
 	_apply_move(intent.get("move", Vector3.ZERO), delta, intent.get("plant", false))
+	if arm_ik:
+		arm_ik.max_tick_change = SwordArmIK.MAX_TICK_CHANGE * float(intent.get("arm_speed", 1.0))
+		var comfort: String = intent.get("guard_pose", "guard")
+		if comfort != _ik_comfort and _pose_degrees.has(comfort):
+			_ik_comfort = comfort
+			arm_ik.set_comfort(_pose_degrees[comfort])
 	if not forced_blade_line.is_empty():
 		reach_blade_line(forced_blade_line[0], forced_blade_line[1], 1.0)
 	elif intent.has("guard_line"):
@@ -592,6 +633,9 @@ func _perceive(delta: float) -> Dictionary:
 		"can_act": state == State.STANDING,
 		"move_blocked": _move_blocked,
 	}
+	if sword:
+		ctx["sword_start"] = sword.global_transform * sword.blade_start
+		ctx["sword_dir"] = sword.get_blade_axis()
 	var head := get_tree().get_first_node_in_group("player_head") as Node3D
 	if head:
 		ctx["player_position"] = head.global_position
@@ -605,9 +649,19 @@ func _perceive(delta: float) -> Dictionary:
 			_prev_tips.erase(w)
 			continue
 		var tip := weapon.get_tip_global()
-		var prev: Vector3 = _prev_tips.get(w, tip)
-		_prev_tips[w] = tip
-		blades.append({"tip": tip, "velocity": (tip - prev) / maxf(delta, 1e-4)})
+		var start := weapon.get_blade_start_global()
+		var prev: Array = _prev_tips.get(w, [tip, start])
+		_prev_tips[w] = [tip, start]
+		if tip.distance_to(prev[0]) > 0.5 or Engine.get_physics_frames() - weapon.teleported_frame <= 2:
+			prev = [tip, start]  # teleported, not swung
+		blades.append({
+			"tip": tip,
+			"velocity": (tip - (prev[0] as Vector3)) / maxf(delta, 1e-4),
+			"start": start,
+			"start_velocity": (start - (prev[1] as Vector3)) / maxf(delta, 1e-4),
+			# How much arm is behind the blade right now (the swing's commitment).
+			"commit": smoothstep(0.05, weapon.full_power_travel, weapon.hand_travel),
+		})
 	ctx["player_blades"] = blades
 	return ctx
 
@@ -620,6 +674,7 @@ func _apply_move(move: Vector3, delta: float, planted := false) -> void:
 		move_velocity = Vector3.ZERO
 		overlay_pose = ""
 		_move_blocked = false
+		burst = false
 		return
 	if move.length() < 0.02:
 		move = Vector3.ZERO
@@ -630,8 +685,14 @@ func _apply_move(move: Vector3, delta: float, planted := false) -> void:
 		move_velocity = Vector3.ZERO
 	else:
 		move_velocity = move_velocity.move_toward(move, (BURST_ACCEL if planted else MOVE_ACCEL) * delta)
-	if move_velocity.length() > 0.15 and not planted:
-		_step_time += delta
+	burst = planted and move_velocity.length() > 0.5
+	# Step while moving, with hysteresis so a slow drift does not flicker
+	# between stepping and standing.
+	var v := move_velocity.length()
+	_stepping = not planted and (v > 0.2 or (_stepping and v > 0.08))
+	if _stepping:
+		# Slow drift, slow steps: each step covers ~0.14 m, 0.28-0.5 s long.
+		_step_time += delta * 0.28 / clampf(0.14 / maxf(v, 0.01), 0.28, 0.5)
 		overlay_pose = "step_l" if fmod(_step_time, 0.56) < 0.28 else "step_r"
 	else:
 		overlay_pose = ""
