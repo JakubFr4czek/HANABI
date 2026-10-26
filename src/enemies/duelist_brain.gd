@@ -37,6 +37,8 @@ const ATTACKS := {
 	"horizontal": {"windup_pose": "windup_h", "strike_pose": "strike_h", "windup": 0.55, "strike": 0.4, "recover": 0.55, "damage": 14.0, "range": 1.7, "lunge": 0.3},
 	"thrust": {"windup_pose": "windup_t", "strike_pose": "strike_t", "windup": 0.65, "strike": 0.32, "recover": 0.75, "damage": 20.0, "range": 2.0, "lunge": 1.2},
 }
+## Share of the recovery spent in the follow-through pose before the guard.
+const RECOVER_FOLLOW_THROUGH := 0.45
 ## Which attacks may follow which in a combo.
 const COMBOS := {
 	"vertical": ["horizontal", "thrust"],
@@ -159,6 +161,9 @@ func think(delta: float, ctx: Dictionary) -> Dictionary:
 				_recover_needed = 0.5
 				_enter(State.RECOVER)
 		State.RECOVER:
+			# Follow through first, then ease back into the guard.
+			if _timer < _recover_needed * RECOVER_FOLLOW_THROUGH:
+				intent.pose = "recover"
 			if _retreat_time > 0.0:
 				_retreat_time -= delta
 				intent.move = -fwd * difficulty.move_speed * 0.8

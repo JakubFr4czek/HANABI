@@ -13,6 +13,10 @@ signal hit_received(hit: Dictionary)
 const DUMMY_SWORD := preload("res://scenes/weapons/dummy_sword.tscn")
 const WET_SURFACE_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 
+## How fast the walking speed may change (m/s²): the body leans into a step
+## and carries its weight out of it instead of starting and stopping dead.
+const MOVE_ACCEL := 4.0
+
 @export var profile: EnemyProfile
 @export var hold_sword := true
 
@@ -102,6 +106,8 @@ func _define_parts() -> Dictionary:
 		d["lower_leg_" + side] = {"shape": "capsule", "radius": 0.055, "height": 0.44, "pos": Vector3(0.1 * s, 0.27, 0),
 			"mass": 4.5, "zone": "limb", "parent": "upper_leg_" + side, "joint": Vector3(0.1 * s, 0.48, 0), "max_torque": 400.0,
 			"limits": {"x": Vector2(-3, 140), "y": Vector2(-3, 3), "z": Vector2(-3, 3)},
+			# Feet slide over the stone (suri-ashi) instead of sticking and skipping.
+			"friction": 0.25,
 			"extra_shapes": [{"shape": "box", "size": Vector3(0.10, 0.06, 0.24), "offset": Vector3(0, -0.24, 0.05)}]}
 	return d
 
@@ -115,6 +121,7 @@ func _define_poses() -> Dictionary:
 	return {
 		# Chūdan-ish guard: sword in the right hand, held forward and up.
 		"guard": {
+			"_blend": 0.45,
 			"chest": Vector3(8, 0, 0),
 			"head": Vector3(-6, 0, 0),
 			"upper_arm_r": Vector3(-40, 0, 15),
@@ -129,6 +136,7 @@ func _define_poses() -> Dictionary:
 		# Overhead cut, telegraphed: sword raised behind the head...
 		"windup": {
 			"_stiffness": 1.3,
+			"_blend": 0.4,
 			"chest": Vector3(-8, 0, 0),
 			"head": Vector3(-5, 0, 0),
 			"upper_arm_r": Vector3(-150, 0, 10),
@@ -143,7 +151,9 @@ func _define_poses() -> Dictionary:
 		# ...then brought down and forward fast.
 		"strike": {
 			"_stiffness": 1.5,
-			"_max_speed": 7.0,
+			"_max_speed": 6.0,
+			"_blend": 0.14,
+			"_ease": "in",
 			"chest": Vector3(22, 0, 0),
 			"head": Vector3(-12, 0, 0),
 			"upper_arm_r": Vector3(-45, 0, 12),
@@ -158,6 +168,7 @@ func _define_poses() -> Dictionary:
 		# Horizontal cut, right to left: sword drawn back past the right shoulder...
 		"windup_h": {
 			"_stiffness": 1.3,
+			"_blend": 0.4,
 			"chest": Vector3(4, -14, 0),
 			"head": Vector3(-6, 20, 0),
 			"upper_arm_r": Vector3(-67, -61, -39),
@@ -172,7 +183,9 @@ func _define_poses() -> Dictionary:
 		# ...then swept across at chest height.
 		"strike_h": {
 			"_stiffness": 1.5,
-			"_max_speed": 7.0,
+			"_max_speed": 6.0,
+			"_blend": 0.14,
+			"_ease": "in",
 			"chest": Vector3(10, 13, 0),
 			"head": Vector3(-8, -20, 0),
 			"upper_arm_r": Vector3(-85, 30, -34),
@@ -187,6 +200,7 @@ func _define_poses() -> Dictionary:
 		# Thrust: fist pulled back to the hip, point aimed at the player...
 		"windup_t": {
 			"_stiffness": 1.3,
+			"_blend": 0.4,
 			"chest": Vector3(-22, -1, 0),
 			"head": Vector3(-6, 18, 0),
 			"upper_arm_r": Vector3(49, -1, -38),
@@ -202,6 +216,8 @@ func _define_poses() -> Dictionary:
 		"strike_t": {
 			"_stiffness": 1.6,
 			"_max_speed": 8.0,
+			"_blend": 0.12,
+			"_ease": "in",
 			"chest": Vector3(18, 8, 0),
 			"head": Vector3(-14, -6, 0),
 			"upper_arm_r": Vector3(-74, 0, 8),
@@ -216,6 +232,8 @@ func _define_poses() -> Dictionary:
 		# Blocks: the bokken raised across the head, or held upright on one side.
 		"block_high": {
 			"_stiffness": 1.6,
+			"_blend": 0.12,
+			"_ease": "out",
 			"chest": Vector3(0, 0, 0),
 			"head": Vector3(-4, 0, 0),
 			"upper_arm_r": Vector3(-130, 35, -25),
@@ -225,6 +243,8 @@ func _define_poses() -> Dictionary:
 		},
 		"block_right": {
 			"_stiffness": 1.6,
+			"_blend": 0.12,
+			"_ease": "out",
 			"chest": Vector3(4, -18, 0),
 			"head": Vector3(-4, 15, 0),
 			"upper_arm_r": Vector3(-45, -45, -35),
@@ -234,6 +254,8 @@ func _define_poses() -> Dictionary:
 		},
 		"block_left": {
 			"_stiffness": 1.6,
+			"_blend": 0.12,
+			"_ease": "out",
 			"chest": Vector3(4, 22, 0),
 			"head": Vector3(-4, -15, 0),
 			"upper_arm_r": Vector3(-55, 55, 5),
@@ -241,22 +263,25 @@ func _define_poses() -> Dictionary:
 			"upper_arm_l": Vector3(-40, 25, -10),
 			"lower_arm_l": Vector3(-60, 0, 0),
 		},
-		# Leg overlays while walking (arms keep the main pose).
+		# Leg overlays while walking (arms keep the main pose): low sliding
+		# steps (suri-ashi), the feet barely leave the floor.
 		"step_l": {
-			"upper_leg_l": Vector3(-30, 0, 6),
-			"lower_leg_l": Vector3(40, 0, 0),
-			"upper_leg_r": Vector3(8, 0, -6),
-			"lower_leg_r": Vector3(6, 0, 0),
+			"upper_leg_l": Vector3(-20, 0, 6),
+			"lower_leg_l": Vector3(26, 0, 0),
+			"upper_leg_r": Vector3(6, 0, -6),
+			"lower_leg_r": Vector3(8, 0, 0),
 		},
 		"step_r": {
-			"upper_leg_l": Vector3(8, 0, 6),
-			"lower_leg_l": Vector3(6, 0, 0),
-			"upper_leg_r": Vector3(-30, 0, -6),
-			"lower_leg_r": Vector3(40, 0, 0),
+			"upper_leg_l": Vector3(6, 0, 6),
+			"lower_leg_l": Vector3(8, 0, 0),
+			"upper_leg_r": Vector3(-20, 0, -6),
+			"lower_leg_r": Vector3(26, 0, 0),
 		},
 		# Thrown off balance after a parry: arms flung up and back.
 		"staggered": {
 			"_stiffness": 0.7,
+			"_blend": 0.18,
+			"_ease": "out",
 			"chest": Vector3(-15, 0, 0),
 			"head": Vector3(-15, 0, 0),
 			"upper_arm_r": Vector3(-120, 0, -30),
@@ -268,7 +293,24 @@ func _define_poses() -> Dictionary:
 			"upper_leg_r": Vector3(10, 0, -8),
 			"lower_leg_r": Vector3(10, 0, 0),
 		},
-		"idle": {},
+		# Follow-through after a strike: the blade carried low, weight still
+		# forward, muscles loose; the brain then eases back into the guard.
+		"recover": {
+			"_stiffness": 0.85,
+			"_blend": 0.2,
+			"_ease": "out",
+			"chest": Vector3(16, 0, 0),
+			"head": Vector3(-10, 0, 0),
+			"upper_arm_r": Vector3(-25, 0, 14),
+			"lower_arm_r": Vector3(-25, 0, 0),
+			"upper_arm_l": Vector3(-30, 0, -22),
+			"lower_arm_l": Vector3(-35, 0, 0),
+			"upper_leg_l": Vector3(-20, 0, 6),
+			"lower_leg_l": Vector3(22, 0, 0),
+			"upper_leg_r": Vector3(12, 0, -6),
+			"lower_leg_r": Vector3(10, 0, 0),
+		},
+		"idle": {"_blend": 0.6},
 	}
 
 
@@ -511,16 +553,23 @@ func _perceive(delta: float) -> Dictionary:
 	return ctx
 
 
-## Walk the anchor, but not into walls, props or the table.
+## Walk the anchor, but not into walls or props.
 func _apply_move(move: Vector3, delta: float) -> void:
 	move.y = 0.0
-	if state != State.STANDING or move.length() < 0.02:
+	if state != State.STANDING:
 		move_velocity = Vector3.ZERO
 		overlay_pose = ""
 		_move_blocked = false
 		return
-	_move_blocked = _blocked_toward(move.normalized())
-	move_velocity = Vector3.ZERO if _move_blocked else move
+	if move.length() < 0.02:
+		move = Vector3.ZERO
+		_move_blocked = false
+	else:
+		_move_blocked = _blocked_toward(move.normalized())
+	if _move_blocked:
+		move_velocity = Vector3.ZERO
+	else:
+		move_velocity = move_velocity.move_toward(move, MOVE_ACCEL * delta)
 	if move_velocity.length() > 0.15:
 		_step_time += delta
 		overlay_pose = "step_l" if fmod(_step_time, 0.56) < 0.28 else "step_r"
