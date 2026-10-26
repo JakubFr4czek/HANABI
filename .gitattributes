@@ -1,0 +1,13 @@
+# Normalize line endings for text, keep binaries untouched
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ogg binary
+*.mp3 binary
+*.wav binary
+*.glb binary
+*.hdr binary
+*.so binary
+*.dll binary
+*.aar binary
+*.ttf binary
