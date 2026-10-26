@@ -130,7 +130,7 @@ At the start of a run the player hovers about 0.5–1 m above the arena in a med
 3. **Elements:** ofuda level-up, upgrade trees, slot limit and evolutions.
 4. **World:** procedural torii, fog, VFX and the spawn symbol.
 5. **Meta AI:** `call_llm`, telemetry, awakened enemies, Oni brain and run memory. Reserve about 2 days before the deadline.
-6. **Demo:** VR comfort and accessibility, polish, record a 2–3 minute video, write the description and submit.
+6. **Demo:** VR comfort and accessibility, polish, record a 2–3 minute video, write the description and submit. Only after that, and first to cut: the calories estimate (cherry on top).
 
 **Cut rule:** if behind schedule, cut content (fewer upgrades, simpler world), never the sword physics or the AI enemies.
 
@@ -162,3 +162,12 @@ End of project, after core gameplay (roadmap phase 6). Do not implement during p
 - **Vignette:** a comfort vignette while moving, with a toggle and a strength setting (`vignette`).
 - **Body:** player height and seated-mode calibration.
 - **Hands:** dominant-hand swap.
+
+## 15. Cherry on top: calories (LATE, lowest priority)
+Only at the very end, after comfort and the demo. First thing to cut. Do not implement during prototyping. The number is an estimate, not a medical measure. Follow the premium art-direction rule: a quiet diegetic mark, no fitness-app UI.
+
+- **Estimate:** MET-style. kcal ≈ MET × body weight (kg) × hours. MET rises with headset motion (vertical and horizontal: squats, lunges, dodges), controller swing speed and acceleration, and the count of strong cuts. Body weight is an optional setting; default about 70 kg. Always label the figure as an estimate.
+- **In session:** a small readout on the wrist or hand, glanceable, beside the existing time.
+- **After the session:** kcal, time, swings, and parries, added quietly to the end screen.
+- **Optional:** personal bests and a short local history.
+- **Stretch:** a later link to Meta / Health apps. Not this pass.
