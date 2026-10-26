@@ -84,14 +84,14 @@ func _run() -> void:
 
 	# 4. The held sword cannot be pushed through a wall.
 	room.reset_room()
-	player.teleport(Vector3(0, 0, -3.9))  # 1.1 m in front of the north wall (inner face z = -5.0)
+	player.teleport(Vector3(0, 0, -4.05))  # 1.1 m in front of the round boundary (inner face r = 5.15)
 	await _wait(0.5)
 	var deepest := 0.0
 	player.swing(DesktopPlayer.THRUST)
 	for f in 90:
 		await get_tree().physics_frame
 		deepest = minf(deepest, sword.get_tip_global().z)
-	_check("thrust into the wall stops at the wall (tip z min %.2f, wall face -5.00)" % deepest, deepest > -5.06)
+	_check("thrust into the wall stops at the wall (tip z min %.2f, wall face -5.15)" % deepest, deepest > -5.21)
 
 	# 5. The dummy holds a physics sword in its guard; blade vs blade is detected.
 	# Step the player back and drop the bokken so it does not push the dummy.
