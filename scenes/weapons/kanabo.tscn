@@ -52,7 +52,7 @@ size = Vector3(0.03, 0.03, 0.03)
 
 [node name="Kanabo" type="RigidBody3D"]
 collision_layer = 4
-collision_mask = 27
+collision_mask = 59
 mass = 4.0
 physics_material_override = SubResource("PhysicsMaterial_iron")
 center_of_mass_mode = 1

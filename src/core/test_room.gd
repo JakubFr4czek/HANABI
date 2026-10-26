@@ -136,7 +136,6 @@ func _setup_dojo_visuals() -> void:
 		_setup_seal_kanji(seal_mesh)
 
 	_style_torii_gates(arena)
-	_style_lanterns(arena)
 	_update_seal_element(Elements.NONE)
 
 
@@ -244,21 +243,6 @@ func _style_torii_gates(arena: Node) -> void:
 			sunken_mat.set_shader_parameter("flash", 0.0)
 		var is_giant := mi.get_path().get_concatenated_names().contains("GiantTorii")
 		mi.material_override = hero_mat if is_giant else sunken_mat
-
-
-func _style_lanterns(arena: Node) -> void:
-	var lanterns := arena.get_node_or_null("Lanterns")
-	if lanterns == null:
-		return
-	var stone := _wet_material(Color(0.14, 0.14, 0.16), 0.75, 0.18, 0.75, -10.0)
-	for child in lanterns.find_children("*", "MeshInstance3D", true, false):
-		var mi := child as MeshInstance3D
-		mi.gi_mode = GeometryInstance3D.GI_MODE_STATIC
-		var mat := stone.duplicate() as ShaderMaterial
-		var orig := mi.mesh.surface_get_material(0) as StandardMaterial3D if mi.mesh and mi.mesh.get_surface_count() > 0 else null
-		if orig and orig.albedo_texture:
-			mat.set_shader_parameter("albedo_texture", orig.albedo_texture)
-		mi.material_override = mat
 
 
 static func _wet_material(color: Color, rough_dry: float, rough_wet: float, wetness: float, waterline_y: float) -> ShaderMaterial:
