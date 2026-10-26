@@ -107,7 +107,7 @@ At the start of a run the player hovers about 0.5–1 m above the arena in a med
 3. **Elements:** ofuda level-up, upgrade trees, slot limit and evolutions.
 4. **World:** procedural torii, fog, VFX and the spawn symbol.
 5. **Meta AI:** `call_llm`, telemetry, awakened enemies, Oni brain and run memory. Reserve about 2 days before the deadline.
-6. **Demo:** polish and record a 2–3 minute video, write the description and submit.
+6. **Demo:** VR comfort and accessibility, polish, record a 2–3 minute video, write the description and submit.
 
 **Cut rule:** if behind schedule, cut content (fewer upgrades, simpler world), never the sword physics or the AI enemies.
 
@@ -115,7 +115,7 @@ At the start of a run the player hovers about 0.5–1 m above the arena in a med
 - **Stabbing / impaling (Blade & Sorcery style):** the blade tip enters a body when the hit velocity is along the blade axis; a slider joint locks it to that axis with friction; the blade is pulled out by retracting it past the entry point.
 
 ## 13. Open questions
-- Locomotion: smooth only, or teleport as a comfort option? (Current build: smooth move on the left stick, snap turn on the right stick.)
+- Locomotion: decided in VR Comfort & Accessibility; build it in the final phase. Current build: smooth move on the left stick, snap turn on the right stick.
 - Placeholders in the test room (2026-10-26): the training dummy and both bokken are built from Godot primitives; the Quaternius base character / katana models are not used yet. Skinning the Quaternius mesh onto the active ragdoll is planned with the yōkai (milestone 2).
 - Balance numbers for the dummy (first pass): damage = (relative speed − 1.5 m/s) × 9, cap 120; one full swing (~10 m/s) staggers, two quick heavy hits knock it down. Tune by feel in the headset.
 - Active ragdoll muscles currently act like animation (no reaction torque on the parent) for stability; full momentum-conserving muscles are a later polish item.
@@ -125,3 +125,12 @@ At the start of a run the player hovers about 0.5–1 m above the arena in a med
 - Exact element and evolution balance numbers?
 - Does Meta offer TTS, or do we use Piper?
 - Which fields does the hackathon submission form require?
+
+## 14. VR Comfort & Accessibility (LATE)
+End of project, after core gameplay (roadmap phase 6). Do not implement during prototyping. `godot-xr-tools` already provides most of this.
+
+- **Turning:** smooth or snap, with an adjustable snap angle and smooth turn speed (`movement_turn`).
+- **Locomotion:** stick (smooth, `movement_direct`) or teleport (`function_teleport`). Teleport conflicts with fast survivor-style combat, so also offer a short dash/blink as the combat-friendly alternative.
+- **Vignette:** a comfort vignette while moving, with a toggle and a strength setting (`vignette`).
+- **Body:** player height and seated-mode calibration.
+- **Hands:** dominant-hand swap.
