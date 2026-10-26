@@ -25,9 +25,11 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/audio/sfx/sword_swing/sword.*.ogg` | https://opengameart.org/content/20-sword-sound-effects-attacks-and-clashes | StarNinjas | CC0 |
 | `assets/audio/sfx/sword_clash/sword_clash.*.ogg` | same pack | StarNinjas | CC0 |
 | `assets/audio/sfx/impact/impactPlank_medium_*.ogg`, `impactPunch_heavy_*.ogg` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 |
+| `assets/models/weapons/katana_grab3d/katana.glb` | https://grab3d.com/models/weapons/katana/ | Grab3D | CC0 1.0 |
 
 ## Generated in-project (no third-party license)
-- Training dummy, practice bokken, test room: built from Godot primitives (`CapsuleMesh`, `BoxMesh`, `CylinderMesh`) in `scenes/` and `src/`.
+- Training dummy, the dummy's bokken, the kanabō and the test room: built from Godot primitives (`CapsuleMesh`, `BoxMesh`, `CylinderMesh`, `TorusMesh`) in `scenes/` and `src/`.
+- Blade trails and spark bursts: generated at runtime (`ImmediateMesh`, `CPUParticles3D`).
 
 ## Raw packs available locally (`assets_raw/`, not committed)
 

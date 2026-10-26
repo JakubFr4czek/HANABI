@@ -35,7 +35,7 @@ func _run() -> void:
 	await _wait(3.0)
 	_check("dummy stands (pelvis height %.2f m)" % dummy.pelvis_height(), absf(dummy.pelvis_height() - 0.98) < 0.12)
 	_check("dummy upright (lean %.1f°)" % dummy.lean_degrees(), dummy.lean_degrees() < 15.0)
-	_check("player holds the practice sword", sword.is_held())
+	_check("player holds the katana", sword.is_held())
 
 	# 2. Slow vs fast horizontal slash: faster swing -> faster impact, more damage.
 	var slow := await _slash_and_get_hit(0.6)
@@ -57,7 +57,7 @@ func _run() -> void:
 		# Step in 1.15 m in front of the dummy, then a fast slash; 0.55 s apart
 		# so balance has little time to recover between hits.
 		var target := dummy.root_part().global_position
-		player.global_position = Vector3(target.x, 0, target.z + 1.15)
+		player.teleport(Vector3(target.x, 0, target.z + 1.15))
 		player.swing_duration = 0.1
 		player.swing(DesktopPlayer.SLASH_HORIZONTAL)
 		for f in 50:
@@ -68,20 +68,23 @@ func _run() -> void:
 			break
 	_check("heavy hits stagger (min balance %.2f)" % min_balance, min_balance < 0.8)
 	_check("repeated heavy hits knock the dummy down", was_down)
-	player.global_position = Vector3(0, 0, 2.5)  # step back so our blade is not in the way
+	player.teleport(Vector3(0, 0, 2.5))  # step back so our blade is not in the way
 	var trace := ""
 	for k in 12:
 		await _wait(0.5)
 		trace += " [%d h%.2f l%.0f p%s]" % [dummy.state, dummy.pelvis_height(), dummy.lean_degrees(), Vector2(dummy.root_part().global_position.x, dummy.root_part().global_position.z).snapped(Vector2.ONE * 0.1)]
 	if dummy.state != ActiveRagdoll.State.STANDING or dummy.pelvis_height() < 0.83:
 		print("    get-up trace (state, pelvis height, lean, pelvis xz every 0.5 s):" + trace)
+		print("    joint errors (deg): ", dummy.pose_errors())
+		print("    balance %.2f muscle %.2f pelvis v %s time_scale %.2f pose %s anchor %s" % [dummy.balance, dummy.muscle, dummy.root_part().linear_velocity.snapped(Vector3.ONE * 0.01), Engine.time_scale, dummy.current_pose, dummy.anchor_position])
+		for n in dummy.parts:
+			print("      %-12s %s" % [n, (dummy.parts[n] as Node3D).global_position.snapped(Vector3.ONE * 0.01)])
 	_check("dummy gets back up (state %d, height %.2f, lean %.1f°)" % [dummy.state, dummy.pelvis_height(), dummy.lean_degrees()],
 		dummy.state == ActiveRagdoll.State.STANDING and absf(dummy.pelvis_height() - 0.98) < 0.15 and dummy.lean_degrees() < 20.0)
 
 	# 4. The held sword cannot be pushed through a wall.
 	room.reset_room()
-	player.global_position = Vector3(0, 0, -3.9)  # 1.1 m in front of the north wall (inner face z = -5.0)
-	player.rotation = Vector3.ZERO
+	player.teleport(Vector3(0, 0, -3.9))  # 1.1 m in front of the north wall (inner face z = -5.0)
 	await _wait(0.5)
 	var deepest := 0.0
 	player.swing(DesktopPlayer.THRUST)
@@ -93,7 +96,7 @@ func _run() -> void:
 	# 5. The dummy holds a physics sword in its guard; blade vs blade is detected.
 	# Step the player back and drop the bokken so it does not push the dummy.
 	player.holder.release()
-	player.global_position = Vector3(0, 0, 3.5)
+	player.teleport(Vector3(0, 0, 3.5))
 	room.reset_room()
 	dummy.equip_sword()
 	await _wait(2.0)
@@ -120,8 +123,7 @@ func _run() -> void:
 ## Slash at the dummy with the given swing time; return the first hit (or {}).
 func _slash_and_get_hit(duration: float) -> Dictionary:
 	room.reset_room()
-	player.global_position = Vector3(0, 0, 1.15)
-	player.rotation = Vector3.ZERO
+	player.teleport(Vector3(0, 0, 1.15))
 	player.hand_offset = Vector3.ZERO
 	await _wait(1.5)
 	hits.clear()

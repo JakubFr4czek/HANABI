@@ -20,10 +20,16 @@ var held: HeldWeapon = null
 
 var _controller: XRController3D = null
 var _recall_was_pressed := false
+var _hand: Node3D = null  # XR Tools hand model next to us, if any
+var _hand_anchor: Node3D = null  # follows the weapon; the hand model is pinned to it
 
 
 func _ready() -> void:
 	_controller = get_parent() as XRController3D
+	if _controller:
+		for sibling in _controller.get_children():
+			if sibling is XRToolsHand:
+				_hand = sibling
 
 
 func get_grip_transform() -> Transform3D:
@@ -38,13 +44,36 @@ func grab(weapon: HeldWeapon) -> void:
 	release()
 	held = weapon
 	weapon.on_grabbed(self)
+	_pin_hand_to(weapon)
 
 
 func release() -> void:
 	if held:
 		var w := held
 		held = null
+		_unpin_hand()
 		w.on_released()
+
+
+## Show the hand where the sword is, not where the controller is: when the blade
+## is stopped by a wall, the hand stays on the hilt. The anchor sits on the
+## weapon where the controller would be if the grip were exactly on target.
+func _pin_hand_to(weapon: HeldWeapon) -> void:
+	if _hand == null or not _hand.has_method("add_target_override"):
+		return
+	_hand_anchor = Node3D.new()
+	_hand_anchor.name = "HandAnchor_" + side
+	weapon.add_child(_hand_anchor)
+	_hand_anchor.transform = transform.affine_inverse()
+	_hand.add_target_override(_hand_anchor, 10)
+
+
+func _unpin_hand() -> void:
+	if _hand_anchor:
+		if _hand:
+			_hand.remove_target_override(_hand_anchor)
+		_hand_anchor.queue_free()
+		_hand_anchor = null
 
 
 ## Teleport the nearest free weapon into the hand and grab it.
