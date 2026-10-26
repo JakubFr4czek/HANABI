@@ -25,9 +25,9 @@ tactics = {
 "attacks": false,
 "block_time": 0.7,
 "difficulty": "normal",
-"engage_distance": 1.55,
+"engage_distance": 1.9,
 "interrupt_damage": 25.0,
 "leash_radius": 3.0,
-"min_distance": 0.95,
+"min_distance": 1.1,
 "track_player": true
 }

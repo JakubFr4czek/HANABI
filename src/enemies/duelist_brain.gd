@@ -3,13 +3,19 @@ extends EnemyBrain
 ## Sword duelist: a readable state machine for the training dummy (and later
 ## oni / samurai yōkai). It decides *what* to do; the body executes it.
 ##
-##   IDLE ──(sparring on)──> STALK ──(cooldown over, in range, in view)──> ATTACK
-##   STALK: close in, back off, circle at engage distance, never leaving the
-##          player's view for long; may raise a BLOCK against a player swing.
-##   ATTACK: WINDUP (anticipation pose + tell) -> STRIKE (blade "attacking",
-##          the parry window) -> combo into another attack, or RECOVER.
-##          A wind-up may be a feint that switches into a different attack.
-##   BLOCK -> STALK, or a riposte (new ATTACK) after a successful block.
+##   IDLE ──(sparring on)──> STALK ──(cooldown over, in reach, in view)──> ATTACK
+##   STALK: keeps ma-ai, the distance just outside its own reach, and varies
+##          what it does there (TACTIC_NAMES): holds still, circles, probes a
+##          half step in, or backs off, each for a random while. It only walks
+##          in when the player is clearly too far. Reacts to a player swing
+##          with a BLOCK or a step back out of reach (evade).
+##   ATTACK: WINDUP with the feet planted (anticipation pose + tell), sometimes
+##          held a moment longer (hesitation) -> STRIKE with one decisive step
+##          in that covers the gap (blade "attacking", the parry window) ->
+##          combo into another attack, or RECOVER (follow-through, then a step
+##          back to ma-ai). A wind-up may be a feint into a different attack.
+##   BLOCK -> STALK, or a riposte (new ATTACK) after a block that landed; a
+##          block raised early enough deflects the swing (enemy parry).
 ##   STAGGER (parried, or hit hard during a wind-up) -> RECOVER -> STALK.
 ##
 ## Fairness rules (not tunable): a strike only comes after at least MIN_TELL
@@ -17,13 +23,23 @@ extends EnemyBrain
 ## cone, and a wind-up the player cannot see for LOOK_AWAY_ABORT is dropped.
 ##
 ## Tactics read from the profile: attacks, track_player, attack_set,
-## engage_distance, min_distance, leash_radius, block_time, interrupt_damage,
-## difficulty (preset name, used when the profile has no [DuelistDifficulty]).
+## engage_distance (ma-ai), min_distance, leash_radius, block_time,
+## interrupt_damage, difficulty (preset name, used when the profile has no
+## [DuelistDifficulty]).
 
 enum State { IDLE, STALK, ATTACK, BLOCK, STAGGER, RECOVER }
 enum AttackPhase { NONE, WINDUP, STRIKE }
+enum Tactic { HOLD, CIRCLE, PROBE, BACK_OFF }
 
 const STATE_NAMES := ["idle", "stalk", "attack", "block", "stagger", "recover"]
+const TACTIC_NAMES := ["hold", "circle", "probe", "back_off"]
+## Longest step in (m) the strike may take to cover the gap to the player.
+const MAX_STEP := 0.55
+## A block that meets the player's blade within this many seconds of being
+## raised deflects the swing (the enemy's parry).
+const PARRY_WINDOW := 0.4
+## Seconds after raising a block during which it keeps following the blade.
+const BLOCK_TRACK_TIME := 0.35
 ## Shortest wind-up the player ever gets to read an attack (seconds).
 const MIN_TELL := 0.4
 ## The enemy counts as seen inside this half-angle of the player's view (deg).
@@ -73,10 +89,20 @@ var _retreat_time := 0.0
 var _block_pose := "block_high"
 var _block_react := -1.0
 var _block_tip := Vector3.ZERO
+var _block_vel := Vector3.ZERO
 var _block_landed := false
+var _block_landed_at := 0.0
 var _swing_watch_cooldown := 0.0
 var _forced_attack := ""
 var _rng := RandomNumberGenerator.new()
+var tactic := Tactic.CIRCLE
+var _tactic_time := 0.0
+var _circle_speed := 0.5
+var _closing := false
+var _hesitate := 0.0
+var _step_speed := 0.0
+var _evade_time := 0.0
+var _zanshin_time := 0.0
 
 
 func setup(p_body: Node3D, p_profile: EnemyProfile) -> void:
@@ -96,6 +122,8 @@ func reset() -> void:
 	_forced_attack = ""
 	_block_react = -1.0
 	_retreat_time = 0.0
+	_evade_time = 0.0
+	_closing = false
 	_cooldown = 1.0
 	current_attack = ""
 	strikes_in_sequence = 0
@@ -150,8 +178,11 @@ func think(delta: float, ctx: Dictionary) -> Dictionary:
 		State.ATTACK:
 			_attack(delta, ctx, dist, fwd, intent)
 		State.BLOCK:
+			_track_block(ctx)
 			intent.pose = _block_pose
-			if _timer >= float(t.get("block_time", 0.7)):
+			intent.plant = true
+			# Hold until the swing has passed: a while after contact, or the full time.
+			if _timer >= float(t.get("block_time", 0.7)) or (_block_landed and _timer >= _block_landed_at + 0.25):
 				_enter(State.STALK)
 		State.STAGGER:
 			intent.pose = "staggered"
@@ -161,14 +192,26 @@ func think(delta: float, ctx: Dictionary) -> Dictionary:
 				_recover_needed = 0.5
 				_enter(State.RECOVER)
 		State.RECOVER:
-			# Follow through first, then ease back into the guard.
-			if _timer < _recover_needed * RECOVER_FOLLOW_THROUGH:
+			# Follow through first, then ease back into the guard while
+			# stepping back out to ma-ai (zanshin) instead of staying in the
+			# player's face.
+			var follow := _recover_needed * RECOVER_FOLLOW_THROUGH
+			if _timer < follow:
 				intent.pose = "recover"
+				intent.plant = true
+			elif _zanshin_time > 0.0 and dist < float(t.get("engage_distance", 1.9)):
+				_zanshin_time -= delta
+				intent.move = -fwd * difficulty.move_speed * 0.8
 			if _retreat_time > 0.0:
 				_retreat_time -= delta
 				intent.move = -fwd * difficulty.move_speed * 0.8
-			if _timer >= _recover_needed:
+			if _timer >= follow:
+				_watch_player_blades(delta, ctx)
+			if state == State.RECOVER and _timer >= _recover_needed:
 				_enter(State.STALK)
+				# Finish the step back out to ma-ai while settling into the guard.
+				if dist < float(t.get("engage_distance", 1.9)) - 0.15:
+					_retreat_time = maxf(_zanshin_time, 0.3)
 	intent.move = _keep_in_leash(intent.move, ctx, t)
 	return intent
 
@@ -186,17 +229,21 @@ func on_strike_blocked(_info: Dictionary) -> void:
 		_enter_recover(ATTACKS[current_attack].recover * difficulty.recover_scale * 1.2)
 
 
-## Our raised guard met the player's blade.
-func on_block_contact(_info: Dictionary) -> void:
+## Our raised guard met the player's blade. Returns true when the block was
+## early enough to deflect the swing (the enemy's parry).
+func on_block_contact(_info: Dictionary) -> bool:
 	if state != State.BLOCK or _block_landed:
-		return
+		return false
 	_block_landed = true
-	var riposte := _rng.randf() < difficulty.riposte_chance
-	GameEvents.log_event("enemy_block", {"enemy": _name(), "pose": _block_pose, "landed": true, "riposte": riposte})
+	_block_landed_at = _timer
+	var parry := _timer <= PARRY_WINDOW
+	var riposte := _rng.randf() < minf(difficulty.riposte_chance * (2.0 if parry else 1.0), 1.0)
+	GameEvents.log_event("enemy_block", {"enemy": _name(), "pose": _block_pose, "landed": true, "parry": parry, "riposte": riposte})
 	if riposte:
 		var attack := _pick_attack(INF)
 		if attack != "":
 			_start_attack(attack, 0.6)
+	return parry
 
 
 func on_hit(hit: Dictionary) -> void:
@@ -206,8 +253,9 @@ func on_hit(hit: Dictionary) -> void:
 		GameEvents.log_event("enemy_interrupted", {"enemy": _name(), "attack": current_attack, "damage": dmg})
 		_stagger_needed = difficulty.stagger_time * 0.6
 		_enter(State.STAGGER)
-	elif state == State.STALK and dmg > 0.0 and _rng.randf() < 0.5:
+	elif state in [State.STALK, State.RECOVER] and dmg > 0.0 and _rng.randf() < 0.5:
 		_retreat_time = 0.6
+		_closing = false
 
 
 func state_name() -> String:
@@ -217,33 +265,78 @@ func state_name() -> String:
 # --- States -------------------------------------------------------------------
 
 func _stalk(delta: float, ctx: Dictionary, t: Dictionary, dist: float, fwd: Vector3, intent: Dictionary) -> void:
-	var engage := float(t.get("engage_distance", 1.55))
-	var min_d := float(t.get("min_distance", 0.95))
+	var ma_ai := float(t.get("engage_distance", 1.9))
+	var min_d := float(t.get("min_distance", 1.1))
 	var speed := difficulty.move_speed
 	var side := Vector3(fwd.z, 0.0, -fwd.x)
+	if _evade_time > 0.0:
+		# A quick step back out of reach of the player's swing.
+		_evade_time -= delta
+		intent.move = -fwd * speed * 1.5
+		intent.plant = true
+		return
 	if _retreat_time > 0.0:
 		_retreat_time -= delta
 		intent.move = -fwd * speed
-	elif dist > engage + 0.25:
+	elif dist > ma_ai + 0.45 or (_closing and dist > ma_ai + 0.05):
+		# Clearly too far: walk in, then stop at ma-ai (hysteresis, so it does
+		# not keep creeping toward a player who only drifts back a little).
+		_closing = true
 		intent.move = fwd * speed
 	elif dist < min_d:
+		_closing = false
 		intent.move = -fwd * speed * 0.9
 	else:
-		_circle_timer -= delta
-		if _circle_timer <= 0.0 or ctx.get("move_blocked", false):
-			_circle_timer = _rng.randf_range(1.2, 2.6)
-			_circle_dir = -_circle_dir if (ctx.get("move_blocked", false) or _rng.randf() < 0.5) else _circle_dir
-		# Drift back toward the middle of the player's view instead of flanking.
-		if absf(_view_angle(ctx)) > VIEW_HALF_ANGLE * 0.6:
-			_circle_dir = _side_toward_view(ctx, side)
-		intent.move = side * _circle_dir * speed * 0.5 + fwd * clampf((dist - engage) * 1.5, -0.5, 0.5)
+		_closing = false
+		_tactic_time -= delta
+		if _tactic_time <= 0.0 or ctx.get("move_blocked", false):
+			_pick_tactic(ctx.get("move_blocked", false))
+		match tactic:
+			Tactic.HOLD:
+				# Stand ground, only keep the distance.
+				intent.move = fwd * clampf((dist - ma_ai) * 1.2, -0.3, 0.3)
+			Tactic.CIRCLE:
+				# Drift back toward the middle of the player's view instead of flanking.
+				if absf(_view_angle(ctx)) > VIEW_HALF_ANGLE * 0.6:
+					_circle_dir = _side_toward_view(ctx, side)
+				intent.move = side * _circle_dir * _circle_speed * speed + fwd * clampf((dist - ma_ai) * 1.5, -0.5, 0.5)
+			Tactic.PROBE:
+				# Half a step into the player's reach to draw a reaction.
+				intent.move = fwd * clampf((dist - (ma_ai - 0.35)) * 2.5, -speed, speed * 0.8)
+			Tactic.BACK_OFF:
+				intent.move = fwd * clampf((dist - (ma_ai + 0.4)) * 2.5, -speed * 0.8, speed)
 
-	if _cooldown > 0.0:
+	if _cooldown > 0.0 or _block_react >= 0.0:
 		return
 	var attack := _forced_attack if _forced_attack != "" else _pick_attack(dist)
-	if attack != "" and dist <= float(ATTACKS[attack].range) + 0.4 and _in_view(ctx):
+	if attack != "" and dist <= float(ATTACKS[attack].range) + MAX_STEP and _in_view(ctx):
 		_forced_attack = ""
 		_start_attack(attack, 1.0)
+
+
+## Pick what to do at ma-ai next, and for how long.
+func _pick_tactic(blocked: bool) -> void:
+	var weights := [0.25, 0.4, 0.2 * (0.5 + difficulty.aggression), 0.15]
+	var total := 0.0
+	for w in weights:
+		total += w
+	var r := _rng.randf() * total
+	var pick := Tactic.CIRCLE
+	for i in weights.size():
+		r -= weights[i]
+		if r <= 0.0:
+			pick = i as Tactic
+			break
+	tactic = pick
+	match tactic:
+		Tactic.HOLD: _tactic_time = _rng.randf_range(0.5, 1.4)
+		Tactic.CIRCLE: _tactic_time = _rng.randf_range(1.0, 2.4)
+		Tactic.PROBE: _tactic_time = _rng.randf_range(0.6, 1.1)
+		Tactic.BACK_OFF: _tactic_time = _rng.randf_range(0.6, 1.2)
+	_circle_speed = _rng.randf_range(0.35, 0.6)
+	if blocked or _rng.randf() < 0.4:
+		_circle_dir = -_circle_dir
+	GameEvents.log_event("enemy_tactic", {"enemy": _name(), "tactic": TACTIC_NAMES[tactic]})
 
 
 func _attack(delta: float, ctx: Dictionary, dist: float, fwd: Vector3, intent: Dictionary) -> void:
@@ -271,15 +364,25 @@ func _attack(delta: float, ctx: Dictionary, dist: float, fwd: Vector3, intent: D
 					_start_attack(other, 1.0)
 					return
 				_feint_at = -1.0
-			if dist > float(a.range):
-				intent.move = fwd * difficulty.move_speed
-			if _timer >= _windup_needed and _visible_time >= MIN_TELL:
+			# Feet planted: no walking while winding up. If the player has
+			# backed off well out of reach, the attack is quietly dropped.
+			intent.plant = true
+			if dist > float(a.range) + MAX_STEP + 0.4:
+				GameEvents.log_event("enemy_attack_aborted", {"enemy": _name(), "attack": current_attack, "reason": "out_of_reach"})
+				_cooldown = 0.4
+				_enter(State.STALK)
+				return
+			if _timer >= _windup_needed + _hesitate and _visible_time >= MIN_TELL:
 				last_windup_time = _timer
 				last_visible_tell = _visible_time
 				attack_phase = AttackPhase.STRIKE
 				_timer = 0.0
 				_strike_blocked = false
 				strikes_in_sequence += 1
+				# One decisive step in that covers the gap, done in the first
+				# part of the cut.
+				var step := clampf(dist - (float(a.range) - 0.3), 0.0, MAX_STEP)
+				_step_speed = step / (float(a.strike) * 0.55)
 				_log_phase("strike")
 		AttackPhase.STRIKE:
 			intent.pose = a.strike_pose
@@ -287,7 +390,8 @@ func _attack(delta: float, ctx: Dictionary, dist: float, fwd: Vector3, intent: D
 			intent.tell = 1.0
 			intent.attack = current_attack
 			intent.damage = float(a.damage) * difficulty.damage_scale
-			intent.move = fwd * float(a.lunge)
+			intent.plant = true
+			intent.move = fwd * (float(a.lunge) + (_step_speed if _timer < float(a.strike) * 0.55 else 0.0))
 			if _timer >= float(a.strike):
 				var nexts: Array = COMBOS.get(current_attack, [])
 				if strikes_in_sequence < difficulty.max_combo and not nexts.is_empty() and _rng.randf() < difficulty.combo_chance:
@@ -305,7 +409,9 @@ func _start_attack(attack: String, windup_mult: float) -> void:
 	_timer = 0.0
 	current_attack = attack
 	attack_phase = AttackPhase.WINDUP
-	_windup_needed = maxf(float(ATTACKS[attack].windup) * difficulty.windup_scale * windup_mult, MIN_TELL)
+	# Tempo varies from attack to attack so it cannot be timed by counting.
+	_windup_needed = maxf(float(ATTACKS[attack].windup) * difficulty.windup_scale * windup_mult * _rng.randf_range(0.85, 1.2), MIN_TELL)
+	_hesitate = _rng.randf_range(0.15, 0.45) if _rng.randf() < difficulty.hesitate_chance else 0.0
 	_visible_time = 0.0
 	_hidden_time = 0.0
 	_feint_at = -1.0
@@ -316,7 +422,8 @@ func _start_attack(attack: String, windup_mult: float) -> void:
 
 func _enter_recover(seconds: float) -> void:
 	_recover_needed = seconds
-	_retreat_time = 0.5 if _rng.randf() < 0.35 else 0.0
+	_retreat_time = 0.0
+	_zanshin_time = _rng.randf_range(0.5, 0.9)
 	_enter(State.RECOVER)
 
 
@@ -328,12 +435,19 @@ func _enter(new_state: State) -> void:
 		attack_phase = AttackPhase.NONE
 	if new_state == State.BLOCK:
 		_block_landed = false
+	if new_state != State.STALK:
+		_evade_time = 0.0
+	if new_state in [State.ATTACK, State.STAGGER, State.IDLE]:
+		_block_react = -1.0
 	if new_state == State.STALK and previous in [State.RECOVER, State.ATTACK, State.BLOCK]:
 		var c := difficulty.attack_cooldown
 		_cooldown = _rng.randf_range(c.x, c.y) * lerpf(1.3, 0.7, difficulty.aggression)
 	elif new_state == State.STALK and previous == State.IDLE and _forced_attack == "":
-		# Size the player up before the first attack.
+		# Size the player up before the first attack: circle first.
 		_cooldown = difficulty.attack_cooldown.x * lerpf(1.2, 0.6, difficulty.aggression)
+		tactic = Tactic.CIRCLE
+		_tactic_time = _rng.randf_range(1.6, 2.4)
+		_circle_speed = 0.5
 	GameEvents.log_event("enemy_state", {"enemy": _name(), "state": STATE_NAMES[new_state]})
 	_log_phase(STATE_NAMES[new_state])
 
@@ -344,7 +458,7 @@ func _watch_player_blades(delta: float, ctx: Dictionary) -> void:
 	if _block_react >= 0.0:
 		_block_react -= delta
 		if _block_react < 0.0:
-			_block_pose = _choose_block_pose(ctx, _block_tip)
+			_block_pose = _choose_block_pose(ctx, _block_tip, _block_vel)
 			_enter(State.BLOCK)
 			GameEvents.log_event("enemy_block", {"enemy": _name(), "pose": _block_pose, "landed": false})
 		return
@@ -353,21 +467,55 @@ func _watch_player_blades(delta: float, ctx: Dictionary) -> void:
 	for blade: Dictionary in ctx.get("player_blades", []):
 		var rel: Vector3 = ctx.chest_position - blade.tip
 		var v: Vector3 = blade.velocity
-		if rel.length() < 1.6 and v.length() > 3.0 and v.dot(rel.normalized()) > 1.0:
-			_swing_watch_cooldown = 0.7
-			if _rng.randf() < difficulty.block_chance:
+		# Read the swing early: a blade within reach that starts moving toward
+		# the body, not only one already arriving.
+		if rel.length() < 2.3 and v.length() > 1.6 and v.dot(rel.normalized()) > 0.6:
+			_swing_watch_cooldown = 0.6
+			var r := _rng.randf()
+			if r < difficulty.block_chance:
 				_block_react = difficulty.reaction_time
-				_block_tip = blade.tip
+				# Guard where the blade is heading, not where it is now.
+				_block_tip = blade.tip + v * difficulty.reaction_time * 0.5
+				_block_vel = v
+			elif r < difficulty.block_chance + difficulty.evade_chance and state == State.STALK:
+				_evade_time = 0.4
+				_closing = false
+				GameEvents.log_event("enemy_evade", {"enemy": _name()})
 			return
 
 
-func _choose_block_pose(ctx: Dictionary, tip: Vector3) -> String:
+## While the block is still forming, keep it on the blade's current line: a
+## swing read during the player's wind-up often comes in lower or from the
+## other side than where it started.
+func _track_block(ctx: Dictionary) -> void:
+	if _block_landed or _timer > BLOCK_TRACK_TIME or not ctx.has("chest_position"):
+		return
+	var nearest := {}
+	var best := INF
+	for blade: Dictionary in ctx.get("player_blades", []):
+		var d: float = (blade.tip as Vector3).distance_to(ctx.chest_position)
+		if d < best:
+			best = d
+			nearest = blade
+	if nearest.is_empty() or best > 2.3 or (nearest.velocity as Vector3).length() < 1.0:
+		return
+	var aim: Vector3 = nearest.tip + (nearest.velocity as Vector3) * 0.08
+	var pose := _choose_block_pose(ctx, aim, nearest.velocity)
+	if pose != _block_pose:
+		_block_pose = pose
+
+
+func _choose_block_pose(ctx: Dictionary, tip: Vector3, velocity := Vector3.ZERO) -> String:
 	var chest: Vector3 = ctx.chest_position
-	if tip.y > chest.y + 0.3:
+	# Only a blade above the head that is coming down is an overhead cut.
+	if tip.y > chest.y + 0.45 and velocity.y < 0.5:
 		return "block_high"
 	var facing: Vector3 = ctx.get("self_forward", Vector3.BACK)
 	var left := Vector3(facing.z, 0.0, -facing.x)
-	return "block_left" if (tip - chest).dot(left) > 0.0 else "block_right"
+	var lateral := (tip - chest).dot(left)
+	if absf(lateral) < 0.15:
+		return "block_mid"
+	return "block_left" if lateral > 0.0 else "block_right"
 
 
 ## Signed angle (deg) of this enemy away from the player's view direction.
