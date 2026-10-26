@@ -103,8 +103,6 @@ const PLAYER_BODY_LAYER := 1 << 19
 @export var damage_per_speed := 9.0
 ## Cap on base damage of a single hit.
 @export var max_damage := 120.0
-## Extra knock-back impulse per m/s of hit speed, on top of the physical contact.
-@export var knockback_per_speed := 0.6
 ## Hits doing at least this much damage trigger hit-stop.
 @export var hit_stop_damage := 40.0
 ## Hits from this much damage up to [member hit_stop_damage] get a micro-stop.
@@ -122,6 +120,28 @@ const PLAYER_BODY_LAYER := 1 << 19
 @export var hilt_multiplier := 0.3
 ## A contact this close to the tip (m) while moving along the blade is a thrust.
 @export var point_length := 0.14
+
+@export_group("Swing power")
+## A hit's weight comes from momentum: the weapon's own effective mass at the
+## contact point plus the arm behind it, but the arm only counts when the swing
+## is carried by the whole arm. Power (0..1) = how far the hand travelled in the
+## last [member power_window] s (a committed swing) times how much of the contact
+## speed comes from the hand moving rather than the wrist turning. A pure wrist
+## flick can whip the tip fast, but has power ~0.
+## Mass of the arm (kg) behind a fully committed one-handed swing.
+@export var arm_mass := 2.5
+## Extra arm mass from the second hand in a two-handed swing (fraction).
+@export var second_arm_mass_factor := 0.6
+## Seconds of hand motion that count toward a swing's commitment.
+@export var power_window := 0.3
+## Hand travel (m, relative to the head) within the window for full commitment.
+@export var full_power_travel := 0.45
+## Share of the damage a powerless flick keeps.
+@export var flick_damage := 0.25
+## Share of the momentum handed to the target (a cut passes through, a club stops).
+@export var impulse_transfer := 0.4
+## Cap on the impulse (N·s) of a single hit.
+@export var max_hit_impulse := 30.0
 
 @export_group("Parry")
 ## A clash with an attacking enemy blade is a parry above this relative speed (m/s)...
@@ -164,6 +184,12 @@ var _prev_target := Transform3D()
 var _has_prev_target := false
 var _blocked_buzz := 0.0
 var _impact_this_tick := false
+## Hand speed (real m/s, relative to the head) and hand travel (m) within the
+## power window, updated every physics tick while held.
+var hand_speed := 0.0
+var hand_travel := 0.0
+var _hand_hist: Array = []  # [segment length, real dt] per tick, newest last
+var _prev_hand := Vector3.INF
 # Velocity change the arm and gravity were expected to cause in the last step.
 var _expected_dv := Vector3.ZERO
 var _expected_dw := Vector3.ZERO
@@ -341,6 +367,7 @@ func _physics_process(delta: float) -> void:
 	_update_wedges(delta)
 	_impact_this_tick = false
 	_process_contacts()
+	_track_hand()
 	if holder and delta > 0.0:
 		if _impact_this_tick and _has_prev_target:
 			_limit_impact_kick(delta)
@@ -763,13 +790,80 @@ func _pre_step_velocity_of(body: Object, point: Vector3) -> Vector3:
 	return Vector3.ZERO
 
 
+# --- Swing power -----------------------------------------------------------------
+
+## Follow the hand(s) relative to the player's head: walking and turning the
+## head do not count as swinging, a teleport resets the history.
+func _track_hand() -> void:
+	if holders.is_empty():
+		_hand_hist.clear()
+		_prev_hand = Vector3.INF
+		hand_speed = 0.0
+		hand_travel = 0.0
+		return
+	var p := Vector3.ZERO
+	for h in holders:
+		p += (h.call("get_grip_transform") as Transform3D).origin
+	p /= holders.size()
+	var head := get_tree().get_first_node_in_group("player_head") as Node3D
+	if head:
+		p -= head.global_position
+	var dt := maxf(TimeController.real_tick(), 1e-4)
+	if _prev_hand == Vector3.INF or p.distance_to(_prev_hand) > 0.5:
+		_hand_hist.clear()
+	else:
+		_hand_hist.append([p.distance_to(_prev_hand), dt])
+	_prev_hand = p
+	var time := 0.0
+	var travel := 0.0
+	var keep := 0
+	for i in range(_hand_hist.size() - 1, -1, -1):
+		if time >= power_window:
+			break
+		travel += float(_hand_hist[i][0])
+		time += float(_hand_hist[i][1])
+		keep += 1
+	if keep < _hand_hist.size():
+		_hand_hist = _hand_hist.slice(_hand_hist.size() - keep)
+	hand_travel = travel
+	hand_speed = float(_hand_hist[-1][0]) / float(_hand_hist[-1][1]) if not _hand_hist.is_empty() else 0.0
+
+
+## 0..1: how much of the arm is behind a contact at [param contact_speed] (real m/s).
+func swing_power(contact_speed: float) -> float:
+	var commit := smoothstep(0.05, full_power_travel, hand_travel)
+	var drive := smoothstep(0.08, 0.35, hand_speed / maxf(contact_speed, 0.1))
+	return commit * drive
+
+
+## Effective mass (kg) of the weapon alone for a push at [param point] along [param dir].
+func effective_mass_at(point: Vector3, dir: Vector3) -> float:
+	var st := PhysicsServer3D.body_get_direct_state(get_rid())
+	if st == null or dir.length_squared() < 1e-8:
+		return mass
+	var n := dir.normalized()
+	var rn := (point - (global_position + st.center_of_mass)).cross(n)
+	return 1.0 / (st.inverse_mass + rn.dot(st.inverse_inertia_tensor * rn))
+
+
+## Momentum behind a contact: power, effective mass (weapon + arm) and the
+## impulse (N·s) handed to the target.
+func strike_momentum(point: Vector3, direction: Vector3, contact_speed: float) -> Dictionary:
+	var power := swing_power(contact_speed)
+	var arms := arm_mass * (1.0 + (second_arm_mass_factor if holders.size() > 1 else 0.0))
+	var m_eff := effective_mass_at(point, direction) + arms * power
+	return {"power": power, "mass": m_eff, "impulse": clampf(m_eff * contact_speed * impulse_transfer, 0.0, max_hit_impulse)}
+
+
 func _handle_hit(c: Dictionary) -> void:
 	if c.speed < min_hit_speed:
 		return
 	var part: Node = c.collider
 	var receiver: Node = part.get_meta("hit_receiver")
 	var strike := classify_strike(c.point, c.direction)
-	var base_damage := clampf((c.speed - min_hit_speed) * damage_per_speed, 0.0, max_damage) * float(strike.multiplier)
+	var mom := strike_momentum(c.point, c.direction, c.speed)
+	var base_damage := clampf((c.speed - min_hit_speed) * damage_per_speed, 0.0, max_damage) \
+		* lerpf(flick_damage, 1.0, mom.power) * float(strike.multiplier)
 	var hit := {
 		"attacker": weapon_name,
 		"element": element,
@@ -781,7 +875,9 @@ func _handle_hit(c: Dictionary) -> void:
 		"base_damage": base_damage,
 		"point": c.point,
 		"direction": c.direction,
-		"knockback": c.direction * c.speed * knockback_per_speed,
+		"power": snappedf(mom.power, 0.01),
+		"impulse": snappedf(mom.impulse, 0.01),
+		"knockback": c.direction * float(mom.impulse),
 	}
 	if receiver.has_method("receive_hit"):
 		hit = receiver.receive_hit(part, hit)
@@ -855,6 +951,15 @@ func _handle_clash(c: Dictionary) -> void:
 		"direction": c.direction,
 		"enemy_attacking": other.attacking,
 	}
+	var mom := strike_momentum(c.point, c.direction, c.speed)
+	clash["power"] = snappedf(mom.power, 0.01)
+	clash["impulse"] = snappedf(mom.impulse, 0.01)
+	# The blade's own mass already met the other blade in the physics step; the
+	# arm behind a committed swing pushes on through and can beat a guard aside.
+	if not (other is HeldWeapon and (other as HeldWeapon).is_held()):
+		var arm_push: float = (float(mom.mass) - effective_mass_at(c.point, c.direction)) * c.speed * impulse_transfer
+		if arm_push > 0.05:
+			other.apply_impulse(c.direction * minf(arm_push, max_hit_impulse), c.point - other.global_position)
 	var is_parry: bool = other.attacking and c.speed >= parry_min_speed and angle >= parry_min_angle
 	clash["parry"] = is_parry
 	GameEvents.report_clash(clash)

@@ -6,6 +6,7 @@ extends CharacterBody3D
 ## Click to capture the mouse, Esc to release. Mouse looks around; hold the
 ## right mouse button to move the sword hand with the mouse instead. WASD to
 ## walk. F / G / T play a scripted horizontal slash / overhead cut / thrust,
+## X a wrist flick (no arm behind it),
 ## mouse wheel changes their speed. Hold Q to raise a high block (parry the
 ## dummy's overhead cut). E grabs or drops the weapon, 1 / 2 pick katana /
 ## kanabō, C cycles grip location (handle / tsuba / blunt blade spine),
@@ -54,6 +55,8 @@ var force_block := false
 var grip_preset_index := 0
 ## Whether the off-hand holder also grips the weapon on desktop.
 var two_handed := false
+## Extra wrist yaw (radians) on top of the hand pose: a flick without moving the arm (X).
+var flick_angle := 0.0
 
 var _pitch := 0.0
 var _swing_roll := 0.0
@@ -132,6 +135,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				swing(SLASH_OVERHEAD)
 			KEY_T:
 				swing(THRUST)
+			KEY_X:
+				flick()
 			KEY_E:
 				if holder.held:
 					left_holder.release()
@@ -224,6 +229,18 @@ func swing(points: Array) -> void:
 	_swing_tween.tween_property(self, "hand_offset", Vector3.ZERO, 0.4).set_trans(Tween.TRANS_SINE)
 
 
+## A wrist flick: the hand stays put, the wrist whips the blade across.
+func flick(from_deg: float = 55.0, to_deg: float = -55.0, duration: float = 0.12) -> void:
+	_kill_swing()
+	_swing_tween = create_tween()
+	_swing_tween.set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	_swing_tween.set_ignore_time_scale(true)
+	_swing_tween.tween_property(self, "flick_angle", deg_to_rad(from_deg), 0.12).set_trans(Tween.TRANS_SINE)
+	_swing_tween.tween_property(self, "flick_angle", deg_to_rad(to_deg), duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_swing_tween.tween_interval(0.1)
+	_swing_tween.tween_property(self, "flick_angle", 0.0, 0.3).set_trans(Tween.TRANS_SINE)
+
+
 func _kill_swing() -> void:
 	if _swing_tween and _swing_tween.is_valid():
 		_swing_tween.kill()
@@ -253,7 +270,7 @@ func _update_hand() -> void:
 	var pos := HAND_REST + Vector3(hand_offset.x, hand_offset.y, -hand_offset.z)
 	var yaw := -hand_offset.x * 1.4
 	var pitch := deg_to_rad(40.0) + hand_offset.y * 2.0
-	var local := Transform3D(Basis.from_euler(Vector3(pitch, yaw, 0.0), EULER_ORDER_YXZ), pos)
+	var local := Transform3D(Basis.from_euler(Vector3(pitch, yaw + flick_angle, 0.0), EULER_ORDER_YXZ), pos)
 	# Turn the wrist so the cutting edge (the hand's -Y) leads the swing, as a
 	# player does without thinking in VR.
 	var dt := TimeController.real_tick()
@@ -274,7 +291,7 @@ func _update_hand() -> void:
 func _hud_text() -> String:
 	var t := "HANABI desktop test rig (no XR runtime found)\n"
 	t += "Click: capture mouse   Esc: release   WASD: walk   Mouse: look\n"
-	t += "Hold RMB + mouse: move the weapon   F/G/T: slash / overhead / thrust   hold Q: high block\n"
+	t += "Hold RMB + mouse: move the weapon   F/G/T: slash / overhead / thrust   X: wrist flick   hold Q: high block\n"
 	t += "Wheel: scripted swing time %.2f s   1/2: katana / kanabō   C: grip spot   V: 1H/2H   E: drop/take   Z: element\n" % swing_duration
 	t += "P: dummy attacks on/off   R: reset dummy\n"
 	if holder.held:

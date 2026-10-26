@@ -37,7 +37,7 @@ func _ready() -> void:
 func _on_hit(hit: Dictionary) -> void:
 	_best_speed = maxf(_best_speed, hit.speed)
 	_best_damage = maxf(_best_damage, hit.get("damage", 0.0))
-	_lines.push_front("%5.1f m/s  →  %5.1f dmg   %-6s %-11s (%s)%s" % [hit.speed, hit.get("damage", 0.0), String(hit.get("strike", "")).to_upper(), hit.get("part", "?"), hit.get("zone", "?"), "  COUNTER" if hit.get("counter", false) else ""])
+	_lines.push_front("%5.1f m/s  arm %3d%%  %4.1f N·s  →  %5.1f dmg   %-6s %-11s (%s)%s" % [hit.speed, roundi(float(hit.get("power", 0.0)) * 100.0), float(hit.get("impulse", 0.0)), hit.get("damage", 0.0), String(hit.get("strike", "")).to_upper(), hit.get("part", "?"), hit.get("zone", "?"), "  COUNTER" if hit.get("counter", false) else ""])
 	if _lines.size() > MAX_LINES:
 		_lines.pop_back()
 	DamageNumber.spawn(get_tree().current_scene, hit.point, hit.get("damage", 0.0), hit.speed)
@@ -45,7 +45,7 @@ func _on_hit(hit: Dictionary) -> void:
 
 
 func _on_clash(clash: Dictionary) -> void:
-	_last_clash = "%.1f m/s at %.0f°%s" % [clash.speed, clash.angle_deg, "  PARRY!" if clash.get("parry", false) else ""]
+	_last_clash = "%.1f m/s at %.0f°, arm %d%%%s" % [clash.speed, clash.angle_deg, roundi(float(clash.get("power", 0.0)) * 100.0), "  PARRY!" if clash.get("parry", false) else ""]
 	_refresh()
 
 
