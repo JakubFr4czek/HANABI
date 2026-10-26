@@ -21,6 +21,9 @@ extends Resource
 ## Seconds lying down before getting up, and how long getting up takes.
 @export var knockdown_time := 1.6
 @export var getup_time := 1.8
+## After being parried: seconds the enemy is open to a counter, and the damage multiplier then.
+@export var counter_window := 1.5
+@export var counter_multiplier := 1.5
 ## Free-form tactic parameters read by the enemy's brain.
 @export var tactics := {}
 

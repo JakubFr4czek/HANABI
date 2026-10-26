@@ -22,6 +22,7 @@ var _sash := StandardMaterial3D.new()
 var _ink := StandardMaterial3D.new()
 var _flash_time := 0.0
 var _revive_on_getup := false
+var _counter_time := 0.0  # > 0 while open to a counter after being parried
 
 
 func _ready() -> void:
@@ -41,8 +42,7 @@ func _ready() -> void:
 		brain = DummyBrain.new()
 		brain.name = "Brain"
 		add_child(brain)
-	brain.body = self
-	brain.profile = profile
+	brain.setup(self, profile)
 	if hold_sword:
 		equip_sword()
 	state_changed.connect(_on_state_changed)
@@ -98,6 +98,49 @@ func _define_poses() -> Dictionary:
 			"lower_leg_l": Vector3(14, 0, 0),
 			"upper_leg_r": Vector3(6, 0, -6),
 			"lower_leg_r": Vector3(8, 0, 0),
+		},
+		# Overhead cut, telegraphed: sword raised behind the head...
+		"windup": {
+			"_stiffness": 1.3,
+			"chest": Vector3(-8, 0, 0),
+			"head": Vector3(-5, 0, 0),
+			"upper_arm_r": Vector3(-150, 0, 10),
+			"lower_arm_r": Vector3(-30, 0, 0),
+			"upper_arm_l": Vector3(-140, 0, -20),
+			"lower_arm_l": Vector3(-40, 0, 0),
+			"upper_leg_l": Vector3(-10, 0, 6),
+			"lower_leg_l": Vector3(14, 0, 0),
+			"upper_leg_r": Vector3(6, 0, -6),
+			"lower_leg_r": Vector3(8, 0, 0),
+		},
+		# ...then brought down and forward fast.
+		"strike": {
+			"_stiffness": 1.5,
+			"_max_speed": 7.0,
+			"chest": Vector3(22, 0, 0),
+			"head": Vector3(-12, 0, 0),
+			"upper_arm_r": Vector3(-45, 0, 12),
+			"lower_arm_r": Vector3(-5, 0, 0),
+			"upper_arm_l": Vector3(-50, 0, -25),
+			"lower_arm_l": Vector3(-20, 0, 0),
+			"upper_leg_l": Vector3(-25, 0, 6),
+			"lower_leg_l": Vector3(25, 0, 0),
+			"upper_leg_r": Vector3(15, 0, -6),
+			"lower_leg_r": Vector3(10, 0, 0),
+		},
+		# Thrown off balance after a parry: arms flung up and back.
+		"staggered": {
+			"_stiffness": 0.7,
+			"chest": Vector3(-15, 0, 0),
+			"head": Vector3(-15, 0, 0),
+			"upper_arm_r": Vector3(-120, 0, -30),
+			"lower_arm_r": Vector3(-20, 0, 0),
+			"upper_arm_l": Vector3(-30, 0, 40),
+			"lower_arm_l": Vector3(-30, 0, 0),
+			"upper_leg_l": Vector3(-5, 0, 8),
+			"lower_leg_l": Vector3(10, 0, 0),
+			"upper_leg_r": Vector3(10, 0, -8),
+			"lower_leg_r": Vector3(10, 0, 0),
 		},
 		"idle": {},
 	}
@@ -173,6 +216,7 @@ func equip_sword() -> void:
 	sword.name = "Sword"
 	add_child(sword)
 	sword.global_transform = _sword_grip_transform()
+	sword.wielder = self
 	attach_to_part("lower_arm_r", sword, sword.global_position)
 
 
@@ -191,6 +235,9 @@ func _sword_grip_transform() -> Transform3D:
 func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	var element: String = hit.get("element", "physical")
 	var dmg: float = hit.base_damage * profile.damage_multiplier(hit.zone, element)
+	if _counter_time > 0.0:
+		dmg *= profile.counter_multiplier
+		hit["counter"] = true
 	dmg = snappedf(dmg, 0.1)
 	hp = maxf(hp - dmg, 0.0)
 	hit["target"] = profile.display_name
@@ -215,9 +262,35 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	return hit
 
 
+## The player parried our attack: stagger and open a counter window.
+func on_parried(info: Dictionary) -> void:
+	_counter_time = profile.counter_window
+	weaken(0.45, 0.5)
+	brain.on_parried(info)
+	if sword:
+		sword.attacking = false
+	GameEvents.log_event("enemy_parried", {"enemy": profile.display_name, "counter_window": profile.counter_window})
+
+
+## Seconds left in which a hit counts as a counter (0 = closed).
+func counter_time_left() -> float:
+	return _counter_time
+
+
+func set_attacks_enabled(enabled: bool) -> void:
+	if brain is DummyBrain:
+		(brain as DummyBrain).attacks_enabled = enabled
+		GameEvents.log_event("dummy_attacks", {"enabled": enabled})
+
+
+func attacks_enabled() -> bool:
+	return brain is DummyBrain and (brain as DummyBrain).attacks_enabled
+
+
 func reset_dummy() -> void:
 	hp = profile.max_hp
 	_revive_on_getup = false
+	_counter_time = 0.0
 	reset_body()
 	if sword:
 		sword.global_transform = _sword_grip_transform()
@@ -241,12 +314,15 @@ func _getup_time() -> float: return profile.getup_time
 
 
 func _physics_process(delta: float) -> void:
-	var context := {}
+	_counter_time = maxf(_counter_time - delta, 0.0)
+	var context := {"self_position": root_part().global_position, "can_act": state == State.STANDING}
 	var players := get_tree().get_nodes_in_group("player_head")
 	if not players.is_empty():
 		context["player_position"] = (players[0] as Node3D).global_position
 	var intent := brain.think(delta, context)
 	set_pose(intent.get("pose", "guard"))
+	if sword:
+		sword.attacking = intent.get("attacking", false) and state == State.STANDING
 	if intent.has("face_position") and state == State.STANDING:
 		face_toward(intent.face_position)
 	super._physics_process(delta)

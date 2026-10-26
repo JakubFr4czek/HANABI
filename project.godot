@@ -21,6 +21,7 @@ XRToolsUserSettings="*res://addons/godot-xr-tools/user_settings/user_settings.gd
 XRToolsRumbleManager="*res://addons/godot-xr-tools/rumble/rumble_manager.gd"
 GameEvents="*res://src/core/game_events.gd"
 Sfx="*res://src/core/sfx.gd"
+TimeController="*res://src/core/time_controller.gd"
 
 [display]
 
@@ -43,6 +44,7 @@ enabled=PackedStringArray("res://addons/godot-xr-tools/plugin.cfg")
 [physics]
 
 3d/physics_engine="Jolt Physics"
+jolt_physics_3d/limits/max_angular_velocity=150.0
 common/physics_ticks_per_second=90
 common/max_physics_steps_per_frame=12
 common/physics_interpolation=false

@@ -111,6 +111,9 @@ The physics-test mannequin lives here. It is the dummy test level: its own scene
 - Placeholders in the test room (2026-10-26): the training dummy and both bokken are built from Godot primitives; the Quaternius base character / katana models are not used yet. Skinning the Quaternius mesh onto the active ragdoll is planned with the yōkai (milestone 2).
 - Balance numbers for the dummy (first pass): damage = (relative speed − 1.5 m/s) × 9, cap 120; one full swing (~10 m/s) staggers, two quick heavy hits knock it down. Tune by feel in the headset.
 - Active ragdoll muscles currently act like animation (no reaction torque on the parent) for stability; full momentum-conserving muscles are a later polish item.
+- Combat feel, first pass (2026-10-26): player arm strength 260 N / 40 N·m (katana 1.1 kg settles in ~0.13 s, kanabō 4 kg in ~0.47 s); hit-stop on hits ≥ 40 damage; parry = clash with an *attacking* enemy blade at ≥ 1.5 m/s relative and ≥ 25° between blades, then slow-mo ×0.3 for 0.6 s with the player's blade kept real-time, enemy stunned 1.2 s, counter window 1.5 s at ×1.5 damage. Tune in the headset.
+- Hit-stop freezes the whole world (including the player's blade) for 50–80 ms; in VR the head and hands keep tracking. If it feels bad in the headset, switch to a local hit-stop (only the hit enemy and the blade).
+- Should enemy attacks that are *not* parried damage the player? Needs player HP (milestone 2).
 - After a knockdown the dummy stands up where it fell instead of walking back; real stepping/locomotion comes with the enemy AI (NavigationAgent3D + FSM).
 - Godot docs recommend the Compatibility renderer for Android XR; the project uses Mobile on PC and Compatibility on Quest. Revisit if Mobile on Quest becomes recommended (needed for some VFX).
 - Number of upgrades per element for the hackathon version?

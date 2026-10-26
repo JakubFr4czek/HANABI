@@ -12,6 +12,8 @@ signal event_logged(event: Dictionary)
 signal hit_landed(hit: Dictionary)
 ## Two weapons collided. See [method report_clash] for keys.
 signal weapon_clash(clash: Dictionary)
+## The player parried an enemy attack (a clash with an attacking enemy blade).
+signal parry(info: Dictionary)
 
 const MAX_LOG_SIZE := 4000
 
@@ -47,6 +49,11 @@ func report_hit(hit: Dictionary) -> void:
 ## speed (relative m/s), angle_deg (between blade axes), point (Vector3).
 func report_clash(clash: Dictionary) -> void:
 	weapon_clash.emit(log_event("clash", clash))
+
+
+## Report a successful parry. Same keys as a clash.
+func report_parry(info: Dictionary) -> void:
+	parry.emit(log_event("parry", info))
 
 
 ## Most recent events, newest last. Optionally filtered by type.
