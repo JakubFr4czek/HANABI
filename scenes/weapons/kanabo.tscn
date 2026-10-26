@@ -77,85 +77,106 @@ transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0.01)
 shape = SubResource("CylinderShape3D_handle")
 
 [node name="Body" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, -0.585)
 mesh = SubResource("Mesh_body")
 
 [node name="Handle" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0.01)
 mesh = SubResource("Mesh_handle")
 
 [node name="Band0" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, -0.16)
 mesh = SubResource("Mesh_band")
 
 [node name="Band1" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, -0.6)
 mesh = SubResource("Mesh_band")
 
 [node name="Band2" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, -1.03)
 mesh = SubResource("Mesh_band")
 
 [node name="Stud0" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0423, 0.0423, -0.7)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud1" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0423, 0.0423, -0.7)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud2" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0423, -0.0423, -0.7)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud3" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0423, -0.0423, -0.7)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud4" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0627, 0.0000, -0.8)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud5" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0000, 0.0627, -0.8)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud6" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0627, 0.0000, -0.8)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud7" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0000, -0.0627, -0.8)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud8" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0464, 0.0464, -0.9)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud9" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0464, 0.0464, -0.9)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud10" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0464, -0.0464, -0.9)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud11" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0464, -0.0464, -0.9)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud12" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0479, 0.0479, -0.97)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud13" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0479, 0.0479, -0.97)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud14" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0479, -0.0479, -0.97)
 mesh = SubResource("Mesh_stud")
 
 [node name="Stud15" type="MeshInstance3D" parent="."]
+gi_mode = 2
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0479, -0.0479, -0.97)
 mesh = SubResource("Mesh_stud")

@@ -137,6 +137,7 @@ bottom_radius = 4.75
 height = 0.44
 radial_segments = 64
 rings = 1
+add_uv2 = true
 
 [sub_resource type="ShaderMaterial" id="Mat_DarkStoneTrim"]
 shader = ExtResource("18_wet")
@@ -152,10 +153,12 @@ inner_radius = 5.08
 outer_radius = 5.34
 rings = 64
 ring_segments = 16
+add_uv2 = true
 
 [sub_resource type="BoxMesh" id="Mesh_NorthThreshold"]
 material = SubResource("Mat_DarkStoneTrim")
 size = Vector3(5.4, 0.24, 0.18)
+add_uv2 = true
 
 [sub_resource type="ShaderMaterial" id="Mat_SpawnSeal"]
 render_priority = 1
@@ -205,14 +208,17 @@ size = Vector3(1.4, 0.9, 0.5)
 [sub_resource type="BoxMesh" id="Mesh_SwordTableTop"]
 material = SubResource("Mat_LacquerStand")
 size = Vector3(1.4, 0.08, 0.5)
+add_uv2 = true
 
 [sub_resource type="BoxMesh" id="Mesh_SwordTableLeg"]
 material = SubResource("Mat_LacquerStand")
 size = Vector3(0.12, 0.84, 0.44)
+add_uv2 = true
 
 [sub_resource type="BoxMesh" id="Mesh_SwordTableBeam"]
 material = SubResource("Mat_CrimsonTrim")
 size = Vector3(1.32, 0.06, 0.08)
+add_uv2 = true
 
 [node name="TestRoom" type="Node3D"]
 script = ExtResource("1_room")
@@ -241,24 +247,28 @@ bounces = 2
 [node name="SkyDome" type="MeshInstance3D" parent="Arena"]
 material_override = SubResource("Mat_SkyDome")
 cast_shadow = 0
+gi_mode = 0
 mesh = SubResource("Mesh_SkyDome")
 
 [node name="WaterMirror" type="MeshInstance3D" parent="Arena"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
 material_override = SubResource("Mat_WaterMirror")
 cast_shadow = 0
+gi_mode = 0
 mesh = SubResource("Mesh_WaterMirror")
 
 [node name="WaterMistLow" type="MeshInstance3D" parent="Arena"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.14, 0)
 material_override = SubResource("Mat_WaterMistLow")
 cast_shadow = 0
+gi_mode = 0
 mesh = SubResource("Mesh_WaterMistLow")
 
 [node name="WaterMistHigh" type="MeshInstance3D" parent="Arena"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.44, 0)
 material_override = SubResource("Mat_WaterMistHigh")
 cast_shadow = 0
+gi_mode = 0
 mesh = SubResource("Mesh_WaterMistHigh")
 
 [node name="PlatformDisc" type="MeshInstance3D" parent="Arena"]
@@ -281,9 +291,11 @@ mesh = SubResource("Mesh_NorthThreshold")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.004, 0)
 material_override = SubResource("Mat_SpawnSeal")
 cast_shadow = 0
+gi_mode = 0
 mesh = SubResource("Mesh_SpawnSeal")
 
 [node name="StormLightning" type="MeshInstance3D" parent="Arena"]
+gi_mode = 0
 script = ExtResource("12_lightning")
 
 [node name="LightningFlashLight" type="DirectionalLight3D" parent="Arena"]
