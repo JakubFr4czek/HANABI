@@ -45,6 +45,7 @@ func _run() -> void:
 	await _test_desktop_slash_leads_with_edge()
 	await _test_no_wedging()
 	await _test_heavy_body_cannot_tear_it_away()
+	await _test_swing_power()
 
 
 # --- 3. Edge alignment ----------------------------------------------------------------
@@ -207,6 +208,57 @@ func _sweep_through_dummy(lead_deg: float) -> Dictionary:
 	var tween := create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
 	tween.tween_property(holder, "global_position", Vector3(-0.8, 1.25, 0.8), 0.25)
 	await _wait(0.6)
+	holder.release()
+	holder.queue_free()
+	var hits := events.filter(func(ev): return ev.type == "hit")
+	return hits[0] if not hits.is_empty() else {}
+
+
+# --- 4. Swing power: the arm, not the wrist, puts weight behind a hit ---------------
+
+func _test_swing_power() -> void:
+	var arm := await _power_strike(katana, false)
+	var flick := await _power_strike(katana, true)
+	var club := await _power_strike(room.kanabo, false)
+	print("    arm swing: %s power %.2f impulse %.1f N·s | wrist flick: %s power %.2f impulse %.1f N·s | kanabō arm swing: %s impulse %.1f N·s" % [
+		_describe(arm), arm.get("power", -1.0), arm.get("impulse", -1.0), _describe(flick), flick.get("power", -1.0), flick.get("impulse", -1.0),
+		_describe(club), club.get("impulse", -1.0)])
+	var ok := not arm.is_empty() and not flick.is_empty()
+	_check("a wrist flick whips the blade about as fast as an arm swing (%.1f vs %.1f m/s)" % [flick.get("speed", 0.0), arm.get("speed", 0.0)],
+		ok and flick.speed > arm.speed * 0.6)
+	_check("...but has no arm behind it: power %.2f vs %.2f, damage %.1f vs %.1f, impulse %.1f vs %.1f N·s" % [
+		flick.get("power", 0.0), arm.get("power", 0.0), flick.get("damage", 0.0), arm.get("damage", 0.0), flick.get("impulse", 0.0), arm.get("impulse", 0.0)],
+		ok and flick.power < 0.2 and arm.power > 0.8 and flick.damage < arm.damage * 0.45 and flick.impulse < arm.impulse * 0.3)
+	_check("the 4 kg kanabō hits much harder than the 1.1 kg katana with the same swing (%.1f vs %.1f N·s)" % [club.get("impulse", 0.0), arm.get("impulse", 0.0)],
+		ok and not club.is_empty() and club.impulse > arm.impulse * 1.5)
+
+
+## One strike through the dummy's chest, edge first, toward +X: either the hand
+## sweeps 1.6 m across (arm swing), or it stays put and the wrist turns 120°.
+func _power_strike(weapon: HeldWeapon, wrist_only: bool) -> Dictionary:
+	room.reset_room()
+	room.katana.global_position = Vector3(-3.5, 0.3, 3.5)
+	room.kanabo.global_position = Vector3(3.5, 0.3, -3.5)
+	await _wait(1.2)
+	var edge_first := Basis(Vector3.BACK, deg_to_rad(90.0))
+	var start: Transform3D
+	if wrist_only:
+		start = Transform3D(Basis(Vector3.UP, deg_to_rad(60.0)) * edge_first, Vector3(0.0, 1.3, 0.95))
+	else:
+		start = Transform3D(edge_first, Vector3(-0.8, 1.3, 0.85))
+	var holder := _new_holder(start)
+	weapon.global_transform = start
+	weapon.linear_velocity = Vector3.ZERO
+	weapon.angular_velocity = Vector3.ZERO
+	holder.grab(weapon, Transform3D.IDENTITY)
+	await _wait(0.5)
+	events.clear()
+	var tween := create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	if wrist_only:
+		tween.tween_property(holder, "global_basis", Basis(Vector3.UP, deg_to_rad(-60.0)) * edge_first, 0.12)
+	else:
+		tween.tween_property(holder, "global_position", Vector3(0.8, 1.3, 0.85), 0.12)
+	await _wait(0.5)
 	holder.release()
 	holder.queue_free()
 	var hits := events.filter(func(ev): return ev.type == "hit")

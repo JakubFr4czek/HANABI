@@ -432,10 +432,13 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	hit["damage"] = dmg
 	hit["hp_left"] = hp
 
+	# Momentum, not damage, knocks the body off balance: a committed swing
+	# staggers, a wrist flick barely moves it.
 	var kb: Vector3 = hit.get("knockback", Vector3.ZERO)
 	if kb != Vector3.ZERO:
-		part.apply_impulse(kb.limit_length(25.0), hit.point - part.global_position)
-	weaken(dmg * profile.muscle_damage_scale, dmg * profile.poise_damage_scale)
+		part.apply_impulse(kb.limit_length(30.0), hit.point - part.global_position)
+	var poise := float(hit.impulse) * profile.poise_per_impulse if hit.has("impulse") else dmg * profile.poise_damage_scale
+	weaken(dmg * profile.muscle_damage_scale, poise)
 	hit["balance_left"] = snappedf(balance, 0.01)
 	hit.erase("knockback")
 	GameEvents.report_hit(hit)
