@@ -78,6 +78,14 @@ Do not implement during prototyping. Prepare the architecture: swappable enemy b
 - **VFX:** GPU particles for petals, procedural lightning, an ink/darkness shader with noise, and blade trails (GPUTrail).
 - **Performance:** on standalone Quest use simple fog and particles. Volumetric fog is a PCVR-only setting for recording.
 
+### VFX target & performance
+Near-realistic, in moody half-light. A dark sky, broken by a few bright events.
+
+- **Lightning:** branching bolts with a bright core and a glow, plus a brief scene-wide flash. Bolts are mesh and shader, not particles.
+- **Rain:** particles, with droplets that run down the blade.
+- **Blade:** the katana reflects the dark sky and flares on lightning. The sky reflection is a baked cubemap. No realtime reflections and no SSR.
+- **Quest 3:** the arena is static, so bake its lighting and shadows with `LightmapGI` (Mobile renderer). Realtime work is only the short lightning flashes, particles, and the blade trail. Shared `GPUParticles3D` budget: about 2–4k alive particles for rain, petals, and blade droplets.
+
 ### Training Arena (Dojo of the Storm)
 The physics-test mannequin lives here. It is the dummy test level: its own scene, separate from the run's shrine. A serene, endless void under a slow purple storm.
 
