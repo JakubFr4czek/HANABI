@@ -149,6 +149,27 @@ def player_hurt(index, seconds=0.5):
     write_wav(f"player_hurt_{index}.wav", normalize(thump + body + rasp, 0.85))
 
 
+def cut(index, seconds=0.35):
+    """A clean cut with the edge: a fast bright slice through straw and cloth."""
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    attack = np.minimum(t / 0.004, 1.0)
+    slice_ = fft_band(rng.standard_normal(n), 2500.0, 11000.0, tilt=1.5) * np.exp(-t / 0.05) * attack
+    fibres = fft_band(rng.standard_normal(n), 600.0, 3000.0) * np.exp(-t / 0.08) * 0.45
+    tick = fft_band(rng.standard_normal(n), 4000.0, 9000.0) * np.exp(-t / 0.006) * 0.8
+    write_wav(f"cut_{index}.wav", normalize(slice_ + fibres + tick, 0.8))
+
+
+def slap(index, seconds=0.3):
+    """The flat or the spine of the blade lands: a dull wooden smack, no bite."""
+    n = int(seconds * SR)
+    t = np.arange(n) / SR
+    f = rng.uniform(140, 190)
+    knock = np.sin(2 * np.pi * f * t) * np.exp(-t / 0.035)
+    body = fft_band(rng.standard_normal(n), 150.0, 1200.0, tilt=-2.0) * np.exp(-t / 0.025)
+    write_wav(f"slap_{index}.wav", normalize(knock * 0.8 + body, 0.75))
+
+
 if __name__ == "__main__":
     rain_loop()
     for i in range(3):
@@ -158,3 +179,5 @@ if __name__ == "__main__":
     for i in range(3):
         enemy_tell(i)
         player_hurt(i)
+        cut(i)
+        slap(i)
