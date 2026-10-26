@@ -60,10 +60,13 @@ func _run() -> void:
 		player.teleport(Vector3(target.x, 0, target.z + 1.15))
 		player.swing_duration = 0.1
 		player.swing(DesktopPlayer.SLASH_HORIZONTAL)
+		var cb := func(e): if e.type == "hit" and OS.get_cmdline_user_args().has("--debug-hits"): print("      hit %s %.1f dmg power %.2f impulse %.1f balance %.2f" % [e.part, e.damage, e.get("power", -1), e.get("impulse", -1), dummy.balance])
+		GameEvents.event_logged.connect(cb)
 		for f in 50:
 			await get_tree().physics_frame
 			min_balance = minf(min_balance, dummy.balance)
 			was_down = was_down or dummy.state != ActiveRagdoll.State.STANDING
+		GameEvents.event_logged.disconnect(cb)
 		if was_down:
 			break
 	_check("heavy hits stagger (min balance %.2f)" % min_balance, min_balance < 0.8)

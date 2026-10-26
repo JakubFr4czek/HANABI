@@ -27,6 +27,8 @@ const MAX_STEP := 0.12
 ## ~400°/s at 90 Hz, quick enough to block, never a jump between equivalent
 ## arm configurations.
 const MAX_TICK_CHANGE := 0.075
+## Current limit (difficulty scales it, see DuelistDifficulty.arm_speed).
+var max_tick_change := MAX_TICK_CHANGE
 ## Pull (per rad) toward the comfortable start pose: settles the spare degrees
 ## of freedom so the arm does not wander into odd but valid configurations.
 const REST_PULL := 0.03
@@ -87,6 +89,25 @@ func setup(p_body: ActiveRagdoll, grip: Transform3D, sword: BladeBody, start_pos
 		_comfort[part] = angles[part]
 
 
+## Change the comfortable pose the spare degrees of freedom settle toward
+## ({part: Vector3 euler degrees}, like a pose): e.g. the authored block pose
+## for a block line, so the arm finds that configuration instead of a twisted one.
+func set_comfort(pose: Dictionary) -> void:
+	for part in RIGHT + LEFT:
+		if pose.has(part):
+			var e: Vector3 = pose[part]
+			_comfort[part] = _clamp(part, Vector3(deg_to_rad(e.x), deg_to_rad(e.y), deg_to_rad(e.z)))
+
+
+## Take the arm's current joint angles from the body, so fading the IK back in
+## (after an authored move) starts from where the arm really is.
+func sync_from_body() -> void:
+	for part in RIGHT + LEFT:
+		var parent: Node3D = body.parts[_chain[part].parent]
+		var rel := parent.global_basis.get_rotation_quaternion().inverse() * (body.parts[part] as Node3D).global_basis.get_rotation_quaternion()
+		angles[part] = _clamp(part, Basis(rel).get_euler())
+
+
 ## World point -> the body's rest frame, through the pelvis's real transform.
 func to_rest_frame(world: Vector3) -> Vector3:
 	var pelvis := body.root_part()
@@ -134,9 +155,9 @@ func _limit_change(before: Dictionary) -> void:
 	for part in angles:
 		total += ((angles[part] as Vector3) - (before[part] as Vector3)).length_squared()
 	total = sqrt(total)
-	if total <= MAX_TICK_CHANGE:
+	if total <= max_tick_change:
 		return
-	var k := MAX_TICK_CHANGE / total
+	var k := max_tick_change / total
 	for part in angles:
 		angles[part] = (before[part] as Vector3).lerp(angles[part], k)
 
@@ -241,7 +262,34 @@ func _dls_step(parts: Array, residual: Callable) -> void:
 			for i in m:
 				s += J[i * n + a] * J[i * n + b]
 			A[a * n + b] = s + (LAMBDA * LAMBDA if a == b else 0.0)
-	var step := _solve(A, g, n)
+	# Active set: a joint resting on its limit that the step would push further
+	# out is frozen for this step and the rest solved again; without this a
+	# clamped step can stop helping and the arm would get stuck at the limit.
+	var locked := {}
+	var step := PackedFloat64Array()
+	for pass_i in 3:
+		var A2 := A.duplicate()
+		var g2 := g.duplicate()
+		for j in locked:
+			for k in n:
+				A2[j * n + k] = 0.0
+				A2[k * n + j] = 0.0
+			A2[j * n + j] = 1.0
+			g2[j] = 0.0
+		step = _solve(A2, g2, n)
+		var newly := false
+		for j in n:
+			if locked.has(j):
+				continue
+			var part: String = vars[j][0]
+			var e: Vector3 = angles[part]
+			var want: float = e[vars[j][1]] + step[j] * 0.1
+			e[vars[j][1]] = want
+			if absf(_clamp(part, e)[vars[j][1]] - want) > 1e-6:
+				locked[j] = true
+				newly = true
+		if not newly:
+			break
 	var len := 0.0
 	for j in n:
 		len += step[j] * step[j]
