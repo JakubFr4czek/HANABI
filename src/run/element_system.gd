@@ -83,6 +83,18 @@ func visual_element() -> String:
 	return active_elements[-1] if not active_elements.is_empty() else Elements.NONE
 
 
+## Human-readable build for the end-screen stele (active elements + evolutions).
+func build_summary() -> String:
+	if active_elements.is_empty() and evolutions.is_empty():
+		return "Unbound"
+	var parts: Array[String] = []
+	for e in active_elements:
+		parts.append(Elements.build_label(e))
+	for ev in evolutions:
+		parts.append(Elements.build_label(ev))
+	return " · ".join(parts)
+
+
 func has_evolution(id: String) -> bool:
 	return evolutions.has(id)
 
