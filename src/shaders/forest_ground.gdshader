@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_back, specular_schlick_ggx;
+render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_disabled;
 // Run forest floor: cedar-needle soil, patches of grass on the flats and stones
 // on slopes / in scattered beds (Poly Haven CC0, 1K). World-space planar mapping
 // (the terrain has no UVs); diffuse + normal only to stay cheap on Quest.
@@ -84,5 +84,6 @@ void fragment() {
 	float wet = wetness * (1.0 - w_stone * 0.4);
 	ROUGHNESS = mix(roughness_dry, roughness_wet, wet);
 	METALLIC = 0.0;
-	EMISSION = mix(alb, storm_fog_color.rgb, 0.3) * ambient_fill * (1.0 - fog_mix);
+	// Shadowed soil takes the fog's color, not a lit copy of the daylight scan.
+	EMISSION = mix(alb, storm_fog_color.rgb, 0.75) * ambient_fill * (1.0 - fog_mix);
 }

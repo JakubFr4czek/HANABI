@@ -35,6 +35,12 @@ uniform int orm_mode : hint_range(0, 2) = 0;
 uniform vec3 emission_tint : source_color = vec3(0.0);
 uniform float procedural_ao : hint_range(0.0, 1.0) = 0.0;
 uniform float fog_rim : hint_range(0.0, 2.5) = 0.0;
+// 1 = ordinary dielectric highlight. 0 = diffuse only (forest props in the fog).
+uniform float specular_scale : hint_range(0.0, 1.0) = 1.0;
+// When above 0, the sky fill is the fog color instead of a cool self-light.
+uniform float fog_fill : hint_range(0.0, 1.0) = 0.0;
+
+global uniform vec4 storm_fog_color;
 
 varying vec3 v_world_pos;
 varying vec3 v_local_pos;
@@ -109,9 +115,13 @@ void fragment() {
 	ALBEDO = col;
 	ROUGHNESS = mix(rough_soaked, min(roughness_wet, rough_soaked), film);
 	METALLIC = metal;
-	SPECULAR = 0.5;
+	SPECULAR = mix(0.02, 0.5, specular_scale);
 	float sky_fill = fill * (0.35 + 0.65 * clamp(wn.y * 0.5 + 0.5, 0.0, 1.0));
-	vec3 emission = flash_color * flash + col * vec3(0.45, 0.5, 0.75) * sky_fill + tex * emission_tint;
+	vec3 sky = col * vec3(0.45, 0.5, 0.75) * sky_fill;
+	if (fog_fill > 0.0) {
+		sky = storm_fog_color.rgb * sky_fill * fog_fill;
+	}
+	vec3 emission = flash_color * flash + sky + tex * emission_tint;
 	if (fog_rim > 0.0) {
 		vec3 view_dir = normalize((INV_VIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
 		float rim = pow(clamp(1.0 - abs(dot(normalize(wn), view_dir)), 0.0, 1.0), 2.4);

@@ -142,9 +142,12 @@ Pominięte: §8 Meta AI, §14 VR comfort, §15 kalorie, powrót sakury na arenie
 
 ## 23. Run forest pass from playtest feedback (2026-10-27)
 - Spawn in a glade of the forest, no dojo disc / seal circle / arena gates.
-- Claustrophobic sugi forest: 14–21 m cedars on a jittered ~3 m grid (no rows,
-  no holes), solid trunks, hills and hollows (walkable < 40°), CC0 ground
-  (needle soil, grass, stones), full-size torii now and then, moonlight shafts.
+- Claustrophobic forest: Grab3D CC0 cherry (crown thinned, blossoms recolored
+  to night foliage) on a jittered ~3 m grid, drawn only inside the fog,
+  solid trunks, hills and hollows (walkable < 40°), CC0 ground (needle soil,
+  grass, stones), full-size torii now and then, moonlight shafts.
+- Run light is the fog: ambient is the fog color, sky reflections off, moon
+  diffuse and grey with no specular. Forest props don't self-light blue.
 - Night milk fog: pale depth fog full at 9 m, background fogged too; yōkai and
   Oni eyes are fog-piercing points that grow as they come.
 - Waves ramp from 2 alive to 12 over ~3 min, elites from wave 3, Oni at 2 min.
