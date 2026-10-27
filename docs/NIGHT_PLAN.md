@@ -105,6 +105,11 @@ sakura trees; do not touch grip/hand logic).
   `held_weapon.gd`; elite yōkai respect `counter` hits in `yokai.gd`.
 - Headless: `gdd_loop_test.tscn`; visual: `run_screenshots.gd` shot 7.
 
+## 19. Oni/yōkai combat closure (shots, mask sculpt, pose blend)
+- Desktop shots: Oni ~2 m / ~6 m in wave fog, yōkai approach + flinch (`point19_combat_screenshots`).
+- Oni mask sculpt v2 (~1k verts, sockets/kły/brwi, normal map).
+- Smoother yōkai pose blends on ActiveRagdoll; QUEST_TEST morning §19.
+
 ## 18. Combat CC0 SFX, music loop/duck, Quest perf (lights/audio)
 - Kenney/OGA recordings for cut/slap/hurt/tell; swing/clash already CC0; CREDITS/LICENSES.
 - `StormMusic` crossfade loop + level-up duck; forest wind on Ambience bus.
