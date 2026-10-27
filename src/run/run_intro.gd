@@ -135,6 +135,9 @@ func _finish_intro() -> void:
 		p.visible = false
 	if _shadow:
 		_shadow.visible = false
+	# Land before unlocking: an XR body released mid-hover would fall and drag
+	# the origin below the floor.
+	_place_player_at_height(0.0)
 	_lock_player(false)
 	_grant_katana()
 	GameEvents.log_event("run_intro_finished", {"skipped": _t < DESCENT_SEC * 0.85})
@@ -192,6 +195,8 @@ func _reveal_katana(amount: float) -> void:
 func _lock_player(locked: bool) -> void:
 	if _player is DesktopPlayer:
 		(_player as DesktopPlayer).movement_locked = locked
+	elif _player is XRPlayer:
+		(_player as XRPlayer).set_rig_locked(locked)
 	_player.set_meta("run_intro_locked", locked)
 
 

@@ -79,8 +79,8 @@ func _run_all() -> void:
 		voices <= RunPerfBudget.MAX_AUDIO_VOICES)
 
 	var we: Environment = run.get_node("WorldEnvironment").environment
-	_check("Run fog closes before distant hills (depth_end <= 10.5)",
-		we.fog_depth_end <= 10.6 and we.fog_density >= 1.2)
+	_check("Run fog is opaque before the loaded forest ends (depth_end %.1f <= %.1f)" % [we.fog_depth_end, ForestWorld.VIEW_RANGE_END],
+		we.fog_depth_end <= ForestWorld.VIEW_RANGE_END and we.fog_density >= 0.99)
 	_check("Forest uses shader baked-look instead of per-chunk LightmapGI",
 		run.forest_world.uses_shader_baked_look())
 

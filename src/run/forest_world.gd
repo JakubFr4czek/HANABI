@@ -2,24 +2,38 @@ class_name ForestWorld
 extends Node3D
 ## Endless forest illusion around the run shrine (docs/NIGHT_PLAN.md §3, GDD §9).
 ## Rolling hills from FastNoiseLite, props via shared MultiMeshes (trees, torii,
-## lanterns, rocks). Chunks recycle with the player; dense scene fog hides seams.
+## lanterns, rocks). Chunks recycle with the player, who can walk out of the
+## shrine clearing into the forest: every chunk carries a terrain collider, and
+## view ranges / ground fade are measured from the camera so fog swallows the
+## chunk edges wherever the player stands.
 
 const CHUNK_SIZE := 28.0
 const CHUNK_RADIUS := 1
-const CLEARING_RADIUS := 10.4
-const PROP_CLEARING_RADIUS := 13.2
+const CLEARING_RADIUS := 9.0
+const PROP_CLEARING_RADIUS := 7.4
+## Keep the giant torii behind the shrine (Arena/ToriiGates/GiantTorii) free of
+## trunks so it stays the clearing's one strong silhouette.
+const GIANT_TORII_POS := Vector2(0.0, -10.5)
+const GIANT_TORII_CLEAR := 7.5
+## Ground level of the clearing: just under the stone platform top (y = 0) so
+## the player walks off and back onto the disc without a step.
+const CLEARING_HEIGHT := -0.06
+const HILL_AMPLITUDE := 2.6
 const TERRAIN_RES := 13
-const VIEW_RANGE_END := 12.5
-const HILL_FADE_START := 9.5
-const HILL_FADE_END := 11.5
+## Chunks are 28 m and the 3×3 ring keeps >= 14 m loaded around the player;
+## everything is fully fogged by VIEW_RANGE_END (RunGame.RUN_FOG_END <= it).
+const VIEW_RANGE_END := 14.0
+## The ground no longer discards itself near the player: hills cut away under
+## their trees left props floating. Depth fog alone dissolves them.
+const GROUND_FADE_START := 60.0
+const GROUND_FADE_END := 70.0
 const GROUND_SHADER := preload("res://src/shaders/forest_ground.gdshader")
 const WET_SHADER := preload("res://src/shaders/wet_surface.gdshader")
-const ROCK_SCENE := preload("res://assets/models/environment/rocks/rock_face_01/rock_face_01.gltf")
 const TREE_SCENE := preload("res://assets/models/environment/forest_quaternius/tree_simple_quaternius.glb")
 const TORII_SCENE := preload("res://assets/models/environment/forest_quaternius/torii_gate_polyfork.glb")
 const TREE_MESH_SCALE := 1.35
 const TORII_MESH_SCALE := 0.42
-const MAX_TREES_PER_CHUNK := 14
+const MAX_TREES_PER_CHUNK := 26
 const MAX_TORII_PER_CHUNK := 4
 const MAX_LANTERNS_PER_CHUNK := 5
 const MAX_ROCKS_PER_CHUNK := 4
@@ -42,7 +56,6 @@ var _tree_mat: ShaderMaterial
 var _torii_mat: ShaderMaterial
 var _lantern_mat: ShaderMaterial
 var _rock_mat: ShaderMaterial
-var _tree_mesh_lod: Mesh
 var _lightmap_gi: LightmapGI
 var _static_gi := false
 
@@ -96,13 +109,10 @@ func _physics_process(_delta: float) -> void:
 func height_at(wx: float, wz: float) -> float:
 	var d := Vector2(wx, wz).length()
 	if d < CLEARING_RADIUS - 1.2:
-		return -0.42
-	var blend := smoothstep(CLEARING_RADIUS - 1.5, CLEARING_RADIUS + 5.5, d)
+		return CLEARING_HEIGHT
+	var blend := smoothstep(CLEARING_RADIUS - 1.5, CLEARING_RADIUS + 9.0, d)
 	var n := _height_noise.get_noise_2d(wx, wz)
-	var h := lerpf(-0.42, n * 3.8, blend)
-	if d > HILL_FADE_START:
-		h = lerpf(h, -0.46, smoothstep(HILL_FADE_START, HILL_FADE_END, d))
-	return h
+	return lerpf(CLEARING_HEIGHT, CLEARING_HEIGHT + n * HILL_AMPLITUDE, blend)
 
 
 func props_in_clearing() -> int:
@@ -143,9 +153,10 @@ func _make_chunk(coord: Vector2i) -> Node3D:
 	terrain.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	_set_view_range(terrain)
 	root.add_child(terrain)
+	root.add_child(_build_terrain_collider(terrain.mesh as ArrayMesh))
 
 	var clearing_props := 0
-	clearing_props += _populate_multimesh(root, "Trees", _tree_mesh, _tree_mat, MAX_TREES_PER_CHUNK, coord, 0, _tree_mesh_lod)
+	clearing_props += _populate_multimesh(root, "Trees", _tree_mesh, _tree_mat, MAX_TREES_PER_CHUNK, coord, 0)
 	clearing_props += _populate_multimesh(root, "Torii", _torii_mesh, _torii_mat, MAX_TORII_PER_CHUNK, coord, 1)
 	clearing_props += _populate_multimesh(root, "Lanterns", _lantern_mesh, _lantern_mat, MAX_LANTERNS_PER_CHUNK, coord, 2)
 	clearing_props += _populate_multimesh(root, "Rocks", _rock_mesh, _rock_mat, MAX_ROCKS_PER_CHUNK, coord, 3)
@@ -155,9 +166,8 @@ func _make_chunk(coord: Vector2i) -> Node3D:
 
 
 func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material, max_count: int,
-		coord: Vector2i, kind: int, lod_mesh: Mesh = null) -> int:
+		coord: Vector2i, kind: int) -> int:
 	var transforms: Array[Transform3D] = []
-	var lod_transforms: Array[Transform3D] = []
 	var clearing_hits := 0
 	for i in max_count:
 		var seed := _hash_coord(coord, kind, i)
@@ -165,14 +175,14 @@ func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 		var lz := _hash01(seed, 2) * CHUNK_SIZE - CHUNK_SIZE * 0.5
 		var wx := root.position.x + lx
 		var wz := root.position.z + lz
-		if Vector2(wx, wz).length() < PROP_CLEARING_RADIUS or Vector2(lx, lz).length_squared() < 0.04:
+		if _in_clearing(wx, wz) or Vector2(lx, lz).length_squared() < 0.04:
 			clearing_hits += 1
 			continue
 		var scatter := _scatter_noise.get_noise_2d(wx * 0.09, wz * 0.09)
-		var threshold := 0.12 if kind == 3 else (-0.05 if kind == 1 else 0.0)
+		# Trees fill most of the forest floor, thinning into glades; torii,
+		# lanterns and rocks stay sparse accents.
+		var threshold := 0.12 if kind == 3 else (-0.05 if kind == 1 else (-0.32 if kind == 0 else 0.0))
 		if scatter < threshold:
-			continue
-		if kind == 0 and scatter < 0.18:
 			continue
 		var hy := height_at(wx, wz)
 		var scale := 0.85 + _hash01(seed, 3) * 0.55
@@ -185,20 +195,12 @@ func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 		var angle := _hash01(seed, 5) * TAU
 		var basis := Basis.from_euler(Vector3(0.0, angle, 0.0)) * Basis.from_scale(Vector3.ONE * scale)
 		var xf := Transform3D(basis, Vector3(lx, hy, lz))
-		var dist := Vector2(wx, wz).length()
-		if kind == 0 and lod_mesh != null and dist > 11.5:
-			lod_transforms.append(xf)
-		else:
-			transforms.append(xf)
+		transforms.append(xf)
 		var props: Array = root.get_meta("prop_world_positions", [])
 		props.append(Vector3(wx, hy, wz))
 		root.set_meta("prop_world_positions", props)
 	if not transforms.is_empty():
 		_commit_multimesh(root, label, mesh, mat, transforms)
-	if not lod_transforms.is_empty() and lod_mesh != null:
-		_commit_multimesh(root, label + "LOD", lod_mesh, mat, lod_transforms)
-	if transforms.is_empty() and lod_transforms.is_empty():
-		return clearing_hits
 	return clearing_hits
 
 
@@ -258,7 +260,7 @@ func _place_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 		var lz := -CHUNK_SIZE * 0.15 if axis_x else along
 		var wx := root.position.x + lx
 		var wz := root.position.z + lz
-		if Vector2(wx, wz).length() < PROP_CLEARING_RADIUS + 0.35:
+		if _in_clearing(wx, wz, 0.35):
 			continue
 		var hy := height_at(wx, wz)
 		var s := 0.42 + float(g) * 0.02
@@ -295,6 +297,23 @@ func _build_terrain_mesh(coord: Vector2i) -> ArrayMesh:
 	return st.commit()
 
 
+func _build_terrain_collider(mesh: ArrayMesh) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = "TerrainCollider"
+	var shape := CollisionShape3D.new()
+	var concave := ConcavePolygonShape3D.new()
+	concave.set_faces(mesh.get_faces())
+	shape.shape = concave
+	body.add_child(shape)
+	return body
+
+
+func _in_clearing(wx: float, wz: float, margin: float = 0.0) -> bool:
+	if Vector2(wx, wz).length() < PROP_CLEARING_RADIUS + margin:
+		return true
+	return Vector2(wx, wz).distance_to(GIANT_TORII_POS) < GIANT_TORII_CLEAR + margin
+
+
 static func _add_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
 	var n := (b - a).cross(c - a).normalized()
 	st.set_normal(n)
@@ -310,8 +329,8 @@ func _build_materials() -> void:
 	_ground_mat.shader = GROUND_SHADER
 	_ground_mat.set_shader_parameter("fill", 1.42)
 	_ground_mat.set_shader_parameter("cavity_ao", 0.85)
-	_ground_mat.set_shader_parameter("fog_fade_start", 8.0)
-	_ground_mat.set_shader_parameter("fog_fade_end", 10.8)
+	_ground_mat.set_shader_parameter("fog_fade_start", GROUND_FADE_START)
+	_ground_mat.set_shader_parameter("fog_fade_end", GROUND_FADE_END)
 
 	_tree_mat = ShaderMaterial.new()
 	_tree_mat.shader = WET_SHADER
@@ -354,15 +373,16 @@ func _build_materials() -> void:
 	_rock_mat.set_shader_parameter("fill", 1.2)
 
 
+## No per-node visibility range: Godot measures it to the node origin, i.e. a
+## 28 m chunk's center, which culled every chunk but the one under the player
+## (and all its trees). Depth fog (RunGame.RUN_FOG_END) hides chunk edges.
 func _set_view_range(inst: GeometryInstance3D) -> void:
 	inst.visibility_range_begin = 0.0
-	inst.visibility_range_end = VIEW_RANGE_END
-	inst.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	inst.visibility_range_end = 0.0
 
 
 func _build_meshes() -> void:
 	_tree_mesh = _build_tree_mesh()
-	_tree_mesh_lod = _box_mesh(Vector3(0.35, 1.25, 0.35), Vector3(0.0, 0.62, 0.0))
 	_torii_mesh = _build_torii_mesh()
 	_lantern_mesh = _build_lantern_mesh()
 	_rock_mesh = _extract_rock_mesh()
@@ -390,9 +410,31 @@ func _build_lantern_mesh() -> ArrayMesh:
 	return _merge_meshes(parts)
 
 
+## The scanned rock_face_01 is ~20k triangles; dozens of MultiMesh copies blew
+## the Quest triangle budget. A noise-displaced low-poly boulder (~80 tris)
+## reads the same through rain and fog.
 func _extract_rock_mesh() -> Mesh:
-	var mesh := _extract_scene_mesh(ROCK_SCENE, 1.0)
-	return mesh if mesh else _box_mesh(Vector3(0.8, 0.5, 0.7), Vector3.ZERO)
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.5
+	sphere.height = 0.62
+	sphere.radial_segments = 9
+	sphere.rings = 5
+	var arrays := sphere.get_mesh_arrays()
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var noise := FastNoiseLite.new()
+	noise.seed = 0x524F434B
+	noise.frequency = 2.1
+	for i in verts.size():
+		var v := verts[i]
+		var bump := 1.0 + noise.get_noise_3dv(v * 1.7) * 0.32
+		verts[i] = Vector3(v.x * bump * 1.25, maxf(v.y * bump, -0.12), v.z * bump * 0.95)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	for i in idx.size():
+		st.add_vertex(verts[idx[i]])
+	st.generate_normals()
+	return st.commit()
 
 
 static func _merge_scene_meshes(scene: PackedScene, scale_factor: float) -> ArrayMesh:
@@ -421,23 +463,6 @@ static func _accumulate_local_transform(node: Node3D, root: Node) -> Transform3D
 			xf = (n as Node3D).transform * xf
 		n = n.get_parent()
 	return xf
-
-
-static func _extract_scene_mesh(scene: PackedScene, scale_factor: float) -> Mesh:
-	var inst := scene.instantiate()
-	var found: Mesh
-	for mi in inst.find_children("*", "MeshInstance3D", true, false):
-		if (mi as MeshInstance3D).mesh:
-			found = (mi as MeshInstance3D).mesh
-			break
-	inst.free()
-	if found == null:
-		return null
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var xform := Transform3D(Basis.from_scale(Vector3.ONE * scale_factor), Vector3.ZERO)
-	st.append_from(found, 0, xform)
-	return st.commit()
 
 
 static func _box_mesh(size: Vector3, center: Vector3) -> ArrayMesh:

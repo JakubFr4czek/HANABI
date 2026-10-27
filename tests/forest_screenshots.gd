@@ -23,6 +23,21 @@ func _ready() -> void:
 	player.camera.rotation.x = deg_to_rad(-10.0)
 	await _frames(45)
 	await _shot("forest_horizon")
+	# Look out sideways from the shrine edge into the tree line.
+	player.teleport(Vector3(3.5, 0.0, 1.0), -PI * 0.5)
+	player.camera.rotation.x = deg_to_rad(-6.0)
+	await _frames(30)
+	await _shot("forest_from_shrine_edge")
+	# Walked out among the hills, far from the shrine.
+	player.teleport(Vector3(30.0, 2.0, 18.0), PI * 0.25)
+	player.camera.rotation.x = deg_to_rad(-6.0)
+	await _frames(60)
+	await _shot("forest_deep_walk")
+	# Looking back at the shrine clearing from the tree line.
+	player.teleport(Vector3(0.0, 0.0, 12.5), 0.0)
+	player.camera.rotation.x = deg_to_rad(-4.0)
+	await _frames(45)
+	await _shot("forest_back_to_shrine")
 	run.queue_free()
 	get_tree().quit(0)
 

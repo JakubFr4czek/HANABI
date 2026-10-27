@@ -104,6 +104,9 @@ func _run_all() -> void:
 	#    which drift to the player and grant XP.
 	clawer.hp = 12.0
 	player.teleport(Vector3(0.0, 0.0, 1.45), 0.0)
+	# The player body no longer blocks yōkai (no shoving in VR), so the claw
+	# lunge leaves it wherever it ended; stand it at blade reach for the cut.
+	clawer.place_at(Vector3(0.0, 0.0, 0.25), 0.0)
 	await _wait(0.25)
 	player.swing_duration = 0.16
 	player.swing(DesktopPlayer.SLASH_HORIZONTAL)
@@ -189,8 +192,14 @@ func _run_all() -> void:
 		and run.load_high_score() == run.high_score
 		and run.get_node_or_null("EndScreen/MemorialStele") != null
 		and run.restart_ofuda != null)
-	_check("Memorial stele lists element BUILD (GDD §6 end screen)",
-		_stele_label_text(run).contains("BUILD") and _stele_label_text(run).contains("雷"))
+	# storm_chain binds Storm unless the random level-up ofuda already filled
+	# both element slots; either way the stele must list what the blade carries.
+	var stele_text := _stele_label_text(run)
+	var lists_build := stele_text.contains("BUILD") and not run.element_system.active_elements.is_empty()
+	for elem in run.element_system.active_elements:
+		lists_build = lists_build and stele_text.contains(Elements.build_label(elem))
+	_check("Memorial stele lists element BUILD (GDD §6 end screen): %s" % stele_text.replace("\n", " | "),
+		lists_build)
 
 	var saved_best := run.high_score
 	# Slice the Restart Ofuda with a katana swing to start a fresh run.

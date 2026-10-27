@@ -19,11 +19,12 @@ func _run_all() -> void:
 	add_child(run)
 	await _frames(16)
 	var fog := run.combat_fog
-	_check("RunCombatFog binds and keeps base fog density for distant hills",
-		fog != null and fog.call("base_fog_density") >= 1.2)
+	_check("RunCombatFog binds and keeps full-strength fog for distant hills",
+		fog != null and fog.call("base_fog_density") >= 0.99)
 
 	var we: Environment = run.get_node("WorldEnvironment").environment
 	var base_end := we.fog_depth_end
+	var base_begin := we.fog_depth_begin
 	var base_density: float = fog.call("base_fog_density")
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
@@ -31,8 +32,8 @@ func _run_all() -> void:
 	player.teleport(Vector3(0.0, 0.0, 1.5), 0.0)
 	run.wave_director.spawn_enemy_at(Vector3(0.0, 0.0, -1.8), player.global_position)
 	await _frames(14)
-	_check("Combat fog softens near enemies without opening distant fog (end=%.2f)" % we.fog_depth_end,
-		we.fog_density < base_density and we.fog_depth_end <= base_end + 0.01)
+	_check("Combat fog clears near enemies without opening distant fog (begin %.2f -> %.2f, end=%.2f)" % [base_begin, we.fog_depth_begin, we.fog_depth_end],
+		we.fog_depth_begin > base_begin + 0.5 and we.fog_density >= base_density - 0.001 and we.fog_depth_end <= base_end + 0.01)
 
 	_check("Element firework helper spawns fog-piercing burst API",
 		ElementFirework != null)

@@ -78,6 +78,12 @@ var current_pose := "guard"
 ## origin; after a knockdown it moves to where the body got up (it is not
 ## dragged back with its feet scraping the floor). [method reset_body] restores it.
 var anchor_position := Vector3.ZERO
+## Optional (x, z) -> ground y. Without it the body stands at this node's
+## height (flat dojo); in the run forest it follows the hills.
+var ground_probe: Callable
+## > 0: the anchor may lead the pelvis by at most this far (swarm walkers).
+## 0 keeps the dojo dummy's spring back to the spot it was knocked from.
+var max_anchor_lead := 0.0
 ## Walking: the anchor glides at this world velocity (XZ) while standing, and
 ## the balance help carries the body along with it.
 var move_velocity := Vector3.ZERO
@@ -445,10 +451,24 @@ func _set_state(new_state: State) -> void:
 func _physics_process(delta: float) -> void:
 	if state == State.STANDING:
 		anchor_position += Vector3(move_velocity.x, 0.0, move_velocity.z) * delta
+		if max_anchor_lead > 0.0:
+			_leash_anchor()
 	_update_state(delta)
 	_turn_facing(delta)
 	_drive_joints(delta)
 	_drive_balance(delta)
+
+
+## Keeps the walking anchor within [member max_anchor_lead] of the pelvis.
+## The anchor integrates the commanded velocity on its own, so whenever the
+## body lags (first steps, a slope, a shove) it runs ahead and the body then
+## chases it at several m/s, overshoots and circles back.
+func _leash_anchor() -> void:
+	var p := root_part().global_position
+	var lead := Vector3(anchor_position.x - p.x, 0.0, anchor_position.z - p.z)
+	if lead.length() > max_anchor_lead:
+		lead = lead.normalized() * max_anchor_lead
+		anchor_position = Vector3(p.x + lead.x, anchor_position.y, p.z + lead.z)
 
 
 func _update_state(delta: float) -> void:
@@ -660,7 +680,10 @@ func _drive_balance(delta: float) -> void:
 
 	# Height: velocity-level spring on the pelvis plus partial gravity
 	# compensation; applied to every body so the whole body is lifted evenly.
-	var target_h := global_position.y + _pelvis_rest_height
+	var ground_y := global_position.y
+	if ground_probe.is_valid():
+		ground_y = float(ground_probe.call(pelvis.global_position.x, pelvis.global_position.z))
+	var target_h := ground_y + _pelvis_rest_height
 	var max_rise := 1.2 if state == State.GETTING_UP else 3.0
 	var vy_des := clampf((target_h - pelvis.global_position.y) * height_stiffness, -3.0, max_rise)
 	var dvy := (vy_des - pelvis.linear_velocity.y) * height_gain
