@@ -81,6 +81,10 @@ const PLAYER_BODY_LAYER := 1 << 19
 @export var guard_z := -0.085
 @export var guard_half_length := 0.02
 @export var guard_radius := 0.04
+## Half the width of a fist along the handle (m). The grip point is the
+## middle of the fist, so it stays this far inside both ends of the handle:
+## a grip right at the guard put half the hand over the tsuba and blade.
+@export var hand_half_width := 0.05
 ## Distance from [member blade_tip] (m) where the blunt spine stops being grabbable.
 @export var blade_grip_margin := 0.06
 ## Local direction from the blade centerline toward the blunt spine (mune).
@@ -193,6 +197,8 @@ var _local_grips := {}  # holder -> Transform3D in weapon local space
 var grab_locked := false
 var _grip_zones := {}   # holder -> String (ZONE_HANDLE / ZONE_TSUBA / ZONE_MUNE)
 var _prev_contacts := {}  # collider instance id -> true, contacts in previous tick
+## True while the blade physically rests against an enemy body this tick.
+var _touching_enemy := false
 var _receiver_cooldown := {}  # receiver instance id -> time left
 var _wedged := {}  # body instance id -> {"body": PhysicsBody3D, "time": float}
 var _stuck_timer := 0.0
@@ -261,11 +267,20 @@ func classify_grip_zone(_local_point: Vector3) -> String:
 
 
 ## Clamp an arbitrary local-space point onto the handle: between the guard
-## and the pommel end, on the handle centerline. A hand that closes on the
-## guard or the blade itself slides to the nearest end of the handle
-## instead of gripping steel.
+## and the pommel end, a fist's half-width inside each end, on the
+## centerline. A hand that closes on the guard or the blade itself slides
+## to the nearest end of the handle instead of gripping steel.
 func clamp_grip_point(local_point: Vector3) -> Vector3:
-	return Vector3(0.0, 0.0, clampf(local_point.z, guard_z + guard_half_length, handle_back_z))
+	return Vector3(0.0, 0.0, clampf(local_point.z, grip_min_z(), grip_max_z()))
+
+
+## Nearest-to-the-guard and nearest-to-the-pommel grip points (fist middles).
+func grip_min_z() -> float:
+	return guard_z + guard_half_length + hand_half_width
+
+
+func grip_max_z() -> float:
+	return maxf(handle_back_z - hand_half_width * 0.6, grip_min_z())
 
 
 func _blade_centerline_at_z(z: float) -> Vector3:
@@ -550,7 +565,11 @@ func _keep_in_hand(target: Transform3D, target_vel: Vector3, last_target: Transf
 		if spread > 0.05:
 			max_angle = minf(max_angle, rad_to_deg(atan(max_grip_offset * 2.0 / spread)))
 	if offset.length() <= max_grip_offset and angle <= max_angle:
-		return false
+		# The grip can sit perfectly in the hand while the blade's far end
+		# rests against a body and the hand keeps shoving: the PD holds the
+		# grip, so the offset check above never trips. A slow push against
+		# flesh still makes the arm give way (fast swings cut instead).
+		return _touching_enemy and target_vel.length() < 1.0
 	var pose := _pose_within(target, g0, offset, q, q_target, angle, max_grip_offset, max_angle)
 	var hits := _overlaps_at(pose)
 	if hits.blocked_by_static:
@@ -765,6 +784,7 @@ func _process_contacts() -> void:
 	if state == null:
 		return
 	var now_contacts := {}
+	_touching_enemy = false
 	# Best (fastest) new contact per receiver this tick.
 	var best := {}
 	for i in state.get_contact_count():
@@ -773,6 +793,8 @@ func _process_contacts() -> void:
 			continue
 		var cid := collider.get_instance_id()
 		now_contacts[cid] = true
+		if collider.has_meta("hit_receiver") and not _wedged.has(cid):
+			_touching_enemy = true
 		if _prev_contacts.has(cid):
 			continue  # still touching from before, not a new impact
 		if collider is RigidBody3D:
@@ -927,7 +949,7 @@ func _handle_hit(c: Dictionary) -> void:
 			Sfx.play_at("cut", c.point, loud)
 			if dmg >= 30.0:
 				Sfx.play_at("impact_heavy", c.point, loud - 6.0)
-			SparkBurst.spawn(get_tree().current_scene, c.point, c.direction, Color(2.2, 2.1, 1.8), 18, 3.5)
+			SparkBurst.spawn(get_tree().current_scene, c.point, c.direction, Color(2.0, 1.15, 0.45), 14, 3.2)
 			if metal_ring and dmg >= micro_stop_damage:
 				Sfx.play_at("blade_ring", c.point, linear_to_db(clampf(dmg / 120.0, 0.12, 0.45)))
 		"blunt":

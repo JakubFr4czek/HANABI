@@ -139,7 +139,8 @@ func _run_all() -> void:
 		for xf in chunk.get_meta("tree_local_xfs", []):
 			var local: Vector3 = (xf as Transform3D).origin
 			var w := chunk.global_transform * local
-			var mesh_floor := forest._mesh_min_height(w.x, w.z, 3.3)
+			# Root reach of the current tree mesh (ribbon tip ~2.1 m).
+			var mesh_floor := forest._mesh_min_height(w.x, w.z, 2.1)
 			sampled += 1
 			if w.y > mesh_floor + 0.02:
 				floating += 1

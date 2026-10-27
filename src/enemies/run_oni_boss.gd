@@ -53,12 +53,15 @@ func _ready() -> void:
 	_robe.set_shader_parameter("fog_rim", 1.25)
 	_robe.set_shader_parameter("procedural_ao", 0.55)
 	_mask.shader = WET_SURFACE_SHADER
-	_mask.set_shader_parameter("base_color", Color(0.94, 0.88, 0.80))
+	# Aged bone like the swarm masks, a touch lighter so the boss still
+	# reads first — not a white signal plate.
+	_mask.set_shader_parameter("base_color", Color(0.52, 0.46, 0.38))
 	_mask.set_shader_parameter("roughness_dry", 0.58)
 	_mask.set_shader_parameter("roughness_wet", 0.22)
 	_mask.set_shader_parameter("wetness", 0.48)
-	_mask.set_shader_parameter("fill", 2.75)
-	_mask.set_shader_parameter("fog_rim", 2.15)
+	_mask.set_shader_parameter("fill", 0.85)
+	_mask.set_shader_parameter("fog_rim", 0.9)
+	_mask.set_shader_parameter("flash_color", Color(0.9, 0.3, 0.16))
 	_mask.set_shader_parameter("normal_texture", ONI_MASK_NRM)
 	_mask.set_shader_parameter("normal_depth", 1.35)
 	_mask.set_shader_parameter("procedural_ao", 0.42)
