@@ -1,0 +1,7 @@
+Oni boss mask mesh: assets/models/enemies/oni_mask_run.glb
+
+License: CC0 1.0 — project-authored geometry.
+Generator: tools/gen_oni_mask_glb.py (Jakub Frączek / HANABI team).
+No Sketchfab, Mixamo, or account-gated download was used.
+
+Regenerate: python3 tools/gen_oni_mask_glb.py
