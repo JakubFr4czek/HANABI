@@ -78,6 +78,7 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/point17_diegetic_critical_
 $GODOT --headless --path . --fixed-fps 90 res://tests/firework_flash_cap_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/point14_fog_torii_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/audio_sfx_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/storm_music_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/elements_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/forest_world_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/enemy_variants_test.tscn -- --desktop
