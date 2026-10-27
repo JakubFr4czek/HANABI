@@ -906,7 +906,9 @@ func _handle_hit(c: Dictionary) -> void:
 	if receiver.has_method("receive_hit"):
 		hit = receiver.receive_hit(part, hit)
 	var dmg: float = hit.get("damage", base_damage)
-	_apply_cut_resistance(c, mom, strike.kind)
+	# A limb taken off offers almost nothing: the blade follows through
+	# clean instead of biting in.
+	_apply_cut_resistance(c, mom, strike.kind, 0.25 if hit.has("severed") else 1.0)
 	var loud := linear_to_db(clampf(0.4 + c.speed / 12.0, 0.4, 1.2))
 	match strike.kind:
 		"edge", "thrust":
@@ -953,14 +955,14 @@ func _handle_hit(c: Dictionary) -> void:
 ## contact). Applied as a direct velocity change, so the impact-kick limiter
 ## (which only caps what the solver adds on top of the arm) leaves it alone;
 ## the PD arm then has to re-accelerate the blade, which reads as weight.
-func _apply_cut_resistance(c: Dictionary, mom: Dictionary, kind: String) -> void:
+func _apply_cut_resistance(c: Dictionary, mom: Dictionary, kind: String, scale: float = 1.0) -> void:
 	var bite := slap_bite
 	match kind:
 		"edge", "thrust":
 			bite = edge_bite
 		"blunt":
 			bite = blunt_bite
-	var j := float(mom.impulse) * bite
+	var j := float(mom.impulse) * bite * scale
 	if j <= 0.0:
 		return
 	var dv: Vector3 = -c.direction * minf(j / maxf(mass, 0.2), max_bite_speed)
