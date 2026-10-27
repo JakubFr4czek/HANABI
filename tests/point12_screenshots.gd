@@ -59,6 +59,12 @@ func _ready() -> void:
 	await _frames(8)
 	await _shot("4_firework_in_fog")
 
+	# NIGHT_PLAN §20: run storm rain + blade drips (GDD §9), not dojo-only.
+	player.teleport(Vector3(0.0, 0.0, 1.0), 0.0)
+	player.camera.rotation.x = deg_to_rad(-18.0)
+	await _frames(55)
+	await _shot("5_run_storm_rain_platform")
+
 	run.queue_free()
 	get_tree().quit(0)
 

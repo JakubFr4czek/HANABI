@@ -53,6 +53,18 @@ func _run_all() -> void:
 	_check("Parry triggers diegetic tsuba glow (not screen-space UI)",
 		run.diegetic_hud._parry_glow > 0.25)
 
+	var rain := run.get_node_or_null("RunStormRain") as StormRain
+	_check("Survival run has storm rain streaks (GDD §9, not arena-only)",
+		rain != null and rain.rain != null)
+	_check("Katana carries blade drip particles in run",
+		run.katana != null and run.katana.get_node_or_null("BladeDrips") != null)
+
+	var fake := Yokai.new()
+	fake.elite_element = Elements.STORM
+	fake.kind = Yokai.Kind.ELITE
+	_check("Elite soul drops use elite element tint (GDD §6)",
+		run._soul_element_for_kill(fake) == Elements.STORM)
+
 	run.queue_free()
 
 

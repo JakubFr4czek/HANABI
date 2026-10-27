@@ -207,6 +207,43 @@ func _configure_run_forest() -> void:
 		storm.name = "StormAmbience"
 		storm.lightning = get_node_or_null("Arena/StormLightning") as StormLightning
 		add_child(storm)
+	_setup_run_storm_rain()
+
+
+func _setup_run_storm_rain() -> void:
+	if get_node_or_null("RunStormRain") != null:
+		return
+	var rain := StormRain.new()
+	rain.name = "RunStormRain"
+	rain.rain_amount = 880
+	rain.splash_amount = 80
+	rain.platform_radius = 5.4
+	add_child(rain)
+	if katana:
+		StormRain.add_blade_drips(katana, katana.blade_tip)
+		_set_katana_rain_droplets(katana, 1.0)
+
+
+func _set_katana_rain_droplets(weapon: Node, amount: float) -> void:
+	for mi in weapon.find_children("*", "MeshInstance3D", true, false):
+		var surf := mi as MeshInstance3D
+		for si in surf.get_surface_override_material_count():
+			var mat := surf.get_surface_override_material(si)
+			if mat is ShaderMaterial:
+				var sm := mat as ShaderMaterial
+				if sm.shader and String(sm.shader.resource_path).ends_with("katana_steel.gdshader"):
+					sm.set_shader_parameter("droplets", amount)
+
+
+func _soul_element_for_kill(yokai: Yokai) -> String:
+	if yokai.is_elite() and yokai.elite_element != Elements.NONE:
+		return yokai.elite_element
+	var le := yokai.last_kill_element
+	if le != Elements.NONE and le != "physical":
+		return le
+	if element_system and element_system.visual_element() != Elements.NONE:
+		return element_system.visual_element()
+	return Elements.NONE
 
 
 func _setup_run_nodes() -> void:
@@ -404,7 +441,7 @@ func _on_enemy_died(yokai: Yokai, _hit: Dictionary) -> void:
 	element_system.on_enemy_died(yokai)
 	score = compute_score()
 	var origin: Vector3 = (yokai.parts["chest"] as RagdollPart).global_position if yokai.parts.has("chest") else yokai.global_position + Vector3(0, 1.0, 0)
-	var elem: String = yokai.last_kill_element if yokai.last_kill_element != "physical" else Elements.NONE
+	var elem: String = _soul_element_for_kill(yokai)
 	var orbs := SoulOrb.spawn_cluster(_souls_root, origin, orbs_per_kill, xp_per_orb, elem)
 	for orb in orbs:
 		orb.collected.connect(_on_soul_collected)
