@@ -298,6 +298,12 @@ func _update_hand() -> void:
 	hand.global_transform = camera.global_transform * local
 
 
+func set_screen_hud_visible(visible: bool) -> void:
+	var layer := _hud.get_parent() as CanvasLayer
+	if layer:
+		layer.visible = visible
+
+
 func _hud_text() -> String:
 	var t := "HANABI desktop test rig (no XR runtime found)\n"
 	t += "Click: capture mouse   Esc: release   WASD: walk   Mouse: look\n"
