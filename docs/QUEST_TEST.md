@@ -12,17 +12,25 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 
 - [ ] Intro seiza: płynne zejście, katana po touchdown, skip (jeśli jest) nie psuje runu.
 - [ ] Diegetyczny HUD (tsuba + nadgarstek): czytelny, bez migotania bloomu.
-- [ ] Las w fogu: chunki bez „pop-in” klocków; drzewa/torii czytelne w promieniu ~12 m.
+- [ ] **Las CC0** (Quaternius / polyfork): drzewa i mniejsze torii czytelne do ~12 m; **za wielkim torii** tylko mgła — bez twardej linii horyzontu / „ściany” chunków.
 - [ ] Hitodama: po killu lecą, spiralnie wciągane; zbieranie bez lag spike’a.
 - [ ] Level-up ofuda: slow-mo, slice, wybór upgrade’u — bez freezu.
 
 ## Walka i VFX
 
 - [ ] Trafienia: iskry czytelne, nie biały szum.
-- [ ] Śmierć yōkai: krótki „firework” w kolorze żywiołu (nie confetti).
+- [ ] **Śmierć yōkai:** krótki firework w kolorze żywiołu — **widoczny we mgle** (neon + krótki błysk), bez konfetti / tęczy.
 - [ ] Elita: halo w kolorze żywiołu odróżnia od swarmu.
-- [ ] Oni boss: groźna sylwetka (nie drewniany manekin), parry/stagger czytelne.
+- [ ] **Oni boss:** z bliska widać **maskę, oczy, rogi, zbroję** (nie czarna sylwetka); w walce mgła w promieniu ~8 m od ciebie lekko się rozjaśnia — dalej nadal ciemno.
+- [ ] Parry / stagger Oni: czytelne, bez zmiany chwytu katany.
 - [ ] Błyskawica: widoczna za wielkim torii, nie tylko flash światła.
+
+## Audio (punkt 10+)
+
+- [ ] Swing katany: pitch rośnie z prędkością, bez metalicznego „zippera”.
+- [ ] Kill: krótki stinger firework + soul collect; level-up chime po slice ofudy.
+- [ ] Las: słychać wiatr / ambience, nie zagłusza SFX walki.
+- [ ] Slow-mo (level-up / parry): lekki low-pass na ambience, bez wyciszenia całej sceny.
 
 ## Komfort VR
 
@@ -39,7 +47,7 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 ## Po sesji
 
 - [ ] Zanotuj falę / liczbę wrogów przy najgorszym fps.
-- [ ] Zrzut ekru z overlay (lub zapisz wartości z górnego lewego rogu).
+- [ ] Zrzut ekranu z overlay (lub zapisz wartości z górnego lewego rogu).
 - [ ] Jeśli coś padło: issue z tagiem `quest` + ostatni commit SHA.
 
 ## Headless (CI — nie zastępuje gogli)
@@ -48,4 +56,13 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 GODOT=".tools/Godot.app/Contents/MacOS/Godot"
 $GODOT --headless --path . --fixed-fps 90 res://tests/quest_perf_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/vfx_pool_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/point12_readability_test.tscn -- --desktop
 ```
+
+## Zrzuty desktop (porównanie z GDD przed Questem)
+
+```bash
+$GODOT --headless --path . --fixed-fps 90 res://tests/point12_screenshots.tscn -- --desktop --shots /tmp/hanabi_point12_shots
+```
+
+Sprawdź: `2_beyond_giant_torii_fog` (nic za torii), `3_oni_close_mask`, `4_firework_in_fog`.

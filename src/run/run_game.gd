@@ -41,6 +41,9 @@ var wave_director: WaveDirector
 var diegetic_hud: DiegeticHud
 var element_system: ElementSystem
 var forest_world: ForestWorld
+const RUN_COMBAT_FOG := preload("res://src/run/run_combat_fog.gd")
+
+var combat_fog: Node
 var run_intro: RunIntro
 var active_ofuda: Array[OfudaTalisman] = []
 var restart_ofuda: OfudaTalisman = null
@@ -179,6 +182,12 @@ func _configure_run_forest() -> void:
 		we.environment.fog_height = 0.15
 		we.environment.fog_height_density = 0.68
 		we.environment.fog_sky_affect = 0.0
+	if combat_fog == null:
+		combat_fog = RUN_COMBAT_FOG.new()
+		combat_fog.name = "RunCombatFog"
+		add_child(combat_fog)
+	if we:
+		combat_fog.bind_environment(we)
 	if forest_world == null:
 		forest_world = ForestWorld.new()
 		forest_world.name = "ForestWorld"
@@ -319,6 +328,10 @@ func _physics_process(delta: float) -> void:
 		for enemy in wave_director.alive_enemies():
 			enemy.apply_distance_lod(p_pos.distance_to(enemy.root_part().global_position))
 		score = compute_score()
+		if combat_fog:
+			combat_fog.step(p_pos, wave_director.alive_enemies(), true)
+	elif combat_fog:
+		combat_fog.step(p_pos, [], false)
 
 	# Step soul orbs even during level-up slow-mo (using simulation delta).
 	if _souls_root == null:

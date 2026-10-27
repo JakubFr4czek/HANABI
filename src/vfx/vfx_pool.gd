@@ -31,6 +31,10 @@ func _ready() -> void:
 	_prewarm_souls(SOUL_PREWARM)
 
 
+func death_vfx_ignores_fog() -> bool:
+	return _spark_mat != null and _ring_mat != null and _spark_mat.disable_fog and _ring_mat.disable_fog
+
+
 func pool_stats() -> Dictionary:
 	return {
 		"spark_free": _spark_free.size(),
@@ -107,7 +111,7 @@ func spawn_element_ring(parent: Node, at: Vector3, col: Color, scale: float) -> 
 	p.amount = mini(ElementFirework.MAX_PARTICLES, int(22 * scale))
 	p.initial_velocity_min = 1.6 * scale
 	p.initial_velocity_max = 3.1 * scale
-	(_ring_mat as StandardMaterial3D).albedo_color = col * 0.75
+	(_ring_mat as StandardMaterial3D).albedo_color = col * 0.92
 	p.global_position = at
 	p.restart()
 	p.emitting = true
@@ -213,13 +217,15 @@ func _build_shared_spark_assets() -> void:
 	_spark_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_spark_mat.albedo_texture = SparkBurst.shared_streak_texture()
 	_spark_mat.vertex_color_use_as_albedo = true
+	_spark_mat.disable_fog = true
 
 
 func _build_shared_ring_assets() -> void:
 	_ring_mesh = QuadMesh.new()
-	_ring_mesh.size = Vector2(0.006, 0.038)
+	_ring_mesh.size = Vector2(0.0072, 0.044)
 	_ring_mat = StandardMaterial3D.new()
 	_ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_ring_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	_ring_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_ring_mat.vertex_color_use_as_albedo = true
+	_ring_mat.disable_fog = true

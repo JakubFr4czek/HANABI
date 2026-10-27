@@ -10,6 +10,7 @@ var _last_hit := {}
 var _flesh := ShaderMaterial.new()
 var _armor := ShaderMaterial.new()
 var _mask := ShaderMaterial.new()
+var _rim: OmniLight3D
 
 
 func _ready() -> void:
@@ -54,6 +55,27 @@ func _ready() -> void:
 	GameEvents.log_event("oni_spawned", {"hp": hp})
 
 
+func _physics_process(delta: float) -> void:
+	super._physics_process(delta)
+	_update_oni_readability()
+
+
+func _update_oni_readability() -> void:
+	var head := get_tree().get_first_node_in_group("player_head") as Node3D
+	var player_pos := head.global_position if head else global_position + Vector3(0, 1.2, 4.0)
+	var d := global_position.distance_to(player_pos)
+	var near := clampf(1.0 - d / 8.0, 0.0, 1.0)
+	if _rim == null:
+		_rim = get_node_or_null("OniRimLight") as OmniLight3D
+	if _rim:
+		_rim.light_energy = lerpf(0.48, 1.35, near)
+		_rim.omni_range = lerpf(2.6, 3.8, near)
+	_mask.set_shader_parameter("fill", lerpf(2.35, 3.25, near))
+	_flesh.set_shader_parameter("fill", lerpf(2.05, 2.65, near))
+	_flesh.set_shader_parameter("fog_rim", lerpf(1.35, 2.05, near))
+	_armor.set_shader_parameter("fog_rim", lerpf(1.1, 1.65, near))
+
+
 func _attach_oni_rim_light() -> void:
 	if get_node_or_null("OniRimLight"):
 		return
@@ -91,6 +113,19 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 	mask_mi.mesh = m
 	mask_mi.position = Vector3(0, 0.04, 0.12)
 	mask_mi.material_override = _mask
+	var brow := MeshInstance3D.new()
+	brow.name = "OniBrow"
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.22, 0.028, 0.04)
+	brow.mesh = bm
+	brow.position = Vector3(0, 0.1, 0.145)
+	var brow_mat := StandardMaterial3D.new()
+	brow_mat.albedo_color = Color(0.62, 0.06, 0.05)
+	brow_mat.emission_enabled = true
+	brow_mat.emission = Color(0.95, 0.12, 0.06)
+	brow_mat.emission_energy_multiplier = 0.55
+	brow.material_override = brow_mat
+	mask_mi.add_child(brow)
 	var eye_l := MeshInstance3D.new()
 	var eye_m := SphereMesh.new()
 	eye_m.radius = 0.018
