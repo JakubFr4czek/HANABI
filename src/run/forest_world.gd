@@ -109,6 +109,7 @@ var _lantern_mat: ShaderMaterial
 var _rock_mat: ShaderMaterial
 var _lightmap_gi: LightmapGI
 var _static_gi := false
+var torii_manager: ToriiManager = null
 
 
 func uses_static_gi() -> bool:
@@ -145,6 +146,11 @@ func setup(p_follow: Node3D, arena_lightmap: LightmapGI = null) -> void:
 	_build_meshes()
 	_lightmap_gi = arena_lightmap
 	_static_gi = _lightmap_gi != null
+	if torii_manager == null:
+		torii_manager = ToriiManager.new()
+		torii_manager.name = "ToriiManager"
+		add_child(torii_manager)
+	torii_manager.setup(self, follow, get_parent() as RunGame)
 	_rebuild_active_chunks()
 
 
@@ -158,6 +164,8 @@ func reset() -> void:
 	center_chunk = Vector2i.ZERO
 	chunk_count = 0
 	active_chunk_keys.clear()
+	if torii_manager:
+		torii_manager.reset()
 	if follow:
 		_rebuild_active_chunks()
 
@@ -389,6 +397,8 @@ func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 		if _in_clearing(wx, wz):
 			clearing_hits += 1
 			continue
+		if torii_manager and torii_manager.is_near_gate(wx, wz, 3.5):
+			continue
 		var density := _scatter_noise.get_noise_2d(wx * 0.09, wz * 0.09) * 0.5 + 0.5
 		if kind == 0:
 			# Clumps and thinner stands, never empty swaths.
@@ -480,6 +490,8 @@ func _tree_spots(coord: Vector2i) -> Dictionary:
 		if _in_clearing(wx, wz):
 			clearing += 1
 			continue
+		if torii_manager and torii_manager.is_near_gate(wx, wz, 3.5):
+			continue
 		var density := _scatter_noise.get_noise_2d(wx * 0.09, wz * 0.09) * 0.5 + 0.5
 		if rng.randf() > lerpf(0.5, 0.97, density):
 			continue
@@ -518,6 +530,39 @@ func _too_close_to_trees(spots: Array[Vector4], halo: Array[Vector2], wx: float,
 
 ## True when (wx, wz) intrudes on an occupied spot. Entries are Vector3
 ## (x, z, radius); clearance adds on top.
+func suppress_props_near(wx: float, wz: float, radius: float) -> void:
+	for c in _tree_spot_cache.keys():
+		var packed: Dictionary = _tree_spot_cache[c]
+		var spots: Array[Vector4] = []
+		for s in packed.get("spots", []):
+			var spot: Vector4 = s
+			if Vector2(spot.x - wx, spot.y - wz).length() >= radius:
+				spots.append(spot)
+		packed["spots"] = spots
+		_tree_spot_cache[c] = packed
+
+
+func is_clear_of_props(wx: float, wz: float, clearance: float) -> bool:
+	var coord := _world_to_chunk(Vector3(wx, 0.0, wz))
+	for ox in range(-1, 2):
+		for oz in range(-1, 2):
+			var packed: Dictionary = _tree_spot_cache.get(coord + Vector2i(ox, oz), {})
+			for s in packed.get("spots", []):
+				var spot: Vector4 = s
+				if Vector2(wx - spot.x, wz - spot.y).length() < clearance + 0.35:
+					return false
+	for key in _chunks:
+		var chunk := _chunks[key] as Node3D
+		if chunk == null or not is_instance_valid(chunk):
+			continue
+		var props: Array = chunk.get_meta("prop_world_positions", [])
+		for p in props:
+			var prop_pos: Vector3 = p
+			if Vector2(wx - prop_pos.x, wz - prop_pos.z).length() < clearance:
+				return false
+	return true
+
+
 func _spot_blocked(occupied: Array, wx: float, wz: float, clearance: float) -> bool:
 	for o in occupied:
 		var e: Vector3 = o

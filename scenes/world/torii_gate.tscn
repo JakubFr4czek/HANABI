@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://torii_gate_elem_scene"]
+
+[ext_resource type="Script" path="res://src/world/torii_gate.gd" id="1_gate"]
+
+[node name="ToriiGate" type="Node3D"]
+script = ExtResource("1_gate")

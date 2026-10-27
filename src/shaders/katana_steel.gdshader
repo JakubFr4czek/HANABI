@@ -20,6 +20,9 @@ uniform float droplets : hint_range(0.0, 1.0) = 1.0;
 // Soft spirit light while the blade is offered in the intro (0 = off).
 uniform float spirit_glow : hint_range(0.0, 2.0) = 0.0;
 uniform vec3 spirit_color : source_color = vec3(0.7, 0.82, 1.0);
+// Elemental blade imbue glow (0 = plain steel)
+uniform float element_glow : hint_range(0.0, 3.0) = 0.0;
+uniform vec3 element_color : source_color = vec3(1.0, 0.32, 0.74);
 
 // Intro spirit gate: steel still on the far side of the gate plane is not
 // drawn, and a thin glowing seam marks where the blade crosses it.
@@ -87,5 +90,6 @@ void fragment() {
 	METALLIC = metal;
 	EMISSION = lightning_tint * storm_flash * blade * (0.15 + 1.2 * fres)
 		+ spirit_color * spirit_glow * (0.25 + 0.75 * blade) * (0.3 + 0.9 * fres)
+		+ element_color * element_glow * blade * (0.3 + 1.2 * fres)
 		+ portal_color * gate_seam * 3.0;
 }

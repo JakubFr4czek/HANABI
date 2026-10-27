@@ -13,10 +13,15 @@ const MAX_PETALS := 12
 const MAX_INK_POOLS := 6
 const MAX_TRANSIENT_MESHES := 18
 
+const ELEMENT_DURATION: float = 20.0
+const FADE_WARNING_TIME: float = 3.0
+
 var run_game: RunGame
 var weapon: HeldWeapon
-## A run binds a single element: the first element upgrade locks the build and
-## later hands only offer its remaining tiers (plus generics).
+## The single imbued element on the katana (~20s duration), or Elements.NONE.
+var current_element: String = Elements.NONE
+var element_time_remaining: float = 0.0
+var is_fade_warning: bool = false
 var active_elements: Array[String] = []
 var stacks: Dictionary = {}
 
@@ -48,6 +53,9 @@ func setup(p_run_game: RunGame, p_weapon: HeldWeapon) -> void:
 
 
 func reset() -> void:
+	current_element = Elements.NONE
+	element_time_remaining = 0.0
+	is_fade_warning = false
 	active_elements.clear()
 	stacks.clear()
 	storm_charge = 0.0
@@ -71,6 +79,39 @@ func apply_upgrade(id: String, all_stacks: Dictionary) -> void:
 	if weapon:
 		weapon.set_element(visual_element())
 	effect_triggered.emit("upgrade", {"id": id, "element": element})
+
+
+func imbue(element_name: String, duration: float = ELEMENT_DURATION) -> void:
+	if element_name == current_element and current_element != Elements.NONE:
+		element_time_remaining = duration
+		blink_cooldown *= 0.5
+		if weapon:
+			weapon.imbue_element(element_name, duration)
+		effect_triggered.emit("refresh", {"element": element_name, "duration": duration})
+		return
+
+	current_element = element_name
+	element_time_remaining = duration if element_name != Elements.NONE else 0.0
+	is_fade_warning = false
+	active_elements.clear()
+	if element_name != Elements.NONE:
+		active_elements.append(element_name)
+	_rebuild_orbit_petals()
+	if weapon:
+		weapon.imbue_element(element_name, duration)
+	effect_triggered.emit("imbue", {"element": element_name, "duration": duration})
+
+
+func _expire_element() -> void:
+	var prev := current_element
+	current_element = Elements.NONE
+	element_time_remaining = 0.0
+	is_fade_warning = false
+	active_elements.clear()
+	_rebuild_orbit_petals()
+	if weapon:
+		weapon.set_element(Elements.NONE)
+	effect_triggered.emit("element_expired", {"previous": prev})
 
 
 func visual_element() -> String:
@@ -213,6 +254,24 @@ func debug_release_petals(direction: Vector3) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if weapon:
+		if weapon.element != current_element:
+			if weapon.element != Elements.NONE:
+				current_element = weapon.element
+				element_time_remaining = weapon.element_time_remaining
+				active_elements = [weapon.element]
+			else:
+				current_element = Elements.NONE
+				element_time_remaining = 0.0
+				active_elements.clear()
+			_rebuild_orbit_petals()
+		elif weapon.element != Elements.NONE and weapon.element_time_remaining > element_time_remaining:
+			element_time_remaining = weapon.element_time_remaining
+	if current_element != Elements.NONE:
+		element_time_remaining = maxf(0.0, element_time_remaining - delta)
+		is_fade_warning = (element_time_remaining <= FADE_WARNING_TIME and element_time_remaining > 0.0)
+		if element_time_remaining <= 0.0:
+			_expire_element()
 	if run_game == null or weapon == null:
 		return
 	blink_cooldown = maxf(0.0, blink_cooldown - delta)

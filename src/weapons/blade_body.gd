@@ -15,6 +15,18 @@ extends RigidBody3D
 @export var weapon_name := "weapon"
 ## Active element: colors the trail now, drives on-hit effects later (GDD section 5).
 @export var element := Elements.NONE
+const ELEMENT_DURATION: float = 20.0
+const FADE_WARNING_TIME: float = 3.0
+
+var current_element: String:
+	get:
+		return element
+	set(val):
+		set_element(val)
+
+var element_time_remaining: float = 0.0
+var is_fade_warning: bool = false
+var _blade_mat: ShaderMaterial = null
 ## Draw a ribbon trail behind the blade when it moves fast.
 @export var show_trail := true
 
@@ -64,8 +76,51 @@ func get_blade_start_global() -> Vector3:
 
 func set_element(new_element: String) -> void:
 	element = new_element
+	element_time_remaining = ELEMENT_DURATION if new_element != Elements.NONE else 0.0
+	is_fade_warning = false
 	if trail:
 		trail.refresh_material()
+	_update_blade_material()
+
+
+func imbue_element(new_element: String, duration: float = ELEMENT_DURATION) -> void:
+	if new_element == element and element != Elements.NONE:
+		element_time_remaining = duration
+	else:
+		element = new_element
+		element_time_remaining = duration if new_element != Elements.NONE else 0.0
+		is_fade_warning = false
+		if trail:
+			trail.refresh_material()
+	_update_blade_material()
+
+
+func _get_blade_material() -> ShaderMaterial:
+	if _blade_mat == null:
+		var model := get_node_or_null("Model")
+		if model:
+			for child in model.get_children():
+				if child is MeshInstance3D:
+					_blade_mat = child.get_surface_override_material(0) as ShaderMaterial
+					if _blade_mat == null and child.mesh and child.mesh.get_surface_count() > 0:
+						_blade_mat = child.get_active_material(0) as ShaderMaterial
+					break
+	return _blade_mat
+
+
+func _update_blade_material() -> void:
+	var mat := _get_blade_material()
+	if mat == null:
+		return
+	if element == Elements.NONE:
+		mat.set_shader_parameter("element_glow", 0.0)
+	else:
+		var glow := 1.0
+		if is_fade_warning:
+			glow = 0.6 + 0.5 * sin(Time.get_ticks_msec() * 0.001 * TAU * 3.0)
+		var c := Elements.accent_color(element)
+		mat.set_shader_parameter("element_glow", glow)
+		mat.set_shader_parameter("element_color", Vector3(c.r, c.g, c.b))
 
 
 ## Velocity a world point on this weapon had going into the last physics step.

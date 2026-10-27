@@ -400,6 +400,7 @@ func register_player_collision_exceptions(player: Node) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_tick_element(delta)
 	_tick_cooldowns(delta)
 	_update_wedges(delta)
 	_impact_this_tick = false
@@ -776,6 +777,16 @@ func _buzz_when_blocked(delta: float) -> void:
 
 
 # --- Contacts: hits, clashes, parries --------------------------------------------
+
+func _tick_element(delta: float) -> void:
+	if element != Elements.NONE and element_time_remaining > 0.0:
+		element_time_remaining = maxf(0.0, element_time_remaining - delta)
+		is_fade_warning = (element_time_remaining <= FADE_WARNING_TIME and element_time_remaining > 0.0)
+		if element_time_remaining <= 0.0:
+			set_element(Elements.NONE)
+		else:
+			_update_blade_material()
+
 
 func _tick_cooldowns(delta: float) -> void:
 	for id in _receiver_cooldown.keys():

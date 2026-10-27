@@ -33,6 +33,31 @@ def sine(freq: float, dur: float, amp: float = 0.3, fade_out: float = 0.05) -> l
     ]
 
 
+
+def make_furin(dur: float = 2.4) -> list[float]:
+    n = int(SR * dur)
+    samples = [0.0] * n
+    strikes = [
+        (0.0, 1760.0, 0.7),
+        (0.14, 2349.3, 0.5),
+    ]
+    for strike_time, base_freq, strike_amp in strikes:
+        start_idx = int(SR * strike_time)
+        harmonics = [
+            (base_freq, 1.0, 1.8),
+            (base_freq * 2.76, 0.4, 0.8),
+            (base_freq * 5.4, 0.15, 0.4),
+            (base_freq * 0.5, 0.12, 1.2),
+        ]
+        for freq, harm_amp, decay in harmonics:
+            for i in range(start_idx, n):
+                t = (i - start_idx) / SR
+                env = math.exp(-t / decay)
+                mod = 1.0 + 0.003 * math.sin(2 * math.pi * 5.5 * t)
+                val = harm_amp * strike_amp * env * math.sin(2 * math.pi * freq * mod * t)
+                samples[i] += val
+    return samples
+
 def mix(*tracks: list[float]) -> list[float]:
     m = max(len(t) for t in tracks)
     out = [0.0] * m
@@ -67,6 +92,7 @@ def main() -> None:
         env = math.exp(-t * 6) * (1 - math.exp(-t * 80))
         crack.append(env * (0.4 * math.sin(2 * math.pi * 55 * t) + 0.2 * random.random()))
     write_wav(os.path.join(OUT, "thunder_crack_0.wav"), crack)
+    write_wav(os.path.join(OUT, "torii_furin_chime.wav"), make_furin())
     print("Wrote hanabi_proc audio to", OUT)
 
 
