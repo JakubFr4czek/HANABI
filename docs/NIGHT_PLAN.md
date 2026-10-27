@@ -80,6 +80,11 @@ lightning ripple across the floor on touchdown, katana materializes; skippable.
 - Hits, deaths ("firework" bursts per element), level-up ofuda, souls; checked
   against the premium rule (sparse neon on a dark base, restrained bloom).
 
+## 10. Kill-feel audio + VfxPool allocation guard
+- Spatial Sfx pool (swing pitch from speed, yokai/firework/soul/ofuda/level-up),
+  forest wind bed, flash-synced thunder crack, slow-mo ambience low-pass; hard-capped
+  VfxPool with zero-growth test after warmup.
+
 ## 9. Premium reads in fog + real forest meshes
 - Oni mask/armor/rim and elite halo readable in run fog; CC0 forest tree/torii
   meshes in MultiMesh within Quest budgets; capture death firework + hitodama shots;

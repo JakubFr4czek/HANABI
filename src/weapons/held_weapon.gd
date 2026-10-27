@@ -1029,4 +1029,5 @@ func _update_swing_audio(delta: float) -> void:
 		return
 	if measured_tip_speed > swing_sound_speed and _swing_cooldown <= 0.0:
 		_swing_cooldown = 0.35
-		Sfx.play_at("swing", tip, linear_to_db(clampf(measured_tip_speed / 14.0, 0.3, 1.0)))
+		var spd := clampf(measured_tip_speed / 14.0, 0.3, 1.0)
+		Sfx.play_at("swing", tip, linear_to_db(spd), 4.0, clampf(0.82 + spd * 0.38, 0.85, 1.35))

@@ -5,8 +5,14 @@ extends Node
 const SPARK_PREWARM := 28
 const RING_PREWARM := 18
 const SOUL_PREWARM := 56
+const MAX_SPARK := 36
+const MAX_RING := 24
+const MAX_SOUL := 72
 
 var _spark_free: Array[SparkBurst] = []
+var _sparks_allocated := 0
+var _rings_allocated := 0
+var _souls_allocated := 0
 var _ring_free: Array[CPUParticles3D] = []
 var _soul_free: Array[SoulOrb] = []
 
@@ -25,18 +31,32 @@ func _ready() -> void:
 	_prewarm_souls(SOUL_PREWARM)
 
 
+func pool_stats() -> Dictionary:
+	return {
+		"spark_free": _spark_free.size(),
+		"ring_free": _ring_free.size(),
+		"soul_free": _soul_free.size(),
+		"sparks_allocated": _sparks_allocated,
+		"rings_allocated": _rings_allocated,
+		"souls_allocated": _souls_allocated,
+	}
+
+
 func ensure_run_budget(extra_souls: int = 32) -> void:
-	while _soul_free.size() < SOUL_PREWARM + extra_souls:
+	var want_souls := mini(SOUL_PREWARM + extra_souls, MAX_SOUL)
+	while _soul_free.size() < want_souls and _souls_allocated < MAX_SOUL:
 		_soul_free.append(_make_soul_orb())
-	while _spark_free.size() < SPARK_PREWARM:
+	while _spark_free.size() < SPARK_PREWARM and _sparks_allocated < MAX_SPARK:
 		_spark_free.append(_make_spark())
-	while _ring_free.size() < RING_PREWARM:
+	while _ring_free.size() < RING_PREWARM and _rings_allocated < MAX_RING:
 		_ring_free.append(_make_ring())
 
 
-func acquire_soul_orb(parent: Node) -> SoulOrb:
+func acquire_soul_orb(parent: Node):
 	var orb: SoulOrb
 	if _soul_free.is_empty():
+		if _souls_allocated >= MAX_SOUL:
+			return null
 		orb = _make_soul_orb()
 	else:
 		orb = _soul_free.pop_back()
@@ -60,6 +80,8 @@ func release_soul_orb(orb: SoulOrb) -> void:
 func spawn_spark(parent: Node, at: Vector3, normal: Vector3, color: Color, amount_: int = 24, speed: float = 3.0) -> void:
 	var s: SparkBurst
 	if _spark_free.is_empty():
+		if _sparks_allocated >= MAX_SPARK:
+			return
 		s = _make_spark()
 	else:
 		s = _spark_free.pop_back()
@@ -74,6 +96,8 @@ func spawn_spark(parent: Node, at: Vector3, normal: Vector3, color: Color, amoun
 func spawn_element_ring(parent: Node, at: Vector3, col: Color, scale: float) -> void:
 	var p: CPUParticles3D
 	if _ring_free.is_empty():
+		if _rings_allocated >= MAX_RING:
+			return
 		p = _make_ring()
 	else:
 		p = _ring_free.pop_back()
@@ -131,6 +155,7 @@ func _prewarm_souls(n: int) -> void:
 
 
 func _make_soul_orb() -> SoulOrb:
+	_souls_allocated += 1
 	var orb := SoulOrb.new()
 	orb.name = "SoulOrbPooled"
 	add_child(orb)
@@ -139,6 +164,7 @@ func _make_soul_orb() -> SoulOrb:
 
 
 func _make_spark() -> SparkBurst:
+	_sparks_allocated += 1
 	var s := SparkBurst.new()
 	s.name = "SparkBurstPooled"
 	add_child(s)
@@ -153,6 +179,7 @@ func _on_spark_finished(s: SparkBurst) -> void:
 
 
 func _make_ring() -> CPUParticles3D:
+	_rings_allocated += 1
 	var p := CPUParticles3D.new()
 	p.name = "ElementRingPooled"
 	p.one_shot = true
