@@ -1,0 +1,616 @@
+class_name Yokai
+extends ActiveRagdoll
+## Basic yōkai swarm enemy (docs/GDD.md §7, NIGHT_PLAN.md §1):
+## A lightweight 7-body active ragdoll (no sword, no IK) that emerges from the
+## storm fog across the water, hunches forward with a pale horned Noh/oni mask,
+## crimson-lacquered shoulder/chest armor and ember-tipped claws, staggers on
+## blade hits, and collapses + dissolves in a burst of sparks when slain.
+
+signal hit_received(hit: Dictionary)
+signal died(yokai: Yokai, last_hit: Dictionary)
+
+const WET_SURFACE_SHADER := preload("res://src/shaders/wet_surface.gdshader")
+const MOVE_ACCEL := 5.0
+const BURST_ACCEL := 24.0
+
+@export var profile: EnemyProfile
+
+var hp := 45.0
+var brain: YokaiBrain
+var is_dead := false
+var last_kill_element := Elements.NONE
+
+var _skin := ShaderMaterial.new()
+var _mask_mat := ShaderMaterial.new()
+var _sash := ShaderMaterial.new()
+var _horn_mat := StandardMaterial3D.new()
+var _eyes := StandardMaterial3D.new()
+var _claw_mat := StandardMaterial3D.new()
+var _sigil_mat := StandardMaterial3D.new()
+
+var _move_blocked := false
+var _step_time := 0.0
+var _stepping := false
+var _was_attacking := false
+var _hit_player_this_strike := false
+var _last_tell := 0.0
+var _flash_time := 0.0
+var _dissolve_timer := 0.0
+var _dissolve_duration := 0.95
+
+
+func _ready() -> void:
+	add_to_group("yokai")
+	add_to_group("enemies")
+	if profile == null:
+		profile = EnemyProfile.new()
+		profile.display_name = "Yokai"
+		profile.max_hp = 45.0
+		profile.poise_per_impulse = 0.045
+		profile.poise_damage_scale = 0.018
+		profile.muscle_damage_scale = 0.01
+		profile.knockdown_time = 0.9
+		profile.getup_time = 1.1
+	hp = profile.max_hp
+
+	# Weathered indigo-slate rain-soaked skin with moonlit sky fill so the
+	# silhouette reads clearly against the storm fog and dark water.
+	_skin.shader = WET_SURFACE_SHADER
+	_skin.set_shader_parameter("base_color", Color(0.18, 0.17, 0.26))
+	_skin.set_shader_parameter("roughness_dry", 0.70)
+	_skin.set_shader_parameter("roughness_wet", 0.34)
+	_skin.set_shader_parameter("wetness", 0.50)
+	_skin.set_shader_parameter("waterline_y", -10.0)
+	_skin.set_shader_parameter("grain_amount", 0.35)
+	_skin.set_shader_parameter("grain_scale", 28.0)
+	_skin.set_shader_parameter("fill", 1.65)
+	_skin.set_shader_parameter("flash_color", Color(1.0, 0.36, 0.22))
+
+	# Weathered pale bone Noh/oni mask.
+	_mask_mat.shader = WET_SURFACE_SHADER
+	_mask_mat.set_shader_parameter("base_color", Color(0.86, 0.81, 0.73))
+	_mask_mat.set_shader_parameter("roughness_dry", 0.72)
+	_mask_mat.set_shader_parameter("roughness_wet", 0.38)
+	_mask_mat.set_shader_parameter("wetness", 0.42)
+	_mask_mat.set_shader_parameter("waterline_y", -10.0)
+	_mask_mat.set_shader_parameter("fill", 1.75)
+
+	# Rain-soaked crimson-vermilion armour lacquer (sode & chest wrap).
+	_sash.shader = WET_SURFACE_SHADER
+	_sash.set_shader_parameter("base_color", Color(0.46, 0.055, 0.075))
+	_sash.set_shader_parameter("roughness_dry", 0.68)
+	_sash.set_shader_parameter("roughness_wet", 0.32)
+	_sash.set_shader_parameter("wetness", 0.48)
+	_sash.set_shader_parameter("waterline_y", -10.0)
+	_sash.set_shader_parameter("fill", 1.60)
+
+	_horn_mat.albedo_color = Color(0.14, 0.11, 0.13)
+	_horn_mat.roughness = 0.55
+
+	_eyes.albedo_color = Color(0.95, 0.18, 0.10)
+	_eyes.emission_enabled = true
+	_eyes.emission = Color(1.6, 0.22, 0.08)
+	_eyes.emission_energy_multiplier = 0.85
+
+	_sigil_mat.albedo_color = Color(0.85, 0.16, 0.10)
+	_sigil_mat.emission_enabled = true
+	_sigil_mat.emission = Color(1.35, 0.18, 0.08)
+	_sigil_mat.emission_energy_multiplier = 0.55
+
+	_claw_mat.albedo_color = Color(0.82, 0.74, 0.64)
+	_claw_mat.roughness = 0.55
+	_claw_mat.emission_enabled = true
+	_claw_mat.emission = Color(1.5, 0.24, 0.10)
+	_claw_mat.emission_energy_multiplier = 0.32
+
+	pose_variation_deg = 6.0
+	idle_sway_deg = 4.0
+	sway_poses = PackedStringArray(["stalk", "idle"])
+	super._ready()
+
+	for child in get_children():
+		if child is YokaiBrain:
+			brain = child
+	if brain == null:
+		brain = YokaiBrain.new()
+		brain.name = "Brain"
+		add_child(brain)
+	brain.setup(self, profile)
+	set_pose("stalk")
+
+
+# --- 7-body lightweight ragdoll ------------------------------------------------
+
+func _define_parts() -> Dictionary:
+	var d := {
+		"pelvis": {"shape": "box", "size": Vector3(0.28, 0.17, 0.17), "pos": Vector3(0, 0.90, 0), "mass": 9.0, "zone": "torso"},
+		"chest": {"shape": "box", "size": Vector3(0.34, 0.42, 0.20), "pos": Vector3(0, 1.22, 0.03), "mass": 12.0, "zone": "torso",
+			"parent": "pelvis", "joint": Vector3(0, 1.00, 0), "max_torque": 520.0,
+			"limits": {"x": Vector2(-25, 45), "y": Vector2(-35, 35), "z": Vector2(-25, 25)}},
+		"head": {"shape": "sphere", "radius": 0.115, "pos": Vector3(0, 1.56, 0.06), "mass": 3.5, "zone": "head",
+			"parent": "chest", "joint": Vector3(0, 1.44, 0.04), "max_torque": 95.0,
+			"limits": {"x": Vector2(-40, 40), "y": Vector2(-60, 60), "z": Vector2(-30, 30)}},
+	}
+	for side in ["l", "r"]:
+		var s := 1.0 if side == "l" else -1.0
+		d["arm_" + side] = {
+			"shape": "capsule", "radius": 0.048, "height": 0.56,
+			"pos": Vector3(0.24 * s, 1.12, 0.08),
+			"mass": 3.0, "zone": "limb", "parent": "chest",
+			"joint": Vector3(0.23 * s, 1.38, 0.03), "max_torque": 240.0,
+			"limits": {"x": Vector2(-150, 65), "y": Vector2(-75, 75), "z": _mirror(Vector2(-35, 110), s)},
+		}
+		d["leg_" + side] = {
+			"shape": "capsule", "radius": 0.062, "height": 0.82,
+			"pos": Vector3(0.10 * s, 0.44, 0),
+			"mass": 9.5, "zone": "limb", "parent": "pelvis",
+			"joint": Vector3(0.10 * s, 0.82, 0), "max_torque": 460.0,
+			"limits": {"x": Vector2(-85, 45), "y": Vector2(-25, 25), "z": _mirror(Vector2(-15, 45), s)},
+			"friction": 0.25,
+			"extra_shapes": [{"shape": "box", "size": Vector3(0.10, 0.06, 0.22), "offset": Vector3(0, -0.40, 0.04)}],
+		}
+	return d
+
+
+static func _mirror(range_deg: Vector2, s: float) -> Vector2:
+	return range_deg if s > 0.0 else Vector2(-range_deg.y, -range_deg.x)
+
+
+func _define_poses() -> Dictionary:
+	return {
+		"stalk": {
+			"_blend": 0.32,
+			"chest": Vector3(18, 0, 0),
+			"head": Vector3(-12, 0, 0),
+			"arm_r": Vector3(-52, -16, -22),
+			"arm_l": Vector3(-52, 16, 22),
+			"leg_l": Vector3(-8, 0, 5),
+			"leg_r": Vector3(6, 0, -5),
+		},
+		"windup_r": {
+			"_stiffness": 1.35,
+			"_blend": 0.35,
+			"chest": Vector3(-10, -24, 0),
+			"head": Vector3(6, 22, -6),
+			"arm_r": Vector3(-135, -35, -45),
+			"arm_l": Vector3(-35, 20, 28),
+			"leg_l": Vector3(-14, 0, 6),
+			"leg_r": Vector3(12, 0, -6),
+		},
+		"slash_r": {
+			"_stiffness": 1.6,
+			"_max_speed": 8.0,
+			"_blend": 0.12,
+			"_ease": "in",
+			"chest": Vector3(26, 22, 0),
+			"head": Vector3(-16, -18, 0),
+			"arm_r": Vector3(-65, 38, 12),
+			"arm_l": Vector3(-20, 15, 32),
+			"leg_l": Vector3(-24, 0, 6),
+			"leg_r": Vector3(16, 0, -6),
+		},
+		"windup_l": {
+			"_stiffness": 1.35,
+			"_blend": 0.35,
+			"chest": Vector3(-10, 24, 0),
+			"head": Vector3(6, -22, 6),
+			"arm_l": Vector3(-135, 35, 45),
+			"arm_r": Vector3(-35, -20, -28),
+			"leg_r": Vector3(-14, 0, -6),
+			"leg_l": Vector3(12, 0, 6),
+		},
+		"slash_l": {
+			"_stiffness": 1.6,
+			"_max_speed": 8.0,
+			"_blend": 0.12,
+			"_ease": "in",
+			"chest": Vector3(26, -22, 0),
+			"head": Vector3(-16, 18, 0),
+			"arm_l": Vector3(-65, -38, -12),
+			"arm_r": Vector3(-20, -15, -32),
+			"leg_r": Vector3(-24, 0, -6),
+			"leg_l": Vector3(16, 0, 6),
+		},
+		"windup_double": {
+			"_stiffness": 1.4,
+			"_blend": 0.38,
+			"chest": Vector3(-16, 0, 0),
+			"head": Vector3(10, 0, 0),
+			"arm_r": Vector3(-142, -18, -32),
+			"arm_l": Vector3(-142, 18, 32),
+			"leg_l": Vector3(-12, 0, 7),
+			"leg_r": Vector3(-12, 0, -7),
+		},
+		"slash_double": {
+			"_stiffness": 1.65,
+			"_max_speed": 8.5,
+			"_blend": 0.12,
+			"_ease": "in",
+			"chest": Vector3(30, 0, 0),
+			"head": Vector3(-20, 0, 0),
+			"arm_r": Vector3(-58, 22, 8),
+			"arm_l": Vector3(-58, -22, -8),
+			"leg_l": Vector3(-26, 0, 6),
+			"leg_r": Vector3(18, 0, -6),
+		},
+		"step_l": {
+			"leg_l": Vector3(-22, 0, 5),
+			"leg_r": Vector3(12, 0, -5),
+		},
+		"step_r": {
+			"leg_l": Vector3(12, 0, 5),
+			"leg_r": Vector3(-22, 0, -5),
+		},
+		"staggered": {
+			"_stiffness": 0.65,
+			"_blend": 0.15,
+			"_ease": "out",
+			"chest": Vector3(-18, 0, 0),
+			"head": Vector3(-18, 0, 0),
+			"arm_r": Vector3(-95, 0, -42),
+			"arm_l": Vector3(-95, 0, 42),
+			"leg_l": Vector3(-4, 0, 8),
+			"leg_r": Vector3(8, 0, -8),
+		},
+		"recover": {
+			"_stiffness": 0.85,
+			"_blend": 0.22,
+			"_ease": "out",
+			"chest": Vector3(22, 0, 0),
+			"head": Vector3(-14, 0, 0),
+			"arm_r": Vector3(-32, 0, -16),
+			"arm_l": Vector3(-32, 0, 16),
+			"leg_l": Vector3(-16, 0, 5),
+			"leg_r": Vector3(10, 0, -5),
+		},
+		"idle": {"_blend": 0.5},
+	}
+
+
+func _decorate_part(part_name: String, part: RagdollPart, def: Dictionary) -> void:
+	var mi := MeshInstance3D.new()
+	match def.shape:
+		"box":
+			var m := BoxMesh.new()
+			m.size = def.size
+			mi.mesh = m
+		"capsule":
+			var m := CapsuleMesh.new()
+			m.radius = def.radius
+			m.height = def.height
+			m.radial_segments = 10
+			m.rings = 2
+			mi.mesh = m
+		"sphere":
+			var m := SphereMesh.new()
+			m.radius = def.radius
+			m.height = def.radius * 2.0
+			m.radial_segments = 12
+			m.rings = 6
+			mi.mesh = m
+	mi.material_override = _skin
+	part.add_child(mi)
+
+	match part_name:
+		"head":
+			# Pale bone Noh/Oni mask plate on the front (+Z).
+			var mask_mi := MeshInstance3D.new()
+			var mask_mesh := BoxMesh.new()
+			mask_mesh.size = Vector3(0.18, 0.22, 0.048)
+			mask_mi.mesh = mask_mesh
+			mask_mi.position = Vector3(0, -0.005, 0.095)
+			mask_mi.material_override = _mask_mat
+			part.add_child(mask_mi)
+
+			# Crimson war-paint brow mark.
+			var brow := MeshInstance3D.new()
+			var brow_m := BoxMesh.new()
+			brow_m.size = Vector3(0.14, 0.024, 0.012)
+			brow.mesh = brow_m
+			brow.position = Vector3(0, 0.06, 0.118)
+			brow.material_override = _sash
+			part.add_child(brow)
+
+			# Two curved obsidian horns on the forehead + glowing eye slits + cheek slashes.
+			for sx in [-1.0, 1.0]:
+				var horn := MeshInstance3D.new()
+				var cyl := CylinderMesh.new()
+				cyl.bottom_radius = 0.024
+				cyl.top_radius = 0.004
+				cyl.height = 0.18
+				cyl.radial_segments = 8
+				horn.mesh = cyl
+				horn.position = Vector3(0.056 * sx, 0.125, 0.082)
+				horn.rotation = Vector3(deg_to_rad(-30.0), 0.0, deg_to_rad(-18.0 * sx))
+				horn.material_override = _horn_mat
+				part.add_child(horn)
+
+				# Piercing crimson eye slits.
+				var eye := MeshInstance3D.new()
+				var eb := BoxMesh.new()
+				eb.size = Vector3(0.046, 0.016, 0.014)
+				eye.mesh = eb
+				eye.position = Vector3(0.044 * sx, 0.016, 0.120)
+				eye.rotation.z = deg_to_rad(-11.0 * sx)
+				eye.material_override = _eyes
+				part.add_child(eye)
+
+				# Crimson cheek war-paint stripe.
+				var cheek := MeshInstance3D.new()
+				var ch_m := BoxMesh.new()
+				ch_m.size = Vector3(0.036, 0.012, 0.012)
+				cheek.mesh = ch_m
+				cheek.position = Vector3(0.052 * sx, -0.042, 0.118)
+				cheek.rotation.z = deg_to_rad(18.0 * sx)
+				cheek.material_override = _sash
+				part.add_child(cheek)
+
+		"chest":
+			# Lacquered crimson chest/shoulder wrap + sode shoulder plates + glowing curse sigil.
+			var wrap := MeshInstance3D.new()
+			var wm := BoxMesh.new()
+			wm.size = Vector3(0.36, 0.14, 0.22)
+			wrap.mesh = wm
+			wrap.position = Vector3(0, 0.10, 0)
+			wrap.material_override = _sash
+			part.add_child(wrap)
+
+			for sx in [-1.0, 1.0]:
+				var sode := MeshInstance3D.new()
+				var sm := BoxMesh.new()
+				sm.size = Vector3(0.09, 0.16, 0.22)
+				sode.mesh = sm
+				sode.position = Vector3(0.20 * sx, 0.12, 0.0)
+				sode.rotation.z = deg_to_rad(-18.0 * sx)
+				sode.material_override = _sash
+				part.add_child(sode)
+
+			var sigil := MeshInstance3D.new()
+			var sig_m := BoxMesh.new()
+			sig_m.size = Vector3(0.036, 0.24, 0.012)
+			sigil.mesh = sig_m
+			sigil.position = Vector3(0, 0.01, 0.106)
+			sigil.material_override = _sigil_mat
+			part.add_child(sigil)
+
+		"pelvis":
+			var obi := MeshInstance3D.new()
+			var ob := BoxMesh.new()
+			ob.size = Vector3(0.31, 0.08, 0.20)
+			obi.mesh = ob
+			obi.position = Vector3(0, 0.04, 0)
+			obi.material_override = _sash
+			part.add_child(obi)
+
+		"arm_l", "arm_r":
+			# Three long bone/ember claws extending from the hand (-Y end of the arm capsule).
+			for c_idx in [-1, 0, 1]:
+				var claw := MeshInstance3D.new()
+				var cm := BoxMesh.new()
+				cm.size = Vector3(0.012, 0.145, 0.020)
+				claw.mesh = cm
+				claw.position = Vector3(c_idx * 0.024, -0.32, 0.028)
+				claw.rotation.x = deg_to_rad(18.0)
+				claw.material_override = _claw_mat
+				part.add_child(claw)
+
+
+# --- Damage & Death ------------------------------------------------------------
+
+func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
+	if is_dead:
+		hit["damage"] = 0.0
+		hit["hp_left"] = 0.0
+		return hit
+	var element: String = hit.get("element", "physical")
+	last_kill_element = element
+	var dmg: float = hit.base_damage * profile.damage_multiplier(hit.zone, element)
+	dmg = snappedf(dmg, 0.1)
+	hp = maxf(hp - dmg, 0.0)
+	hit["target"] = profile.display_name
+	hit["damage"] = dmg
+	hit["hp_left"] = hp
+
+	var kb: Vector3 = hit.get("knockback", Vector3.ZERO)
+	if kb != Vector3.ZERO:
+		part.apply_impulse(kb.limit_length(28.0), hit.point - part.global_position)
+	var poise := float(hit.impulse) * profile.poise_per_impulse if hit.has("impulse") else dmg * profile.poise_damage_scale
+	weaken(dmg * profile.muscle_damage_scale, poise)
+	hit["balance_left"] = snappedf(balance, 0.01)
+	hit.erase("knockback")
+	GameEvents.report_hit(hit)
+	if brain:
+		brain.on_hit(hit)
+	hit_received.emit(hit)
+	_flash_time = 0.12
+
+	if hp <= 0.0 and not is_dead:
+		die(hit)
+	return hit
+
+
+func die(hit: Dictionary = {}) -> void:
+	if is_dead:
+		return
+	is_dead = true
+	weaken(1.0, 1.0)
+	move_velocity = Vector3.ZERO
+	_flash_time = 0.10
+	var chest_pos := (parts["chest"] as RagdollPart).global_position if parts.has("chest") else global_position + Vector3(0, 1.1, 0)
+	# Stop corpses from blocking the player or other yōkai while they collapse and dissolve.
+	for p: RagdollPart in parts.values():
+		p.collision_layer = 0
+		p.collision_mask = 1
+	var col := Elements.color(last_kill_element) if last_kill_element != Elements.NONE else Color(1.8, 0.35, 0.22)
+	if last_kill_element == Elements.INK:
+		col = Color(0.55, 0.68, 1.2)
+	if is_inside_tree() and get_tree().current_scene:
+		SparkBurst.spawn(get_tree().current_scene, chest_pos, Vector3.UP, col, 24, 3.8)
+	GameEvents.log_event("enemy_defeated", {
+		"enemy": profile.display_name,
+		"element": last_kill_element,
+		"position": chest_pos,
+	})
+	died.emit(self, hit)
+
+
+func _balance_regen() -> float: return 0.0 if is_dead else profile.balance_regen
+func _muscle_regen() -> float: return 0.0 if is_dead else profile.muscle_regen
+func _knockdown_time() -> float: return 999.0 if is_dead else profile.knockdown_time
+func _getup_time() -> float: return profile.getup_time
+
+
+func _physics_process(delta: float) -> void:
+	if is_dead:
+		balance = 0.0
+		muscle = 0.0
+		move_velocity = Vector3.ZERO
+		_dissolve_timer += delta
+		var t := clampf(_dissolve_timer / _dissolve_duration, 0.0, 1.0)
+		var brief_flash := maxf(0.0, (0.12 - _dissolve_timer) / 0.12) * 0.45
+		_skin.set_shader_parameter("flash", brief_flash)
+		_mask_mat.set_shader_parameter("flash", brief_flash * 0.5)
+		_skin.set_shader_parameter("fill", lerpf(1.65, 0.1, t))
+		_mask_mat.set_shader_parameter("fill", lerpf(1.75, 0.1, t))
+		_sash.set_shader_parameter("fill", lerpf(1.60, 0.1, t))
+		_eyes.emission_energy_multiplier = maxf(0.0, (1.0 - t * 2.0) * 0.85)
+		_sigil_mat.emission_energy_multiplier = maxf(0.0, (1.0 - t * 2.0) * 0.55)
+		# Gently sink and shrink limbs in the final half of the dissolve.
+		if t > 0.35:
+			var s := maxf(0.05, 1.0 - (t - 0.35) / 0.65)
+			for p: RagdollPart in parts.values():
+				p.scale = Vector3.ONE * s
+		if _dissolve_timer >= _dissolve_duration:
+			queue_free()
+		return
+
+	var intent := brain.think(delta, _perceive())
+	set_pose(intent.get("pose", "stalk"))
+	var attacking: bool = intent.get("attacking", false) and state == State.STANDING
+	if attacking and not _was_attacking:
+		_hit_player_this_strike = false
+	_was_attacking = attacking
+	if attacking:
+		_try_claw_player(float(intent.get("damage", 12.0)), String(intent.get("attack", "right")))
+	if intent.has("face_position") and state == State.STANDING:
+		face_toward(intent.face_position)
+	_apply_move(intent.get("move", Vector3.ZERO), delta, intent.get("plant", false))
+	_show_tell(float(intent.get("tell", 0.0)))
+	super._physics_process(delta)
+
+
+func _perceive() -> Dictionary:
+	var pelvis := root_part()
+	var self_pos := pelvis.global_position
+	var ctx := {
+		"self_position": self_pos,
+		"self_forward": Vector3(sin(_facing_yaw), 0.0, cos(_facing_yaw)),
+		"can_act": state == State.STANDING and not is_dead,
+		"move_blocked": _move_blocked,
+	}
+	var head := get_tree().get_first_node_in_group("player_head") as Node3D
+	if head:
+		ctx["player_position"] = head.global_position
+		ctx["player_forward"] = -head.global_basis.z
+	var health := get_tree().get_first_node_in_group("player_health") as PlayerHealth
+	ctx["player_alive"] = health == null or health.is_alive()
+
+	# Swarm separation so multiple yōkai spread out around the player.
+	var sep := Vector3.ZERO
+	for node in get_tree().get_nodes_in_group("yokai"):
+		if node == self or not (node is Yokai):
+			continue
+		var other := node as Yokai
+		if other.is_dead:
+			continue
+		var diff := self_pos - other.root_part().global_position
+		diff.y = 0.0
+		var d := diff.length()
+		if d > 0.001 and d < 1.15:
+			sep += (diff / d) * ((1.15 - d) / 1.15)
+	ctx["separation"] = sep.limit_length(1.5)
+	return ctx
+
+
+func _apply_move(move: Vector3, delta: float, planted := false) -> void:
+	move.y = 0.0
+	if state != State.STANDING or is_dead:
+		move_velocity = Vector3.ZERO
+		overlay_pose = ""
+		_move_blocked = false
+		burst = false
+		return
+	if move.length() < 0.02:
+		move = Vector3.ZERO
+		_move_blocked = false
+	else:
+		_move_blocked = _blocked_toward(move.normalized())
+	if _move_blocked:
+		move_velocity = Vector3.ZERO
+	else:
+		move_velocity = move_velocity.move_toward(move, (BURST_ACCEL if planted else MOVE_ACCEL) * delta)
+	burst = planted and move_velocity.length() > 0.5
+	var v := move_velocity.length()
+	_stepping = not planted and (v > 0.2 or (_stepping and v > 0.08))
+	if _stepping:
+		_step_time += delta * 0.28 / clampf(0.14 / maxf(v, 0.01), 0.24, 0.48)
+		overlay_pose = "step_l" if fmod(_step_time, 0.56) < 0.28 else "step_r"
+	else:
+		overlay_pose = ""
+
+
+func _blocked_toward(dir: Vector3) -> bool:
+	var space := get_world_3d().direct_space_state
+	var from := root_part().global_position
+	var own: Array[RID] = []
+	for p: RagdollPart in parts.values():
+		own.append(p.get_rid())
+	for h in [-0.5, -0.1]:
+		var a := Vector3(from.x, from.y + h, from.z)
+		var q := PhysicsRayQueryParameters3D.create(a, a + dir * 0.45, 1, own)
+		if not space.intersect_ray(q).is_empty():
+			return true
+	return false
+
+
+func _try_claw_player(damage: float, attack: String) -> void:
+	if _hit_player_this_strike or is_dead:
+		return
+	var health := get_tree().get_first_node_in_group("player_health") as PlayerHealth
+	if health == null or not health.is_alive():
+		return
+	var body := health.hurt_capsule()  # [top, bottom, radius]
+	var arms: Array[String] = []
+	match attack:
+		"left": arms = ["arm_l"]
+		"right": arms = ["arm_r"]
+		_: arms = ["arm_l", "arm_r"]
+	for arm_name in arms:
+		var arm: RagdollPart = parts.get(arm_name)
+		if arm == null:
+			continue
+		var shoulder := arm.global_transform * Vector3(0, 0.22, 0)
+		var claw_tip := arm.global_transform * Vector3(0, -0.36, 0.05)
+		var pts := Geometry3D.get_closest_points_between_segments(shoulder, claw_tip, body[0], body[1])
+		if pts[0].distance_to(pts[1]) <= float(body[2]) + 0.14:
+			_hit_player_this_strike = true
+			health.take_hit(damage, pts[0], {"attacker": profile.display_name, "attack": attack})
+			return
+
+
+func _show_tell(tell: float) -> void:
+	_eyes.emission_energy_multiplier = 0.85 + tell * tell * 4.5
+	_claw_mat.emission_energy_multiplier = 0.32 + tell * tell * 3.8
+	_sigil_mat.emission_energy_multiplier = 0.55 + tell * tell * 2.5
+	if tell > 0.05 and _last_tell <= 0.05:
+		var head_part: RagdollPart = parts.get("head")
+		Sfx.play_at("enemy_tell", head_part.global_position if head_part else global_position, -5.0)
+	_last_tell = tell
+
+
+func _process(delta: float) -> void:
+	if _flash_time > 0.0 and not is_dead:
+		_flash_time -= delta
+		var f := clampf(_flash_time / 0.12, 0.0, 1.0) * 0.55
+		_skin.set_shader_parameter("flash", f)
+		_mask_mat.set_shader_parameter("flash", f * 0.5)
