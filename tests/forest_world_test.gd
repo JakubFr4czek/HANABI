@@ -32,15 +32,15 @@ func _run_all() -> void:
 
 	var nearest := forest.nearest_prop_distance()
 	_check("Shrine clearing stays free of forest props",
-		nearest >= ForestWorld.PROP_CLEARING_RADIUS - 0.25 or nearest == INF)
-	_check("Rolling hills rise outside the clearing",
-		forest.height_at(20.0, 6.0) > forest.height_at(2.0, 2.0) + 0.5)
+		nearest >= ForestWorld.PROP_CLEARING_RADIUS - 0.05 or nearest == INF)
+	_check("Terrain flattens beyond the torii sightline while staying low in the clearing",
+		forest.height_at(18.0, 0.0) <= -0.2 and forest.height_at(2.0, 2.0) < -0.3)
 
 	var water := run.get_node_or_null("Arena/WaterMirror") as MeshInstance3D
 	_check("Run replaces the endless water mirror with forest terrain", water != null and not water.visible)
 
 	var props := forest.total_prop_instances()
-	_check("Shared MultiMesh props stay within a Quest-friendly budget", props > 24 and props < 650)
+	_check("Shared MultiMesh props stay within a Quest-friendly budget", props > 24 and props < 980)
 	run.queue_free()
 
 

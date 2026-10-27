@@ -36,6 +36,8 @@ var _oni_cooldown := 0.0
 var _rng := RandomNumberGenerator.new()
 var _enemies: Array[Yokai] = []
 var _active_oni: RunOniBoss
+var _yokai_pool: Array[Yokai] = []
+const YOKAI_POOL_CAP := 14
 
 
 func _ready() -> void:
@@ -170,7 +172,7 @@ func spawn_in_fog_ring(target_pos: Vector3 = Vector3.ZERO, sector_bias: float = 
 
 
 func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO) -> Yokai:
-	var yokai := Yokai.new()
+	var yokai := _acquire_yokai()
 	var hp_val := scaled_hp(maxi(wave, 1), run_seconds)
 	yokai.configure_kind(Yokai.Kind.SWARM, Elements.NONE, hp_val)
 	yokai.enable_pathfinding()
@@ -186,7 +188,10 @@ func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO) -> Yoka
 		yokai.brain.move_speed = scaled_speed(maxi(wave, 1), run_seconds)
 		yokai.brain.base_damage = scaled_damage(maxi(wave, 1))
 
-	yokai.died.connect(_on_enemy_died)
+	if not yokai.died.is_connected(_on_enemy_died):
+		yokai.died.connect(_on_enemy_died)
+	if not yokai.dissolve_finished.is_connected(_recycle_yokai):
+		yokai.dissolve_finished.connect(_recycle_yokai)
 	_enemies.append(yokai)
 	enemy_spawned.emit(yokai)
 	return yokai
@@ -225,6 +230,30 @@ func spawn_oni_boss(facing_target: Vector3) -> RunOniBoss:
 
 func _on_enemy_died(yokai: Yokai, hit: Dictionary) -> void:
 	enemy_died.emit(yokai, hit)
+
+
+func _acquire_yokai() -> Yokai:
+	while not _yokai_pool.is_empty():
+		var cached: Yokai = _yokai_pool.pop_back()
+		if is_instance_valid(cached):
+			cached.prepare_for_spawn()
+			cached.set_physics_process(true)
+			return cached
+	return Yokai.new()
+
+
+func _recycle_yokai(yokai: Yokai) -> void:
+	if not is_instance_valid(yokai):
+		return
+	if yokai.get_parent() == self:
+		remove_child(yokai)
+	_enemies.erase(yokai)
+	if _yokai_pool.size() >= YOKAI_POOL_CAP:
+		yokai.queue_free()
+		return
+	yokai.visible = false
+	yokai.set_physics_process(false)
+	_yokai_pool.append(yokai)
 
 
 func _on_oni_defeated(oni: RunOniBoss, hit: Dictionary) -> void:
