@@ -62,14 +62,20 @@ var _torso_lag_pitch := 0.0
 
 
 func prepare_for_spawn() -> void:
-	EyeGlow.set_glow(_eye_glows, 1.0)
 	is_dead = false
 	_dissolve_timer = 0.0
 	_slow_time = 0.0
 	_slow_scale = 1.0
 	_confusion_time = 0.0
 	_flinch_time = 0.0
+	_flash_time = 0.0
+	_lod_far = false
+	_detour_side = 1.0
+	last_kill_element = Elements.NONE
 	visible = true
+	# The death dissolve shrinks limbs and fades every material to ~0; a pooled
+	# body reused without this comes back tiny, dark and haloed by its elite life.
+	_reset_spawn_look()
 	for p: RagdollPart in parts.values():
 		p.scale = Vector3.ONE
 		p.collision_layer = 2
@@ -230,9 +236,37 @@ func is_staggered() -> bool:
 	return brain != null and brain.state == YokaiBrain.State.STAGGER
 
 
+## Swarm base look (matches _ready): also the cleanup for a pooled elite
+## reused as a swarm — normal size, no halo, no elite group or tint.
+func _reset_spawn_look() -> void:
+	scale = Vector3.ONE
+	remove_from_group("elite_yokai")
+	if _elite_halo and is_instance_valid(_elite_halo):
+		_elite_halo.queue_free()
+	_elite_halo = null
+	_skin.set_shader_parameter("fill", 1.65)
+	_skin.set_shader_parameter("flash", 0.0)
+	_mask_mat.set_shader_parameter("fill", 1.75)
+	_mask_mat.set_shader_parameter("flash", 0.0)
+	_sash.set_shader_parameter("base_color", Color(0.46, 0.055, 0.075))
+	_sash.set_shader_parameter("fill", 1.60)
+	_horn_mat.albedo_color = Color(0.14, 0.11, 0.13)
+	_eyes.albedo_color = Color(0.95, 0.18, 0.10)
+	_eyes.emission = Color(1.6, 0.22, 0.08)
+	_eyes.emission_energy_multiplier = 0.85
+	_sigil_mat.albedo_color = Color(0.85, 0.16, 0.10)
+	_sigil_mat.emission = Color(1.35, 0.18, 0.08)
+	_sigil_mat.emission_energy_multiplier = 0.55
+	_claw_mat.albedo_color = Color(0.82, 0.74, 0.64)
+	_claw_mat.emission = Color(1.5, 0.24, 0.10)
+	_claw_mat.emission_energy_multiplier = 0.32
+	EyeGlow.set_color(_eye_glows, Color(1.0, 0.24, 0.1))
+	EyeGlow.set_glow(_eye_glows, 1.0)
+
+
 func _apply_kind_visuals() -> void:
 	if kind != Kind.ELITE:
-		EyeGlow.set_color(_eye_glows, Color(1.0, 0.24, 0.1))
+		_reset_spawn_look()
 		return
 	scale = Vector3.ONE * 1.14
 	var accent := Elements.accent_color(elite_element)
