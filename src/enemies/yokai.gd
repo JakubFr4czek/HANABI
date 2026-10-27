@@ -216,8 +216,8 @@ func _attach_elite_halo(accent: Color) -> void:
 	_elite_halo = MeshInstance3D.new()
 	_elite_halo.name = "EliteHalo"
 	var torus := TorusMesh.new()
-	torus.inner_radius = 0.34
-	torus.outer_radius = 0.39
+	torus.inner_radius = 0.38
+	torus.outer_radius = 0.46
 	torus.rings = 10
 	torus.ring_segments = 24
 	_elite_halo.mesh = torus
@@ -227,10 +227,13 @@ func _attach_elite_halo(accent: Color) -> void:
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.albedo_color = accent * 1.25
+	mat.albedo_color = accent * 2.2
 	mat.emission_enabled = true
-	mat.emission = accent * 0.85
+	mat.emission = accent * 1.65
+	mat.emission_energy_multiplier = 1.8
+	mat.no_depth_test = true
 	_elite_halo.material_override = mat
+	_elite_halo.scale = Vector3(1.08, 1.08, 1.08)
 	_elite_halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	chest.add_child(_elite_halo)
 
@@ -683,6 +686,9 @@ func _physics_process(delta: float) -> void:
 		face_toward(intent.face_position)
 	_apply_move(move, delta, intent.get("plant", false))
 	_show_tell(float(intent.get("tell", 0.0)))
+	if kind == Kind.ELITE and _elite_halo and is_instance_valid(_elite_halo):
+		var pulse := 1.06 + sin(Time.get_ticks_msec() * 0.007) * 0.14
+		_elite_halo.scale = Vector3(pulse, pulse, pulse)
 	super._physics_process(delta)
 
 

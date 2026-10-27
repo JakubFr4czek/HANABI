@@ -46,6 +46,8 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `HANABI_assets_midpoly/` (Sketchfab CC BY 4.0 sakura trees, torii, stone lanterns, platform, dummy; Poly Haven CC0 rocks, katana, stand, textures, sky) | per-asset links in `assets_raw/HANABI_assets_midpoly/CREDITS.md` | see that file | CC BY 4.0 / CC0 1.0 (each CC BY model needs an in-game credit if used) |
 | `katana/Katana_ColoradoStark/` | https://opengameart.org/content/katana-2 | Colorado Stark | CC0 |
 | `katana/grab3d_katana/` | https://grab3d.com/models/weapons/katana/ | Grab3D | CC0 1.0 |
+| `assets/models/environment/forest_quaternius/tree_simple_quaternius.glb` (run forest MultiMesh) | https://quaternius.com/packs/simplenature.html | Quaternius | CC0 |
+| `assets/models/environment/forest_quaternius/torii_gate_polyfork.glb` (run forest MultiMesh) | https://polyfork.dev/asset/torii-gate-402f30 | polyfork.dev (Little Tokyo kit) | CC0 / commercial use per site |
 | `environment/polypizza/Torii_Gate_Quaternius.glb` | https://poly.pizza/m/7SyXZ62xR5 | Quaternius | CC0 |
 | `environment/polypizza/Shrine_KayLousberg.glb` | https://poly.pizza/m/tFxdxO5clk | Kay Lousberg | CC0 |
 | `environment/polypizza/Lantern_KayLousberg.glb` | https://poly.pizza/m/CtHBJ1ufeW | Kay Lousberg | CC0 |
