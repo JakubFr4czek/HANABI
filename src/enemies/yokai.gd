@@ -65,7 +65,7 @@ func prepare_for_spawn() -> void:
 		p.collision_layer = 2
 		p.collision_mask = 1 | 2 | 8
 	reset_body()
-	set_pose("stalk")
+	snap_pose("stalk")
 	if brain:
 		brain.reset()
 
@@ -154,7 +154,7 @@ func _ready() -> void:
 		brain.name = "Brain"
 		add_child(brain)
 	brain.setup(self, profile)
-	set_pose("stalk")
+	snap_pose("stalk")
 
 
 func configure_kind(p_kind: Kind, element: String = Elements.NONE, max_hp: float = -1.0) -> void:
