@@ -9,6 +9,8 @@ extends ActiveRagdoll
 signal hit_received(hit: Dictionary)
 signal died(yokai: Yokai, last_hit: Dictionary)
 
+enum Kind { SWARM, ELITE }
+
 const WET_SURFACE_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const MOVE_ACCEL := 5.0
 const BURST_ACCEL := 24.0
@@ -19,6 +21,11 @@ var hp := 45.0
 var brain: YokaiBrain
 var is_dead := false
 var last_kill_element := Elements.NONE
+var kind := Kind.SWARM
+var elite_element := Elements.NONE
+var use_pathfinding := false
+
+var _nav_agent: NavigationAgent3D
 
 var _skin := ShaderMaterial.new()
 var _mask_mat := ShaderMaterial.new()
@@ -120,6 +127,55 @@ func _ready() -> void:
 		add_child(brain)
 	brain.setup(self, profile)
 	set_pose("stalk")
+
+
+func configure_kind(p_kind: Kind, element: String = Elements.NONE, max_hp: float = -1.0) -> void:
+	kind = p_kind
+	elite_element = element if p_kind == Kind.ELITE else Elements.NONE
+	var hp_val := max_hp if max_hp > 0.0 else profile.max_hp
+	if p_kind == Kind.ELITE:
+		profile = EnemyCatalog.make_elite_profile(element, hp_val)
+	else:
+		profile = EnemyCatalog.make_swarm_profile(hp_val)
+	hp = profile.max_hp
+	_apply_kind_visuals()
+	if brain:
+		brain.setup(self, profile)
+
+
+func enable_pathfinding() -> void:
+	if _nav_agent != null:
+		use_pathfinding = true
+		return
+	use_pathfinding = true
+	_nav_agent = NavigationAgent3D.new()
+	_nav_agent.name = "Navigator"
+	_nav_agent.path_desired_distance = 0.45
+	_nav_agent.target_desired_distance = 1.05
+	_nav_agent.path_max_distance = 24.0
+	_nav_agent.avoidance_enabled = false
+	add_child(_nav_agent)
+
+
+func is_elite() -> bool:
+	return kind == Kind.ELITE
+
+
+func is_staggered() -> bool:
+	return brain != null and brain.state == YokaiBrain.State.STAGGER
+
+
+func _apply_kind_visuals() -> void:
+	if kind != Kind.ELITE:
+		return
+	scale = Vector3.ONE * 1.14
+	var accent := Elements.accent_color(elite_element)
+	_sigil_mat.emission = accent * 1.35
+	_sigil_mat.emission_energy_multiplier = 0.95
+	_eyes.emission = accent * 1.6
+	_eyes.emission_energy_multiplier = 1.05
+	_sash.set_shader_parameter("base_color", accent.darkened(0.55))
+	_claw_mat.emission = accent * 1.2
 
 
 # --- 7-body lightweight ragdoll ------------------------------------------------
@@ -408,6 +464,12 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	var element: String = hit.get("element", "physical")
 	last_kill_element = element
 	var dmg: float = hit.base_damage * profile.damage_multiplier(hit.zone, element)
+	if is_elite() and bool(profile.tactics.get("parry_armor", false)):
+		var phys := element == Elements.NONE or element == "physical"
+		if phys and not is_staggered() and not hit.get("counter", false):
+			dmg *= 0.26
+		elif is_staggered():
+			dmg *= 1.35
 	dmg = snappedf(dmg, 0.1)
 	hp = maxf(hp - dmg, 0.0)
 	hit["target"] = profile.display_name
@@ -541,6 +603,16 @@ func _physics_process(delta: float) -> void:
 		_slow_scale = 1.0
 	_confusion_time = maxf(0.0, _confusion_time - delta)
 	var intent := brain.think(delta, _perceive())
+	var move: Vector3 = intent.get("move", Vector3.ZERO)
+	if use_pathfinding and _nav_agent and move.length_squared() > 0.01 and state == State.STANDING:
+		var root_pos := root_part().global_position
+		_nav_agent.target_position = root_pos + Vector3(move.x, 0.0, move.z).normalized() * 4.0
+		if NavigationServer3D.map_get_iteration_id(_nav_agent.get_navigation_map()) > 0:
+			var next := _nav_agent.get_next_path_position()
+			var steer := next - root_pos
+			steer.y = 0.0
+			if steer.length_squared() > 0.05:
+				move = steer.normalized() * move.length()
 	set_pose(intent.get("pose", "stalk"))
 	var attacking: bool = intent.get("attacking", false) and state == State.STANDING
 	if attacking and not _was_attacking:
@@ -550,7 +622,7 @@ func _physics_process(delta: float) -> void:
 		_try_claw_player(float(intent.get("damage", 12.0)), String(intent.get("attack", "right")))
 	if intent.has("face_position") and state == State.STANDING:
 		face_toward(intent.face_position)
-	_apply_move(intent.get("move", Vector3.ZERO), delta, intent.get("plant", false))
+	_apply_move(move, delta, intent.get("plant", false))
 	_show_tell(float(intent.get("tell", 0.0)))
 	super._physics_process(delta)
 
@@ -607,6 +679,15 @@ func _apply_move(move: Vector3, delta: float, planted := false) -> void:
 		_move_blocked = false
 	else:
 		_move_blocked = _blocked_toward(move.normalized())
+	if _move_blocked and move.length_squared() > 0.01:
+		var forward := move.normalized()
+		var side := Vector3(-forward.z, 0.0, forward.x)
+		for flip in [-1.0, 1.0]:
+			var detour: Vector3 = (forward + side * flip * 0.72).normalized()
+			if not _blocked_toward(detour):
+				move = detour * move.length()
+				_move_blocked = false
+				break
 	if _move_blocked:
 		move_velocity = Vector3.ZERO
 	else:

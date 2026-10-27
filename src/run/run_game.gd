@@ -121,6 +121,32 @@ func _prepare_run_arena() -> void:
 			health.died.connect(_on_player_died)
 
 	_configure_run_forest()
+	_configure_run_navigation()
+
+
+func _configure_run_navigation() -> void:
+	if get_node_or_null("RunNavigation") != null:
+		return
+	var region := NavigationRegion3D.new()
+	region.name = "RunNavigation"
+	var nav_mesh := NavigationMesh.new()
+	nav_mesh.agent_radius = 0.38
+	nav_mesh.agent_height = 1.75
+	nav_mesh.cell_size = 0.35
+	nav_mesh.cell_height = 0.2
+	region.navigation_mesh = nav_mesh
+	add_child(region)
+	var floor_hint := MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(88.0, 88.0)
+	floor_hint.mesh = plane
+	floor_hint.rotation.x = -PI * 0.5
+	floor_hint.position.y = -0.34
+	region.add_child(floor_hint)
+	var src := NavigationMeshSourceGeometryData3D.new()
+	NavigationServer3D.parse_source_geometry_data(nav_mesh, src, floor_hint)
+	NavigationServer3D.bake_from_source_geometry_data(nav_mesh, src)
+	region.navigation_mesh = nav_mesh
 
 
 func _configure_run_forest() -> void:
@@ -165,6 +191,7 @@ func _setup_run_nodes() -> void:
 	wave_director = WaveDirector.new()
 	wave_director.name = "WaveDirector"
 	wave_director.enemy_died.connect(_on_enemy_died)
+	wave_director.oni_defeated.connect(_on_oni_defeated)
 	add_child(wave_director)
 
 	diegetic_hud = DiegeticHud.new()
@@ -279,6 +306,18 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 # --- Kills, Souls & XP ---------------------------------------------------------
+
+func _on_oni_defeated(oni: RunOniBoss, hit: Dictionary) -> void:
+	if state == RunState.GAME_OVER:
+		return
+	kills += 3
+	score = compute_score()
+	var origin: Vector3 = hit.get("point", oni.global_position + Vector3(0, 1.2, 0))
+	var orbs := SoulOrb.spawn_cluster(_souls_root, origin, 8, xp_per_orb + 2, Elements.STORM)
+	for orb in orbs:
+		orb.collected.connect(_on_soul_collected)
+	GameEvents.log_event("oni_boss_kill", {"kills": kills, "element": hit.get("element", Elements.NONE)})
+
 
 func _on_enemy_died(yokai: Yokai, _hit: Dictionary) -> void:
 	if state == RunState.GAME_OVER:
