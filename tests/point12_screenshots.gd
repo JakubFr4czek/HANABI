@@ -37,10 +37,13 @@ func _ready() -> void:
 	player.teleport(Vector3(0.0, 0.0, 2.85), 0.0)
 	player.camera.rotation.x = deg_to_rad(-5.0)
 	var oni := run.wave_director.spawn_oni_boss(player.global_position)
-	oni.global_position = Vector3(0.0, 0.0, -1.1)
+	oni.global_position = Vector3(0.0, 1.0, -3.8)
 	oni.home_position = oni.global_position
 	oni.set_attacks_enabled(false)
 	oni.set_pose("guard")
+	var face := player.global_position
+	face.y = oni.global_position.y
+	oni.look_at(face, Vector3.UP)
 	await _frames(28)
 	await _shot("3_oni_close_mask")
 
