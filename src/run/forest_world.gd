@@ -9,9 +9,9 @@ const CHUNK_RADIUS := 1
 const CLEARING_RADIUS := 10.4
 const PROP_CLEARING_RADIUS := 13.2
 const TERRAIN_RES := 13
-const VIEW_RANGE_END := 17.5
-const HILL_FADE_START := 11.0
-const HILL_FADE_END := 14.0
+const VIEW_RANGE_END := 12.5
+const HILL_FADE_START := 9.5
+const HILL_FADE_END := 11.5
 const GROUND_SHADER := preload("res://src/shaders/forest_ground.gdshader")
 const WET_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const ROCK_SCENE := preload("res://assets/models/environment/rocks/rock_face_01/rock_face_01.gltf")
@@ -310,6 +310,8 @@ func _build_materials() -> void:
 	_ground_mat.shader = GROUND_SHADER
 	_ground_mat.set_shader_parameter("fill", 1.42)
 	_ground_mat.set_shader_parameter("cavity_ao", 0.85)
+	_ground_mat.set_shader_parameter("fog_fade_start", 8.0)
+	_ground_mat.set_shader_parameter("fog_fade_end", 10.8)
 
 	_tree_mat = ShaderMaterial.new()
 	_tree_mat.shader = WET_SHADER

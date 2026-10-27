@@ -177,8 +177,8 @@ func _configure_run_forest() -> void:
 		we.environment.fog_enabled = true
 		we.environment.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 		we.environment.fog_depth_begin = 2.2
-		we.environment.fog_depth_end = 10.2
-		we.environment.fog_density = 1.32
+		we.environment.fog_depth_end = 9.6
+		we.environment.fog_density = 1.42
 		we.environment.fog_height = 0.15
 		we.environment.fog_height_density = 0.68
 		we.environment.fog_sky_affect = 0.0
