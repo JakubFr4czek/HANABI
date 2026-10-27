@@ -17,7 +17,10 @@ signal upgrade_chosen(upgrade: Dictionary, level: int)
 signal run_ended(summary: Dictionary)
 signal run_started
 
-const RUN_FOG_END := 9.0
+## Milk fog is solid here. The old 9 m bubble read as a small arena with a
+## few trees; opened up as far as the Quest triangle budget allows (the tree
+## ring past it is thinned, not cut, so trunks still dissolve into the fog).
+const RUN_FOG_END := 10.5
 ## Night "milk" fog (sRGB): pale moonlit haze that swallows the forest.
 const RUN_FOG_COLOR := Color(0.5, 0.53, 0.6)
 
