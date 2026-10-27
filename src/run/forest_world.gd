@@ -33,6 +33,11 @@ const SHAFT_LENGTH := 15.0
 const GROUND_SHADER := preload("res://src/shaders/forest_ground.gdshader")
 const WET_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const TORII_SCENE := preload("res://assets/models/environment/forest_quaternius/torii_gate_polyfork.glb")
+## Grab3D CC0 cherry tree, crown simplified, scaled to a tall shrine cedar.
+const TREE_SCENE := preload("res://assets/models/environment/forest_trees/cherry_forest.gltf")
+const TREE_DIFFUSE := preload("res://src/shaders/forest_diffuse.gdshader")
+const TREE_ALBEDO := preload("res://assets/models/environment/forest_trees/cherry_forest_albedo.jpg")
+const TREE_NORMAL := preload("res://assets/models/environment/forest_trees/cherry_forest_normal.jpg")
 const TORII_MESH_SCALE := 0.42
 ## Trunks and gate pillars collide on their own layer: the player walks into
 ## them, yōkai ragdolls do not (their limbs snag and topple them); yōkai steer
@@ -41,6 +46,10 @@ const TRUNK_LAYER := 64
 const TRUNK_CELL := 3.0
 ## Trees per chunk side on the jittered grid (28 m / 9 ≈ 3.1 m spacing).
 const TREE_GRID := 9
+## Fog is solid by 9 m. Trees past this are the fog's color already, so they
+## are not drawn; the mesh is a real tree and drawing every chunk would blow
+## the Quest primitive cap.
+const TREE_DRAW_RADIUS := 9.5
 const MAX_TREES_PER_CHUNK := TREE_GRID * TREE_GRID
 ## Full-size gates met now and then in the fog (GDD §9).
 const MAX_TORII_PER_CHUNK := 1
@@ -127,6 +136,7 @@ func _physics_process(_delta: float) -> void:
 	if next != center_chunk:
 		center_chunk = next
 		_rebuild_active_chunks()
+	_refresh_tree_draw(follow.global_position)
 
 
 func height_at(wx: float, wz: float) -> float:
@@ -162,6 +172,8 @@ func _rebuild_active_chunks() -> void:
 		if not _chunks.has(key):
 			_chunks[key] = _make_chunk(key)
 	chunk_count = _chunks.size()
+	if follow:
+		_refresh_tree_draw(follow.global_position)
 
 
 func _make_chunk(coord: Vector2i) -> Node3D:
@@ -236,6 +248,8 @@ func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 		var props: Array = root.get_meta("prop_world_positions", [])
 		props.append(Vector3(wx, hy, wz))
 		root.set_meta("prop_world_positions", props)
+	if kind == 0:
+		root.set_meta("tree_local_xfs", transforms)
 	if not transforms.is_empty():
 		_commit_multimesh(root, label, mesh, mat, transforms)
 		if kind == 0 or kind == 1:
@@ -309,8 +323,10 @@ func _build_trunk_colliders(transforms: Array[Transform3D], kind: int, root: Nod
 	for xf in transforms:
 		var s := xf.basis.get_scale().x
 		if kind == 0:
-			_add_cylinder(body, xf.origin + Vector3(0.0, 1.5, 0.0), 0.34 * s, 3.0)
-			registered.append(_remember_trunk(root.position + xf.origin, 0.34 * s))
+			# Chest-height bark is about 0.45 m across at scale 1.
+			var trunk_r := 0.42 * s
+			_add_cylinder(body, xf.origin + Vector3(0.0, 1.8 * s, 0.0), trunk_r, 3.6 * s)
+			registered.append(_remember_trunk(root.position + xf.origin, trunk_r))
 		else:
 			# Two pillars, each ~0.34 of the gate width off its center.
 			var h := _torii_mesh.get_aabb().size.y * s if _torii_mesh else 4.5
@@ -399,10 +415,39 @@ func _commit_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 func _refresh_multimesh_transforms(mm_inst: MultiMeshInstance3D, transforms: Array[Transform3D]) -> void:
 	if not is_instance_valid(mm_inst) or mm_inst.multimesh == null:
 		return
+	if mm_inst.name == "Trees" and follow:
+		_refresh_tree_draw(follow.global_position)
+		return
 	var mm := mm_inst.multimesh
 	mm.instance_count = transforms.size()
 	for i in transforms.size():
 		mm.set_instance_transform(i, transforms[i])
+
+
+## Trees past the fog are the fog. Keep their colliders; drop the draw.
+func _refresh_tree_draw(origin: Vector3) -> void:
+	var r2 := TREE_DRAW_RADIUS * TREE_DRAW_RADIUS
+	for key in _chunks:
+		var chunk := _chunks[key] as Node3D
+		var inst := chunk.get_node_or_null("Trees") as MultiMeshInstance3D
+		if inst == null or inst.multimesh == null:
+			continue
+		var all: Array = chunk.get_meta("tree_local_xfs", [])
+		var mm := inst.multimesh
+		var near: Array[Transform3D] = []
+		var base := chunk.position
+		for xf in all:
+			var placed := xf as Transform3D
+			var dx := base.x + placed.origin.x - origin.x
+			var dz := base.z + placed.origin.z - origin.z
+			if dx * dx + dz * dz > r2:
+				continue
+			near.append(placed)
+		# instance_count is what the headless perf probe counts. A visibility
+		# cap on top of the full buffer still submitted every tree.
+		mm.instance_count = near.size()
+		for i in near.size():
+			mm.set_instance_transform(i, near[i])
 
 
 func _place_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
@@ -519,9 +564,9 @@ static func _add_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> voi
 func _build_materials() -> void:
 	_ground_mat = ShaderMaterial.new()
 	_ground_mat.shader = GROUND_SHADER
-	_ground_mat.set_shader_parameter("fill", 1.42)
+	_ground_mat.set_shader_parameter("fill", 0.0)
 	_ground_mat.set_shader_parameter("cavity_ao", 0.85)
-	_ground_mat.set_shader_parameter("ambient_fill", 0.55)
+	_ground_mat.set_shader_parameter("ambient_fill", 0.1)
 	# Damp, not mirror-wet: wet normals over 1K scans sparkle white in VR.
 	_ground_mat.set_shader_parameter("wetness", 0.3)
 	_ground_mat.set_shader_parameter("roughness_wet", 0.72)
@@ -533,46 +578,44 @@ func _build_materials() -> void:
 	_ground_mat.set_shader_parameter("fog_fade_end", GROUND_FADE_END)
 
 	_tree_mat = ShaderMaterial.new()
-	_tree_mat.shader = WET_SHADER
-	# Weathered cedar bark, a touch lighter than the fog so near trunks stand
-	# out and far ones melt into it.
-	_tree_mat.set_shader_parameter("base_color", Color(0.13, 0.115, 0.115))
-	_tree_mat.set_shader_parameter("roughness_dry", 0.82)
-	_tree_mat.set_shader_parameter("roughness_wet", 0.48)
-	_tree_mat.set_shader_parameter("wetness", 0.55)
-	_tree_mat.set_shader_parameter("waterline_y", -10.0)
-	_tree_mat.set_shader_parameter("fill", 1.25)
-	_tree_mat.set_shader_parameter("procedural_ao", 0.92)
+	_tree_mat.shader = TREE_DIFFUSE
+	_tree_mat.set_shader_parameter("albedo_texture", TREE_ALBEDO)
+	_tree_mat.set_shader_parameter("normal_texture", TREE_NORMAL)
 
 	_torii_mat = ShaderMaterial.new()
 	_torii_mat.shader = WET_SHADER
-	_torii_mat.set_shader_parameter("base_color", Color(0.34, 0.05, 0.05))
-	_torii_mat.set_shader_parameter("roughness_dry", 0.52)
-	_torii_mat.set_shader_parameter("roughness_wet", 0.34)
-	_torii_mat.set_shader_parameter("wetness", 0.62)
+	_torii_mat.set_shader_parameter("base_color", Color(0.28, 0.06, 0.05))
+	_torii_mat.set_shader_parameter("roughness_dry", 0.84)
+	_torii_mat.set_shader_parameter("roughness_wet", 0.72)
+	_torii_mat.set_shader_parameter("wetness", 0.28)
 	_torii_mat.set_shader_parameter("waterline_y", -10.0)
-	_torii_mat.set_shader_parameter("fill", 1.18)
-	_torii_mat.set_shader_parameter("emission_tint", Color(0.12, 0.02, 0.02))
-	_torii_mat.set_shader_parameter("procedural_ao", 0.78)
+	_torii_mat.set_shader_parameter("fill", 0.35)
+	_torii_mat.set_shader_parameter("specular_scale", 0.0)
+	_torii_mat.set_shader_parameter("fog_fill", 0.22)
+	_torii_mat.set_shader_parameter("procedural_ao", 0.55)
 
 	_lantern_mat = ShaderMaterial.new()
 	_lantern_mat.shader = WET_SHADER
-	_lantern_mat.set_shader_parameter("base_color", Color(0.52, 0.48, 0.42))
-	_lantern_mat.set_shader_parameter("roughness_dry", 0.68)
-	_lantern_mat.set_shader_parameter("roughness_wet", 0.38)
-	_lantern_mat.set_shader_parameter("wetness", 0.58)
+	_lantern_mat.set_shader_parameter("base_color", Color(0.42, 0.4, 0.36))
+	_lantern_mat.set_shader_parameter("roughness_dry", 0.88)
+	_lantern_mat.set_shader_parameter("roughness_wet", 0.75)
+	_lantern_mat.set_shader_parameter("wetness", 0.25)
 	_lantern_mat.set_shader_parameter("waterline_y", -10.0)
-	_lantern_mat.set_shader_parameter("fill", 1.35)
-	_lantern_mat.set_shader_parameter("emission_tint", Color(0.08, 0.12, 0.18))
+	_lantern_mat.set_shader_parameter("fill", 0.3)
+	_lantern_mat.set_shader_parameter("specular_scale", 0.0)
+	_lantern_mat.set_shader_parameter("fog_fill", 0.2)
+	_lantern_mat.set_shader_parameter("emission_tint", Color(0.04, 0.05, 0.06))
 
 	_rock_mat = ShaderMaterial.new()
 	_rock_mat.shader = WET_SHADER
-	_rock_mat.set_shader_parameter("base_color", Color(0.14, 0.14, 0.16))
-	_rock_mat.set_shader_parameter("roughness_dry", 0.86)
-	_rock_mat.set_shader_parameter("roughness_wet", 0.52)
-	_rock_mat.set_shader_parameter("wetness", 0.65)
+	_rock_mat.set_shader_parameter("base_color", Color(0.16, 0.16, 0.17))
+	_rock_mat.set_shader_parameter("roughness_dry", 0.92)
+	_rock_mat.set_shader_parameter("roughness_wet", 0.8)
+	_rock_mat.set_shader_parameter("wetness", 0.22)
 	_rock_mat.set_shader_parameter("waterline_y", -10.0)
-	_rock_mat.set_shader_parameter("fill", 1.2)
+	_rock_mat.set_shader_parameter("fill", 0.28)
+	_rock_mat.set_shader_parameter("specular_scale", 0.0)
+	_rock_mat.set_shader_parameter("fog_fill", 0.18)
 
 
 ## No per-node visibility range: Godot measures it to the node origin, i.e. a
@@ -589,7 +632,12 @@ func _build_meshes() -> void:
 	_shaft_mesh.center_offset = Vector3(0.0, 0.5, 0.0)
 	_shaft_mat = ShaderMaterial.new()
 	_shaft_mat.shader = SHAFT_SHADER
-	_tree_mesh = _build_tree_mesh()
+	# Same grey as the fog, dim. A blue-white beam reads as a plastic tube.
+	_shaft_mat.set_shader_parameter("shaft_color", Color(0.62, 0.64, 0.66))
+	_shaft_mat.set_shader_parameter("intensity", 0.2)
+	_tree_mesh = _merge_scene_meshes(TREE_SCENE, 1.0)
+	if _tree_mesh == null:
+		_tree_mesh = _build_tree_mesh()
 	_torii_mesh = _build_torii_mesh()
 	_lantern_mesh = _build_lantern_mesh()
 	_rock_mesh = _extract_rock_mesh()
