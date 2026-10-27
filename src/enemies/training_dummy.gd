@@ -580,7 +580,18 @@ func _on_state_changed(new_state: State) -> void:
 	GameEvents.log_event("enemy_state", {"enemy": profile.display_name, "state": names[new_state]})
 	if new_state == State.STANDING and _revive_on_getup:
 		_revive_on_getup = false
+		if not _allow_revive_after_knockout():
+			_on_permanent_defeat()
+			return
 		hp = profile.max_hp
+
+
+func _allow_revive_after_knockout() -> bool:
+	return true
+
+
+func _on_permanent_defeat() -> void:
+	pass
 
 
 func _balance_regen() -> float: return profile.balance_regen
