@@ -61,7 +61,11 @@ var _hit_player_this_strike := false
 var _last_tell := 0.0
 var _flash_time := 0.0
 var _dissolve_timer := 0.0
+## Longest a dead body falls before it bursts into petals anyway.
 var _dissolve_duration := 0.95
+var _petal_burst_done := false
+## Petals a whole yōkai comes apart into.
+const DEATH_PETALS := 90
 var _slow_time := 0.0
 var _slow_scale := 1.0
 var _confusion_time := 0.0
@@ -76,6 +80,7 @@ var _severed := {}  # part name -> true while that limb is gone
 func prepare_for_spawn() -> void:
 	is_dead = false
 	_dissolve_timer = 0.0
+	_petal_burst_done = false
 	_slow_time = 0.0
 	_slow_scale = 1.0
 	_confusion_time = 0.0
@@ -837,6 +842,29 @@ func die(hit: Dictionary = {}) -> void:
 	died.emit(self, hit)
 
 
+## Down: the pelvis is near the ground, or the body has stopped falling.
+func _body_landed() -> bool:
+	var pelvis := root_part()
+	if pelvis == null:
+		return true
+	if ground_probe.is_valid():
+		var gy := float(ground_probe.call(pelvis.global_position.x, pelvis.global_position.z))
+		if pelvis.global_position.y - gy < 0.32:
+			return true
+	return _dissolve_timer >= 0.5 and pelvis.linear_velocity.length() < 0.5
+
+
+func _burst_into_petals() -> void:
+	_petal_burst_done = true
+	var scene := get_tree().current_scene if is_inside_tree() else null
+	if scene:
+		var push := root_part().linear_velocity if root_part() else Vector3.ZERO
+		var tint := Elements.color(last_kill_element) if last_kill_element != Elements.NONE and last_kill_element != "physical" else Color.WHITE
+		SakuraScatter.burst_from(self, scene, DEATH_PETALS, push, tint)
+	visible = false
+	dissolve_finished.emit(self)
+
+
 func _balance_regen() -> float: return 0.0 if is_dead else profile.balance_regen
 func _muscle_regen() -> float: return 0.0 if is_dead else profile.muscle_regen
 func _knockdown_time() -> float: return 999.0 if is_dead else profile.knockdown_time
@@ -849,23 +877,19 @@ func _physics_process(delta: float) -> void:
 		muscle = 0.0
 		move_velocity = Vector3.ZERO
 		_dissolve_timer += delta
+		if _petal_burst_done:
+			return
 		var t := clampf(_dissolve_timer / _dissolve_duration, 0.0, 1.0)
 		var brief_flash := maxf(0.0, (0.12 - _dissolve_timer) / 0.12) * 0.45
 		_skin.set_shader_parameter("flash", brief_flash)
 		_mask_mat.set_shader_parameter("flash", brief_flash * 0.5)
-		_skin.set_shader_parameter("fill", lerpf(1.65, 0.1, t))
-		_mask_mat.set_shader_parameter("fill", lerpf(1.75, 0.1, t))
-		_sash.set_shader_parameter("fill", lerpf(1.60, 0.1, t))
 		_eyes.emission_energy_multiplier = maxf(0.0, (1.0 - t * 2.0) * 0.85)
 		EyeGlow.set_glow(_eye_glows, maxf(0.0, 1.0 - t * 2.5))
 		_sigil_mat.emission_energy_multiplier = maxf(0.0, (1.0 - t * 2.0) * 0.55)
-		# Gently sink and shrink limbs in the final half of the dissolve.
-		if t > 0.35:
-			var s := maxf(0.05, 1.0 - (t - 0.35) / 0.65)
-			for p: RagdollPart in parts.values():
-				p.scale = Vector3.ONE * s
-		if _dissolve_timer >= _dissolve_duration:
-			dissolve_finished.emit(self)
+		# The body falls limp; once it is down (or after the longest fall)
+		# it comes apart into sakura petals that the wind carries off.
+		if _dissolve_timer >= _dissolve_duration or (_dissolve_timer >= 0.3 and _body_landed()):
+			_burst_into_petals()
 		return
 
 	# Safety net: whatever happened (a launch, a knockdown through a gap in
