@@ -19,10 +19,10 @@ extends BladeBody
 ##   put back in the hand (unless something solid is in the way).
 ## - Slow motion: in a compensated slow-mo (parry) gains are scaled by
 ##   [method TimeController.compensation] so the blade keeps real-time speed.
-## - Free & two-handed grip: each hand grabs at a local grip transform clamped to
-##   the handle (tsuka), guard (tsuba), or blunt spine of the blade (mune, never
-##   the cutting edge ha). A second hand can grab the weapon simultaneously,
-##   steering the blade axis between the two hands and adding second-arm strength.
+## - Free & two-handed grip: each hand grabs at a local grip transform clamped
+##   to the handle (tsuka) only — never the guard or the blade. A second hand
+##   can grab the other end of the handle simultaneously, steering the blade
+##   axis between the two hands and adding second-arm strength.
 
 const ZONE_HANDLE := "handle"
 const ZONE_TSUBA := "tsuba"
@@ -251,34 +251,18 @@ func get_grip_point_global(by: Node3D = null) -> Vector3:
 	return global_transform * get_local_grip(by).origin
 
 
-## Classify which grabbable region a local-space point falls into.
-func classify_grip_zone(local_point: Vector3) -> String:
-	if local_point.z > guard_z + guard_half_length:
-		return ZONE_HANDLE
-	if local_point.z >= guard_z - guard_half_length:
-		return ZONE_TSUBA
-	return ZONE_MUNE
+## The only grabbable region is the handle (tsuka). Kept as a classifier so
+## callers can log/verify the grip zone without knowing the clamp rule.
+func classify_grip_zone(_local_point: Vector3) -> String:
+	return ZONE_HANDLE
 
 
-## Clamp an arbitrary local-space point onto the nearest valid grip surface:
-## the handle (tsuka), the guard (tsuba), or the blunt spine of the blade (mune).
-## Points along the blade are always placed on the blunt spine, never on the cutting edge.
+## Clamp an arbitrary local-space point onto the handle: between the guard
+## and the pommel end, on the handle centerline. A hand that closes on the
+## guard or the blade itself slides to the nearest end of the handle
+## instead of gripping steel.
 func clamp_grip_point(local_point: Vector3) -> Vector3:
-	var min_z := minf(blade_start.z, blade_tip.z) + blade_grip_margin
-	var z := clampf(local_point.z, min_z, handle_back_z)
-	var zone := classify_grip_zone(Vector3(local_point.x, local_point.y, z))
-	match zone:
-		ZONE_HANDLE:
-			return Vector3(0.0, 0.0, clampf(z, guard_z + guard_half_length, handle_back_z))
-		ZONE_TSUBA:
-			var xy := Vector2(local_point.x, local_point.y)
-			if xy.length() > guard_radius:
-				xy = xy.normalized() * guard_radius
-			return Vector3(xy.x, xy.y, clampf(z, guard_z - guard_half_length, guard_z + guard_half_length))
-		_:
-			var z_mune := clampf(z, min_z, guard_z - guard_half_length)
-			var center := _blade_centerline_at_z(z_mune)
-			return center + spine_direction.normalized() * spine_offset
+	return Vector3(0.0, 0.0, clampf(local_point.z, guard_z + guard_half_length, handle_back_z))
 
 
 func _blade_centerline_at_z(z: float) -> Vector3:
@@ -301,19 +285,18 @@ func distance_to_grip(world_point: Vector3) -> float:
 	return world_point.distance_to(global_transform * clamped)
 
 
-## The reversed (blade-down) grip: 180° about the local X axis, which flips
-## both the blade end (-Z to +Z) and the edge side. Grabbing with the fist
-## already turned takes this grip instead of snapping back to normal.
+## The reversed (blade-down) grip: 180° about the local Y axis — the spine
+## (mune) axis. That turns the blade end-for-end (-Z to +Z) while the cutting
+## edge keeps the same side it has in the normal grip, so a backhand strike
+## still meets the enemy edge-first. Rotating about X instead would also
+## flip the edge to the spine side, presenting the blunt back to the target.
 func _reversed_grip_basis() -> Basis:
-	return Basis(Vector3.RIGHT, PI)
+	return Basis(Vector3.UP, PI)
 
 
-## Snap a hand orientation to the nearest canonical grip on the handle/guard:
-## normal, or reversed when the fist came in blade-down. Only grips on the
-## blade spine keep the exact hand orientation.
-func _snap_grip_basis(raw_basis: Basis, zone: String) -> Basis:
-	if zone == ZONE_MUNE:
-		return raw_basis.orthonormalized()
+## Snap a hand orientation to the nearest canonical grip on the handle:
+## normal, or reversed when the fist came in blade-down.
+func _snap_grip_basis(raw_basis: Basis, _zone: String) -> Basis:
 	var q := raw_basis.get_rotation_quaternion()
 	var flip := _reversed_grip_basis().get_rotation_quaternion()
 	if q.angle_to(flip) < q.angle_to(Quaternion.IDENTITY):
@@ -322,9 +305,8 @@ func _snap_grip_basis(raw_basis: Basis, zone: String) -> Basis:
 
 
 ## Compute the local grip Transform3D for a hand grabbing at [param hand_global].
-## On the handle and guard the grip snaps to normal or reversed (blade-down),
-## whichever the fist is closer to; only grips on the blade spine keep the
-## exact hand orientation.
+## The grip snaps to normal or reversed (blade-down), whichever the fist is
+## closer to.
 func compute_local_grip(hand_global: Transform3D) -> Transform3D:
 	var raw_local := global_transform.affine_inverse() * hand_global
 	if raw_local.origin.length() < 0.005 and raw_local.basis.get_rotation_quaternion().angle_to(Quaternion.IDENTITY) < 0.01:

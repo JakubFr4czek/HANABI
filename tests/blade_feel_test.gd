@@ -112,13 +112,16 @@ func _test_fixed_handle_grip() -> void:
 		katana.angular_velocity = Vector3.ZERO
 		await _wait(0.1)
 	_check("handle / guard grip seats the sword the same way however the hand came in: blade out of the fist, edge on the fingers' side (%s)" % ", ".join(results), all_ok)
-	# The blunt spine (half-swording) keeps the hand's own angle.
-	var spine_hand := katana.global_transform * Transform3D(Basis(Vector3.BACK, deg_to_rad(90.0)), Vector3(0, 0.02, -0.4))
-	holder.global_transform = spine_hand
+	# A hand closing on the blade itself slides to the handle and snaps to
+	# the canonical grip like any other grab — steel is not a grip.
+	var blade_hand := katana.global_transform * Transform3D(Basis(Vector3.BACK, deg_to_rad(90.0)), Vector3(0, 0.02, -0.4))
+	holder.global_transform = blade_hand
 	holder.grab(katana)
-	var spine_grip := katana.get_local_grip(holder)
-	_check("a grip on the blade spine keeps the hand's angle (zone %s)" % katana.get_grip_zone(holder),
-		katana.get_grip_zone(holder) == HeldWeapon.ZONE_MUNE and not spine_grip.basis.is_equal_approx(Basis.IDENTITY))
+	var blade_grip := katana.get_local_grip(holder)
+	_check("a grip on the blade slides to the handle and snaps (zone %s, z %.3f)" % [katana.get_grip_zone(holder), blade_grip.origin.z],
+		katana.get_grip_zone(holder) == HeldWeapon.ZONE_HANDLE
+		and blade_grip.origin.z >= katana.guard_z + katana.guard_half_length - 0.001
+		and blade_grip.basis.is_equal_approx(Basis.IDENTITY))
 	holder.release()
 	holder.queue_free()
 

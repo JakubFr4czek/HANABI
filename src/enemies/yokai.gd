@@ -79,7 +79,7 @@ func prepare_for_spawn() -> void:
 	for p: RagdollPart in parts.values():
 		p.scale = Vector3.ONE
 		p.collision_layer = 2
-		p.collision_mask = 2 | 4 | 8
+		p.collision_mask = 4 | 8
 	# The pool calls this before add_child. reset_body reads global transforms,
 	# which are identity off the tree; place_at() resets once the body is back.
 	if is_inside_tree():
@@ -181,13 +181,21 @@ func _ready() -> void:
 	default_pose_blend = 0.38
 	sway_poses = PackedStringArray(["stalk", "approach", "idle", "flinch"])
 	super._ready()
-	# Standing swarm bodies live on layer 2. The ground mesh and the trunks are
-	# not in the mask: both snag or launch a foot, and the height spring carries
-	# the body. Parts are born on the fallen-body layer; a fresh spawn skips
-	# prepare_for_spawn.
+	# Standing swarm bodies live on layer 2 but never collide with it: a
+	# ragdoll's own parts (and other yōkai) pass through each other. The rest
+	# pose already overlaps pelvis/legs and chest/arms by centimetres, so
+	# self-collision made the solver constantly pop limbs out of the torso —
+	# worst in strike poses, where an arm pressed into the chest was ejected
+	# at speed. The joints hold the body together; the brain's separation
+	# steering keeps yōkai from stacking. The ground mesh and the trunks are
+	# not in the mask either: both snag or launch a foot, and the height
+	# spring carries the body. Parts are born on the fallen-body layer; a
+	# fresh spawn skips prepare_for_spawn.
 	for p: RagdollPart in parts.values():
 		p.collision_layer = 2
-		p.collision_mask = 2 | 4 | 8
+		p.collision_mask = 4 | 8
+	if not state_changed.is_connected(_on_ragdoll_state_changed):
+		state_changed.connect(_on_ragdoll_state_changed)
 
 	for child in get_children():
 		if child is YokaiBrain:
@@ -198,6 +206,18 @@ func _ready() -> void:
 		add_child(brain)
 	brain.setup(self, profile)
 	snap_pose("stalk")
+
+
+## While standing, the height spring carries the body and the parts ignore
+## the terrain (see _ready). Knocked down there is no spring, so the body
+## must land on the ground for real — without terrain in the mask it fell
+## through the world and rose back minutes later as a "dead" straggler.
+func _on_ragdoll_state_changed(new_state: State) -> void:
+	if is_dead:
+		return
+	var mask := (1 | 4 | 8) if new_state != State.STANDING else (4 | 8)
+	for p: RagdollPart in parts.values():
+		p.collision_mask = mask
 
 
 func configure_kind(p_kind: Kind, element: String = Elements.NONE, max_hp: float = -1.0) -> void:
@@ -268,7 +288,11 @@ func _apply_kind_visuals() -> void:
 	if kind != Kind.ELITE:
 		_reset_spawn_look()
 		return
-	scale = Vector3.ONE * 1.14
+	# No node scaling: scaling the Yokai node moves rigid-body parts away
+	# from their joint anchors (shapes do not scale with the node), so elite
+	# bodies fought their own joints and tore themselves apart. Elites read
+	# as bigger through the halo, tint and glow instead.
+	scale = Vector3.ONE
 	var accent := Elements.accent_color(elite_element)
 	_sigil_mat.emission = accent * 1.35
 	_sigil_mat.emission_energy_multiplier = 0.95
@@ -768,6 +792,14 @@ func _physics_process(delta: float) -> void:
 			dissolve_finished.emit(self)
 		return
 
+	# Safety net: whatever happened (a launch, a knockdown through a gap in
+	# the height spring), a living yōkai never stays under the terrain. One
+	# that sank read as dying before it ever reached the player.
+	if ground_probe.is_valid() and not parts.is_empty():
+		var rp := root_part().global_position
+		var gy := float(ground_probe.call(rp.x, rp.z))
+		if rp.y < gy - 1.2:
+			place_at(Vector3(rp.x, gy, rp.z), _facing_yaw)
 	_slow_time = maxf(0.0, _slow_time - delta)
 	if _slow_time <= 0.0:
 		_slow_scale = 1.0
@@ -797,14 +829,15 @@ func _physics_process(delta: float) -> void:
 		var pulse := 1.06 + sin(Time.get_ticks_msec() * 0.007) * 0.14
 		_elite_halo.scale = Vector3(pulse, pulse, pulse)
 	super._physics_process(delta)
-	# No ground under the feet to lean on, so a standing pelvis is kept upright
-	# directly. Knockdowns skip this and fall for real.
+	# No ground under the feet to lean on, so a standing pelvis is kept
+	# upright by bleeding off its pitch/roll spin; the balance drive does
+	# the actual uprighting. (Teleporting the pelvis basis upright every
+	# tick, as before, rotated the body into whatever it overlapped and
+	# the solver popped it back out — a steady source of launches.)
 	if state == State.STANDING and not is_dead:
 		var pelvis := root_part()
-		var upright := Basis(Vector3.UP, _facing_yaw)
-		pelvis.global_transform = Transform3D(upright, pelvis.global_position)
 		var spin := pelvis.angular_velocity
-		pelvis.angular_velocity = Vector3(0.0, spin.y, 0.0)
+		pelvis.angular_velocity = Vector3(spin.x * 0.6, spin.y, spin.z * 0.6)
 	_apply_secondary_motion_overlay()
 
 

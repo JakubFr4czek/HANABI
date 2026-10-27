@@ -4,9 +4,9 @@ extends Node3D
 ## pose the weapon follows: blade along -Z, so rotate this node (relative to the
 ## controller) to change how the sword sits in the hand.
 ##
-## Supports free grabbing anywhere along the handle (tsuka), guard (tsuba), or
-## blunt side of the blade (mune), as well as grabbing a weapon already held by
-## the other hand for two-handed swordplay.
+## Supports free grabbing anywhere along the handle (tsuka) only — never the
+## guard or the blade — as well as grabbing a weapon already held by the
+## other hand for two-handed swordplay.
 ##
 ## Under an [XRController3D] it reads the grip and B/Y inputs itself:
 ## hold grip near a weapon to grab it, release grip to drop it, press B/Y to
@@ -67,7 +67,7 @@ func xr_grip_transform() -> Transform3D:
 
 ## Grab [param weapon].
 ## - If [param custom_local_grip] is a [Transform3D] or [Vector3], grip at that
-##   local pose on the weapon (clamped to handle, tsuba, or blunt blade spine).
+##   local pose on the weapon (clamped to the handle).
 ## - Otherwise, if the weapon's grabbable body is within [member grab_radius],
 ##   grip it where the hand currently is relative to the weapon.
 ## - If the weapon is far away, fall back to the default origin grip.
@@ -102,7 +102,7 @@ func release() -> void:
 
 
 ## Show the hand where the sword is, not where the controller is: when the blade
-## is stopped by a wall, the hand stays on the hilt/tsuba/blade spine where it
+## is stopped by a wall, the hand stays on the handle where it
 ## grabbed the weapon.
 func _pin_hand_to(weapon: HeldWeapon, local_grip: Transform3D = Transform3D.IDENTITY) -> void:
 	if _hand == null or not _hand.has_method("add_target_override"):

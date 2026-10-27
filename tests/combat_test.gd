@@ -1,6 +1,6 @@
 extends Node
 ## Headless checks for the PD katana, weight lag, hit-stop, trail, parry,
-## free grip (handle / tsuba / blunt blade spine) and two-handed grip. Run with:
+## free grip (handle only) and two-handed grip. Run with:
 ##   godot --headless --path . --fixed-fps 90 res://tests/combat_test.tscn -- --desktop
 ## Exit code 0 when everything passed.
 
@@ -171,7 +171,7 @@ func _run() -> void:
 	_check("katana keeps up with the real hand in slow-mo (grip error %.3f m, normal time %.3f m)" % [slow_err, base_err], slow_err < base_err * 1.5 + 0.02)
 	TimeController.clear()
 
-	# 7. Free grip anywhere (handle, tsuba, blunt side of the blade) and two-handed grip.
+	# 7. Free grip along the handle only (guard/blade grabs slide or fail) and two-handed grip.
 	await _test_free_and_two_handed_grip(lag_kanabo[0])
 
 	# 8. Dojo of the Storm arena elements: storm lightning, water and fog.
@@ -210,7 +210,8 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 		katana.get_local_grip(h1).origin.z, katana.get_grip_zone(h1), handle_err],
 		katana.get_grip_zone(h1) == HeldWeapon.ZONE_HANDLE and absf(katana.get_local_grip(h1).origin.z - 0.16) < 0.01 and handle_err < 0.03)
 
-	# 7b. Grabbing the guard (tsuba, z = -0.085).
+	# 7b. Grabbing the guard (tsuba, z = -0.085): the hand slides to the
+	# nearest end of the handle — the guard itself is not a grip.
 	katana.release_all()
 	katana.global_transform = base_pose
 	katana.linear_velocity = Vector3.ZERO
@@ -221,28 +222,38 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 	h1.global_transform = Transform3D(Basis(Vector3.UP, deg_to_rad(35.0)), base_pose.origin + Vector3(-0.2, 0.05, 0.1))
 	await _wait(0.35)
 	var tsuba_err := katana.get_grip_point_global(h1).distance_to(h1.global_position)
-	_check("free grip on the guard (tsuba, z=%.3f, zone=%s, err=%.3f m)" % [
+	_check("grabbing the guard slides to the handle end (z=%.3f, zone=%s, err=%.3f m)" % [
 		katana.get_local_grip(h1).origin.z, katana.get_grip_zone(h1), tsuba_err],
-		katana.get_grip_zone(h1) == HeldWeapon.ZONE_TSUBA and tsuba_err < 0.03)
+		katana.get_grip_zone(h1) == HeldWeapon.ZONE_HANDLE
+		and absf(katana.get_local_grip(h1).origin.z - (katana.guard_z + katana.guard_half_length)) < 0.01
+		and tsuba_err < 0.03)
 
-	# 7c. Grabbing the blade clamps onto the blunt spine (mune), never the sharp edge (ha).
+	# 7c. Grabbing the blade itself: the grip lands on the handle, never on
+	# the steel — a hand on the blade cannot hold the katana by the blade.
 	katana.release_all()
 	katana.global_transform = base_pose
 	katana.linear_velocity = Vector3.ZERO
 	katana.angular_velocity = Vector3.ZERO
-	# Approach even from the sharp edge side (-Y): the grip must snap to the blunt spine (+Y).
-	h1.global_transform = base_pose * Transform3D(Basis.IDENTITY, Vector3(-0.025, -0.02, -0.45))
+	h1.global_transform = base_pose * Transform3D(Basis.IDENTITY, Vector3(-0.025, -0.02, -0.20))
 	h1.grab(katana)
-	var mune_local := katana.get_local_grip(h1).origin
+	var blade_grip_local := katana.get_local_grip(h1).origin
 	await _wait(0.4)
 	h1.global_position += Vector3(0.2, 0.15, -0.1)
 	await _wait(0.35)
-	var mune_err := katana.get_grip_point_global(h1).distance_to(h1.global_position)
-	_check("free grip on the blade snaps to blunt spine (mune, zone=%s, blunt=%s, err=%.3f m)" % [
-		katana.get_grip_zone(h1), katana.is_on_blunt_side(mune_local), mune_err],
-		katana.get_grip_zone(h1) == HeldWeapon.ZONE_MUNE and katana.is_on_blunt_side(mune_local) and mune_err < 0.03)
+	var blade_err := katana.get_grip_point_global(h1).distance_to(h1.global_position)
+	_check("grabbing the blade puts the hand on the handle (zone=%s, z=%.3f, err=%.3f m)" % [
+		katana.get_grip_zone(h1), blade_grip_local.z, blade_err],
+		katana.get_grip_zone(h1) == HeldWeapon.ZONE_HANDLE
+		and blade_grip_local.z >= katana.guard_z + katana.guard_half_length - 0.001
+		and blade_grip_local.z <= katana.handle_back_z + 0.001
+		and blade_err < 0.03)
+	# And from farther along the blade the weapon is not grabbable at all.
+	katana.release_all()
+	var far_local := base_pose * Vector3(0.0, 0.0, -0.55)
+	_check("mid-blade is outside grab reach of the handle (dist %.2f m)" % katana.distance_to_grip(far_local),
+		katana.distance_to_grip(far_local) > 0.3)
 
-	# 7d. Two-handed grip (handle + blunt blade spine / half-swording):
+	# 7d. Two-handed grip (both hands on the handle):
 	# grabbing with the second hand keeps the first hand attached, steers the blade
 	# between both hands, and releasing the first hand transfers control to the second.
 	katana.release_all()
@@ -250,7 +261,7 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 	katana.linear_velocity = Vector3.ZERO
 	katana.angular_velocity = Vector3.ZERO
 	h1.global_transform = base_pose * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 0.05))
-	h2.global_transform = base_pose * Transform3D(Basis.IDENTITY, Vector3(-0.025, 0.02, -0.45))
+	h2.global_transform = base_pose * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 0.17))
 	h1.grab(katana)
 	h2.grab(katana)
 	_check("second hand grabs without releasing the first (two_handed=%s, holders=%d)" % [
@@ -288,13 +299,13 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 	kanabo.linear_velocity = Vector3.ZERO
 	kanabo.angular_velocity = Vector3.ZERO
 	h1.global_transform = base_pose
-	h2.global_transform = base_pose * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -0.35))
+	h2.global_transform = base_pose * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 0.18))
 	h1.grab(kanabo)
 	h2.grab(kanabo)
 	await _wait(1.0)
 	var jump_pose := Transform3D(Basis(Vector3.UP, deg_to_rad(60.0)), Vector3(-2.6, 1.4, 3.0))
 	h1.global_transform = jump_pose
-	h2.global_transform = jump_pose * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -0.35))
+	h2.global_transform = jump_pose * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 0.18))
 	var settle_2h := -1.0
 	for i in 90:
 		await get_tree().physics_frame
@@ -336,7 +347,7 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 	katana.global_transform = base_pose
 	# The holders sit in the fist, offset from the controllers: put the fists on the grip spots.
 	var grip_r := Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 0.04))
-	var grip_l := Transform3D(Basis.IDENTITY, Vector3(-0.025, 0.018, -0.40))
+	var grip_l := Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 0.16))
 	xr_player.right_controller.global_transform = base_pose * grip_r * xr_player.right_holder.transform.affine_inverse()
 	xr_player.left_controller.global_transform = base_pose * grip_l * xr_player.left_holder.transform.affine_inverse()
 	xr_player.right_holder.grab(katana)
@@ -344,8 +355,9 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 	var anchor_r := katana.get_node_or_null("HandAnchor_right") as Node3D
 	var anchor_l := katana.get_node_or_null("HandAnchor_left") as Node3D
 	var expected_r := (grip_r * xr_player.right_holder.transform.affine_inverse()).origin
+	var expected_l := (grip_l * xr_player.left_holder.transform.affine_inverse()).origin
 	_check("VR hand models pin to both grip locations on the katana",
-		anchor_r != null and anchor_l != null and anchor_r.position.distance_to(expected_r) < 0.01 and anchor_l.position.z < -0.35)
+		anchor_r != null and anchor_l != null and anchor_r.position.distance_to(expected_r) < 0.01 and anchor_l.position.distance_to(expected_l) < 0.01)
 	xr_player.right_holder.release()
 	xr_player.left_holder.release()
 	xr_player.queue_free()
