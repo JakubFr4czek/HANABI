@@ -32,6 +32,10 @@ func _ready() -> void:
 	var max_alive := 0
 	var deaths := [0]
 	run.wave_director.enemy_died.connect(func(_e, _h): deaths[0] += 1)
+	var hits: Array = []
+	GameEvents.hit_landed.connect(func(h): hits.append(h))
+	var severed := {}
+	GameEvents.event_logged.connect(func(e): if e.get("type", "") == "enemy_dismembered": severed[e.part] = int(severed.get(e.part, 0)) + 1)
 	for f in frames:
 		await get_tree().physics_frame
 		health.heal_full()
@@ -66,7 +70,18 @@ func _ready() -> void:
 			alive += 1
 			_inspect(r, f / 90.0, player.global_position)
 		max_alive = maxi(max_alive, alive)
-	print("SOAK %.0f s: %d swings, %d kills, max %d bodies, %d incidents" % [seconds, swings, deaths[0], max_alive, _incidents])
+	if args.has("--hit-stats"):
+		var rows := hits.filter(func(h): return h.get("strike", "") == "edge")
+		for key in ["speed", "power", "impulse", "base_damage"]:
+			var v: Array = rows.map(func(h): return float(h.get(key, 0.0)))
+			v.sort()
+			if not v.is_empty():
+				print("  %s: p25 %.2f  p50 %.2f  p75 %.2f  p90 %.2f  max %.2f" % [key, v[v.size() / 4], v[v.size() / 2], v[v.size() * 3 / 4], v[v.size() * 9 / 10], v[-1]])
+		var kinds := {}
+		for h in hits:
+			kinds[h.get("strike", "?")] = int(kinds.get(h.get("strike", "?"), 0)) + 1
+		print("  strikes: %s, edge hits %d" % [kinds, rows.size()])
+	print("SOAK %.0f s: %d swings, %d kills, max %d bodies, %d incidents, severed %s" % [seconds, swings, deaths[0], max_alive, _incidents, severed])
 	get_tree().quit(1 if _incidents > 0 else 0)
 
 
@@ -76,6 +91,8 @@ func _inspect(r: ActiveRagdoll, t: float, player_pos: Vector3) -> void:
 	var worst := 0.0
 	var worst_part := ""
 	for part_name in r.parts:
+		if r is Yokai and (r as Yokai).is_severed(part_name):
+			continue
 		var part := r.parts[part_name] as RagdollPart
 		var rest_d := ((r._rest[part_name] as Transform3D).origin - rest_root.origin).length()
 		var tear := absf(part.global_position.distance_to(pelvis.global_position) - rest_d)
@@ -86,7 +103,10 @@ func _inspect(r: ActiveRagdoll, t: float, player_pos: Vector3) -> void:
 	var id := r.get_instance_id()
 	var dead: bool = r.get("is_dead") == true
 	var key := "%d:%s" % [id, dead]
-	if worst > TEAR_LIMIT and worst > float(_worst.get(key, 0.0)) + 0.5:
+	# A limp dead body may fold onto itself (head onto the pelvis); only a
+	# limb flung far off counts there.
+	var limit := TEAR_LIMIT * (1.7 if dead else 1.0)
+	if worst > limit and worst > float(_worst.get(key, 0.0)) + 0.5:
 		_worst[key] = worst
 		_incidents += 1
 		print("t=%6.2f %s%s tear %.2f m at %s | state %d dead %s muscle %.2f pelvis %s dist %.1f" % [
