@@ -73,6 +73,9 @@ func _physics_process(delta: float) -> void:
 	while not _samples.is_empty() and _samples[0][2] > lifetime:
 		_samples.pop_front()
 	_samples.append([base, tip, 0.0, strength])
+	if _blade and _blade.element != Elements.NONE and _blade.is_fade_warning:
+		var pulse := 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.001 * TAU * 3.0)
+		_material.albedo_color = Elements.color(_blade.element) * pulse
 	_rebuild()
 
 

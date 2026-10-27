@@ -16,7 +16,7 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Sword swing and clash sounds: **StarNinjas** (OpenGameArt, CC0)
 - Impact sounds + combat cuts/slaps/hurt/tells: **Kenney** Impact Sounds (kenney.nl, CC0), `assets/audio/sfx/impact/` & `cc0_combat/`
 - Run sting SFX (soul collect, firework, ofuda slice, level-up, yōkai slice): **Kenney** Interface Sounds & Impact Sounds (kenney.nl, CC0), in `assets/audio/sfx/kenney_run/`
-- Forest wind bed: procedural WAV in `assets/audio/sfx/hanabi_proc/` (project author, CC0)
+- Forest wind bed & Torii gate fūrin (wind chime): procedural WAV in `assets/audio/sfx/hanabi_proc/` (project author, CC0)
 - Storm rain + thunder: Kresiek The Furry, WuxiaScrub, OpenGameArt CC0 in `assets/audio/sfx/cc0_storm/` (see `LICENSE.txt`)
 - Run ambient music: Tozan "Oriental Somber" (OpenGameArt CC0), `assets/audio/music/cc0_run/orientalsomber.ogg`
 - Run forest trees: "Cherry Blossom Tree" by **Grab3D** (CC0), crown simplified and the daylight blossoms recolored to night foliage, `assets/models/environment/forest_trees/`
