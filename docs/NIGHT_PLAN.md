@@ -105,6 +105,11 @@ sakura trees; do not touch grip/hand logic).
   `held_weapon.gd`; elite yōkai respect `counter` hits in `yokai.gd`.
 - Headless: `gdd_loop_test.tscn`; visual: `run_screenshots.gd` shot 7.
 
+## 15. Polish after point 13 (premium HUD, stele, CC0 audio)
+- Wrist HUD: billboard readout, HP ring only when critical, shrine palette (`diegetic_hud.gd`).
+- Memorial stele: larger VR type, shorter 拾得 upgrade line (`run_game.gd`).
+- CC0 rain/thunder/steel clashes + subdued Music loop (`cc0_storm/`, `cc0_run/orientalsomber.ogg`).
+
 ## 14. Close gaps from points 12–13
 - Oni: dedicated mid-poly mask mesh + PBR (`oni_mask_run.glb`, `run_oni_boss.gd`).
 - Firework death VFX: cap dynamic flash lights (`VfxPool.MAX_FIREWORK_FLASH_LIGHTS`).

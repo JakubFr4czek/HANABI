@@ -127,6 +127,10 @@ func _setup_dojo_visuals() -> void:
 	ambience.lightning = lightning
 	add_child(ambience)
 
+	var music := StormMusic.new()
+	music.name = "StormMusic"
+	add_child(music)
+
 	rain = StormRain.new()
 	rain.name = "StormRain"
 	arena.add_child(rain)

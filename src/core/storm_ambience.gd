@@ -4,7 +4,7 @@ extends Node
 ## rolling in a moment after each lightning strike, placed in the direction of
 ## the bolt so it pans and gets the World bus reverb.
 
-const RAIN := preload("res://assets/audio/generated/rain_loop.wav")
+const RAIN := preload("res://assets/audio/sfx/cc0_storm/amb_rain_loop_1.ogg")
 
 @export var rain_volume_db := -10.0
 @export var thunder_volume_db := 2.0
@@ -23,11 +23,18 @@ var _rng := RandomNumberGenerator.new()
 func _ready() -> void:
 	rain_player = AudioStreamPlayer.new()
 	rain_player.name = "Rain"
-	var stream := RAIN
-	if stream is AudioStreamWAV and (stream as AudioStreamWAV).loop_mode == AudioStreamWAV.LOOP_DISABLED:
-		stream = stream.duplicate()
-		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-		stream.loop_end = int(stream.get_length() * stream.mix_rate)
+	var stream: AudioStream = RAIN
+	if stream is AudioStreamOggVorbis:
+		var ogg := (stream as AudioStreamOggVorbis).duplicate()
+		ogg.loop = true
+		stream = ogg
+	elif stream is AudioStreamWAV:
+		var wav := stream as AudioStreamWAV
+		if wav.loop_mode == AudioStreamWAV.LOOP_DISABLED:
+			var looped := wav.duplicate()
+			looped.loop_mode = AudioStreamWAV.LOOP_FORWARD
+			looped.loop_end = int(looped.get_length() * looped.mix_rate)
+			stream = looped
 	rain_player.stream = stream
 	rain_player.volume_db = rain_volume_db
 	rain_player.bus = Sfx.AMBIENCE_BUS

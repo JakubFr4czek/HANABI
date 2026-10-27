@@ -411,13 +411,17 @@ func _test_dojo_of_the_storm() -> void:
 
 	var world_bus := AudioServer.get_bus_index(Sfx.WORLD_BUS)
 	var amb: StormAmbience = room.ambience
-	var rain_stream := amb.rain_player.stream as AudioStreamWAV if amb else null
+	var rain_loops := false
+	if amb and amb.rain_player.stream is AudioStreamOggVorbis:
+		rain_loops = (amb.rain_player.stream as AudioStreamOggVorbis).loop
+	elif amb and amb.rain_player.stream is AudioStreamWAV:
+		rain_loops = (amb.rain_player.stream as AudioStreamWAV).loop_mode != AudioStreamWAV.LOOP_DISABLED
 	_check("Audio: World bus with reverb, steel ring + thunder sounds, looping rain bed on Ambience bus",
 		world_bus >= 0 and AudioServer.get_bus_effect_count(world_bus) > 0
 		and AudioServer.get_bus_effect(world_bus, 0) is AudioEffectReverb
 		and Sfx._streams.has("blade_ring") and Sfx._streams.has("thunder")
 		and amb != null and amb.rain_player.playing and amb.rain_player.bus == Sfx.AMBIENCE_BUS
-		and rain_stream != null and rain_stream.loop_mode != AudioStreamWAV.LOOP_DISABLED)
+		and rain_loops)
 
 	TimeController.clear()
 	TimeController.micro_stop(0.03)
