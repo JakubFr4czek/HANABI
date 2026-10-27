@@ -1,0 +1,9 @@
+CC0 storm ambience (commit to repo).
+
+- amb_rain_loop_1.ogg — Kresiek The Furry, OpenGameArt "AMB Rain Loop 1" (CC0)
+  https://opengameart.org/content/amb-rain-loop-1
+- thunder_clap_0.wav — OpenGameArt "thunderclap" submission (CC0, WAV)
+  https://opengameart.org/sites/default/files/thunderclap.ogg
+- rain_thunder_sample.ogg — WuxiaScrub, OpenGameArt "Rain + Long Thunder" (CC0)
+  https://opengameart.org/content/rain-long-thunder
+  (source for optional thunder rolls; primary thunder uses thunder_clap_0.wav)

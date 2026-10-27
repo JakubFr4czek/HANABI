@@ -21,9 +21,9 @@ func _ready() -> void:
 	run.score = 42
 	run._refresh_hud()
 	player.teleport(Vector3(0.0, 0.0, 2.0), 0.0)
-	player.camera.rotation.x = deg_to_rad(-12.0)
-	player.hand_offset = Vector3(0.06, -0.04, 0.0)
-	await _frames(4)
+	player.camera.rotation.x = deg_to_rad(-28.0)
+	player.hand_offset = Vector3(0.14, -0.10, 0.0)
+	await _frames(8)
 	await _frames(40)
 	await _shot("wrist_hud_natural_angle")
 	run.queue_free()
