@@ -59,6 +59,7 @@ var _rng := RandomNumberGenerator.new()
 func _ready() -> void:
 	_rng.randomize()
 	super._ready()
+	QuestPerfOverlay.attach_if_needed(self)
 	GameEvents.log_event("session_start", {"scene": "run", "xr": is_xr_available() and not OS.get_cmdline_user_args().has("--desktop")})
 
 	if katana:
@@ -231,6 +232,8 @@ func _setup_run_nodes() -> void:
 
 func start_run() -> void:
 	TimeController.clear()
+	if VfxPool:
+		VfxPool.ensure_run_budget(40)
 	_clear_souls()
 	_clear_ofuda()
 	_clear_end_screen()
@@ -312,6 +315,8 @@ func _physics_process(delta: float) -> void:
 		score = compute_score()
 
 	# Step soul orbs even during level-up slow-mo (using simulation delta).
+	if _souls_root == null:
+		return
 	for child in _souls_root.get_children():
 		if child is SoulOrb:
 			(child as SoulOrb).step_orb(delta, p_pos, soul_magnet_radius)
@@ -733,7 +738,10 @@ func _clear_souls() -> void:
 	if _souls_root == null:
 		return
 	for c in _souls_root.get_children():
-		c.queue_free()
+		if c is SoulOrb and VfxPool:
+			VfxPool.release_soul_orb(c as SoulOrb)
+		else:
+			c.queue_free()
 
 
 func _clear_ofuda() -> void:

@@ -47,6 +47,12 @@ func uses_static_gi() -> bool:
 	return _static_gi
 
 
+## Procedural chunks recycle — no stable UV2 for LightmapGI. We fake contact
+## shadowing in forest shaders instead (NIGHT_PLAN §8).
+func uses_shader_baked_look() -> bool:
+	return true
+
+
 func setup(p_follow: Node3D, arena_lightmap: LightmapGI = null) -> void:
 	follow = p_follow
 	_height_noise.seed = 0x464F52455354
@@ -130,7 +136,7 @@ func _make_chunk(coord: Vector2i) -> Node3D:
 	terrain.mesh = _build_terrain_mesh(coord)
 	terrain.material_override = _ground_mat
 	terrain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	terrain.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+	terrain.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	_set_view_range(terrain)
 	root.add_child(terrain)
 
@@ -205,7 +211,7 @@ func _commit_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 	mm_inst.multimesh = mm
 	mm_inst.material_override = mat
 	mm_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mm_inst.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+	mm_inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	_set_view_range(mm_inst)
 	root.add_child(mm_inst)
 	call_deferred("_refresh_multimesh_transforms", mm_inst, transforms)
@@ -234,7 +240,7 @@ func _place_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 	mm_inst.multimesh = mm
 	mm_inst.material_override = _torii_mat
 	mm_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mm_inst.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+	mm_inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	_set_view_range(mm_inst)
 	root.add_child(mm_inst)
 
@@ -299,6 +305,7 @@ func _build_materials() -> void:
 	_ground_mat = ShaderMaterial.new()
 	_ground_mat.shader = GROUND_SHADER
 	_ground_mat.set_shader_parameter("fill", 1.42)
+	_ground_mat.set_shader_parameter("cavity_ao", 0.85)
 
 	_tree_mat = ShaderMaterial.new()
 	_tree_mat.shader = WET_SHADER
@@ -308,6 +315,7 @@ func _build_materials() -> void:
 	_tree_mat.set_shader_parameter("wetness", 0.55)
 	_tree_mat.set_shader_parameter("waterline_y", -10.0)
 	_tree_mat.set_shader_parameter("fill", 1.25)
+	_tree_mat.set_shader_parameter("procedural_ao", 0.92)
 
 	_torii_mat = ShaderMaterial.new()
 	_torii_mat.shader = WET_SHADER
@@ -318,6 +326,7 @@ func _build_materials() -> void:
 	_torii_mat.set_shader_parameter("waterline_y", -10.0)
 	_torii_mat.set_shader_parameter("fill", 1.18)
 	_torii_mat.set_shader_parameter("emission_tint", Color(0.12, 0.02, 0.02))
+	_torii_mat.set_shader_parameter("procedural_ao", 0.78)
 
 	_lantern_mat = ShaderMaterial.new()
 	_lantern_mat.shader = WET_SHADER
