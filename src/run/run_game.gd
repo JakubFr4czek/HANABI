@@ -655,29 +655,36 @@ func _build_end_screen(summary: Dictionary) -> void:
 		"Hiragino Mincho ProN", "YuMincho", "Songti SC", "Noto Serif CJK JP", "Hiragino Sans", "Arial Unicode MS"
 	])
 
-	var title_lbl := OfudaTalisman.make_label("散華 · RUN ENDED", sys_font, 46, 0.0013, Color(1.15, 0.30, 0.24), Vector3(0, 0.21, 0.024))
+	var title_lbl := OfudaTalisman.make_label("散華", sys_font, 72, 0.00185, Color(1.12, 0.34, 0.26), Vector3(0, 0.24, 0.024))
 	board.add_child(title_lbl)
+	var sub_lbl := OfudaTalisman.make_label("RUN ENDED", sys_font, 34, 0.00125, Color(0.86, 0.88, 0.94), Vector3(0, 0.17, 0.024))
+	board.add_child(sub_lbl)
 
 	var mins := int(run_time) / 60
 	var secs := int(run_time) % 60
-	var rec_tag := "  [NEW RECORD]" if summary.get("new_record", false) else ""
-	var stats_text := "SCORE  %d%s\nHIGH SCORE  %d\nTIME  %02d:%02d   ·   YŌKAI SLAIN  %d   ·   LEVEL  %d (WAVE %d)" % [
-		int(summary.score), rec_tag, int(summary.high_score), mins, secs, int(summary.kills), int(summary.level), int(summary.wave)
+	var rec_tag := "\n★ NEW RECORD" if summary.get("new_record", false) else ""
+	var stats_text := "%d pt%s\n%02d:%02d  ·  斬 %d  ·  LV %d  ·  波 %d\nBEST  %d" % [
+		int(summary.score), rec_tag, mins, secs, int(summary.kills), int(summary.level), int(summary.wave), int(summary.high_score)
 	]
-	var stats_lbl := OfudaTalisman.make_label(stats_text, sys_font, 30, 0.00105, Color(0.92, 0.94, 1.0), Vector3(0, 0.06, 0.024))
+	var stats_lbl := OfudaTalisman.make_label(stats_text, sys_font, 38, 0.00138, Color(0.94, 0.95, 1.0), Vector3(0, 0.04, 0.024))
+	stats_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	board.add_child(stats_lbl)
 
 	var build_text := String(summary.get("build", "Unbound"))
-	var build_lbl := OfudaTalisman.make_label("BUILD  %s" % build_text, sys_font, 28, 0.0010, Color(0.88, 0.72, 1.0), Vector3(0, -0.06, 0.024))
+	var build_lbl := OfudaTalisman.make_label("BUILD  %s" % build_text, sys_font, 34, 0.00122, Color(0.9, 0.76, 1.0), Vector3(0, -0.10, 0.024))
+	build_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	board.add_child(build_lbl)
 
 	var upg_parts: Array[String] = []
 	for u_id in upgrade_stacks:
 		var def := UpgradePool.get_upgrade(String(u_id))
 		var name_str := String(def.get("title", String(u_id).to_upper()))
-		upg_parts.append("%s ×%d" % [name_str, int(upgrade_stacks[u_id])])
-	var upg_line := "UPGRADES: " + (", ".join(upg_parts) if not upg_parts.is_empty() else "None")
-	var upg_lbl := OfudaTalisman.make_label(upg_line, sys_font, 22, 0.00088, Color(0.76, 0.82, 0.94), Vector3(0, -0.20, 0.024))
+		if name_str.length() > 18:
+			name_str = name_str.substr(0, 16) + "…"
+		upg_parts.append("%s×%d" % [name_str, int(upgrade_stacks[u_id])])
+	var upg_line := _short_upgrade_line(upg_parts)
+	var upg_lbl := OfudaTalisman.make_label(upg_line, sys_font, 28, 0.00108, Color(0.74, 0.8, 0.92), Vector3(0, -0.22, 0.024))
+	upg_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	board.add_child(upg_lbl)
 
 	# Floating Restart Ofuda positioned cleanly to the right of the Memorial Stele:
@@ -704,6 +711,20 @@ func _build_end_screen(summary: Dictionary) -> void:
 func _on_restart_ofuda_sliced(_ofuda: OfudaTalisman, _upgrade: Dictionary) -> void:
 	restart_ofuda = null
 	start_run()
+
+
+func _short_upgrade_line(parts: Array[String]) -> String:
+	if parts.is_empty():
+		return "拾得  —"
+	const MAX_SHOW := 3
+	const MAX_CHARS := 52
+	var shown := parts.slice(0, MAX_SHOW)
+	var line := "拾得  " + " · ".join(shown)
+	if parts.size() > MAX_SHOW:
+		line += "  …+%d" % (parts.size() - MAX_SHOW)
+	if line.length() > MAX_CHARS:
+		line = line.substr(0, MAX_CHARS - 1) + "…"
+	return line
 
 
 func load_high_score() -> int:
