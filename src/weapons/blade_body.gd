@@ -76,7 +76,9 @@ func get_blade_start_global() -> Vector3:
 
 func set_element(new_element: String) -> void:
 	element = new_element
-	element_time_remaining = ELEMENT_DURATION if new_element != Elements.NONE else 0.0
+	# Single source of truth: set_element sets visual state without starting a timer.
+	# The 20s countdown is managed exclusively by ElementSystem via imbue_element.
+	element_time_remaining = 0.0
 	is_fade_warning = false
 	if trail:
 		trail.refresh_material()

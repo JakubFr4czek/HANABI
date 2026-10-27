@@ -778,14 +778,10 @@ func _buzz_when_blocked(delta: float) -> void:
 
 # --- Contacts: hits, clashes, parries --------------------------------------------
 
-func _tick_element(delta: float) -> void:
-	if element != Elements.NONE and element_time_remaining > 0.0:
-		element_time_remaining = maxf(0.0, element_time_remaining - delta)
-		is_fade_warning = (element_time_remaining <= FADE_WARNING_TIME and element_time_remaining > 0.0)
-		if element_time_remaining <= 0.0:
-			set_element(Elements.NONE)
-		else:
-			_update_blade_material()
+func _tick_element(_delta: float) -> void:
+	# Single source of truth: ElementSystem manages element duration and expiry.
+	# HeldWeapon purely displays the blade visual state (glow, pulse, trail).
+	_update_blade_material()
 
 
 func _tick_cooldowns(delta: float) -> void:

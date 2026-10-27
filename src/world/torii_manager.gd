@@ -37,7 +37,6 @@ func setup(p_forest: ForestWorld, p_follow: Node3D, p_run: RunGame = null) -> vo
 	run_game = p_run
 	reset()
 	_ensure_gates_ahead()
-	print("TORII SETUP: follow=", follow, " pos=", _player_pos(), " active_gates=", active_gates.size())
 
 
 func reset() -> void:
@@ -143,20 +142,20 @@ func _attempt_spawn_gate_in_range(p_pos: Vector3) -> ToriiGate:
 	var fwd := _player_forward()
 	var base_angle := atan2(fwd.x, fwd.z)
 
-	# Try angles around facing direction and outward
-	var angle_offsets: Array[float] = [0.0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.2, -2.2, PI]
-	var distances: Array[float] = [IDEAL_SPAWN_DIST, 20.0, 28.0, 22.0, 26.0, 30.0, 18.5]
+	# Sweep 24 angles around player facing direction and multiple distances in [18.5, 31.5]
+	var angle_count := 24
+	var distances: Array[float] = [22.0, 24.0, 20.0, 26.0, 18.5, 28.0, 30.0, 31.5]
 
 	for dist in distances:
-		for off in angle_offsets:
+		for i in angle_count:
+			var sign_mult := 1.0 if (i % 2 == 0) else -1.0
+			var off := (float(i) / float(angle_count)) * PI * sign_mult
 			var ang := base_angle + off
 			var cand_x := p_pos.x + sin(ang) * dist
 			var cand_z := p_pos.z + cos(ang) * dist
 
 			if _is_valid_location(cand_x, cand_z, p_pos):
 				return spawn_gate_at(cand_x, cand_z)
-			# else:
-				# print("CAND REJECTED: dist=", dist, " off=", off)
 	return null
 
 
@@ -170,6 +169,22 @@ func _is_valid_location(wx: float, wz: float, p_pos: Vector3) -> bool:
 	var d_player := Vector2(p_pos.x - wx, p_pos.z - wz).length()
 	if d_player < MIN_SPAWN_DIST or d_player > MAX_SPAWN_DIST:
 		return false
+	if forest_world:
+		if not forest_world.is_clear_of_props(wx, wz, CLEARANCE_RADIUS):
+			return false
+		var space := get_world_3d().direct_space_state if get_world_3d() else null
+		if space:
+			var query := PhysicsShapeQueryParameters3D.new()
+			var cyl := CylinderShape3D.new()
+			cyl.radius = CLEARANCE_RADIUS
+			cyl.height = 4.0
+			query.shape = cyl
+			var hy := forest_world.height_at(wx, wz)
+			query.transform = Transform3D(Basis(), Vector3(wx, hy + 2.0, wz))
+			query.collision_mask = ForestWorld.TRUNK_LAYER
+			var hits := space.intersect_shape(query, 1)
+			if not hits.is_empty():
+				return false
 	return true
 
 

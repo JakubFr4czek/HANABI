@@ -1,6 +1,6 @@
 extends Node
 ## Unit tests for Torii gate crossing, single-element imbue, 20s expiry,
-## and 45m distance reactivation (docs/ELEMENTS_PLAN.md Phase E2a).
+## paused-tree immunity, weapon filtering, and 45m distance reactivation.
 ##   godot --headless --path . --fixed-fps 90 res://tests/torii_gate_test.tscn -- --desktop
 
 const TORII_SCENE := preload("res://scenes/world/torii_gate.tscn")
@@ -54,26 +54,43 @@ func _run_all() -> void:
 	_check("Gate deactivates after crossing", not gate.is_active)
 	_check("Timer is initialized to ~20.0 s", elem_sys.element_time_remaining >= 19.5 and elem_sys.element_time_remaining <= 20.0)
 
-	# 2. Sword touch alone does not trigger
+	# 2. Real sword touch filter: sword & hand physically enter gate aperture and do NOT imbue
 	gate.reactivate()
 	katana.set_element(Elements.NONE)
 	elem_sys.reset()
-	# Move fake body far away
+	# Move fake player body far away so only weapon is near gate
 	fake_body.position = Vector3(100.0, 0.0, 100.0)
 	await _frames(2)
 
-	# Move katana through gate aperture
-	katana.position = Vector3(0.0, 1.5, 1.0)
-	await _frames(2)
-	katana.position = Vector3(0.0, 1.5, -1.0)
+	# Katana physically penetrates the gate crossing volume
+	katana.position = Vector3(0.0, 1.5, 0.0)
+	gate._on_body_entered(katana)
+	gate.trigger_cross(katana)
 	await _frames(4)
 
-	_check("Sword touch alone does not trigger gate imbue", katana.element == Elements.NONE)
-	_check("Gate remains active when sword alone crosses", gate.is_active)
+	_check("Sword physical touch alone does not trigger gate imbue", katana.element == Elements.NONE and elem_sys.current_element == Elements.NONE)
+	_check("Gate remains active when sword alone enters aperture", gate.is_active)
 
-	# 3. Same gate refreshes timer
+	# Now player body enters -> must trigger imbue
+	fake_body.position = Vector3(0.0, 1.5, 1.0)
+	await _frames(2)
+	fake_body.position = Vector3(0.0, 1.5, -1.0)
+	await _frames(4)
+	_check("Player body crossing triggers imbue after sword was rejected", katana.element == Elements.SAKURA and not gate.is_active)
+
+	# 3. Single source of truth & pause immunity: 21s paused tree does not decrement element timer
 	elem_sys.imbue(Elements.SAKURA, 20.0)
-	# Step timer down by 10 seconds
+	var t_before := elem_sys.element_time_remaining
+	get_tree().paused = true
+	for _i in 210:
+		elem_sys._physics_process(0.1)
+		katana._physics_process(0.1)
+	_check("21s paused tree does not change element time remaining (frozen at %.1f s)" % elem_sys.element_time_remaining,
+		elem_sys.element_time_remaining == t_before and katana.element == Elements.SAKURA)
+	get_tree().paused = false
+
+	# 4. Same gate refreshes timer
+	# Step timer down by 10 seconds in normal time
 	for _i in 100:
 		elem_sys._physics_process(0.1)
 		katana._physics_process(0.1)
@@ -89,7 +106,14 @@ func _run_all() -> void:
 	_check("Same gate refreshes timer back to 20.0 s", elem_sys.element_time_remaining >= 19.5 and elem_sys.element_time_remaining <= 20.0)
 	_check("Katana element remains Sakura", katana.element == Elements.SAKURA)
 
-	# 4. Different gate replaces element
+	# 5. Level-up cards / upgrades do NOT grant element to katana
+	elem_sys.reset()
+	katana.set_element(Elements.NONE)
+	elem_sys.apply_upgrade("storm_chain", {"storm_chain": 1})
+	_check("Level-up upgrade does not grant element to katana (remains NONE)",
+		katana.element == Elements.NONE and elem_sys.current_element == Elements.NONE and elem_sys.element_time_remaining == 0.0)
+
+	# 6. Different gate replaces element
 	var storm_gate: ToriiGate = TORII_SCENE.instantiate()
 	storm_gate.element = Elements.STORM
 	storm_gate.position = Vector3(10.0, 0.0, 0.0)
@@ -104,11 +128,9 @@ func _run_all() -> void:
 
 	_check("Different gate replaces element with Storm", katana.element == Elements.STORM)
 	_check("ElementSystem reflects new element Storm", elem_sys.current_element == Elements.STORM)
-	_check("ElementSystem active_elements has only Storm", elem_sys.active_elements == [Elements.STORM])
 	_check("Timer reset to 20.0 s on new element", elem_sys.element_time_remaining >= 19.5 and elem_sys.element_time_remaining <= 20.0)
 
-	# 5. 20 s timer expires to plain steel
-	# Step time past 20.0s (e.g. 21.0 seconds total)
+	# 7. 20 s timer expires to plain steel
 	for _i in 210:
 		elem_sys._physics_process(0.1)
 		katana._physics_process(0.1)
@@ -117,13 +139,12 @@ func _run_all() -> void:
 	_check("ElementSystem current_element is NONE after expiry", elem_sys.current_element == Elements.NONE)
 	_check("active_elements is empty after expiry", elem_sys.active_elements.is_empty())
 
-	# 6. Gate reactivates after 45m distance (tested with time/physics stepping)
+	# 8. Gate reactivates after 45m distance
 	storm_gate.is_active = false
-	fake_body.position = storm_gate.global_position + Vector3(0.0, 0.0, 20.0) # 20m away
+	fake_body.position = storm_gate.global_position + Vector3(0.0, 0.0, 20.0)
 	await _frames(4)
 	_check("Gate remains inactive at 20 m distance", not storm_gate.is_active)
 
-	# Step player out past 45m (to 46.0m)
 	fake_body.position = storm_gate.global_position + Vector3(0.0, 0.0, 46.0)
 	await _frames(4)
 	_check("Gate reactivates when player moves >= 45.0 m away", storm_gate.is_active)

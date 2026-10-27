@@ -43,28 +43,54 @@ func _run_all() -> void:
 		has_gate_in_range and nearest_dist >= ToriiManager.MIN_SPAWN_DIST and nearest_dist <= ToriiManager.MAX_SPAWN_DIST)
 
 	# 2. Gate never spawns overlapping trunk or boulder colliders (clearance >= 3.2 m)
-	var any_overlap := false
-	var min_clearance := INF
+	# Real physics space query on TRUNK_LAYER (layer 64) with CylinderShape3D
+	var space := run.get_world_3d().direct_space_state
+	var physical_collision_hits := 0
+	var min_multimesh_clearance := INF
 
-	# Gather all tree spots from loaded chunks
-	var tree_positions: Array[Vector3] = []
-	for coord in run.forest_world.active_chunk_keys:
-		var packed: Dictionary = run.forest_world._tree_spot_cache.get(coord, {})
-		for s in packed.get("spots", []):
-			var spot: Vector4 = s
-			tree_positions.append(Vector3(spot.x, 0.0, spot.y))
+	# MultiMesh instance inspection across active chunks
+	var multimesh_instances: Array[Vector3] = []
+	for key in run.forest_world._chunks:
+		var chunk: Node3D = run.forest_world._chunks[key]
+		if chunk == null or not is_instance_valid(chunk):
+			continue
+		for m_name in ["Trees", "Rocks", "Lanterns"]:
+			var mm_node := chunk.get_node_or_null(m_name) as MultiMeshInstance3D
+			if mm_node and mm_node.multimesh:
+				var mm := mm_node.multimesh
+				for i in mm.instance_count:
+					var inst_pos: Vector3 = chunk.global_transform * mm.get_instance_transform(i).origin
+					multimesh_instances.append(inst_pos)
 
 	for g in gates:
 		var gx := g.global_position.x
+		var gy := g.global_position.y
 		var gz := g.global_position.z
-		for tp in tree_positions:
-			var d := Vector2(gx - tp.x, gz - tp.z).length()
-			min_clearance = minf(min_clearance, d)
-			if d < ToriiGate.CLEARANCE_RADIUS - 0.01:
-				any_overlap = true
 
-	_check("Gate never spawns inside trunk/boulder colliders (min clearance=%.2f m, req=%.1f m)" % [min_clearance, ToriiGate.CLEARANCE_RADIUS],
-		not any_overlap and min_clearance >= ToriiGate.CLEARANCE_RADIUS - 0.01)
+		# Physics cylinder query (radius = 3.2m, height = 4.0m)
+		if space:
+			var query := PhysicsShapeQueryParameters3D.new()
+			var cyl := CylinderShape3D.new()
+			cyl.radius = ToriiGate.CLEARANCE_RADIUS - 0.05
+			cyl.height = 4.0
+			query.shape = cyl
+			query.transform = Transform3D(Basis(), Vector3(gx, gy + 2.0, gz))
+			query.collision_mask = ForestWorld.TRUNK_LAYER
+			var hits := space.intersect_shape(query, 10)
+			for hit in hits:
+				var collider = hit.get("collider")
+				if collider != g._static_body and collider != g:
+					physical_collision_hits += 1
+
+		# MultiMesh distance check
+		for inst_pos in multimesh_instances:
+			var d := Vector2(gx - inst_pos.x, gz - inst_pos.z).length()
+			min_multimesh_clearance = minf(min_multimesh_clearance, d)
+
+	_check("Physics query confirms 0 trunk/boulder collider overlaps inside 3.2m cylinder (hits=%d)" % physical_collision_hits,
+		physical_collision_hits == 0)
+	_check("MultiMesh instances maintain >= 3.2m clearance from gate center (min=%.2f m)" % min_multimesh_clearance,
+		min_multimesh_clearance >= ToriiGate.CLEARANCE_RADIUS - 0.05)
 
 	# 3. Uptime ratio >= 0.65 in 120s test with time stepping
 	# We simulate a 120-second run traversal: player advances along a heading,

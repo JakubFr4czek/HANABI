@@ -48,14 +48,17 @@ func _test_pool_and_limits() -> void:
 	_check("Element trees are ordered; Sakura II is locked before Sakura I",
 		not tier_two_locked.any(func(c: Dictionary) -> bool: return String(c.id) == "sakura_orbit"))
 
+	run.katana.set_element(Elements.NONE)
+	run.element_system.reset()
 	run._apply_upgrade({"id": "storm_chain"})
+	_check("Level-up upgrade does not grant element to katana (remains NONE)", run.katana.element == Elements.NONE)
+	run.element_system.imbue(Elements.STORM, 20.0)
+	_check("Torii gate imbue binds element to blade for 20s", run.katana.element == Elements.STORM and run.element_system.element_time_remaining == 20.0)
 	run._apply_upgrade({"id": "ink_pool"})
 	run._apply_upgrade({"id": "sakura_petals"})
-	_check("A run locks into a single element; later elements are refused",
-		run.element_system.active_elements == [Elements.STORM]
-		and not run.upgrade_stacks.has("ink_pool")
-		and not run.upgrade_stacks.has("sakura_petals")
-		and run.katana.element == Elements.STORM)
+	_check("A run locks into a single upgrade element tree; later elements are refused",
+		not run.upgrade_stacks.has("ink_pool")
+		and not run.upgrade_stacks.has("sakura_petals"))
 
 
 func _fresh_run() -> void:
@@ -68,6 +71,8 @@ func _fresh_run() -> void:
 func _test_storm() -> void:
 	run._apply_upgrade({"id": "storm_charge"})
 	run._apply_upgrade({"id": "storm_overload"})
+	run.element_system.imbue(Elements.STORM)
+	run._update_element_seal()
 	_check("One complete tree occupies three element slots",
 		UpgradePool.element_slot_count(run.upgrade_stacks) == 3)
 	_check("The bound element colors the blade",
@@ -114,6 +119,8 @@ func _test_ink() -> void:
 	await _fresh_run()
 	for id in ["ink_pool", "ink_tendrils", "ink_depth"]:
 		run._apply_upgrade({"id": id})
+	run.element_system.imbue(Elements.INK)
+	run._update_element_seal()
 	_check("Ink binds alone and colors the blade", run.katana.element == Elements.INK)
 
 	var victim := run.wave_director.spawn_enemy_at(Vector3(-0.7, 0.0, -0.8), player.global_position)
@@ -137,6 +144,8 @@ func _test_sakura() -> void:
 	await _fresh_run()
 	for id in ["sakura_petals", "sakura_orbit", "sakura_heal"]:
 		run._apply_upgrade({"id": id})
+	run.element_system.imbue(Elements.SAKURA)
+	run._update_element_seal()
 	_check("Sakura binds alone and colors the blade", run.katana.element == Elements.SAKURA)
 	_check("Sakura creates a three-blade orbit",
 		run.element_system._orbit_petals.size() == 3)
@@ -166,6 +175,8 @@ func _test_shadow() -> void:
 	await _fresh_run()
 	for id in ["shadow_blink", "shadow_darkness", "shadow_veil"]:
 		run._apply_upgrade({"id": id})
+	run.element_system.imbue(Elements.SHADOW)
+	run._update_element_seal()
 	_check("Shadow binds alone and colors the blade", run.katana.element == Elements.SHADOW)
 
 	var before_blink := player.global_position
