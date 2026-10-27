@@ -75,6 +75,14 @@ storm_flash_dir={
 "type": "vec2",
 "value": Vector2(-0.25, -0.96)
 }
+intro_ripple_radius={
+"type": "float",
+"value": 0.0
+}
+intro_ripple_gain={
+"type": "float",
+"value": 0.0
+}
 
 [xr]
 

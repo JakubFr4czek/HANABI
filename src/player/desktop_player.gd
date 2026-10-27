@@ -55,6 +55,8 @@ var force_block := false
 var grip_preset_index := 0
 ## Whether the off-hand holder also grips the weapon on desktop.
 var two_handed := false
+## When true, WASD locomotion is disabled (run intro levitation).
+var movement_locked := false
 ## Extra wrist yaw (radians) on top of the hand pose: a flick without moving the arm (X).
 var flick_angle := 0.0
 
@@ -247,6 +249,14 @@ func _kill_swing() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if movement_locked:
+		velocity = Vector3.ZERO
+		move_and_slide()
+		var real_delta := TimeController.real_tick()
+		block_amount = move_toward(block_amount, 0.0, real_delta * 8.0)
+		_update_hand()
+		_hud.text = _hud_text()
+		return
 	var input := Vector2.ZERO
 	if Input.is_physical_key_pressed(KEY_W): input.y += 1
 	if Input.is_physical_key_pressed(KEY_S): input.y -= 1

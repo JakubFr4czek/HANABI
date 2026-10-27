@@ -31,6 +31,7 @@ func _run_all() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_SAVE_PATH))
 
 	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
 	run.high_score_path = TEST_SAVE_PATH
 	add_child(run)
 	await _wait(0.2)

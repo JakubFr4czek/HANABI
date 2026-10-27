@@ -10,7 +10,7 @@ extends "res://src/core/test_room.gd"
 ## - Death ends the run, saves local high score, and presents an in-world
 ##   memorial stele + a Restart Ofuda that starts a new run when sliced.
 
-enum RunState { PLAYING, LEVEL_UP, GAME_OVER }
+enum RunState { INTRO, PLAYING, LEVEL_UP, GAME_OVER }
 
 signal level_up_started(level: int, choices: Array[Dictionary])
 signal upgrade_chosen(upgrade: Dictionary, level: int)
@@ -23,8 +23,9 @@ const PLAYER_BOUNDARY_LAYER := 64  # bit 7: blocks player body, lets yōkai walk
 @export var base_magnet_radius := 3.8
 @export var orbs_per_kill := 4
 @export var xp_per_orb := 6
+@export var skip_run_intro := false
 
-var state := RunState.PLAYING
+var state := RunState.INTRO
 var run_time := 0.0
 var xp := 0
 var level := 1
@@ -40,6 +41,7 @@ var wave_director: WaveDirector
 var diegetic_hud: DiegeticHud
 var element_system: ElementSystem
 var forest_world: ForestWorld
+var run_intro: RunIntro
 var active_ofuda: Array[OfudaTalisman] = []
 var restart_ofuda: OfudaTalisman = null
 
@@ -209,6 +211,14 @@ func _setup_run_nodes() -> void:
 		xr.run_element_mode = true
 		xr.element_ability_requested.connect(_on_element_ability_requested)
 
+	run_intro = RunIntro.new()
+	run_intro.name = "RunIntro"
+	var seal_mesh := get_node_or_null("Arena/SpawnSeal") as MeshInstance3D
+	var seal_mat := seal_mesh.material_override as ShaderMaterial if seal_mesh else null
+	run_intro.setup(player, katana, spawn.global_position, spawn.global_rotation.y, seal_mat, lightning)
+	run_intro.finished.connect(_on_run_intro_finished)
+	add_child(run_intro)
+
 
 func start_run() -> void:
 	TimeController.clear()
@@ -216,8 +226,9 @@ func start_run() -> void:
 	_clear_ofuda()
 	_clear_end_screen()
 	wave_director.clear_enemies()
+	wave_director.stop_director()
 
-	state = RunState.PLAYING
+	state = RunState.INTRO
 	run_time = 0.0
 	xp = 0
 	level = 1
@@ -247,21 +258,34 @@ func start_run() -> void:
 		katana.angular_frequency = _base_angular_freq
 		katana.set_element(Elements.NONE)
 
+	if skip_run_intro:
+		_begin_play_after_intro()
+	else:
+		run_intro.start()
+	_refresh_hud()
+
+
+func _begin_play_after_intro() -> void:
+	state = RunState.PLAYING
 	if player is DesktopPlayer:
 		var dp := player as DesktopPlayer
 		dp.teleport(spawn.global_position, spawn.global_rotation.y)
-		dp.take_weapon(katana)
+		if katana and not katana.is_held():
+			dp.take_weapon(katana)
 	elif player is XRPlayer:
 		var xr := player as XRPlayer
 		xr.global_transform = spawn.global_transform
 		if xr.right_holder and katana and not katana.is_held():
 			xr.right_holder.grab(katana)
 			katana.snap_to_hand()
-
 	wave_director.start_director()
 	GameEvents.log_event("run_started", {"high_score": high_score})
 	run_started.emit()
 	_refresh_hud()
+
+
+func _on_run_intro_finished() -> void:
+	_begin_play_after_intro()
 
 
 ## Rising XP requirement for advancing from [param current_level] to the next.
@@ -285,6 +309,16 @@ func _physics_process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if state == RunState.INTRO and run_intro and run_intro.is_active():
+		if (event is InputEventKey and event.pressed and not event.echo
+				and event.physical_keycode in [KEY_SPACE, KEY_ENTER, KEY_ESCAPE]):
+			run_intro.skip()
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventMouseButton and event.pressed:
+			run_intro.skip()
+			get_viewport().set_input_as_handled()
+			return
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	var key: int = event.physical_keycode

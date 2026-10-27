@@ -21,6 +21,7 @@ func _ready() -> void:
 
 func _run_all() -> void:
 	run = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
 	run.high_score_path = TEST_SAVE_PATH
 	add_child(run)
 	await _frames(12)
