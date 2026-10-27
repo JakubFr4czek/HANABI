@@ -143,11 +143,11 @@ func _ready() -> void:
 	_claw_mat.emission = Color(1.5, 0.24, 0.10)
 	_claw_mat.emission_energy_multiplier = 0.32
 
-	pose_variation_deg = 6.0
-	idle_sway_deg = 4.0
-	overlay_blend = 0.22
-	default_pose_blend = 0.26
-	sway_poses = PackedStringArray(["stalk", "approach", "idle"])
+	pose_variation_deg = 5.0
+	idle_sway_deg = 5.5
+	overlay_blend = 0.32
+	default_pose_blend = 0.38
+	sway_poses = PackedStringArray(["stalk", "approach", "idle", "flinch"])
 	super._ready()
 
 	for child in get_children():
@@ -282,7 +282,9 @@ static func _mirror(range_deg: Vector2, s: float) -> Vector2:
 func _define_poses() -> Dictionary:
 	return {
 		"stalk": {
-			"_blend": 0.32,
+			"_blend": 0.42,
+			"_ease": "inout",
+			"_max_speed": 5.2,
 			"chest": Vector3(18, 0, 0),
 			"head": Vector3(-12, 0, 0),
 			"arm_r": Vector3(-52, -16, -22),
@@ -291,7 +293,10 @@ func _define_poses() -> Dictionary:
 			"leg_r": Vector3(6, 0, -5),
 		},
 		"approach": {
-			"_blend": 0.24,
+			"_blend": 0.48,
+			"_ease": "inout",
+			"_stiffness": 0.9,
+			"_max_speed": 4.8,
 			"chest": Vector3(28, 0, 4),
 			"head": Vector3(-8, 0, -6),
 			"arm_r": Vector3(-48, -12, -18),
@@ -300,9 +305,10 @@ func _define_poses() -> Dictionary:
 			"leg_r": Vector3(10, 0, -6),
 		},
 		"flinch": {
-			"_stiffness": 1.2,
-			"_blend": 0.10,
+			"_stiffness": 1.05,
+			"_blend": 0.22,
 			"_ease": "out",
+			"_max_speed": 6.5,
 			"chest": Vector3(-22, 0, 0),
 			"head": Vector3(-28, 0, 0),
 			"arm_r": Vector3(-72, 8, -28),
