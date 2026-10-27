@@ -94,6 +94,14 @@ var _shaft_mat: ShaderMaterial
 var _torii_mesh: Mesh
 var _lantern_mesh: Mesh
 var _rock_mesh: Mesh
+## Collision shapes measured from the meshes above (see _build_prop_shapes):
+## convex hulls of the visible surface, shared by every instance and placed
+## with the instance's own transform, so bodies and the blade stop where the
+## object visibly ends.
+var _trunk_shapes: Array[ConvexPolygonShape3D] = []
+var _torii_shapes: Array[ConvexPolygonShape3D] = []
+var _rock_shape: ConvexPolygonShape3D
+var _trunk_chest_radius := 0.8
 var _ground_mat: ShaderMaterial
 var _tree_mat: ShaderMaterial
 var _torii_mat: ShaderMaterial
@@ -440,8 +448,7 @@ func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 		root.set_meta("tree_local_xfs", transforms)
 	if not transforms.is_empty():
 		_commit_multimesh(root, label, mesh, mat, transforms)
-		if kind == 0 or kind == 1:
-			root.add_child(_build_trunk_colliders(transforms, kind, root))
+		root.add_child(_build_trunk_colliders(transforms, kind, root))
 	return clearing_hits
 
 
@@ -620,37 +627,184 @@ func _place_moon_shafts(root: Node3D, coord: Vector2i) -> void:
 	root.add_child(inst)
 
 
-## Solid trunks and gate pillars. The player stops on TRUNK_LAYER; yōkai
-## ragdolls ignore it (limbs snag and topple) and steer with trunk_push.
+## Lantern parts (size, centre) shared by the mesh and its collider.
+const LANTERN_PARTS := [
+	[Vector3(0.22, 0.42, 0.22), Vector3(0.0, 0.21, 0.0)],
+	[Vector3(0.34, 0.28, 0.34), Vector3(0.0, 0.56, 0.0)],
+	[Vector3(0.4, 0.08, 0.4), Vector3(0.0, 0.76, 0.0)],
+]
+## Trunk hull top (mesh space): above the reach of a raised blade. The
+## trunk is hulled in slices this tall (overlapping a little), so the
+## hull follows the taper and flare instead of bridging them.
+const TRUNK_HULL_TOP := 4.4
+const TRUNK_SLICE := 1.1
+
+
+## Convex hulls of the props' own vertices. The old trunk tube was 0.42 m
+## while the bark stands ~0.75 m out at chest height, so hands, bodies and
+## the blade sank into every tree; gate pillars and the boulders and
+## lanterns (which had no collider at all) had the same problem.
+func _build_prop_shapes() -> void:
+	_trunk_shapes.clear()
+	var chest: Array[float] = []
+	if _tree_mesh:
+		var a := _tree_mesh.surface_get_arrays(0)
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
+		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX] if a[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		var tris := PackedVector3Array()
+		var n := idx.size() if not idx.is_empty() else v.size()
+		for t in range(0, n - 2, 3):
+			var i0 := idx[t] if not idx.is_empty() else t
+			var i1 := idx[t + 1] if not idx.is_empty() else t + 1
+			var i2 := idx[t + 2] if not idx.is_empty() else t + 2
+			# Bark only: not the welded roots (UV.x > 1.5) or foliage
+			# (UV.y > 1.5), and only the trunk column below the boughs.
+			var uv_c := (uv[i0] + uv[i1] + uv[i2]) / 3.0
+			if uv_c.x > 1.5 or uv_c.y > 1.5:
+				continue
+			var c := (v[i0] + v[i1] + v[i2]) / 3.0
+			if Vector2(c.x, c.z).length() > 1.25 or c.y > TRUNK_HULL_TOP + 0.3:
+				continue
+			tris.append_array([v[i0], v[i1], v[i2]])
+			if c.y > 0.9 and c.y < 2.0:
+				chest.append(Vector2(c.x, c.z).length())
+		for pts in _slab_points(tris, 0.0, TRUNK_HULL_TOP, TRUNK_SLICE):
+			_trunk_shapes.append(_hull(pts))
+	if not chest.is_empty():
+		chest.sort()
+		_trunk_chest_radius = chest[int(chest.size() * 0.9)]
+	_torii_shapes.clear()
+	if _torii_mesh:
+		var ta := _torii_mesh.surface_get_arrays(0)
+		var tv: PackedVector3Array = ta[Mesh.ARRAY_VERTEX]
+		var ti: PackedInt32Array = ta[Mesh.ARRAY_INDEX] if ta[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		var box := _torii_mesh.get_aabb()
+		# The tie beam (nuki) starts ~60% up; below it the frame is just the
+		# two pillars, above it one block of beams.
+		var beam_y := box.position.y + box.size.y * 0.6
+		var left := PackedVector3Array()
+		var right := PackedVector3Array()
+		var n := ti.size() if not ti.is_empty() else tv.size()
+		for t in range(0, n - 2, 3):
+			var p0 := tv[ti[t] if not ti.is_empty() else t]
+			var p1 := tv[ti[t + 1] if not ti.is_empty() else t + 1]
+			var p2 := tv[ti[t + 2] if not ti.is_empty() else t + 2]
+			var cx := (p0.x + p1.x + p2.x) / 3.0
+			if cx < 0.0:
+				left.append_array([p0, p1, p2])
+			else:
+				right.append_array([p0, p1, p2])
+		var pillar_slice := (beam_y - box.position.y) / 3.0
+		for side in [left, right]:
+			for pts in _slab_points(side, box.position.y, beam_y, pillar_slice):
+				_torii_shapes.append(_hull(pts))
+		var all := left.duplicate()
+		all.append_array(right)
+		for pts in _slab_points(all, beam_y, box.end.y, box.end.y - beam_y):
+			_torii_shapes.append(_hull(pts))
+	if _rock_mesh:
+		_rock_shape = _hull(_rock_mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX])
+
+
+static func _hull(points: PackedVector3Array) -> ConvexPolygonShape3D:
+	var hull := ConvexPolygonShape3D.new()
+	hull.points = points
+	return hull
+
+
+## Cut the triangle soup [param tris] into horizontal slabs [y0, y1) of
+## [param slice] height and return each slab's points: the triangles clipped
+## to the slab, so a slab gets the exact cross-sections at its faces even
+## where the mesh has no vertex inside it (a decimated trunk, a gate pillar
+## that is one long quad). Empty or flat slabs are dropped.
+static func _slab_points(tris: PackedVector3Array, y0: float, y1: float, slice: float) -> Array[PackedVector3Array]:
+	var out: Array[PackedVector3Array] = []
+	var count := maxi(int(ceil((y1 - y0) / maxf(slice, 0.01) - 0.001)), 1)
+	for k in count:
+		var lo := y0 + slice * k
+		var hi := minf(lo + slice, y1)
+		var pts := PackedVector3Array()
+		for t in range(0, tris.size() - 2, 3):
+			var poly: Array[Vector3] = [tris[t], tris[t + 1], tris[t + 2]]
+			poly = _clip_y(poly, lo, true)
+			poly = _clip_y(poly, hi, false)
+			for p in poly:
+				pts.append(p)
+		var y_min := INF
+		var y_max := -INF
+		for p in pts:
+			y_min = minf(y_min, p.y)
+			y_max = maxf(y_max, p.y)
+		if pts.size() >= 4 and y_max - y_min > 0.01:
+			out.append(pts)
+	return out
+
+
+## Keep the part of [param poly] above (or below) the plane y = [param y].
+static func _clip_y(poly: Array[Vector3], y: float, keep_above: bool) -> Array[Vector3]:
+	var res: Array[Vector3] = []
+	if poly.is_empty():
+		return res
+	for i in poly.size():
+		var a := poly[i]
+		var b := poly[(i + 1) % poly.size()]
+		var a_in := a.y >= y if keep_above else a.y <= y
+		var b_in := b.y >= y if keep_above else b.y <= y
+		if a_in:
+			res.append(a)
+		if a_in != b_in and absf(b.y - a.y) > 1e-9:
+			res.append(a.lerp(b, (y - a.y) / (b.y - a.y)))
+	return res
+
+
+## Solid trunks, gate frames, lanterns and boulders, each on its measured
+## shape. The player and the blade stop on TRUNK_LAYER; yōkai ragdolls ignore
+## it (limbs snag and topple) and steer with trunk_push.
 func _build_trunk_colliders(transforms: Array[Transform3D], kind: int, root: Node3D) -> StaticBody3D:
 	var body := StaticBody3D.new()
-	body.name = "TrunkColliders" if kind == 0 else "ToriiColliders"
+	body.name = ["TrunkColliders", "ToriiColliders", "LanternColliders", "RockColliders"][clampi(kind, 0, 3)]
 	body.collision_layer = TRUNK_LAYER
 	body.collision_mask = 0
+	# What the blade feels when it meets it (HeldWeapon reads this).
+	body.set_meta("env_surface", "wood" if kind <= 1 else "stone")
 	var registered: Array = root.get_meta("trunk_entries", [])
 	for xf in transforms:
 		var s := xf.basis.get_scale().x
-		if kind == 0:
-			# Chest-height bark is about 0.45 m across at scale 1. The visual
-			# trunk leans with the hill, so the collider leans with it —
-			# a vertical tube let the player walk through the visible bark.
-			var trunk_r := 0.42 * s
-			var lean := xf.basis.orthonormalized()
-			var up := (lean * Vector3.UP).normalized()
-			_add_cylinder(body, Transform3D(lean, xf.origin + up * (1.8 * s)), trunk_r, 3.6 * s)
-			registered.append(_remember_trunk(root.position + xf.origin, trunk_r))
-		else:
-			# Two pillars, each ~0.34 of the gate width off its center.
-			var h := _torii_mesh.get_aabb().size.y * s if _torii_mesh else 4.5
-			var half_span := _torii_mesh.get_aabb().size.x * s * 0.34 if _torii_mesh else 1.5
-			var side := xf.basis.x.normalized()
-			for sgn_v in [-1.0, 1.0]:
-				var sgn := float(sgn_v)
-				var pillar := xf.origin + side * half_span * sgn
-				_add_cylinder(body, Transform3D(Basis.IDENTITY, pillar + Vector3(0.0, h * 0.35, 0.0)), h * 0.045, h * 0.7)
-				registered.append(_remember_trunk(root.position + pillar, h * 0.045))
+		match kind:
+			0:
+				# Same transform as the drawn tree (lean with the hill, uniform
+				# scale), on the hull of the tree's own bark.
+				for shape in _trunk_shapes:
+					_add_shape(body, shape, xf)
+				registered.append(_remember_trunk(root.position + xf.origin, _trunk_chest_radius * s))
+			1:
+				for shape in _torii_shapes:
+					_add_shape(body, shape, xf)
+				var half_span := _torii_mesh.get_aabb().size.x * s * 0.36 if _torii_mesh else 1.5
+				var side := xf.basis.x.normalized()
+				for sgn in [-1.0, 1.0]:
+					registered.append(_remember_trunk(root.position + xf.origin + side * half_span * float(sgn), 0.1 * s))
+			2:
+				for part in LANTERN_PARTS:
+					var box := BoxShape3D.new()
+					box.size = part[0]
+					_add_shape(body, box, xf * Transform3D(Basis.IDENTITY, part[1]))
+				registered.append(_remember_trunk(root.position + xf.origin, 0.24 * s))
+			_:
+				_add_shape(body, _rock_shape, xf)
+				registered.append(_remember_trunk(root.position + xf.origin, 0.55 * s))
 	root.set_meta("trunk_entries", registered)
 	return body
+
+
+static func _add_shape(body: StaticBody3D, shape: Shape3D, xf: Transform3D) -> void:
+	if shape == null:
+		return
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	cs.transform = xf
+	body.add_child(cs)
 
 
 func _remember_trunk(world: Vector3, radius: float) -> Array:
@@ -693,16 +847,6 @@ func trunk_push(pos: Vector3, heading: Vector3, reach: float = 0.95) -> Vector3:
 					lateral = h.cross(Vector3.UP)
 				push += lateral.normalized() * strength * 1.3 + away.normalized() * strength * 0.4
 	return push
-
-
-static func _add_cylinder(body: StaticBody3D, xf: Transform3D, radius: float, height: float) -> void:
-	var cs := CollisionShape3D.new()
-	var cyl := CylinderShape3D.new()
-	cyl.radius = radius
-	cyl.height = height
-	cs.shape = cyl
-	cs.transform = xf
-	body.add_child(cs)
 
 
 func _commit_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
@@ -976,6 +1120,7 @@ func _build_meshes() -> void:
 	_torii_mesh = _build_torii_mesh()
 	_lantern_mesh = _build_lantern_mesh()
 	_rock_mesh = _extract_rock_mesh()
+	_build_prop_shapes()
 
 
 ## The scanned crown was decimated leaf cards cut out of a blob atlas: after
@@ -1262,9 +1407,8 @@ func _build_torii_mesh() -> ArrayMesh:
 
 func _build_lantern_mesh() -> ArrayMesh:
 	var parts: Array[Mesh] = []
-	parts.append(_box_mesh(Vector3(0.22, 0.42, 0.22), Vector3(0.0, 0.21, 0.0)))
-	parts.append(_box_mesh(Vector3(0.34, 0.28, 0.34), Vector3(0.0, 0.56, 0.0)))
-	parts.append(_box_mesh(Vector3(0.4, 0.08, 0.4), Vector3(0.0, 0.76, 0.0)))
+	for part in LANTERN_PARTS:
+		parts.append(_box_mesh(part[0], part[1]))
 	return _merge_meshes(parts)
 
 

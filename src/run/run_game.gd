@@ -115,6 +115,11 @@ func _prepare_run_arena() -> void:
 	for pb in bodies:
 		(pb as CharacterBody3D).collision_mask &= ~(2 | 8)
 		(pb as CharacterBody3D).collision_mask |= ForestWorld.TRUNK_LAYER
+	# The blades meet trunks, gates, lanterns and boulders too: a swing into
+	# a tree stops on the bark instead of passing through it.
+	for w in get_tree().get_nodes_in_group("player_weapons"):
+		if w is RigidBody3D:
+			(w as RigidBody3D).collision_mask |= ForestWorld.TRUNK_LAYER
 
 	# Configure player health for survival runs (death ends the run).
 	var health := _player_health()
