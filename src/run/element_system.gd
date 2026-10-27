@@ -76,8 +76,8 @@ func apply_upgrade(id: String, all_stacks: Dictionary) -> void:
 			return
 		active_elements.append(element)
 	_rebuild_orbit_petals()
-	if weapon:
-		weapon.set_element(visual_element())
+	# Upgrades/Ofuda cards do NOT grant blade elements or 20s timers!
+	# The element on the katana comes exclusively from passing Torii gates.
 	effect_triggered.emit("upgrade", {"id": id, "element": element})
 
 
@@ -254,22 +254,16 @@ func debug_release_petals(direction: Vector3) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if weapon:
-		if weapon.element != current_element:
-			if weapon.element != Elements.NONE:
-				current_element = weapon.element
-				element_time_remaining = weapon.element_time_remaining
-				active_elements = [weapon.element]
-			else:
-				current_element = Elements.NONE
-				element_time_remaining = 0.0
-				active_elements.clear()
-			_rebuild_orbit_petals()
-		elif weapon.element != Elements.NONE and weapon.element_time_remaining > element_time_remaining:
-			element_time_remaining = weapon.element_time_remaining
+	if get_tree() and get_tree().paused:
+		return
 	if current_element != Elements.NONE:
 		element_time_remaining = maxf(0.0, element_time_remaining - delta)
 		is_fade_warning = (element_time_remaining <= FADE_WARNING_TIME and element_time_remaining > 0.0)
+		if weapon:
+			weapon.element = current_element
+			weapon.element_time_remaining = element_time_remaining
+			weapon.is_fade_warning = is_fade_warning
+			weapon._update_blade_material()
 		if element_time_remaining <= 0.0:
 			_expire_element()
 	if run_game == null or weapon == null:
