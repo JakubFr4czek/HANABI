@@ -24,6 +24,8 @@ var active_gates: Array[ToriiGate] = []
 var _shuffle_bag: Array[String] = []
 var _rng := RandomNumberGenerator.new()
 var _spawn_check_timer: float = 0.0
+var _clearance_query: PhysicsShapeQueryParameters3D = null
+var _clearance_cyl: CylinderShape3D = null
 
 
 func _ready() -> void:
@@ -160,29 +162,35 @@ func _attempt_spawn_gate_in_range(p_pos: Vector3) -> ToriiGate:
 
 
 func _is_valid_location(wx: float, wz: float, p_pos: Vector3) -> bool:
-	if Vector2(wx, wz).length() < SHRINE_CLEARING_RADIUS:
+	if wx * wx + wz * wz < SHRINE_CLEARING_RADIUS * SHRINE_CLEARING_RADIUS:
 		return false
+	var min_sep_sq := MIN_GATE_SEPARATION * MIN_GATE_SEPARATION
 	for g in active_gates:
 		if is_instance_valid(g) and g.is_active:
-			if Vector2(g.global_position.x - wx, g.global_position.z - wz).length() < MIN_GATE_SEPARATION:
+			var dx := g.global_position.x - wx
+			var dz := g.global_position.z - wz
+			if dx * dx + dz * dz < min_sep_sq:
 				return false
-	var d_player := Vector2(p_pos.x - wx, p_pos.z - wz).length()
-	if d_player < MIN_SPAWN_DIST or d_player > MAX_SPAWN_DIST:
+	var dx_p := p_pos.x - wx
+	var dz_p := p_pos.z - wz
+	var d_player_sq := dx_p * dx_p + dz_p * dz_p
+	if d_player_sq < MIN_SPAWN_DIST * MIN_SPAWN_DIST or d_player_sq > MAX_SPAWN_DIST * MAX_SPAWN_DIST:
 		return false
 	if forest_world:
 		if not forest_world.is_clear_of_props(wx, wz, CLEARANCE_RADIUS):
 			return false
 		var space := get_world_3d().direct_space_state if get_world_3d() else null
 		if space:
-			var query := PhysicsShapeQueryParameters3D.new()
-			var cyl := CylinderShape3D.new()
-			cyl.radius = CLEARANCE_RADIUS
-			cyl.height = 4.0
-			query.shape = cyl
+			if _clearance_query == null:
+				_clearance_query = PhysicsShapeQueryParameters3D.new()
+				_clearance_cyl = CylinderShape3D.new()
+				_clearance_cyl.radius = CLEARANCE_RADIUS
+				_clearance_cyl.height = 4.0
+				_clearance_query.shape = _clearance_cyl
+				_clearance_query.collision_mask = ForestWorld.TRUNK_LAYER
 			var hy := forest_world.height_at(wx, wz)
-			query.transform = Transform3D(Basis(), Vector3(wx, hy + 2.0, wz))
-			query.collision_mask = ForestWorld.TRUNK_LAYER
-			var hits := space.intersect_shape(query, 1)
+			_clearance_query.transform = Transform3D(Basis(), Vector3(wx, hy + 2.0, wz))
+			var hits := space.intersect_shape(_clearance_query, 1)
 			if not hits.is_empty():
 				return false
 	return true
