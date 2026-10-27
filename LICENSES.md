@@ -32,6 +32,7 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/models/environment/torii_bazylonator/` ("Japanese Torii gate Game Asset", hero torii) | https://sketchfab.com/3d-models/japanese-torii-gate-game-asset-e12d2fa1b2b94928b8b87cb7787e2462 | Bazylonator | **CC BY 4.0**, modified (rescaled, rain/wet shading); credited in `CREDITS.md` and in game |
 | `assets/models/environment/torii_old_primagenevieve/` ("Old Torii", sunken torii) | https://sketchfab.com/3d-models/old-torii-34f21f85784a4dcf9e0f9c6b9d772e37 | Sarah Nguyen (Nguyen Phuong Hoa) (primagenevieve) | **CC BY 4.0**, modified (rescaled, darkened, wet shading); credited in `CREDITS.md` and in game |
 | `assets/models/enemies/oni_mask_run.glb`, `oni_mask_run_normal.png` | `tools/gen_oni_mask_glb.py`, `ONI_MASK_LICENSE.txt` | Jakub Frączek (HANABI) | CC0 1.0 — §17: no suitable external CC0 GLB without login |
+| `assets/models/enemies/oni_body_run.glb`, `oni_kanabo_run.glb` | `tools/gen_oni_body_glb.py` | Jakub Frączek (HANABI) | CC0 1.0 (§21 procedural boss shell) |
 | `assets/fonts/YujiBoku-Regular.ttf` | https://github.com/google/fonts/tree/main/ofl/yujiboku | Kinuta Font Factory | SIL OFL 1.1 (`assets/fonts/LICENSE.txt`) |
 | `assets/models/weapons/antique_katana_01/` (glTF, 2K) | https://polyhaven.com/a/antique_katana_01 | Tal Swicegood (Poly Haven) | CC0 1.0 |
 | `assets/models/props/katana_stand_01/` (glTF, textures downscaled to 1K) | https://polyhaven.com/a/katana_stand_01 | Rico Cilliers (Poly Haven) | CC0 1.0 |

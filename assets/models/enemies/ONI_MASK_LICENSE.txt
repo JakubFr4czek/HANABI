@@ -7,3 +7,5 @@ account-free CC0 GLB on Poly Haven / Kenney / OpenGameArt).
 Generator: tools/gen_oni_mask_glb.py (~1.1k verts, horns/brows/fangs + baked normal).
 
 Regenerate: python3 tools/gen_oni_mask_glb.py
+
+Oni body + kanabō: oni_body_run.glb, oni_kanabo_run.glb (CC0 1.0, tools/gen_oni_body_glb.py).
