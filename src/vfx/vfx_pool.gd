@@ -8,8 +8,10 @@ const SOUL_PREWARM := 56
 const MAX_SPARK := 36
 const MAX_RING := 24
 const MAX_SOUL := 72
+const MAX_FIREWORK_FLASH_LIGHTS := 3
 
 var _spark_free: Array[SparkBurst] = []
+var _firework_flashes: Array[OmniLight3D] = []
 var _sparks_allocated := 0
 var _rings_allocated := 0
 var _souls_allocated := 0
@@ -33,6 +35,45 @@ func _ready() -> void:
 
 func death_vfx_ignores_fog() -> bool:
 	return _spark_mat != null and _ring_mat != null and _spark_mat.disable_fog and _ring_mat.disable_fog
+
+
+func active_firework_flash_count() -> int:
+	_prune_firework_flashes()
+	return _firework_flashes.size()
+
+
+## Capped dynamic lights for death fireworks; overflow uses emission-only sparks.
+func spawn_firework_flash(parent: Node, at: Vector3, col: Color, vis: float) -> void:
+	if parent == null:
+		return
+	_prune_firework_flashes()
+	if _firework_flashes.size() >= MAX_FIREWORK_FLASH_LIGHTS:
+		spawn_spark(parent, at, Vector3.UP, col * 1.55, 14, 3.5 * vis)
+		return
+	var lamp := OmniLight3D.new()
+	lamp.name = "FireworkFlash"
+	lamp.light_color = col.lerp(Color(1.0, 0.92, 0.95), 0.22)
+	lamp.light_energy = 2.2 * vis
+	lamp.omni_range = 3.6 * vis
+	lamp.omni_attenuation = 1.35
+	lamp.shadow_enabled = false
+	parent.add_child(lamp)
+	lamp.global_position = at + Vector3(0.0, 0.35, 0.0)
+	_firework_flashes.append(lamp)
+	var tw := parent.get_tree().create_tween()
+	tw.tween_property(lamp, "light_energy", 0.0, 0.15)
+	tw.tween_callback(func() -> void:
+		_firework_flashes.erase(lamp)
+		if is_instance_valid(lamp):
+			lamp.queue_free())
+
+
+func _prune_firework_flashes() -> void:
+	var kept: Array[OmniLight3D] = []
+	for l in _firework_flashes:
+		if is_instance_valid(l):
+			kept.append(l)
+	_firework_flashes = kept
 
 
 func pool_stats() -> Dictionary:

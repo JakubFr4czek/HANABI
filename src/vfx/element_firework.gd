@@ -14,7 +14,10 @@ static func spawn(parent: Node, at: Vector3, element: String, scale: float = 1.0
 	var up := Vector3.UP
 	SparkBurst.spawn(parent, at, up, col * 1.35, int(18 * vis), 3.65 * vis)
 	SparkBurst.spawn(parent, at, Vector3(0.2, 0.85, 0.1).normalized(), col * 1.05, int(12 * vis), 2.85 * vis)
-	_fog_flash(parent, at, col, vis)
+	if VfxPool:
+		VfxPool.spawn_firework_flash(parent, at, col, vis)
+	else:
+		_fog_flash_ephemeral(parent, at, col, vis)
 	if VfxPool:
 		VfxPool.spawn_element_ring(parent, at, col, scale * 1.08)
 	else:
@@ -22,7 +25,7 @@ static func spawn(parent: Node, at: Vector3, element: String, scale: float = 1.0
 	Sfx.play_at("firework", at, -7.0, 4.5 * scale, clampf(0.9 + scale * 0.12, 0.85, 1.25))
 
 
-static func _fog_flash(parent: Node, at: Vector3, col: Color, vis: float) -> void:
+static func _fog_flash_ephemeral(parent: Node, at: Vector3, col: Color, vis: float) -> void:
 	var lamp := OmniLight3D.new()
 	lamp.light_color = col.lerp(Color(1.0, 0.92, 0.95), 0.22)
 	lamp.light_energy = 2.4 * vis
