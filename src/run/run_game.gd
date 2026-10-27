@@ -132,21 +132,23 @@ func _configure_run_navigation() -> void:
 	var region := NavigationRegion3D.new()
 	region.name = "RunNavigation"
 	var nav_mesh := NavigationMesh.new()
-	nav_mesh.agent_radius = 0.38
+	nav_mesh.agent_radius = 0.35
 	nav_mesh.agent_height = 1.75
 	nav_mesh.cell_size = 0.35
-	nav_mesh.cell_height = 0.2
+	nav_mesh.cell_height = 0.25
 	region.navigation_mesh = nav_mesh
 	add_child(region)
-	var floor_hint := MeshInstance3D.new()
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(88.0, 88.0)
-	floor_hint.mesh = plane
-	floor_hint.rotation.x = -PI * 0.5
-	floor_hint.position.y = -0.34
-	region.add_child(floor_hint)
+	var floor_body := StaticBody3D.new()
+	floor_body.name = "NavBakeFloor"
+	floor_body.position.y = -0.34
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(88.0, 0.5, 88.0)
+	cs.shape = box
+	floor_body.add_child(cs)
+	region.add_child(floor_body)
 	var src := NavigationMeshSourceGeometryData3D.new()
-	NavigationServer3D.parse_source_geometry_data(nav_mesh, src, floor_hint)
+	NavigationServer3D.parse_source_geometry_data(nav_mesh, src, floor_body)
 	NavigationServer3D.bake_from_source_geometry_data(nav_mesh, src)
 	region.navigation_mesh = nav_mesh
 

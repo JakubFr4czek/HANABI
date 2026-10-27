@@ -92,7 +92,7 @@ func _set_flash(value: float) -> void:
 	RenderingServer.global_shader_parameter_set("storm_flash", value)
 	if flash_light:
 		flash_light.visible = value > 0.01
-		flash_light.light_energy = value * 1.6
+		flash_light.light_energy = value * 2.85
 	if world_environment:
 		world_environment.fog_light_color = base_fog_light_color.lerp(flash_fog_tint, value * 0.22)
 		world_environment.ambient_light_energy = base_ambient_energy * (1.0 + value * 1.5)
