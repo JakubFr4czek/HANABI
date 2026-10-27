@@ -46,15 +46,18 @@ There are four elements. Each grants 2 active abilities mapped to the two face b
 | **Shadow** 影 | dark violet | trickery | **Kagemusha** (smoke decoy clone redirecting enemy aggro) | **Yami-watari** (shadow step behind target with +60% critical strike) |
 
 - **Single Element Imbue (~20 s Duration):** The katana holds at most ONE element at a time, imbued by walking the player body through an elemental Torii gate in the endless forest.
+- **Pacing & Gate Density:** Gates spawn within **18–32 m** of the player (mean ~24 m). Given realistic VR combat traversal speed (~1.4 m/s), traversal takes ~12–17 s, ensuring an elemental uptime of **65%–75%** of active run time. Verified via automated metric `element_uptime_ratio >= 0.65`.
+- **Deterministic Gate Reactivation:** A passed gate deactivates instantly and reactivates if and only if the player moves **>= 45.0 m** away from its center.
 - **Dynamic Re-Imbue & Refresh:** Passing a Torii gate of a different element immediately replaces the element and resets the 20s timer. Passing a gate of the same element refreshes the timer back to 20s. The final 3s pulse an expiration warning before reverting to plain steel.
-- **Empty Blade Behavior:** On plain steel, pressing Ability 1 or 2 fires an empty, muted haptic click with zero popups or errors.
-- **Skill Tree & Ofuda Currency:** Yōkai drop paper Ofuda talismans. A spatial 3D VR Menu (opened via off-hand Menu button) pauses the game (`get_tree().paused = true`, `process_mode = PROCESS_MODE_ALWAYS` for XR rig/hands/UI, zero `Engine.time_scale = 0`) to spend Ofuda on 4 per-element trees (5 nodes each with prerequisites). Progress is per-run (resets on death).
+- **Sword Hand Controls & Empty Steel:** Buttons A and B activate Ability 1 and 2. On plain steel, pressing A or B produces a quiet, muted haptic click with zero popups or error banners. Katana recall (`Grip + B`) only triggers when the hand is empty (`held == null`), preventing any conflict with Ability 2.
 - **Anti-Clipping UI Guarantee:** All UI panels and wrist HUD elements use depth-test-disabled materials (`flags_no_depth_test = true`, render priority 100) and adaptive forward raycasting to guarantee panels never clip through trees, rocks, or walls.
 
 ## 6. Progression and UI
-- **Drops:** enemies drop many glowing soul orbs (hitodama), colored by element. Orbs fly to the player when nearby.
-- **Level-up:** time slows and three **ofuda** (paper talismans) float in front of the player. The player chooses one by **slicing it with the sword**.
-- **HUD:** minimal and diegetic: health as a glowing wrist charm, plus an engraved wrist readout (rank, wave, score, life, kills, souls) that only appears when the wrist is raised toward the face. Nothing is mounted on the katana.
+- **Drops:**
+  - **Hitodama (Soul Orbs):** Grant XP and score, replenishing life and advancing player rank.
+  - **Ofuda (御札):** Physical collectible paper currency dropped by yōkai, gathered magnetically and tallied on the wrist plate (`御札 × N`).
+- **VR Skill Tree Menu (No Card Slicing):** The legacy slow-motion card slicing mechanic is retired. Level progression occurs via the 3D VR Skill Tree Menu, opened with the off-hand Menu button. Opening the menu cleanly pauses game time (`get_tree().paused = true`, `process_mode = PROCESS_MODE_ALWAYS` for XR tracking/hands/UI), allowing deliberate spending of Ofuda on 4 per-element trees (5 nodes each with prerequisites). Progress resets on death.
+- **HUD:** Minimal and diegetic: health as a glowing wrist charm, elemental ring gauge with remaining 20s imbue countdown, Ofuda tally, and engraved stats that appear when the wrist is raised toward the face. Nothing is mounted on the katana.
 - **End screen:** score, time survived, kills, build used and high score.
 
 ## 7. Enemies
