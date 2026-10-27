@@ -21,6 +21,7 @@ func _run_all() -> void:
 	await _test_heavy_hit_stays_bounded()
 	await _test_overlapping_spawns_separate()
 	await _test_yokai_body_invariants()
+	await _test_recycled_body_stays_whole()
 
 
 ## A kanabo-grade blow to the forearm: the arm may fly, the body must not.
@@ -120,6 +121,53 @@ func _test_yokai_body_invariants() -> void:
 	var pelvis_h := yokai.root_part().global_position.y - float(run.wave_director.ground_height.call(
 		yokai.root_part().global_position.x, yokai.root_part().global_position.z))
 	_check("yokai gets back up after a knockdown (pelvis %.2f m over ground)" % pelvis_h, rose and pelvis_h > 0.55)
+	run.queue_free()
+
+
+## How far the body is from its rest shape: the largest gap (m) between a
+## part's distance to the pelvis now and in the rest pose. A torn body (limbs
+## held off by mis-anchored joints) reads in metres; a whole one in cm.
+func _body_tear(e: ActiveRagdoll) -> float:
+	var pelvis := e.root_part()
+	var rest_root: Transform3D = e._rest[pelvis.name]
+	var worst := 0.0
+	for part_name in e.parts:
+		var part := e.parts[part_name] as RagdollPart
+		var rest_d := ((e._rest[part_name] as Transform3D).origin - rest_root.origin).length()
+		worst = maxf(worst, absf(part.global_position.distance_to(pelvis.global_position) - rest_d))
+	return worst
+
+
+## A pooled yōkai dies wherever its body walked to (the parts roam away from
+## the Yokai node), then comes back somewhere else. Its joints re-anchor when
+## it re-enters the tree: that must happen with the body in its rest shape,
+## or every limb is pinned metres off and flies around the map.
+func _test_recycled_body_stays_whole() -> void:
+	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
+	add_child(run)
+	await _frames(12)
+	var director := run.wave_director
+	director.stop_director()
+	director.clear_enemies()
+	await _frames(4)
+	var gy := float(director.ground_height.call(0.0, 6.0))
+	var yokai: Yokai = director.spawn_enemy_at(Vector3(0.0, gy, 6.0), Vector3.ZERO)
+	await _frames(30)
+	# The body walked 3 m off its node, then dies there and crumples.
+	for p in yokai.parts.values():
+		(p as RagdollPart).global_position += Vector3(3.0, 0.0, 1.5)
+	await _frames(5)
+	yokai.die({})
+	await _frames(140)
+	var again: Yokai = director.spawn_enemy_at(Vector3(-3.0, float(director.ground_height.call(-3.0, 7.0)), 7.0), Vector3.ZERO)
+	_check("the pool hands back the same body", again == yokai)
+	var worst := 0.0
+	for i in 180:
+		await get_tree().physics_frame
+		worst = maxf(worst, _body_tear(again))
+	print("    recycled body: worst tear %.2f m" % worst)
+	_check("a recycled yokai comes back whole (worst tear %.2f m)" % worst, worst < 0.35)
 	run.queue_free()
 
 
