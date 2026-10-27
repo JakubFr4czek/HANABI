@@ -26,6 +26,10 @@ var _descent_done := false
 var _ripple_t := 0.0
 var _ripple_playing := false
 var _katana_reveal := 0.0
+## After the descent the katana hangs in the air before the player and the run
+## only starts once it is taken: the grab is the start button.
+var _waiting_grab := false
+var _float_basis := Basis.IDENTITY
 var _shadow: MeshInstance3D
 var _petals: Array[MeshInstance3D] = []
 var _petal_angles: PackedFloat32Array
@@ -52,8 +56,9 @@ func start() -> void:
 	active = true
 	_t = 0.0
 	_descent_done = false
-	_ripple_t = 0.0
 	_ripple_playing = false
+	_waiting_grab = false
+	_ripple_t = 0.0
 	_katana_reveal = 0.0
 	_set_ripple(0.0, 0.0)
 	_set_seal_glow(0.35)
@@ -121,8 +126,12 @@ func _step_post_touchdown(delta: float) -> void:
 	_katana_reveal = minf(_katana_reveal + delta * 2.4, 1.0)
 	_reveal_katana(_katana_reveal)
 	_update_petals(delta, 1.0)
-	if _katana_reveal >= 1.0 and not _ripple_playing:
-		_finish_intro()
+	if _waiting_grab:
+		_float_katana()
+		if _katana and _katana.is_held():
+			_finish_intro()
+	elif _katana_reveal >= 1.0 and not _ripple_playing:
+		_begin_float()
 
 
 func _finish_intro() -> void:
@@ -139,7 +148,11 @@ func _finish_intro() -> void:
 	# the origin below the floor.
 	_place_player_at_height(0.0)
 	_lock_player(false)
-	_grant_katana()
+	if _katana:
+		_katana.freeze = false
+	# The grab path already holds it; the skip path still needs the grant.
+	if _katana and not _katana.is_held():
+		_grant_katana()
 	GameEvents.log_event("run_intro_finished", {"skipped": _t < DESCENT_SEC * 0.85})
 	finished.emit()
 
@@ -180,16 +193,44 @@ func _grant_katana() -> void:
 			_katana.snap_to_hand()
 
 
+## The offering pose: chest height, half a metre before the player, blade
+## pointing down, turning slowly until taken.
+func _float_pose() -> Transform3D:
+	var fwd := (Basis(Vector3.UP, _spawn_yaw) * Vector3.FORWARD)
+	fwd.y = 0.0
+	if fwd.length_squared() < 1e-4:
+		fwd = Vector3.FORWARD
+	else:
+		fwd = fwd.normalized()
+	var pos := _spawn_pos + fwd * 0.55 + Vector3.UP * (_ground_y + 1.25 + sin(_t * 1.8) * 0.03)
+	return Transform3D(Basis(Vector3.UP, _t * 0.55) * _float_basis, pos)
+
+
+func _begin_float() -> void:
+	_waiting_grab = true
+	if _katana:
+		_float_basis = _katana.global_basis.orthonormalized()
+		_katana.freeze = true
+		_katana.linear_velocity = Vector3.ZERO
+		_katana.angular_velocity = Vector3.ZERO
+	GameEvents.log_event("katana_offered", {})
+
+
+func _float_katana() -> void:
+	if _katana == null:
+		return
+	_katana.global_transform = _float_pose()
+
+
 func _reveal_katana(amount: float) -> void:
 	if _katana == null:
 		return
 	_katana.visible = amount > 0.02
-	if amount < 0.98:
+	if _waiting_grab or amount >= 0.98:
 		return
-	if _player is DesktopPlayer:
-		var dp := _player as DesktopPlayer
-		if not _katana.is_held():
-			dp.take_weapon(_katana)
+	# The blade flies in to the offering spot while it materializes.
+	_katana.global_transform = _katana.global_transform.interpolate_with(
+		_float_pose(), clampf(amount * 1.5, 0.0, 1.0))
 
 
 func _lock_player(locked: bool) -> void:
