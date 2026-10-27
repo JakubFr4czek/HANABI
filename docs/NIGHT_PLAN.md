@@ -105,6 +105,11 @@ sakura trees; do not touch grip/hand logic).
   `held_weapon.gd`; elite yōkai respect `counter` hits in `yokai.gd`.
 - Headless: `gdd_loop_test.tscn`; visual: `run_screenshots.gd` shot 7.
 
+## 18. Combat CC0 SFX, music loop/duck, Quest perf (lights/audio)
+- Kenney/OGA recordings for cut/slap/hurt/tell; swing/clash already CC0; CREDITS/LICENSES.
+- `StormMusic` crossfade loop + level-up duck; forest wind on Ambience bus.
+- Oni rim cull, Sfx voice soft-cap, stressed `quest_perf_test` flash lights; `QUEST_TEST.md` §18.
+
 ## 17. Sculpted Oni mask, torii fog shot, §15 polish closure
 - Procedural sculpted mask + normal map (`gen_oni_mask_glb.py`) or document no external CC0 found.
 - Giant torii silhouette in fog (`point12_screenshots` shot 2).

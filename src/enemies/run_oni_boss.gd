@@ -76,8 +76,13 @@ func _update_oni_readability() -> void:
 	if _rim == null:
 		_rim = get_node_or_null("OniRimLight") as OmniLight3D
 	if _rim:
-		_rim.light_energy = lerpf(0.48, 1.35, near)
-		_rim.omni_range = lerpf(2.6, 3.8, near)
+		var active := d < 14.0
+		_rim.visible = active
+		if active:
+			_rim.light_energy = lerpf(0.38, 1.05, near)
+			_rim.omni_range = lerpf(2.2, 3.2, near)
+		else:
+			_rim.light_energy = 0.0
 	_mask.set_shader_parameter("fill", lerpf(2.35, 3.25, near))
 	_flesh.set_shader_parameter("fill", lerpf(2.05, 2.65, near))
 	_flesh.set_shader_parameter("fog_rim", lerpf(1.35, 2.05, near))

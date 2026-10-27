@@ -33,14 +33,21 @@ func _run_all() -> void:
 	run.element_system.apply_upgrade("ink_pool", run.upgrade_stacks)
 	run.element_system.debug_release_petals(Vector3.FORWARD)
 	await _frames(8)
+	if VfxPool:
+		for i in 3:
+			VfxPool.spawn_firework_flash(run, Vector3(1.6 * i - 1.6, 1.1, -3.2), Color(1.0, 0.4, 0.5), 1.0)
+	ElementFirework.spawn(run, Vector3(0.0, 1.2, -3.0), Elements.STORM, 0.95)
+	await _frames(12)
 
-	var peak := {"draw_calls": 0, "primitives": 0, "process_ms": 0.0}
+	var peak := {"draw_calls": 0, "primitives": 0, "process_ms": 0.0, "lights": 0, "voices": 0}
 	for _f in 24:
 		await get_tree().physics_frame
 		var s := RunPerfProbe.rendering_info()
 		peak.draw_calls = maxi(peak.draw_calls, s.draw_calls)
 		peak.primitives = maxi(peak.primitives, s.primitives)
 		peak.process_ms = maxf(peak.process_ms, s.process_ms)
+		peak.lights = maxi(peak.lights, RunPerfProbe.count_dynamic_lights(run))
+		peak.voices = maxi(peak.voices, RunPerfProbe.count_audio_voices(run))
 	var est := RunPerfProbe.estimate_scene_cost(run)
 	if peak.draw_calls <= 0:
 		peak.draw_calls = est.draw_calls
@@ -49,8 +56,8 @@ func _run_all() -> void:
 
 	var bodies := RunPerfProbe.count_yokai_physics_bodies(run)
 	var particles := RunPerfProbe.estimate_particles(run)
-	var lights := RunPerfProbe.count_dynamic_lights(run)
-	var voices := RunPerfProbe.count_audio_voices(run)
+	var lights := maxi(RunPerfProbe.count_dynamic_lights(run), peak.lights)
+	var voices := maxi(RunPerfProbe.count_audio_voices(run), peak.voices)
 	print("PERF peak draw=%d prims=%d process_ms=%.2f bodies=%d particles~=%d lights=%d audio~=%d (baseline draw=%d prims=%d ms=%.1f)"
 		% [peak.draw_calls, peak.primitives, peak.process_ms, bodies, particles, lights, voices,
 			RunPerfBudget.BASELINE_DRAW_CALLS, RunPerfBudget.BASELINE_PRIMITIVES, RunPerfBudget.BASELINE_PROCESS_MS])
