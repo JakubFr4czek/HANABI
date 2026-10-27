@@ -230,6 +230,7 @@ func _configure_run_forest() -> void:
 	var moon := get_node_or_null("Moon") as DirectionalLight3D
 	if moon:
 		forest_world.moon_direction = moon.global_basis.z.normalized()
+	_configure_run_light(we, moon)
 	forest_world.setup(player, arena_lm)
 	if get_node_or_null("RunForestAmbience") == null:
 		var forest_amb := RunForestAmbience.new()
@@ -245,6 +246,24 @@ func _configure_run_forest() -> void:
 		storm.lightning = get_node_or_null("Arena/StormLightning") as StormLightning
 		add_child(storm)
 	_setup_run_storm_rain()
+
+
+## Run-only. The dojo keeps its own moon. Here the light is the fog: no sky
+## reflection, no specular moon, ambient the same grey as the air.
+func _configure_run_light(we: WorldEnvironment, moon: DirectionalLight3D) -> void:
+	if we and we.environment:
+		var env := we.environment
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = RUN_FOG_COLOR
+		env.ambient_light_energy = 0.55
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+		env.tonemap_exposure = 0.92
+		env.glow_intensity = 0.16
+		env.glow_hdr_threshold = 1.7
+	if moon:
+		moon.light_color = Color(0.64, 0.66, 0.68)
+		moon.light_energy = 0.5
+		moon.light_specular = 0.0
 
 
 func _setup_run_storm_rain() -> void:

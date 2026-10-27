@@ -57,7 +57,8 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `katana/Katana_ColoradoStark/` | https://opengameart.org/content/katana-2 | Colorado Stark | CC0 |
 | `katana/grab3d_katana/` | https://grab3d.com/models/weapons/katana/ | Grab3D | CC0 1.0 |
 | `assets/audio/sfx/hanabi_proc/*.wav` (run stingers + forest wind) | `scripts/generate_hanabi_proc_audio.py` in repo | Jakub Frączek / HANABI | CC0 (procedural) |
-| `assets/models/environment/forest_quaternius/tree_simple_quaternius.glb` (run forest MultiMesh) | https://quaternius.com/packs/simplenature.html | Quaternius | CC0 |
+| `assets/models/environment/forest_trees/` (run forest MultiMesh; Grab3D cherry, canopy simplified, albedo recolored for night fog) | https://grab3d.com/models/nature/cherry-blossom-tree/ | Grab3D | CC0 1.0 |
+| `assets/models/environment/forest_quaternius/tree_simple_quaternius.glb` (unused fallback mesh) | https://quaternius.com/packs/simplenature.html | Quaternius | CC0 |
 | `assets/models/environment/forest_quaternius/torii_gate_polyfork.glb` (run forest MultiMesh) | https://polyfork.dev/asset/torii-gate-402f30 | polyfork.dev (Little Tokyo kit) | CC0 / commercial use per site |
 | `environment/polypizza/Torii_Gate_Quaternius.glb` | https://poly.pizza/m/7SyXZ62xR5 | Quaternius | CC0 |
 | `environment/polypizza/Shrine_KayLousberg.glb` | https://poly.pizza/m/tFxdxO5clk | Kay Lousberg | CC0 |
