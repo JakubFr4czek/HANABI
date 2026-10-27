@@ -29,8 +29,11 @@ void fragment() {
 	float wash_out = 1.0 - smoothstep(max(lifetime - 1.2, 0.0), lifetime, age);
 	float life = wash_in * wash_out;
 	float oily = pow(max(0.0, 1.0 - abs(dot(NORMAL, VIEW))), 3.0);
-	vec3 col = ink_color * (0.78 + n * 0.24) + edge_color * (rim * 0.62 + oily * 0.14);
+	// Liquid glass: slow bright cells drift over the surface like light on oil.
+	float gloss_n = noise(p * 2.1 + vec2(-TIME * 0.09, TIME * 0.06));
+	float gloss = pow(max(0.0, gloss_n - 0.55) / 0.45, 2.0) * body;
+	vec3 col = ink_color * (0.78 + n * 0.24) + edge_color * (rim * 0.62 + oily * 0.14 + gloss * 0.30);
 	ALBEDO = col;
-	EMISSION = edge_color * (rim * 0.34 + oily * 0.08);
+	EMISSION = edge_color * (rim * 0.34 + oily * 0.08 + gloss * 0.20);
 	ALPHA = body * life * (0.82 + rim * 0.16);
 }

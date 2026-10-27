@@ -1,7 +1,7 @@
 extends Node
 ## Headless coverage for docs/NIGHT_PLAN.md item 2:
-## four gated element trees, two-element / six-slot cap, combat effects,
-## both evolutions, seal progress and bounded Quest-oriented VFX.
+## four gated element trees, one-element lock-in, combat effects per tree,
+## seal progress and bounded Quest-oriented VFX.
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
 const TEST_SAVE_PATH := "user://test_elements_high_score.cfg"
@@ -31,8 +31,10 @@ func _run_all() -> void:
 	await _frames(4)
 
 	_test_pool_and_limits()
-	await _test_storm_and_ink()
-	await _test_sakura_and_shadow()
+	await _test_storm()
+	await _test_ink()
+	await _test_sakura()
+	await _test_shadow()
 	run.queue_free()
 
 
@@ -49,21 +51,27 @@ func _test_pool_and_limits() -> void:
 	run._apply_upgrade({"id": "storm_chain"})
 	run._apply_upgrade({"id": "ink_pool"})
 	run._apply_upgrade({"id": "sakura_petals"})
-	_check("A run binds at most two elements",
-		run.element_system.active_elements == [Elements.STORM, Elements.INK]
-		and not run.upgrade_stacks.has("sakura_petals"))
+	_check("A run locks into a single element; later elements are refused",
+		run.element_system.active_elements == [Elements.STORM]
+		and not run.upgrade_stacks.has("ink_pool")
+		and not run.upgrade_stacks.has("sakura_petals")
+		and run.katana.element == Elements.STORM)
 
 
-func _test_storm_and_ink() -> void:
+func _fresh_run() -> void:
+	run.start_run()
+	run.wave_director.stop_director()
+	run.wave_director.clear_enemies()
+	await _frames(4)
+
+
+func _test_storm() -> void:
 	run._apply_upgrade({"id": "storm_charge"})
 	run._apply_upgrade({"id": "storm_overload"})
-	run._apply_upgrade({"id": "ink_tendrils"})
-	run._apply_upgrade({"id": "ink_depth"})
-	_check("Two complete trees occupy six element slots",
-		UpgradePool.element_slot_count(run.upgrade_stacks) == 6)
-	_check("Storm + Ink evolves into black lightning and colors the blade",
-		run.element_system.has_evolution(Elements.BLACK_LIGHTNING)
-		and run.katana.element == Elements.BLACK_LIGHTNING)
+	_check("One complete tree occupies three element slots",
+		UpgradePool.element_slot_count(run.upgrade_stacks) == 3)
+	_check("The bound element colors the blade",
+		run.katana.element == Elements.STORM)
 
 	var e1 := run.wave_director.spawn_enemy_at(Vector3(-0.7, 0.0, -0.8), player.global_position)
 	var e2 := run.wave_director.spawn_enemy_at(Vector3(0.5, 0.0, -1.1), player.global_position)
@@ -79,8 +87,6 @@ func _test_storm_and_ink() -> void:
 	await _frames(3)
 	_check("Storm chains through several nearby yōkai",
 		e1.hp < hp_before[0] and e2.hp < hp_before[1])
-	_check("Black lightning paints Ink pools at chained targets",
-		run.element_system._ink_pools.size() >= 2)
 
 	run.element_system.storm_charge = 1.0
 	var charged_before := e3.hp
@@ -94,40 +100,46 @@ func _test_storm_and_ink() -> void:
 	_check("A fully charged Storm strike discharges bonus damage",
 		run.element_system.storm_charge == 0.0 and e3.hp < charged_before)
 
-	run.element_system.paint_ink(ElementSystem._enemy_center(e1))
-	await _seconds(0.28)
-	_check("Ink pools slow yōkai standing in the painted area", e1.is_slowed())
-	var ink_hp := e1.hp
-	await _seconds(1.1)
-	_check("Ink tendrils damage trapped yōkai", e1.is_dead or e1.hp < ink_hp)
-
-	for i in 9:
-		run.element_system.paint_ink(Vector3(float(i) * 0.1, 0.0, -0.4))
-	_check("Ink VFX pool is hard-capped for Quest", run.element_system._ink_pools.size() <= ElementSystem.MAX_INK_POOLS)
 	for i in 20:
 		run.element_system._spawn_shadow_trace(Vector3.ZERO, Vector3(float(i % 3), 1.0, -2.0))
 	_check("Short-lived mesh VFX are hard-capped for Quest",
 		run.element_system._transients.size() <= ElementSystem.MAX_TRANSIENT_MESHES)
 
-	var seal := run.get_node("Arena/SpawnSeal") as MeshInstance3D
-	var seal_mat := seal.material_override as ShaderMaterial
-	_check("Spawn seal lights both element quadrants and the evolution star",
-		int(seal_mat.get_shader_parameter("active_elements_mask")) == 6
-		and int(seal_mat.get_shader_parameter("evolution_mask")) == 1)
+	_check("Spawn seal lights the Storm quadrant and no evolution star",
+		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 2
+		and int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("evolution_mask")) == 0)
 
 
-func _test_sakura_and_shadow() -> void:
-	run.start_run()
-	run.wave_director.stop_director()
-	run.wave_director.clear_enemies()
-	await _frames(4)
-	for id in ["sakura_petals", "sakura_orbit", "sakura_heal", "shadow_blink", "shadow_darkness", "shadow_veil"]:
+func _test_ink() -> void:
+	await _fresh_run()
+	for id in ["ink_pool", "ink_tendrils", "ink_depth"]:
 		run._apply_upgrade({"id": id})
-	_check("Sakura + Shadow evolves into phantom petals",
-		run.element_system.has_evolution(Elements.PHANTOM_PETALS)
-		and run.katana.element == Elements.PHANTOM_PETALS)
-	_check("Sakura creates the evolved five-blade orbit",
-		run.element_system._orbit_petals.size() == 5)
+	_check("Ink binds alone and colors the blade", run.katana.element == Elements.INK)
+
+	var victim := run.wave_director.spawn_enemy_at(Vector3(-0.7, 0.0, -0.8), player.global_position)
+	await _frames(5)
+	run.element_system.paint_ink(ElementSystem._enemy_center(victim))
+	await _seconds(0.28)
+	_check("Ink pools slow yōkai standing in the painted area", victim.is_slowed())
+	var ink_hp := victim.hp
+	await _seconds(1.1)
+	_check("Ink tendrils damage trapped yōkai", victim.is_dead or victim.hp < ink_hp)
+
+	for i in 9:
+		run.element_system.paint_ink(Vector3(float(i) * 0.1, 0.0, -0.4))
+	_check("Ink VFX pool is hard-capped for Quest", run.element_system._ink_pools.size() <= ElementSystem.MAX_INK_POOLS)
+	_check("Spawn seal lights the Ink quadrant and no evolution star",
+		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 4
+		and int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("evolution_mask")) == 0)
+
+
+func _test_sakura() -> void:
+	await _fresh_run()
+	for id in ["sakura_petals", "sakura_orbit", "sakura_heal"]:
+		run._apply_upgrade({"id": id})
+	_check("Sakura binds alone and colors the blade", run.katana.element == Elements.SAKURA)
+	_check("Sakura creates a three-blade orbit",
+		run.element_system._orbit_petals.size() == 3)
 
 	var petal_target := run.wave_director.spawn_enemy_at(Vector3(0.0, 0.0, -1.0), player.global_position)
 	await _frames(4)
@@ -135,7 +147,7 @@ func _test_sakura_and_shadow() -> void:
 	run.element_system.debug_release_petals(
 		(ElementSystem._enemy_center(petal_target) - run.katana.get_tip_global()).normalized())
 	await _seconds(0.55)
-	_check("Cutting phantom petals seek, damage and confuse yōkai",
+	_check("Cutting petals damage yōkai",
 		petal_target.is_dead or petal_target.hp < petal_hp)
 	for i in 5:
 		run.element_system.debug_release_petals(Vector3.FORWARD)
@@ -144,7 +156,17 @@ func _test_sakura_and_shadow() -> void:
 
 	player.health.hp = 60.0
 	run.element_system.on_enemy_died(petal_target)
-	_check("Maxed Sakura grants light healing", player.health.hp > 60.0)
+	_check("Sakura grants light healing on a kill", player.health.hp > 60.0)
+	_check("Spawn seal lights the Sakura quadrant and no evolution star",
+		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 1
+		and int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("evolution_mask")) == 0)
+
+
+func _test_shadow() -> void:
+	await _fresh_run()
+	for id in ["shadow_blink", "shadow_darkness", "shadow_veil"]:
+		run._apply_upgrade({"id": id})
+	_check("Shadow binds alone and colors the blade", run.katana.element == Elements.SHADOW)
 
 	var before_blink := player.global_position
 	var confused := run.wave_director.spawn_enemy_at(before_blink + Vector3(-2.2, 0.0, 0.0), player.global_position)
@@ -156,12 +178,9 @@ func _test_sakura_and_shadow() -> void:
 		and player.global_position.distance_to(before_blink) < 3.1)
 	_check("Blink darkness confuses nearby enemies",
 		confused.is_confused() and not run.element_system._darkness_areas.is_empty())
-
-	var seal := run.get_node("Arena/SpawnSeal") as MeshInstance3D
-	var seal_mat := seal.material_override as ShaderMaterial
-	_check("Phantom-petal seal state uses Sakura + Shadow and evolution mark",
-		int(seal_mat.get_shader_parameter("active_elements_mask")) == 9
-		and int(seal_mat.get_shader_parameter("evolution_mask")) == 2)
+	_check("Spawn seal lights the Shadow quadrant and no evolution star",
+		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 8
+		and int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("evolution_mask")) == 0)
 
 
 func _check(label: String, ok: bool) -> void:
