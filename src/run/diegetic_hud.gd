@@ -22,6 +22,7 @@ var _wrist_xp_mat := ShaderMaterial.new()
 var _charm_mat := StandardMaterial3D.new()
 var _lacquer_mat := ShaderMaterial.new()
 var _trim_mat := ShaderMaterial.new()
+var _parry_glow := 0.0
 
 
 func setup(player: Node3D, katana: HeldWeapon) -> void:
@@ -32,7 +33,7 @@ func setup(player: Node3D, katana: HeldWeapon) -> void:
 
 	_setup_tsuba_ring(katana)
 	_setup_wrist_unit(player)
-	update_hud(100.0, 100.0, 0, 30, 1, 1, 0, 0.0, Elements.NONE)
+	update_hud(100.0, 100.0, 0, 30, 1, 1, 0, 0, 0.0, Elements.NONE)
 
 
 func _setup_tsuba_ring(katana: HeldWeapon) -> void:
@@ -210,7 +211,17 @@ func _setup_wrist_unit(player: Node3D) -> void:
 		player.add_child(wrist_unit)
 
 
-func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, wave: int, score: int, run_seconds: float, active_element: String) -> void:
+func _process(delta: float) -> void:
+	if _parry_glow > 0.0:
+		_parry_glow = maxf(_parry_glow - delta, 0.0)
+
+
+## Brief tsuba ring flare when the player lands a parry (GDD §4).
+func on_parry() -> void:
+	_parry_glow = 0.42
+
+
+func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, wave: int, score: int, kills: int, run_seconds: float, active_element: String) -> void:
 	var xp_ratio := clampf(float(xp) / float(maxi(xp_to_next, 1)), 0.0, 1.0)
 	var hp_ratio := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
 
@@ -220,6 +231,7 @@ func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, 
 
 	_tsuba_mat.set_shader_parameter("fill_ratio", xp_ratio)
 	_tsuba_mat.set_shader_parameter("fill_color", elem_col)
+	_tsuba_mat.set_shader_parameter("glow_boost", 2.35 + _parry_glow * 6.0)
 	_wrist_xp_mat.set_shader_parameter("fill_ratio", xp_ratio)
 	_wrist_xp_mat.set_shader_parameter("fill_color", elem_col)
 
@@ -237,4 +249,4 @@ func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, 
 	if wrist_label:
 		var mins := int(run_seconds) / 60
 		var secs := int(run_seconds) % 60
-		wrist_label.text = "LV %d · 波 %d\n%02d:%02d · 斬 %d" % [level, wave, mins, secs, score]
+		wrist_label.text = "LV %d · 波 %d\n%02d:%02d · %d pt · 斬 %d" % [level, wave, mins, secs, score, kills]
