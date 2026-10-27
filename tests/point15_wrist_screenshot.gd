@@ -21,11 +21,13 @@ func _ready() -> void:
 	run.score = 42
 	run._refresh_hud()
 	player.teleport(Vector3(0.0, 0.0, 2.0), 0.0)
-	player.camera.rotation.x = deg_to_rad(-28.0)
-	player.hand_offset = Vector3(0.14, -0.10, 0.0)
-	await _frames(8)
-	await _frames(40)
+	player.camera.rotation.x = deg_to_rad(-34.0)
+	player.hand_offset = Vector3(0.18, -0.14, 0.0)
+	await _frames(48)
 	await _shot("wrist_hud_natural_angle")
+	run.diegetic_hud.update_hud(18.0, 100.0, run.xp, run.xp_to_next, run.level, 1, run.score, run.kills, run.run_time, Elements.NONE)
+	await _frames(10)
+	await _shot("wrist_hud_critical_hp_ring")
 	run.queue_free()
 	get_tree().quit(0)
 
