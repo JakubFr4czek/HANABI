@@ -650,14 +650,9 @@ func _build_end_screen(summary: Dictionary) -> void:
 		post.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		board.add_child(post)
 
-	var sys_font := SystemFont.new()
-	sys_font.font_names = PackedStringArray([
-		"Hiragino Mincho ProN", "YuMincho", "Songti SC", "Noto Serif CJK JP", "Hiragino Sans", "Arial Unicode MS"
-	])
-
-	var title_lbl := OfudaTalisman.make_label("散華", sys_font, 72, 0.00185, Color(1.12, 0.34, 0.26), Vector3(0, 0.24, 0.024))
+	var title_lbl := MemorialTypography.stele_label("散華", 72, 0.00185, Color(1.12, 0.34, 0.26), Vector3(0, 0.24, 0.024))
 	board.add_child(title_lbl)
-	var sub_lbl := OfudaTalisman.make_label("RUN ENDED", sys_font, 34, 0.00125, Color(0.86, 0.88, 0.94), Vector3(0, 0.17, 0.024))
+	var sub_lbl := MemorialTypography.stele_label("RUN ENDED", 34, 0.00125, Color(0.86, 0.88, 0.94), Vector3(0, 0.17, 0.024))
 	board.add_child(sub_lbl)
 
 	var mins := int(run_time) / 60
@@ -666,24 +661,24 @@ func _build_end_screen(summary: Dictionary) -> void:
 	var stats_text := "%d pt%s\n%02d:%02d  ·  斬 %d  ·  LV %d  ·  波 %d\nBEST  %d" % [
 		int(summary.score), rec_tag, mins, secs, int(summary.kills), int(summary.level), int(summary.wave), int(summary.high_score)
 	]
-	var stats_lbl := OfudaTalisman.make_label(stats_text, sys_font, 38, 0.00138, Color(0.94, 0.95, 1.0), Vector3(0, 0.04, 0.024))
+	var stats_lbl := MemorialTypography.stele_label(stats_text, 38, 0.00138, Color(0.94, 0.95, 1.0), Vector3(0, 0.04, 0.024))
 	stats_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	board.add_child(stats_lbl)
 
 	var build_text := String(summary.get("build", "Unbound"))
-	var build_lbl := OfudaTalisman.make_label("BUILD  %s" % build_text, sys_font, 34, 0.00122, Color(0.9, 0.76, 1.0), Vector3(0, -0.10, 0.024))
+	var build_lbl := MemorialTypography.stele_label("BUILD  %s" % build_text, 34, 0.00122, Color(0.9, 0.76, 1.0), Vector3(0, -0.10, 0.024))
 	build_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	board.add_child(build_lbl)
 
 	var upg_parts: Array[String] = []
 	for u_id in upgrade_stacks:
 		var def := UpgradePool.get_upgrade(String(u_id))
-		var name_str := String(def.get("title", String(u_id).to_upper()))
-		if name_str.length() > 18:
-			name_str = name_str.substr(0, 16) + "…"
-		upg_parts.append("%s×%d" % [name_str, int(upgrade_stacks[u_id])])
+		var tag := String(def.get("kanji", ""))
+		if tag.is_empty():
+			tag = String(def.get("title", String(u_id))).substr(0, 3)
+		upg_parts.append("%s×%d" % [tag, int(upgrade_stacks[u_id])])
 	var upg_line := _short_upgrade_line(upg_parts)
-	var upg_lbl := OfudaTalisman.make_label(upg_line, sys_font, 28, 0.00108, Color(0.74, 0.8, 0.92), Vector3(0, -0.22, 0.024))
+	var upg_lbl := MemorialTypography.stele_label(upg_line, 28, 0.00108, Color(0.74, 0.8, 0.92), Vector3(0, -0.22, 0.024))
 	upg_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	board.add_child(upg_lbl)
 
@@ -717,7 +712,7 @@ func _short_upgrade_line(parts: Array[String]) -> String:
 	if parts.is_empty():
 		return "拾得  —"
 	const MAX_SHOW := 3
-	const MAX_CHARS := 52
+	const MAX_CHARS := 36
 	var shown := parts.slice(0, MAX_SHOW)
 	var line := "拾得  " + " · ".join(shown)
 	if parts.size() > MAX_SHOW:
