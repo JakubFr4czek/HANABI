@@ -17,6 +17,7 @@ static func spawn(parent: Node, at: Vector3, element: String, scale: float = 1.0
 		VfxPool.spawn_element_ring(parent, at, col, scale)
 	else:
 		_ring_ephemeral(parent, at, col, scale)
+	Sfx.play_at("firework", at, -7.0, 4.5 * scale, clampf(0.9 + scale * 0.12, 0.85, 1.25))
 
 
 static func _burst_color(element: String) -> Color:

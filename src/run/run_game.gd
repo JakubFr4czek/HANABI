@@ -185,6 +185,10 @@ func _configure_run_forest() -> void:
 		add_child(forest_world)
 		move_child(forest_world, 0)
 	forest_world.setup(player, arena_lm)
+	if get_node_or_null("RunForestAmbience") == null:
+		var forest_amb := RunForestAmbience.new()
+		forest_amb.name = "RunForestAmbience"
+		add_child(forest_amb)
 
 
 func _setup_run_nodes() -> void:
@@ -414,13 +418,16 @@ func _present_level_up() -> void:
 	# Slow time to 0.2x while keeping the player's blade at real-time speed.
 	TimeController.slow_motion(0.2, 120.0, true)
 
+	var frame := _player_view_frame()
+	var chime_pos := frame.origin + (-frame.basis.z) * 0.8
+	Sfx.play_at("level_up", chime_pos, -4.0, 5.0)
+
 	var health := _player_health()
 	var hp_ratio := (health.hp / maxf(health.max_hp, 1.0)) if health else 1.0
 	var choices := UpgradePool.pick_choices(
 		3, upgrade_stacks, hp_ratio, _rng,
 		element_system.active_elements, UpgradePool.element_slot_count(upgrade_stacks))
 
-	var frame := _player_view_frame()
 	var center := frame.origin + (-frame.basis.z) * 1.16
 	center.y = clampf(frame.origin.y - 0.14, 1.15, 1.55)
 	var right := frame.basis.x

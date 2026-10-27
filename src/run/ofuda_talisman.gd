@@ -135,8 +135,9 @@ func slice(cut_point: Vector3 = Vector3.ZERO, cut_dir: Vector3 = Vector3.RIGHT) 
 	_body.collision_layer = 0
 	var world_pt := cut_point if cut_point != Vector3.ZERO else global_position
 	var accent: Color = upgrade.get("color", Color(1.0, 0.35, 0.25))
-	Sfx.play_at("cut", world_pt, 1.5)
-	Sfx.play_at("blade_ring", world_pt, -1.0)
+	Sfx.play_at("ofuda_slice", world_pt, -2.0, 3.5)
+	Sfx.play_at("cut", world_pt, 0.5)
+	Sfx.play_at("blade_ring", world_pt, -3.0)
 	if is_inside_tree() and get_tree().current_scene:
 		SparkBurst.spawn(get_tree().current_scene, world_pt, cut_dir, accent * 1.45, 22, 3.4)
 		var elem := String(upgrade.get("element", Elements.NONE))
