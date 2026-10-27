@@ -11,6 +11,7 @@ uniform sampler2D normal_texture : hint_normal, filter_linear_mipmap, repeat_ena
 uniform vec3 night_tint : source_color = vec3(0.82, 0.86, 0.84);
 uniform float albedo_gain = 1.0;
 uniform float normal_depth = 0.55;
+uniform vec3 foliage_color : source_color = vec3(0.30, 0.36, 0.32);
 
 void fragment() {
 	// UV.x above 1 is the root flare: bark at the trunk, soil at the tip.
@@ -32,14 +33,20 @@ void fragment() {
 	vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	float open_sky = clamp(wn.y * 0.45 + 0.5, 0.0, 1.0);
 
+	// UV.y above 1.5 is a solid foliage clump (the rebuilt crown): a muted
+	// leaf mass, per-vertex shade in UV.x, darker on its underside.
+	float leaf = step(1.5, UV.y);
+	vec3 alb_leaf = foliage_color * mix(0.78, 1.12, UV.x) * mix(0.55, 1.0, open_sky);
+	alb = mix(alb, alb_leaf, leaf);
+
 	ALBEDO = mix(alb, alb_root, root);
 	ROUGHNESS = 1.0;
 	METALLIC = 0.0;
 	// Bark grooves and leaf clumps catch the moon on the diffuse lobe only.
 	NORMAL_MAP = texture(normal_texture, UV).rgb;
-	NORMAL_MAP_DEPTH = normal_depth * (1.0 - root);
-	// Canopy gaps cut away; the welded root flare is solid geometry.
-	ALPHA = mix(cover, 1.0, root);
+	NORMAL_MAP_DEPTH = normal_depth * (1.0 - root) * (1.0 - leaf);
+	// Canopy gaps cut away; the root flare and foliage clumps are solid.
+	ALPHA = mix(cover, 1.0, max(root, leaf));
 	ALPHA_SCISSOR_THRESHOLD = 0.05;
 	// Shadowed bark takes a little of the fog, so a trunk fades into the air.
 	EMISSION = storm_fog_color.rgb * 0.05 * (0.65 + 0.35 * open_sky);
