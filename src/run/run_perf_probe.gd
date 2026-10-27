@@ -59,3 +59,23 @@ static func estimate_particles(root: Node) -> int:
 		if p.emitting:
 			alive += p.amount
 	return alive
+
+
+static func count_dynamic_lights(root: Node) -> int:
+	var n := 0
+	for lamp in root.find_children("*", "OmniLight3D", true, false):
+		var o := lamp as OmniLight3D
+		if o.visible and o.light_energy > 0.05:
+			n += 1
+	return n
+
+
+static func count_audio_voices(root: Node) -> int:
+	var voices := 0
+	for p in root.find_children("*", "AudioStreamPlayer", true, false):
+		if (p as AudioStreamPlayer).playing:
+			voices += 1
+	for p in root.find_children("*", "AudioStreamPlayer3D", true, false):
+		if (p as AudioStreamPlayer3D).playing:
+			voices += 1
+	return voices

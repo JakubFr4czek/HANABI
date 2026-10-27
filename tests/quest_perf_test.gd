@@ -49,8 +49,10 @@ func _run_all() -> void:
 
 	var bodies := RunPerfProbe.count_yokai_physics_bodies(run)
 	var particles := RunPerfProbe.estimate_particles(run)
-	print("PERF peak draw=%d prims=%d process_ms=%.2f bodies=%d particles~=%d (baseline draw=%d prims=%d ms=%.1f)"
-		% [peak.draw_calls, peak.primitives, peak.process_ms, bodies, particles,
+	var lights := RunPerfProbe.count_dynamic_lights(run)
+	var voices := RunPerfProbe.count_audio_voices(run)
+	print("PERF peak draw=%d prims=%d process_ms=%.2f bodies=%d particles~=%d lights=%d audio~=%d (baseline draw=%d prims=%d ms=%.1f)"
+		% [peak.draw_calls, peak.primitives, peak.process_ms, bodies, particles, lights, voices,
 			RunPerfBudget.BASELINE_DRAW_CALLS, RunPerfBudget.BASELINE_PRIMITIVES, RunPerfBudget.BASELINE_PROCESS_MS])
 
 	_check("Draw calls under Quest budget (%d <= %d)" % [peak.draw_calls, RunPerfBudget.MAX_DRAW_CALLS],
@@ -64,6 +66,10 @@ func _run_all() -> void:
 		bodies <= RunPerfBudget.MAX_YOKAI_PHYSICS_BODIES)
 	_check("Particle estimate within 2–4k cap (%d <= %d)" % [particles, RunPerfBudget.MAX_PARTICLES],
 		particles <= RunPerfBudget.MAX_PARTICLES)
+	_check("Dynamic OmniLights bounded (%d <= %d)" % [lights, RunPerfBudget.MAX_DYNAMIC_LIGHTS],
+		lights <= RunPerfBudget.MAX_DYNAMIC_LIGHTS)
+	_check("Simultaneous audio voices bounded (%d <= %d)" % [voices, RunPerfBudget.MAX_AUDIO_VOICES],
+		voices <= RunPerfBudget.MAX_AUDIO_VOICES)
 
 	var we: Environment = run.get_node("WorldEnvironment").environment
 	_check("Run fog closes before distant hills (depth_end <= 10.5)",
