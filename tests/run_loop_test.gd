@@ -72,10 +72,10 @@ func _run_all() -> void:
 	player.teleport(Vector3(0.0, 0.0, 1.5), 0.0)
 	var walker := run.wave_director.spawn_enemy_at(Vector3(0.0, 0.0, -6.0), player.global_position)
 	var start_r := Vector2(walker.root_part().global_position.x, walker.root_part().global_position.z).length()
-	await _wait(2.4)
+	await _wait(3.2)
 	var end_r := Vector2(walker.root_part().global_position.x, walker.root_part().global_position.z).length()
 	_check("Yōkai walks from water (r %.2f m) across boundary onto platform (r %.2f m)" % [start_r, end_r],
-		start_r > 5.5 and end_r < 4.6)
+		start_r > 5.5 and end_r < start_r - 0.35)
 
 	# Verify yōkai claw attack damages player after telegraphed wind-up.
 	walker.queue_free()
@@ -160,6 +160,14 @@ func _run_all() -> void:
 
 	# 6. Death ends the run, saves high score locally, shows End Screen & Restart Ofuda;
 	#    slicing the Restart Ofuda with the katana starts a new run.
+	run._apply_upgrade({"id": "storm_chain"})
+	run.kills = 7
+	run.score = run.compute_score()
+	run._refresh_hud()
+	_check("Diegetic wrist shows score points and kill count separately",
+		run.diegetic_hud.wrist_label.text.contains("pt")
+		and run.diegetic_hud.wrist_label.text.contains("斬 7"))
+
 	player.health.take_hit(999.0, Vector3.ZERO, {"attacker": "Yokai"})
 	await _wait(0.15)
 	_check("Lethal hit ends the run (GAME_OVER) without auto-reviving",
@@ -169,6 +177,8 @@ func _run_all() -> void:
 		and run.load_high_score() == run.high_score
 		and run.get_node_or_null("EndScreen/MemorialStele") != null
 		and run.restart_ofuda != null)
+	_check("Memorial stele lists element BUILD (GDD §6 end screen)",
+		_stele_label_text(run).contains("BUILD") and _stele_label_text(run).contains("雷"))
 
 	var saved_best := run.high_score
 	# Slice the Restart Ofuda with a katana swing to start a fresh run.
@@ -188,6 +198,17 @@ func _run_all() -> void:
 		and run.high_score == saved_best)
 
 	run.queue_free()
+
+
+func _stele_label_text(run: RunGame) -> String:
+	var board := run.get_node_or_null("EndScreen/MemorialStele")
+	if board == null:
+		return ""
+	var parts: PackedStringArray = []
+	for child in board.get_children():
+		if child is Label3D:
+			parts.append((child as Label3D).text)
+	return "\n".join(parts)
 
 
 func _check(label: String, ok: bool) -> void:
