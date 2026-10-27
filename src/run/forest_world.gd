@@ -17,7 +17,7 @@ const CLEARING_HEIGHT := 0.0
 const HILL_AMPLITUDE := 3.1
 ## Smaller mounds and hollows on top of the rolling hills.
 const BUMP_AMPLITUDE := 0.42
-const TERRAIN_RES := 19
+const TERRAIN_RES := 41
 ## Chunks are 28 m and the 3×3 ring keeps >= 14 m loaded around the player;
 ## everything is fully fogged by VIEW_RANGE_END (RunGame.RUN_FOG_END <= it).
 const VIEW_RANGE_END := 14.0
@@ -70,6 +70,7 @@ var _chunks: Dictionary = {}
 var _trunk_cells: Dictionary = {}
 var _height_noise := FastNoiseLite.new()
 var _bump_noise := FastNoiseLite.new()
+var _floor_noise := FastNoiseLite.new()
 var _scatter_noise := FastNoiseLite.new()
 var _corridor_noise := FastNoiseLite.new()
 var _tree_mesh: Mesh
@@ -106,6 +107,10 @@ func setup(p_follow: Node3D, arena_lightmap: LightmapGI = null) -> void:
 	_bump_noise.seed = 0x42554D50
 	_bump_noise.frequency = 0.11
 	_bump_noise.fractal_octaves = 1
+	# Roots and leaf pockets. Only the flats get them, so a steep hill stays walkable.
+	_floor_noise.seed = 0x464C4F4F52
+	_floor_noise.frequency = 0.38
+	_floor_noise.fractal_octaves = 2
 	_scatter_noise.seed = 0x534341545445
 	_scatter_noise.frequency = 0.11
 	_corridor_noise.seed = 0x53454E424F4E
@@ -146,6 +151,15 @@ func height_at(wx: float, wz: float) -> float:
 	var blend := smoothstep(CLEARING_RADIUS - 1.5, CLEARING_RADIUS + 9.0, d)
 	var n := _height_noise.get_noise_2d(wx, wz) * HILL_AMPLITUDE
 	n += _bump_noise.get_noise_2d(wx, wz) * BUMP_AMPLITUDE
+	# Grade of the broad hill over a couple of metres. Pockets sit on the
+	# flats; a slope that is already near the walk limit does not get steeper.
+	var sx := _height_noise.get_noise_2d(wx + 1.2, wz) - _height_noise.get_noise_2d(wx - 1.2, wz)
+	var sz := _height_noise.get_noise_2d(wx, wz + 1.2) - _height_noise.get_noise_2d(wx, wz - 1.2)
+	var grade := clampf(Vector2(sx, sz).length() * HILL_AMPLITUDE / 2.4, 0.0, 1.0)
+	var flat := 1.0 - smoothstep(0.22, 0.48, grade)
+	var pocket := _floor_noise.get_noise_2d(wx, wz)
+	var root := 1.0 - absf(_floor_noise.get_noise_2d(wx * 0.41 + 18.0, wz * 0.41))
+	n += (pocket * 0.28 + root * root * 0.18) * flat
 	return lerpf(CLEARING_HEIGHT, CLEARING_HEIGHT + n, blend)
 
 
@@ -512,6 +526,10 @@ func _build_terrain_mesh(coord: Vector2i) -> ArrayMesh:
 			var p11 := Vector3(x1, height_at(wx1, wz1), z1)
 			_add_tri(st, p00, p10, p11)
 			_add_tri(st, p00, p11, p01)
+	# Shared vertices, then one normal per point, so a root reads as a mound
+	# instead of a faceted plate.
+	st.index()
+	st.generate_normals()
 	return st.commit()
 
 
@@ -566,7 +584,8 @@ func _build_materials() -> void:
 	_ground_mat.shader = GROUND_SHADER
 	_ground_mat.set_shader_parameter("fill", 0.0)
 	_ground_mat.set_shader_parameter("cavity_ao", 0.85)
-	_ground_mat.set_shader_parameter("ambient_fill", 0.1)
+	_ground_mat.set_shader_parameter("ambient_fill", 0.08)
+	_ground_mat.set_shader_parameter("normal_strength", 1.2)
 	# Damp, not mirror-wet: wet normals over 1K scans sparkle white in VR.
 	_ground_mat.set_shader_parameter("wetness", 0.3)
 	_ground_mat.set_shader_parameter("roughness_wet", 0.72)
