@@ -25,6 +25,7 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/audio/sfx/sword_swing/sword.*.ogg` | https://opengameart.org/content/20-sword-sound-effects-attacks-and-clashes | StarNinjas | CC0 |
 | `assets/audio/sfx/sword_clash/sword_clash.*.ogg` | same pack | StarNinjas | CC0 |
 | `assets/audio/sfx/impact/impactPlank_medium_*.ogg`, `impactPunch_heavy_*.ogg` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 |
+| `assets/audio/sfx/cc0_combat/*.ogg` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 1.0 (`assets/audio/sfx/cc0_combat/LICENSE.txt`) |
 | `assets/audio/sfx/kenney_run/*.ogg` | https://kenney.nl/assets/interface-sounds & https://kenney.nl/assets/impact-sounds | Kenney | CC0 1.0 (`assets/audio/sfx/kenney_run/LICENSE.txt`) |
 | `assets/audio/sfx/cc0_storm/*` | https://opengameart.org/content/amb-rain-loop-1 , https://opengameart.org/content/rain-long-thunder , thunderclap WAV on OGA | Kresiek The Furry / WuxiaScrub / OGA submitters | CC0 (`assets/audio/sfx/cc0_storm/LICENSE.txt`) |
 | `assets/audio/music/cc0_run/orientalsomber.ogg` | https://opengameart.org/content/oriental-somber | Tozan | CC0 |

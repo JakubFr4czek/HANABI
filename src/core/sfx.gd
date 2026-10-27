@@ -11,10 +11,10 @@ const CATEGORIES := {
 	"impact_heavy": ["res://assets/audio/sfx/impact", "impactPunch"],
 	"blade_ring": ["res://assets/audio/sfx/sword_clash", ""],
 	"thunder": ["res://assets/audio/sfx/cc0_storm", "thunder"],
-	"enemy_tell": ["res://assets/audio/generated", "enemy_tell"],
-	"player_hurt": ["res://assets/audio/generated", "player_hurt"],
-	"cut": ["res://assets/audio/generated", "cut"],
-	"slap": ["res://assets/audio/generated", "slap"],
+	"enemy_tell": ["res://assets/audio/sfx/cc0_combat", "enemy_tell"],
+	"player_hurt": ["res://assets/audio/sfx/cc0_combat", "player_hurt"],
+	"cut": ["res://assets/audio/sfx/cc0_combat", "cut"],
+	"slap": ["res://assets/audio/sfx/cc0_combat", "slap"],
 	"firework": ["res://assets/audio/sfx/kenney_run", "firework"],
 	"soul_collect": ["res://assets/audio/sfx/kenney_run", "soul_collect"],
 	"ofuda_slice": ["res://assets/audio/sfx/kenney_run", "ofuda_slice"],
@@ -82,8 +82,9 @@ func _load_category(category: String) -> void:
 	var dir: String = CATEGORIES[category][0]
 	var prefix: String = CATEGORIES[category][1]
 	var randomizer := AudioStreamRandomizer.new()
-	randomizer.random_pitch = 1.06
-	randomizer.random_volume_offset_db = 1.5
+	var combat := category in ["swing", "clash", "cut", "slap", "impact_light", "impact_heavy", "player_hurt", "yokai_slice"]
+	randomizer.random_pitch = 1.14 if combat else 1.06
+	randomizer.random_volume_offset_db = 2.0 if combat else 1.5
 	for file in ResourceLoader.list_directory(dir):
 		if file.get_extension() not in ["ogg", "wav"]:
 			continue
