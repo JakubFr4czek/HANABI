@@ -12,17 +12,31 @@ const HP_RING_CRITICAL_RATIO := 0.30
 ## Wrist-to-face distance (m) where the readout is fully shown / fully hidden.
 const LABEL_SHOW_DIST := 0.42
 const LABEL_HIDE_DIST := 0.62
+## Bundled font: the system fonts the plate used before do not exist on Quest.
+const HUD_FONT_PATH := "res://assets/fonts/YujiBoku-Regular.ttf"
+const PLATE_SIZE := Vector2(0.1, 0.054)
+const CHARM_X := -0.031
+const TEXT_X := -0.009
+const MAX_FACE_TILT_DEG := 25.0
 
 var wrist_unit: Node3D
 var wrist_face: Node3D
 var hp_charm_mesh: MeshInstance3D
 var wrist_hp_ring: MeshInstance3D
 var wrist_label: Label3D
+var hp_label: Label3D
+var hp_gauge: MeshInstance3D
+var xp_bar: MeshInstance3D
 
 var _wrist_hp_mat := ShaderMaterial.new()
 var _charm_mat := StandardMaterial3D.new()
 var _lacquer_mat := ShaderMaterial.new()
-var _trim_mat := ShaderMaterial.new()
+var _trim_mat := StandardMaterial3D.new()
+var _hp_gauge_mat := ShaderMaterial.new()
+var _xp_mat := StandardMaterial3D.new()
+var _xp_bar_left := 0.0
+var _xp_bar_width := 0.1
+var _follow_eyes := false
 var _parry_glow := 0.0
 var _view_camera: Camera3D
 
@@ -57,63 +71,51 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_unit.add_child(wrist_face)
 
 	_lacquer_mat.shader = WET_SURFACE_SHADER
-	_lacquer_mat.set_shader_parameter("base_color", Color(0.11, 0.10, 0.14))
-	_lacquer_mat.set_shader_parameter("roughness_dry", 0.72)
-	_lacquer_mat.set_shader_parameter("roughness_wet", 0.34)
-	_lacquer_mat.set_shader_parameter("wetness", 0.52)
+	_lacquer_mat.set_shader_parameter("base_color", Color(0.07, 0.065, 0.09))
+	_lacquer_mat.set_shader_parameter("roughness_dry", 0.62)
+	_lacquer_mat.set_shader_parameter("roughness_wet", 0.30)
+	_lacquer_mat.set_shader_parameter("wetness", 0.45)
 	_lacquer_mat.set_shader_parameter("waterline_y", -10.0)
-	_lacquer_mat.set_shader_parameter("fill", 2.15)
-	_lacquer_mat.set_shader_parameter("fog_rim", 0.35)
-	_lacquer_mat.set_shader_parameter("emission_tint", Color(0.18, 0.14, 0.22))
+	_lacquer_mat.set_shader_parameter("fill", 1.6)
+	_lacquer_mat.set_shader_parameter("fog_rim", 0.2)
+	_lacquer_mat.set_shader_parameter("emission_tint", Color(0.10, 0.08, 0.13))
 
-	_trim_mat.shader = WET_SURFACE_SHADER
-	_trim_mat.set_shader_parameter("base_color", Color(0.62, 0.14, 0.10))
-	_trim_mat.set_shader_parameter("roughness_dry", 0.58)
-	_trim_mat.set_shader_parameter("roughness_wet", 0.28)
-	_trim_mat.set_shader_parameter("wetness", 0.55)
-	_trim_mat.set_shader_parameter("waterline_y", -10.0)
-	_trim_mat.set_shader_parameter("fill", 2.35)
-	_trim_mat.set_shader_parameter("emission_tint", Color(0.45, 0.10, 0.06))
+	# Thin gilt frame: reads as a lacquered plaque, not a red slab, and its
+	# faint glow keeps the outline visible in the night fog.
+	_trim_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_trim_mat.albedo_color = Color(0.78, 0.6, 0.32)
 
-	var bracer := MeshInstance3D.new()
-	bracer.name = "BracerPlate"
+	var plate := MeshInstance3D.new()
+	plate.name = "BracerPlate"
 	var bm := BoxMesh.new()
-	bm.size = Vector3(0.118, 0.009, 0.064)
-	bracer.mesh = bm
-	bracer.material_override = _lacquer_mat
-	bracer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	bracer.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	wrist_face.add_child(bracer)
+	bm.size = Vector3(PLATE_SIZE.x, 0.006, PLATE_SIZE.y)
+	plate.mesh = bm
+	plate.position.y = -0.003
+	plate.material_override = _lacquer_mat
+	_no_shadow(plate)
+	wrist_face.add_child(plate)
 
-	var rim := MeshInstance3D.new()
-	rim.name = "BracerRimGlow"
-	var rq := QuadMesh.new()
-	rq.size = Vector2(0.128, 0.072)
-	var rim_mat := StandardMaterial3D.new()
-	rim_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	rim_mat.albedo_color = Color(0.85, 0.32, 0.18, 0.22)
-	rim_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	rim_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	rim.mesh = rq
-	rim.material_override = rim_mat
-	rim.position = Vector3(0.0, 0.005, 0.0)
-	rim.rotation.x = -PI * 0.5
-	rim.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	wrist_face.add_child(rim)
+	var hx := PLATE_SIZE.x * 0.5
+	var hz := PLATE_SIZE.y * 0.5
+	for edge in [
+		[Vector3(0.0, 0.0006, -hz), Vector3(PLATE_SIZE.x + 0.002, 0.0012, 0.0016)],
+		[Vector3(0.0, 0.0006, hz), Vector3(PLATE_SIZE.x + 0.002, 0.0012, 0.0016)],
+		[Vector3(-hx, 0.0006, 0.0), Vector3(0.0016, 0.0012, PLATE_SIZE.y)],
+		[Vector3(hx, 0.0006, 0.0), Vector3(0.0016, 0.0012, PLATE_SIZE.y)],
+	]:
+		var trim := MeshInstance3D.new()
+		var tm := BoxMesh.new()
+		tm.size = edge[1]
+		trim.mesh = tm
+		trim.position = edge[0]
+		trim.material_override = _trim_mat
+		_no_shadow(trim)
+		wrist_face.add_child(trim)
 
-	for sz in [-1.0, 1.0]:
-		var rail := MeshInstance3D.new()
-		var rm := BoxMesh.new()
-		rm.size = Vector3(0.122, 0.011, 0.004)
-		rail.mesh = rm
-		rail.position = Vector3(0.0, 0.001, 0.030 * sz)
-		rail.material_override = _trim_mat
-		rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		rail.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-		wrist_face.add_child(rail)
-
+	# Left: the HP charm inside its gauge ring (always on, the glanceable
+	# signal), with a red danger ring around it below 30 %.
 	_charm_mat.albedo_color = Color(0.55, 0.62, 0.68)
-	_charm_mat.roughness = 0.55
+	_charm_mat.roughness = 0.35
 	_charm_mat.emission_enabled = true
 	_charm_mat.emission = Color(0.22, 0.48, 0.52)
 	_charm_mat.emission_energy_multiplier = 0.35
@@ -121,109 +123,170 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	hp_charm_mesh = MeshInstance3D.new()
 	hp_charm_mesh.name = "HPCharm"
 	var sphere := SphereMesh.new()
-	sphere.radius = 0.009
-	sphere.height = 0.016
-	sphere.radial_segments = 10
-	sphere.rings = 5
+	sphere.radius = 0.0075
+	sphere.height = 0.008
+	sphere.radial_segments = 16
+	sphere.rings = 6
 	hp_charm_mesh.mesh = sphere
 	hp_charm_mesh.material_override = _charm_mat
-	hp_charm_mesh.position = Vector3(-0.034, 0.006, 0.0)
-	hp_charm_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	hp_charm_mesh.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	hp_charm_mesh.position = Vector3(CHARM_X, 0.002, 0.0)
+	_no_shadow(hp_charm_mesh)
 	wrist_face.add_child(hp_charm_mesh)
 
-	wrist_hp_ring = MeshInstance3D.new()
-	wrist_hp_ring.name = "WristHpRing"
-	var hp_quad := QuadMesh.new()
-	hp_quad.size = Vector2(0.042, 0.042)
-	_wrist_hp_mat.shader = RING_SHADER
-	_wrist_hp_mat.set_shader_parameter("inner_radius", 0.64)
-	_wrist_hp_mat.set_shader_parameter("outer_radius", 0.92)
-	_wrist_hp_mat.set_shader_parameter("segments", 10)
-	_wrist_hp_mat.set_shader_parameter("glow_boost", 2.85)
-	wrist_hp_ring.mesh = hp_quad
-	wrist_hp_ring.material_override = _wrist_hp_mat
-	wrist_hp_ring.position = Vector3(-0.034, 0.005, 0.0)
-	wrist_hp_ring.rotation.x = -PI * 0.5
+	hp_gauge = _ring_quad("HpGauge", _hp_gauge_mat, 0.033, 0.74, 0.94, 20)
+	_hp_gauge_mat.set_shader_parameter("track_color", Color(0.10, 0.10, 0.14))
+	_hp_gauge_mat.set_shader_parameter("glow_boost", 1.6)
+	wrist_face.add_child(hp_gauge)
+
+	# A thin, unbroken halo just outside the gauge: frames it, never covers it.
+	wrist_hp_ring = _ring_quad("WristHpRing", _wrist_hp_mat, 0.040, 0.87, 0.97, 1)
+	_wrist_hp_mat.set_shader_parameter("glow_boost", 2.6)
 	wrist_hp_ring.visible = false
-	wrist_hp_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	wrist_hp_ring.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	wrist_face.add_child(wrist_hp_ring)
 
-	var sys_font := SystemFont.new()
-	sys_font.font_names = PackedStringArray([
-		"Hiragino Mincho ProN", "YuMincho", "Noto Serif CJK JP", "Hiragino Sans", "Arial Unicode MS"
-	])
-	wrist_label = Label3D.new()
-	wrist_label.name = "WristLabel"
-	wrist_label.font = sys_font
-	wrist_label.font_size = 24
-	wrist_label.pixel_size = 0.00042
-	wrist_label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	wrist_label.shaded = false
-	wrist_label.double_sided = true
-	wrist_label.outline_size = 6
-	wrist_label.outline_modulate = Color(0.08, 0.04, 0.02, 0.95)
-	wrist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	wrist_label.modulate = Color(0.92, 0.90, 0.84, 0.98)
-	# Float clear of the bracer plate (top at 0.0045) so glyphs never sink
-	# into the lacquer or the hand mesh; depth test stays on, so the hand
-	# occludes the text naturally instead of it shining through.
-	wrist_label.position = Vector3(0.006, 0.012, 0.0)
-	wrist_label.rotation.x = -PI * 0.5
-	wrist_label.visible = false
+	# Right: life in large figures, the run stats under it, souls toward the
+	# next rank as a bar along the bottom edge.
+	# Figures in Godot's built-in sans (the brush font's "1" reads as "7"),
+	# kanji from the bundled brush font as the fallback.
+	var font := FontVariation.new()
+	font.base_font = ThemeDB.fallback_font
+	if ResourceLoader.exists(HUD_FONT_PATH):
+		font.fallbacks = [load(HUD_FONT_PATH)]
+	font.variation_embolden = 0.35
+	hp_label = _make_label("HpLabel", font, 44, Vector3(TEXT_X, 0.0012, -0.0085))
+	wrist_label = _make_label("WristLabel", font, 26, Vector3(TEXT_X, 0.0012, 0.0062))
+	wrist_label.line_spacing = -2.0
+	wrist_face.add_child(hp_label)
 	wrist_face.add_child(wrist_label)
+
+	var bar_w := PLATE_SIZE.x - 0.012
+	var track := MeshInstance3D.new()
+	track.name = "SoulBarTrack"
+	var trm := BoxMesh.new()
+	trm.size = Vector3(bar_w, 0.0008, 0.0022)
+	track.mesh = trm
+	track.position = Vector3(0.0, 0.0006, hz - 0.0042)
+	var track_mat := StandardMaterial3D.new()
+	track_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	track_mat.albedo_color = Color(0.16, 0.15, 0.2)
+	track.material_override = track_mat
+	_no_shadow(track)
+	wrist_face.add_child(track)
+
+	xp_bar = MeshInstance3D.new()
+	xp_bar.name = "SoulBar"
+	var xbm := BoxMesh.new()
+	xbm.size = Vector3(bar_w, 0.0012, 0.0024)
+	xp_bar.mesh = xbm
+	_xp_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_xp_mat.albedo_color = Color(0.55, 0.85, 1.0)
+	xp_bar.material_override = _xp_mat
+	_no_shadow(xp_bar)
+	_xp_bar_left = -bar_w * 0.5
+	_xp_bar_width = bar_w
+	xp_bar.position = Vector3(0.0, 0.0009, hz - 0.0042)
+	wrist_face.add_child(xp_bar)
 
 	if player is XRPlayer:
 		var xr := player as XRPlayer
 		xr.left_controller.add_child(wrist_unit)
+		# Back of the left wrist, rolled a little toward the thumb so a
+		# "check the watch" turn of the forearm shows it to the eyes.
 		wrist_unit.position = Vector3(0.0, 0.032, 0.058)
 		wrist_unit.rotation = Vector3(deg_to_rad(12.0), 0.0, deg_to_rad(-22.0))
+		_follow_eyes = true
 	elif player is DesktopPlayer:
 		var dp := player as DesktopPlayer
 		dp.set_screen_hud_visible(false)
 		# The sword hand is the right. The readout stays on a left wrist in
 		# front of the body, so a slash does not whip the plate out of view.
 		dp.camera.add_child(wrist_unit)
-		wrist_unit.position = Vector3(-0.24, -0.22, -0.32)
-		wrist_unit.rotation = Vector3(deg_to_rad(50.0), deg_to_rad(16.0), 0.0)
+		wrist_unit.position = Vector3(-0.2, -0.17, -0.34)
+		# Pinned to the camera: face it once, squarely, text upright.
+		var to_cam := -wrist_unit.position.normalized()
+		var x_axis := Vector3.RIGHT.slide(to_cam).normalized()
+		wrist_unit.basis = Basis(x_axis, to_cam, x_axis.cross(to_cam).normalized())
 	else:
 		player.add_child(wrist_unit)
 
 
-func _process(_delta: float) -> void:
+func _no_shadow(mi: GeometryInstance3D) -> void:
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+
+
+func _ring_quad(node_name: String, mat: ShaderMaterial, size: float, inner: float, outer: float, segments: int) -> MeshInstance3D:
+	var ring := MeshInstance3D.new()
+	ring.name = node_name
+	var q := QuadMesh.new()
+	q.size = Vector2(size, size)
+	mat.shader = RING_SHADER
+	mat.set_shader_parameter("inner_radius", inner)
+	mat.set_shader_parameter("outer_radius", outer)
+	mat.set_shader_parameter("segments", segments)
+	ring.mesh = q
+	ring.material_override = mat
+	ring.position = Vector3(CHARM_X, 0.0009, 0.0)
+	ring.rotation.x = -PI * 0.5
+	_no_shadow(ring)
+	return ring
+
+
+func _make_label(node_name: String, font: Font, size: int, at: Vector3) -> Label3D:
+	var l := Label3D.new()
+	l.name = node_name
+	l.font = font
+	l.font_size = size
+	l.pixel_size = 0.00026
+	l.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	l.shaded = false
+	l.double_sided = false
+	l.outline_size = 8
+	l.outline_modulate = Color(0.03, 0.02, 0.02, 0.95)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.modulate = Color(0.95, 0.92, 0.85, 0.98)
+	# Text up is -Z on the plate; glyphs float just over the lacquer and keep
+	# the depth test, so the hand still occludes them.
+	l.position = at
+	l.rotation.x = -PI * 0.5
+	l.visible = false
+	return l
+
+
+func _process(delta: float) -> void:
 	if _parry_glow > 0.0:
-		_parry_glow = maxf(_parry_glow - _delta, 0.0)
+		_parry_glow = maxf(_parry_glow - delta, 0.0)
 		_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2
-	_orient_wrist_face()
+	_orient_wrist_face(delta)
 	_update_label_visibility()
 
 
-func _orient_wrist_face() -> void:
-	if wrist_face == null or wrist_unit == null:
+## In VR the plate rides the wrist rigidly and only leans toward the eyes by
+## up to [constant MAX_FACE_TILT_DEG], smoothed. (Turning it fully to the
+## camera every frame made it swim against the wrist and flip the text as
+## the arm rolled.)
+func _orient_wrist_face(delta: float) -> void:
+	if not _follow_eyes or wrist_face == null or wrist_unit == null:
 		return
 	var cam := _view_camera
 	if cam == null or not is_instance_valid(cam):
 		cam = get_viewport().get_camera_3d() if get_viewport() else null
 	if cam == null:
 		return
-	var origin := wrist_unit.global_position
-	var to_cam := cam.global_position - origin
+	var wrist := wrist_unit.global_basis.orthonormalized()
+	var to_cam := (cam.global_position - wrist_unit.global_position)
 	if to_cam.length_squared() < 1e-6:
 		return
-	# The plate is a flat box in local XZ. Its readable side is +Y, so that
-	# axis has to point at the eyes. look_at() aims Z and was showing the edge.
-	var normal := to_cam.normalized()
-	var across := wrist_unit.global_transform.basis.x
-	if absf(across.dot(normal)) > 0.92:
-		across = wrist_unit.global_transform.basis.z
-	var x_axis := across.slide(normal)
-	if x_axis.length_squared() < 1e-8:
-		return
-	x_axis = x_axis.normalized()
-	# X cross Y must be Z. The other cross mirrors the plate and the text.
-	var z_axis := x_axis.cross(normal).normalized()
-	wrist_face.global_transform = Transform3D(Basis(x_axis, normal, z_axis), origin)
+	var local_dir := (wrist.inverse() * to_cam.normalized())
+	var tilt := Quaternion.IDENTITY
+	if local_dir.y > 0.05:
+		var angle := minf(Vector3.UP.angle_to(local_dir), deg_to_rad(MAX_FACE_TILT_DEG))
+		var axis := Vector3.UP.cross(local_dir)
+		if axis.length_squared() > 1e-8:
+			tilt = Quaternion(axis.normalized(), angle)
+	var current := wrist_face.quaternion
+	wrist_face.quaternion = current.slerp(tilt, clampf(delta * 10.0, 0.0, 1.0))
 
 
 func on_parry() -> void:
@@ -244,11 +307,14 @@ func _update_label_visibility() -> void:
 		cam = get_viewport().get_camera_3d() if get_viewport() else null
 	if cam == null:
 		wrist_label.visible = false
+		hp_label.visible = false
 		return
 	var d := wrist_unit.global_position.distance_to(cam.global_position)
 	var a := clampf((LABEL_HIDE_DIST - d) / maxf(LABEL_HIDE_DIST - LABEL_SHOW_DIST, 0.01), 0.0, 1.0)
-	wrist_label.visible = a > 0.02
-	wrist_label.modulate.a = 0.98 * a
+	for l in [wrist_label, hp_label]:
+		(l as Label3D).visible = a > 0.02
+		(l as Label3D).modulate.a = 0.98 * a
+		(l as Label3D).outline_modulate.a = 0.95 * a
 
 
 func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, wave: int, score: int, kills: int, run_seconds: float, active_element: String) -> void:
@@ -272,8 +338,17 @@ func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, 
 	_charm_base_energy = 0.28 + (1.0 - hp_ratio) * 0.55 + (0.65 if critical else 0.0)
 	_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2
 
+	if hp_gauge:
+		_hp_gauge_mat.set_shader_parameter("fill_ratio", hp_ratio)
+		_hp_gauge_mat.set_shader_parameter("fill_color", hp_col)
+	if hp_label:
+		hp_label.text = "命 %d" % int(round(hp))
+		hp_label.modulate = Color(hp_col.lightened(0.45), hp_label.modulate.a)
+	if xp_bar:
+		var r := clampf(float(xp) / maxf(float(xp_to_next), 1.0), 0.0, 1.0)
+		xp_bar.visible = r > 0.001
+		xp_bar.scale.x = maxf(r, 0.001)
+		xp_bar.position.x = _xp_bar_left + _xp_bar_width * r * 0.5
 	if wrist_label:
-		# Engraved readout in the game's voice: rank, wave, score, life,
-		# kills, souls toward the next rank.
-		wrist_label.text = "位 %d · 波 %d · %d pt\n命 %d · 斬 %d · 魂 %d/%d" % [
-			level, wave, score, int(round(hp)), kills, xp, xp_to_next]
+		# Engraved readout in the game's voice: rank, wave, kills, score.
+		wrist_label.text = "位 %d · 波 %d · 斬 %d\n%d pt" % [level, wave, kills, score]

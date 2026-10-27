@@ -25,7 +25,9 @@ func _ready() -> void:
 	player.hand_offset = Vector3(0.18, -0.14, 0.0)
 	await _frames(48)
 	await _shot("wrist_hud_natural_angle")
-	run.diegetic_hud.update_hud(18.0, 100.0, run.xp, run.xp_to_next, run.level, 1, run.score, run.kills, run.run_time, Elements.NONE)
+	player.health.hp = 18.0
+	run.xp = 14
+	run._refresh_hud()
 	await _frames(10)
 	await _shot("wrist_hud_critical_hp_ring")
 	run.queue_free()
