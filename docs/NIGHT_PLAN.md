@@ -105,6 +105,11 @@ sakura trees; do not touch grip/hand logic).
   `held_weapon.gd`; elite yōkai respect `counter` hits in `yokai.gd`.
 - Headless: `gdd_loop_test.tscn`; visual: `run_screenshots.gd` shot 7.
 
+## 17. Sculpted Oni mask, torii fog shot, §15 polish closure
+- Procedural sculpted mask + normal map (`gen_oni_mask_glb.py`) or document no external CC0 found.
+- Giant torii silhouette in fog (`point12_screenshots` shot 2).
+- Wrist contrast + critical HP test; Yuji Boku stele; extra CC0/Kenney thunder layers.
+
 ## 16. Oni mask audit, yōkai motion, Quest perf pass
 - Oni mask: verified project CC0 (`ONI_MASK_LICENSE.txt`, regenerated mesh).
 - Yōkai: approach / flinch poses blended with ActiveRagdoll (`yokai_combat_motion_test`).
