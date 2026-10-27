@@ -507,7 +507,9 @@ func _on_oni_defeated(oni: RunOniBoss, hit: Dictionary) -> void:
 	var origin: Vector3 = hit.get("point", oni.global_position + Vector3(0, 1.2, 0))
 	var orbs := SoulOrb.spawn_cluster(_souls_root, origin, 8, xp_per_orb + 2, Elements.STORM)
 	for orb in orbs:
-		orb.collected.connect(_on_soul_collected)
+		# Pooled orbs come back still connected from their last life.
+		if not orb.collected.is_connected(_on_soul_collected):
+			orb.collected.connect(_on_soul_collected)
 	GameEvents.log_event("oni_boss_kill", {"kills": kills, "element": hit.get("element", Elements.NONE)})
 
 
@@ -521,7 +523,8 @@ func _on_enemy_died(yokai: Yokai, _hit: Dictionary) -> void:
 	var elem: String = _soul_element_for_kill(yokai)
 	var orbs := SoulOrb.spawn_cluster(_souls_root, origin, orbs_per_kill, xp_per_orb, elem)
 	for orb in orbs:
-		orb.collected.connect(_on_soul_collected)
+		if not orb.collected.is_connected(_on_soul_collected):
+			orb.collected.connect(_on_soul_collected)
 
 
 func _on_soul_collected(xp_amount: int, elem: String) -> void:

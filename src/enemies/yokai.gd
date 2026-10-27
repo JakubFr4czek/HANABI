@@ -15,8 +15,19 @@ enum Kind { SWARM, ELITE }
 const WET_SURFACE_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const MOVE_ACCEL := 5.0
 const BURST_ACCEL := 24.0
+## Parts a very strong clean cut takes off. A leg or the head is fatal.
+const SEVERABLE := ["arm_l", "arm_r", "leg_l", "leg_r", "head"]
 
 @export var profile: EnemyProfile
+## A cut severs the limb it lands on only when all of these hold: the edge
+## leads (alignment), the full arm is behind it (power), the blade is moving
+## fast (real m/s at the contact) and the blow carries real momentum (N·s).
+@export var sever_min_speed := 8.5
+@export var sever_min_power := 0.8
+@export var sever_min_impulse := 12.0
+@export var sever_min_alignment := 0.7
+## Extra damage (fraction of max HP) for taking an arm off.
+@export var sever_arm_damage := 0.45
 
 var hp := 45.0
 var brain: YokaiBrain
@@ -59,6 +70,7 @@ var _lod_tick := 0
 var _elite_halo: MeshInstance3D
 var _flinch_time := 0.0
 var _torso_lag_pitch := 0.0
+var _severed := {}  # part name -> true while that limb is gone
 
 
 func prepare_for_spawn() -> void:
@@ -76,8 +88,10 @@ func prepare_for_spawn() -> void:
 	# The death dissolve shrinks limbs and fades every material to ~0; a pooled
 	# body reused without this comes back tiny, dark and haloed by its elite life.
 	_reset_spawn_look()
+	_severed.clear()
 	for p: RagdollPart in parts.values():
 		p.scale = Vector3.ONE
+		p.visible = true
 		p.collision_layer = 2
 		p.collision_mask = 4 | 8
 	# Before add_child: the joints re-anchor on entering the tree, so the
@@ -220,7 +234,8 @@ func _on_ragdoll_state_changed(new_state: State) -> void:
 		return
 	var mask := (1 | 4 | 8) if new_state != State.STANDING else (4 | 8)
 	for p: RagdollPart in parts.values():
-		p.collision_mask = mask
+		if not _severed.has(String(p.name)):
+			p.collision_mask = mask
 
 
 func configure_kind(p_kind: Kind, element: String = Elements.NONE, max_hp: float = -1.0) -> void:
@@ -661,6 +676,12 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 			dmg *= 0.26
 		elif is_staggered():
 			dmg *= 1.35
+	if can_sever(part, hit):
+		var part_name := String(part.name)
+		# A leg or the head off ends it; an arm off takes a big bite of HP.
+		dmg = maxf(dmg, hp) if part_name == "head" or part_name.begins_with("leg") else dmg + profile.max_hp * sever_arm_damage
+		_sever(part, hit)
+		hit["severed"] = part_name
 	dmg = snappedf(dmg, 0.1)
 	hp = maxf(hp - dmg, 0.0)
 	hit["target"] = profile.display_name
@@ -691,6 +712,58 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 
 ## Damage from bounded run abilities (petals, lightning and ink tendrils).
 ## Kept separate from weapon contacts so it cannot recursively proc on-hit effects.
+func is_severed(part_name: String) -> bool:
+	return _severed.has(part_name)
+
+
+## Whether [param hit] on [param part] is strong and clean enough to take the
+## limb off: a committed full-arm cut with the edge leading, fast.
+func can_sever(part: RagdollPart, hit: Dictionary) -> bool:
+	if is_dead or part == null or not SEVERABLE.has(String(part.name)) or _severed.has(String(part.name)):
+		return false
+	if String(hit.get("strike", "")) != "edge":
+		return false
+	return float(hit.get("edge_alignment", 0.0)) >= sever_min_alignment \
+		and float(hit.get("power", 0.0)) >= sever_min_power \
+		and float(hit.get("speed", 0.0)) >= sever_min_speed \
+		and float(hit.get("impulse", 0.0)) >= sever_min_impulse
+
+
+## Take [param part] off: a free copy flies along the cut, the original stays
+## jointed in the ragdoll but hidden and touching nothing (see SeveredLimb).
+func _sever(part: RagdollPart, hit: Dictionary) -> void:
+	var part_name := String(part.name)
+	_severed[part_name] = true
+	var dir: Vector3 = hit.get("direction", Vector3.ZERO)
+	var impulse := float(hit.get("impulse", 0.0))
+	var ember := Color(1.7, 0.3, 0.16)
+	var scene := get_tree().current_scene if is_inside_tree() else null
+	if scene:
+		SeveredLimb.spawn_from(scene, part, dir, impulse, ember)
+		# The wound: a hot spray of spirit embers out of the stump along the
+		# cut, and a second, slower puff back toward the body.
+		var stump := _joint_point(part_name)
+		SparkBurst.spawn(scene, stump, dir if dir.length_squared() > 1e-6 else Vector3.UP, ember, 26, 3.2)
+		SparkBurst.spawn(scene, stump, Vector3.UP, Color(0.5, 0.06, 0.05), 12, 1.4)
+		Sfx.play_at("yokai_slice", stump, -2.0, 3.0, 0.85)
+	part.visible = false
+	part.collision_layer = 0
+	part.collision_mask = 0
+	GameEvents.log_event("enemy_dismembered", {"enemy": profile.display_name, "part": part_name})
+
+
+## World position of the joint that holds [param part_name] to its parent,
+## carried by the parent part (the Joint nodes stay where the body was built,
+## and the body walks away from its node).
+func _joint_point(part_name: String) -> Vector3:
+	var def: Dictionary = _defs.get(part_name, {})
+	var parent_part := parts.get(String(def.get("parent", ""))) as RagdollPart
+	if parent_part == null or not def.has("joint"):
+		return (parts[part_name] as RagdollPart).global_position
+	var parent_rest: Transform3D = _rest[parent_part.name]
+	return parent_part.global_transform * (parent_rest.affine_inverse() * (def.joint as Vector3))
+
+
 func receive_element_damage(amount: float, element: String, point: Vector3, direction: Vector3) -> float:
 	if is_dead or amount <= 0.0:
 		return 0.0
@@ -1028,7 +1101,7 @@ func _try_claw_player(damage: float, attack: String) -> void:
 		_: arms = ["arm_l", "arm_r"]
 	for arm_name in arms:
 		var arm: RagdollPart = parts.get(arm_name)
-		if arm == null:
+		if arm == null or _severed.has(arm_name):
 			continue
 		var shoulder := arm.global_transform * Vector3(0, 0.22, 0)
 		var claw_tip := arm.global_transform * Vector3(0, -0.36, 0.05)
