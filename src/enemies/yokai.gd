@@ -52,6 +52,7 @@ var _lod_far := false
 var _lod_tick := 0
 var _elite_halo: MeshInstance3D
 var _flinch_time := 0.0
+var _torso_lag_pitch := 0.0
 
 
 func prepare_for_spawn() -> void:
@@ -400,15 +401,20 @@ func _define_poses() -> Dictionary:
 			"leg_r": Vector3(8, 0, -8),
 		},
 		"recover": {
-			"_stiffness": 0.85,
-			"_blend": 0.22,
+			"_stiffness": 0.82,
+			"_blend": 0.38,
 			"_ease": "out",
-			"chest": Vector3(22, 0, 0),
-			"head": Vector3(-14, 0, 0),
-			"arm_r": Vector3(-32, 0, -16),
-			"arm_l": Vector3(-32, 0, 16),
-			"leg_l": Vector3(-16, 0, 5),
-			"leg_r": Vector3(10, 0, -5),
+			"chest": Vector3(26, 0, -5),
+			"head": Vector3(-18, 0, 4),
+			"arm_r": Vector3(-38, 6, -18),
+			"arm_l": Vector3(-38, -6, 18),
+			"leg_l": Vector3(-18, 0, 6),
+			"leg_r": Vector3(12, 0, -6),
+		},
+		"torso_lag": {
+			"_blend": 0.28,
+			"_ease": "inout",
+			"chest": Vector3(0, 0, 0),
 		},
 		"idle": {"_blend": 0.5},
 	}
@@ -725,6 +731,42 @@ func _physics_process(delta: float) -> void:
 		var pulse := 1.06 + sin(Time.get_ticks_msec() * 0.007) * 0.14
 		_elite_halo.scale = Vector3(pulse, pulse, pulse)
 	super._physics_process(delta)
+	_apply_secondary_motion_overlay()
+
+
+func _apply_secondary_motion_overlay() -> void:
+	if is_dead or brain == null:
+		return
+	if brain.state == YokaiBrain.State.RECOVER:
+		overlay_pose = "recover"
+		return
+	if _stepping:
+		return
+	if not parts.has("head") or not parts.has("chest"):
+		return
+	var head_p: RagdollPart = parts["head"]
+	var chest_p: RagdollPart = parts["chest"]
+	var head_fwd := -head_p.global_transform.basis.z
+	var chest_fwd := -chest_p.global_transform.basis.z
+	head_fwd.y = 0.0
+	chest_fwd.y = 0.0
+	if head_fwd.length_squared() < 0.01 or chest_fwd.length_squared() < 0.01:
+		return
+	head_fwd = head_fwd.normalized()
+	chest_fwd = chest_fwd.normalized()
+	var yaw_lag := chest_fwd.signed_angle_to(head_fwd, Vector3.UP)
+	var pitch_lag := (head_p.rotation.x - chest_p.rotation.x) * 0.32
+	_torso_lag_pitch = lerpf(_torso_lag_pitch, pitch_lag, 0.18)
+	var chest_deg := Vector3(
+		rad_to_deg(_torso_lag_pitch) + rad_to_deg(yaw_lag) * 0.12,
+		rad_to_deg(yaw_lag) * 0.08,
+		0.0)
+	if chest_deg.length() < 1.5:
+		if overlay_pose == "torso_lag":
+			overlay_pose = ""
+		return
+	_poses["torso_lag"] = {"chest": chest_deg}
+	overlay_pose = "torso_lag"
 
 
 func _perceive() -> Dictionary:

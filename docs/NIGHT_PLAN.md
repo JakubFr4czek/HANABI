@@ -105,6 +105,11 @@ sakura trees; do not touch grip/hand logic).
   `held_weapon.gd`; elite yōkai respect `counter` hits in `yokai.gd`.
 - Headless: `gdd_loop_test.tscn`; visual: `run_screenshots.gd` shot 7.
 
+## 21. Premium Oni silhouette + yōkai secondary motion
+- Oni: hide ragdoll primitives; procedural body shell + kanabō visual (wet PBR).
+- Yōkai: torso lag overlay + recover pose after attacks.
+- Desktop fog shots 2 m / 6 m; full test suite.
+
 ## 19. Oni/yōkai combat closure (shots, mask sculpt, pose blend)
 - Desktop shots: Oni ~2 m / ~6 m in wave fog, yōkai approach + flinch (`point19_combat_screenshots`).
 - Oni mask sculpt v2 (~1k verts, sockets/kły/brwi, normal map).

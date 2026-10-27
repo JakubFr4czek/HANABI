@@ -7,6 +7,8 @@ signal boss_defeated(oni: RunOniBoss, hit: Dictionary)
 
 const ONI_MASK_GLB := preload("res://assets/models/enemies/oni_mask_run.glb")
 const ONI_MASK_NRM := preload("res://assets/models/enemies/oni_mask_run_normal.png")
+const ONI_BODY_GLB := preload("res://assets/models/enemies/oni_body_run.glb")
+const ONI_KANABO_GLB := preload("res://assets/models/enemies/oni_kanabo_run.glb")
 
 var is_dead := false
 static var _cached_mask_mesh: Mesh
@@ -15,6 +17,9 @@ var _flesh := ShaderMaterial.new()
 var _armor := ShaderMaterial.new()
 var _mask := ShaderMaterial.new()
 var _rim: OmniLight3D
+var _robe := ShaderMaterial.new()
+static var _cached_body_mesh: Mesh
+static var _cached_kanabo_mesh: Mesh
 
 
 func _ready() -> void:
@@ -39,6 +44,14 @@ func _ready() -> void:
 	_armor.set_shader_parameter("fill", 1.85)
 	_armor.set_shader_parameter("fog_rim", 1.1)
 	_armor.set_shader_parameter("emission_tint", Color(0.42, 0.05, 0.04))
+	_robe.shader = WET_SURFACE_SHADER
+	_robe.set_shader_parameter("base_color", Color(0.08, 0.05, 0.07))
+	_robe.set_shader_parameter("roughness_dry", 0.72)
+	_robe.set_shader_parameter("roughness_wet", 0.34)
+	_robe.set_shader_parameter("wetness", 0.52)
+	_robe.set_shader_parameter("fill", 1.65)
+	_robe.set_shader_parameter("fog_rim", 1.25)
+	_robe.set_shader_parameter("procedural_ao", 0.55)
 	_mask.shader = WET_SURFACE_SHADER
 	_mask.set_shader_parameter("base_color", Color(0.94, 0.88, 0.80))
 	_mask.set_shader_parameter("roughness_dry", 0.58)
@@ -102,21 +115,98 @@ func _attach_oni_rim_light() -> void:
 	add_child(lamp)
 
 
+func equip_sword() -> void:
+	super.equip_sword()
+	if sword:
+		sword.visible = false
+	_attach_kanabo_visual()
+
+
 func _apply_oni_visuals() -> void:
 	for p: RagdollPart in parts.values():
 		for c in p.get_children():
 			if c is MeshInstance3D:
 				var mi := c as MeshInstance3D
-				if mi.material_override == _straw:
+				var keep := mi.name in ["OniMask", "OniBodyShell", "OniKanaboVisual"]
+				if not keep:
+					mi.visible = false
+				elif mi.material_override == _straw:
 					mi.material_override = _flesh
+	if parts.has("pelvis"):
+		_attach_oni_body_shell(parts["pelvis"] as RagdollPart)
 	if parts.has("head"):
 		var head := parts["head"] as RagdollPart
 		for c in head.get_children():
 			if c is MeshInstance3D and c.name != "OniMask":
 				(c as MeshInstance3D).visible = false
 		_attach_oni_mask(head)
-	if parts.has("chest"):
-		_attach_oni_armor(parts["chest"] as RagdollPart)
+
+
+func _attach_oni_body_shell(pelvis: RagdollPart) -> void:
+	for c in pelvis.get_children():
+		if c.name == "OniBodyShell":
+			return
+	var shell := MeshInstance3D.new()
+	shell.name = "OniBodyShell"
+	var mesh := _oni_body_mesh()
+	shell.mesh = mesh if mesh else BoxMesh.new()
+	shell.position = Vector3(0.0, 0.04, 0.0)
+	shell.scale = Vector3(1.14, 1.12, 1.1)
+	shell.material_override = _armor
+	pelvis.add_child(shell)
+
+
+func _attach_kanabo_visual() -> void:
+	if not parts.has("lower_arm_r"):
+		return
+	var arm := parts["lower_arm_r"] as RagdollPart
+	for c in arm.get_children():
+		if c.name == "OniKanaboVisual":
+			return
+	var club := MeshInstance3D.new()
+	club.name = "OniKanaboVisual"
+	var mesh := _oni_kanabo_mesh()
+	club.mesh = mesh if mesh else CylinderMesh.new()
+	club.position = Vector3(0.08, -0.22, 0.12)
+	club.rotation = Vector3(deg_to_rad(-78.0), deg_to_rad(12.0), deg_to_rad(6.0))
+	club.scale = Vector3(1.15, 1.15, 1.15)
+	var mat := ShaderMaterial.new()
+	mat.shader = WET_SURFACE_SHADER
+	mat.set_shader_parameter("base_color", Color(0.22, 0.20, 0.21))
+	mat.set_shader_parameter("roughness_dry", 0.38)
+	mat.set_shader_parameter("roughness_wet", 0.18)
+	mat.set_shader_parameter("wetness", 0.55)
+	mat.set_shader_parameter("metallic", 0.72)
+	mat.set_shader_parameter("fill", 1.95)
+	mat.set_shader_parameter("fog_rim", 1.35)
+	club.material_override = mat
+	arm.add_child(club)
+
+
+static func _oni_body_mesh() -> Mesh:
+	if _cached_body_mesh != null:
+		return _cached_body_mesh
+	var inst := ONI_BODY_GLB.instantiate()
+	for node in inst.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh:
+			_cached_body_mesh = mi.mesh
+			break
+	inst.free()
+	return _cached_body_mesh
+
+
+static func _oni_kanabo_mesh() -> Mesh:
+	if _cached_kanabo_mesh != null:
+		return _cached_kanabo_mesh
+	var inst := ONI_KANABO_GLB.instantiate()
+	for node in inst.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh:
+			_cached_kanabo_mesh = mi.mesh
+			break
+	inst.free()
+	return _cached_kanabo_mesh
 
 
 func _attach_oni_mask(head: RagdollPart) -> void:
@@ -166,20 +256,6 @@ static func _fallback_mask_mesh() -> Mesh:
 	var m := BoxMesh.new()
 	m.size = Vector3(0.26, 0.30, 0.065)
 	return m
-
-
-func _attach_oni_armor(chest: RagdollPart) -> void:
-	for c in chest.get_children():
-		if c.name == "OniArmor":
-			return
-	var plate := MeshInstance3D.new()
-	plate.name = "OniArmor"
-	var m := BoxMesh.new()
-	m.size = Vector3(0.48, 0.22, 0.28)
-	plate.mesh = m
-	plate.position = Vector3(0, 0.14, 0.04)
-	plate.material_override = _armor
-	chest.add_child(plate)
 
 
 func _allow_revive_after_knockout() -> bool:
