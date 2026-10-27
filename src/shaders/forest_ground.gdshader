@@ -11,6 +11,7 @@ uniform float roughness_dry : hint_range(0.0, 1.0) = 0.88;
 uniform float roughness_wet : hint_range(0.0, 1.0) = 0.42;
 uniform float wetness : hint_range(0.0, 1.0) = 0.72;
 uniform float fill = 1.35;
+uniform float cavity_ao : hint_range(0.0, 1.0) = 0.0;
 
 varying vec3 v_world_pos;
 
@@ -29,7 +30,12 @@ void fragment() {
 	vec3 albedo = mix(base_color, moss_color, up * 0.55 + patch * 0.12);
 	float wet = wetness * (0.35 + up * 0.65);
 	float rough = mix(roughness_dry, roughness_wet, wet);
-	vec3 lit = albedo * (0.22 + up * fill * 0.14);
+	float cavity = 1.0;
+	if (cavity_ao > 0.0) {
+		cavity = 0.62 + up * 0.38 - patch * 0.14;
+		cavity = mix(1.0, cavity, cavity_ao);
+	}
+	vec3 lit = albedo * (0.22 + up * fill * 0.14) * cavity;
 	float radial = length(v_world_pos.xz);
 	float fog_mix = smoothstep(fog_fade_start, fog_fade_end, radial);
 	vec3 fog_col = storm_fog_color.rgb * 0.58;

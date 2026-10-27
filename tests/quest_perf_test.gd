@@ -68,8 +68,8 @@ func _run_all() -> void:
 	var we: Environment = run.get_node("WorldEnvironment").environment
 	_check("Run fog closes before distant hills (depth_end <= 10.5)",
 		we.fog_depth_end <= 10.6 and we.fog_density >= 1.2)
-	_check("Forest chunks use static GI for LightmapGI",
-		run.forest_world.uses_static_gi())
+	_check("Forest uses shader baked-look instead of per-chunk LightmapGI",
+		run.forest_world.uses_shader_baked_look())
 
 	run.queue_free()
 

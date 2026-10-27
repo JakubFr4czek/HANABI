@@ -79,3 +79,11 @@ lightning ripple across the floor on touchdown, katana materializes; skippable.
 ## 7. VFX polish
 - Hits, deaths ("firework" bursts per element), level-up ofuda, souls; checked
   against the premium rule (sparse neon on a dark base, restrained bloom).
+
+## 8. Quest pools, forest GI look, on-device profiling
+- Pool soul orbs, spark bursts and elemental death rings (`VfxPool` autoload) so
+  waves do not allocate VFX nodes mid-fight.
+- Procedural forest chunks do not bake LightmapGI (recycling, no UV2); use shader
+  cavity AO / wet-surface fill for a convincing static look on Quest.
+- Toggleable perf overlay (`--perf-hud`, F3) and `docs/QUEST_TEST.md` morning
+  checklist for headset validation.

@@ -13,7 +13,10 @@ static func spawn(parent: Node, at: Vector3, element: String, scale: float = 1.0
 	var up := Vector3.UP
 	SparkBurst.spawn(parent, at, up, col * 1.15, int(14 * scale), 3.2 * scale)
 	SparkBurst.spawn(parent, at, Vector3(0.2, 0.85, 0.1).normalized(), col * 0.85, int(10 * scale), 2.4 * scale)
-	_ring(parent, at, col, scale)
+	if VfxPool:
+		VfxPool.spawn_element_ring(parent, at, col, scale)
+	else:
+		_ring_ephemeral(parent, at, col, scale)
 
 
 static func _burst_color(element: String) -> Color:
@@ -34,7 +37,7 @@ static func _burst_color(element: String) -> Color:
 			return Color(1.45, 0.38, 0.22)
 
 
-static func _ring(parent: Node, at: Vector3, col: Color, scale: float) -> void:
+static func _ring_ephemeral(parent: Node, at: Vector3, col: Color, scale: float) -> void:
 	var p := CPUParticles3D.new()
 	p.amount = mini(MAX_PARTICLES, int(22 * scale))
 	p.one_shot = true
