@@ -711,6 +711,11 @@ func _on_player_died() -> void:
 	wave_director.stop_director()
 	for e in wave_director.alive_enemies():
 		e.die({"element": Elements.NONE})
+	# The boss leaves too: it kept fighting a dead player through the end
+	# screen, swinging into the stele and the restart talisman.
+	var oni := wave_director.get_active_oni()
+	if is_instance_valid(oni) and not oni.is_dead:
+		oni._on_permanent_defeat()
 	for o in active_ofuda:
 		if is_instance_valid(o):
 			o.dismiss()
