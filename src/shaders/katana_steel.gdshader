@@ -17,6 +17,9 @@ uniform vec3 lightning_tint : source_color = vec3(0.55, 0.72, 1.0);
 uniform float blade_polish : hint_range(0.0, 1.0) = 0.55;
 uniform float fittings_wet : hint_range(0.0, 1.0) = 0.35;
 uniform float droplets : hint_range(0.0, 1.0) = 1.0;
+// Soft spirit light while the blade is offered in the intro (0 = off).
+uniform float spirit_glow : hint_range(0.0, 2.0) = 0.0;
+uniform vec3 spirit_color : source_color = vec3(0.7, 0.82, 1.0);
 
 varying vec3 v_local;
 
@@ -68,5 +71,6 @@ void fragment() {
 	ALBEDO = albedo;
 	ROUGHNESS = rough;
 	METALLIC = metal;
-	EMISSION = lightning_tint * storm_flash * blade * (0.15 + 1.2 * fres);
+	EMISSION = lightning_tint * storm_flash * blade * (0.15 + 1.2 * fres)
+		+ spirit_color * spirit_glow * (0.25 + 0.75 * blade) * (0.3 + 0.9 * fres);
 }

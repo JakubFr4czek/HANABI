@@ -20,7 +20,28 @@ func _run_all() -> void:
 	var run: RunGame = RUN_SCENE.instantiate()
 	add_child(run)
 	# No skip: ride the whole descent, ripple and materialize (~4.5 s real).
-	await _frames(560)
+	# Watch the parked katana: it must never drop to the ground and rise again.
+	var intro := run.run_intro
+	var min_katana_y := INF
+	var max_steps_lit := 0
+	var steps_by_touchdown := -1
+	for i in 560:
+		await get_tree().physics_frame
+		min_katana_y = minf(min_katana_y, run.katana.global_position.y)
+		var lit := 0
+		for st in intro._air_steps:
+			lit += 1 if st.visible else 0
+		max_steps_lit = maxi(max_steps_lit, lit)
+		if steps_by_touchdown < 0 and intro._descent_done:
+			steps_by_touchdown = intro._steps_taken
+	var ground := run.spawn.global_position.y
+	_check("the katana waits at the offering instead of falling (lowest %.2f m over ground)" % (min_katana_y - ground),
+		min_katana_y - ground > 0.9)
+	_check("the descent leaves glowing steps in the air (%d steps, up to %d lit at once)" % [steps_by_touchdown, max_steps_lit],
+		steps_by_touchdown == RunIntro.AIR_STEPS and max_steps_lit >= 1)
+	var petals_left := intro._petals.filter(func(p): return p.visible).size()
+	_check("the petal swirl is gone once the katana is offered (%d left)" % petals_left, petals_left == 0)
+	_check("the offered katana glows softly (glow %.2f)" % intro._glow, intro._glow > 0.4)
 	_check("intro parks on the offering instead of starting the run",
 		run.state == RunGame.RunState.INTRO and run.wave_director.wave == 0)
 	_check("the katana hangs visible and unheld before the player",
@@ -53,6 +74,8 @@ func _run_all() -> void:
 	await _frames(30)
 	_check("taking the katana starts the run",
 		run.katana.is_held() and run.state == RunGame.RunState.PLAYING)
+	await _frames(90)
+	_check("the glow fades out once the katana is taken (glow %.2f)" % intro._glow, intro._glow < 0.02)
 	run.queue_free()
 
 
