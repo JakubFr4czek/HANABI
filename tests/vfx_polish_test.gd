@@ -30,6 +30,10 @@ func _run_all() -> void:
 	var oni: RunOniBoss = run.wave_director.spawn_oni_boss(player.global_position)
 	await _frames(8)
 	_check("Oni boss spawns with RunOniBoss visuals", oni != null and oni.is_in_group("oni_boss"))
+	var pelvis := oni.parts.get("pelvis") as RagdollPart
+	_check("Oni wears body shell and kanabō visual (not red ragdoll primitives)",
+		pelvis != null and pelvis.get_node_or_null("OniBodyShell") != null
+		and oni.parts.get("lower_arm_r").get_node_or_null("OniKanaboVisual") != null)
 	_check("Oni boss uses demon flesh material, not default wood",
 		oni._flesh != null and oni._flesh.get_shader_parameter("base_color").r < 0.2)
 	var elite := run.wave_director.spawn_elite_at(Vector3(2.0, 0.0, -2.5), player.global_position, Elements.INK)

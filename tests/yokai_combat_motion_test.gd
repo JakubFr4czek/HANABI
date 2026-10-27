@@ -32,6 +32,9 @@ func _run() -> void:
 	await _frames(48)
 	_check("Attack chain reaches slash or recover",
 		y.brain.state in [YokaiBrain.State.SLASH, YokaiBrain.State.RECOVER, YokaiBrain.State.APPROACH])
+	await _frames(36)
+	if y.brain.state == YokaiBrain.State.RECOVER:
+		_check("Recovery phase uses recover overlay pose", y.overlay_pose == "recover")
 	y.brain.on_hit({"damage": 20.0, "power": 0.5})
 	await _frames(3)
 	_check("Heavy hit from brain staggers yōkai", y.brain.state == YokaiBrain.State.STAGGER)
