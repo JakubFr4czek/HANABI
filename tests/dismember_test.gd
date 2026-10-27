@@ -77,6 +77,40 @@ func _run_all() -> void:
 		all_back = all_back and (p as RagdollPart).visible and (p as RagdollPart).collision_layer == 2
 	_check("a recycled body comes back with every limb (%s)" % ("same body" if y3 == y2 else "new body"),
 		all_back and not y3.is_severed("leg_r"))
+
+	# Death: the body falls, then comes apart into sakura petals on the wind.
+	var before := get_tree().current_scene.get_children().filter(func(c): return c is SakuraScatter)
+	y3.die({})
+	var scatter: SakuraScatter = null
+	var burst_frame := -1
+	for i in 150:
+		await get_tree().physics_frame
+		for c in get_tree().current_scene.get_children():
+			if c is SakuraScatter and not before.has(c) and (c as SakuraScatter).petal_count() == Yokai.DEATH_PETALS:
+				scatter = c
+		if scatter:
+			burst_frame = i
+			break
+	_check("a dead yokai bursts into petals once it is down (frame %d, body visible %s)" % [burst_frame, y3.visible],
+		scatter != null and not y3.visible)
+	if scatter:
+		var start := scatter.petal_center()
+		var a0 := scatter.petal_alpha(0)
+		# Two seconds of the petals' own (game) time.
+		for i in 2000:
+			if scatter._age >= 2.0:
+				break
+			await get_tree().physics_frame
+		var drift := scatter.petal_center() - start
+		var a1 := scatter.petal_alpha(0)
+		_check("the petals ride the wind (drift %.2f m along it) and fade (alpha %.2f -> %.2f)" % [drift.dot(SakuraScatter.WIND.normalized()), a0, a1],
+			drift.dot(SakuraScatter.WIND.normalized()) > 1.0 and a1 < a0 * 0.75)
+		# (Kills can level up into the 0.2x upgrade slow-mo: count in game time.)
+		for i in 2000:
+			if not is_instance_valid(scatter):
+				break
+			await get_tree().physics_frame
+		_check("the petals are gone after a few seconds", not is_instance_valid(scatter))
 	run.queue_free()
 
 

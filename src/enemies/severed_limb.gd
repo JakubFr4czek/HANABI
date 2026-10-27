@@ -6,13 +6,13 @@ extends RigidBody3D
 ## has a joint torn out and the solver has nothing to detonate.
 ##
 ## The limb tumbles off along the cut with a trail of spirit embers from the
-## wound, lands on the terrain, lies there for a moment and shrinks away.
+## wound, lands on the terrain, lies there for a moment and comes apart into
+## sakura petals.
 
 ## Severed limbs alive at once; the oldest goes first beyond this (Quest budget).
 const MAX_ALIVE := 8
-## Seconds a limb stays before it is gone, and the shrink at the end of that.
-const LIFETIME := 4.0
-const SHRINK_TIME := 0.6
+## Seconds a limb lies before it scatters into petals.
+const LIFETIME := 2.6
 
 static var _alive: Array[SeveredLimb] = []
 
@@ -77,14 +77,11 @@ func _physics_process(delta: float) -> void:
 		if _ember_time <= 0.0:
 			_ember_time = 0.07
 			SparkBurst.spawn(get_parent(), global_position + global_basis.y * 0.15, -global_basis.y, _ember_color, 4, 0.9)
-	var left := LIFETIME - _age
-	if left < SHRINK_TIME:
-		# Shrink the meshes, not the body: a scaled rigid body fights the solver.
-		var s := maxf(left / SHRINK_TIME, 0.02)
-		for v in _visuals:
-			if is_instance_valid(v):
-				v.scale = Vector3.ONE * s
+	# Once it has lain a moment it comes apart into petals on the wind, like
+	# the body it was cut from.
 	if _age >= LIFETIME:
+		set_physics_process(false)
+		SakuraScatter.burst_from(self, get_parent(), 22, linear_velocity)
 		queue_free()
 
 
