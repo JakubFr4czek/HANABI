@@ -134,14 +134,25 @@ func reset() -> void:
 		_rebuild_active_chunks()
 
 
+## Where the player actually walks. Locomotion moves the XR origin/body, not
+## the rig root, so the root stays at the spawn while the player walks away;
+## anchoring chunks on it strands the whole forest behind (desktop rigs move
+## the root itself, so they just use it).
+func _anchor_position() -> Vector3:
+	if follow != null and follow.has_method("feet_position"):
+		return follow.call("feet_position")
+	return follow.global_position
+
+
 func _physics_process(_delta: float) -> void:
 	if follow == null or not is_instance_valid(follow):
 		return
-	var next := _world_to_chunk(follow.global_position)
+	var anchor := _anchor_position()
+	var next := _world_to_chunk(anchor)
 	if next != center_chunk:
 		center_chunk = next
 		_rebuild_active_chunks()
-	_refresh_tree_draw(follow.global_position)
+	_refresh_tree_draw(anchor)
 
 
 func height_at(wx: float, wz: float) -> float:
@@ -187,7 +198,7 @@ func _rebuild_active_chunks() -> void:
 			_chunks[key] = _make_chunk(key)
 	chunk_count = _chunks.size()
 	if follow:
-		_refresh_tree_draw(follow.global_position)
+		_refresh_tree_draw(_anchor_position())
 
 
 func _make_chunk(coord: Vector2i) -> Node3D:
@@ -430,7 +441,7 @@ func _refresh_multimesh_transforms(mm_inst: MultiMeshInstance3D, transforms: Arr
 	if not is_instance_valid(mm_inst) or mm_inst.multimesh == null:
 		return
 	if mm_inst.name == "Trees" and follow:
-		_refresh_tree_draw(follow.global_position)
+		_refresh_tree_draw(_anchor_position())
 		return
 	var mm := mm_inst.multimesh
 	mm.instance_count = transforms.size()
