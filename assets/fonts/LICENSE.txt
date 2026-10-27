@@ -1,0 +1,4 @@
+Yuji Boku (assets/fonts/YujiBoku-Regular.ttf)
+Copyright Kinuta Font Factory
+SIL Open Font License 1.1 — https://scripts.sil.org/OFL
+Source: https://github.com/google/fonts/tree/main/ofl/yujiboku
