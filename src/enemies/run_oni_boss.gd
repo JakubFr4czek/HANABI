@@ -236,6 +236,8 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 		var e := eye_l.duplicate() as MeshInstance3D
 		e.position = Vector3(0.055 * sx, 0.02, 0.14)
 		mask_mi.add_child(e)
+	# Bigger, hotter points than a yōkai's: the Oni is read first in the fog.
+	EyeGlow.attach(mask_mi, Vector3(0.0, 0.02, 0.14), Color(1.0, 0.36, 0.08), 0.11, 0.075)
 	head.add_child(mask_mi)
 
 

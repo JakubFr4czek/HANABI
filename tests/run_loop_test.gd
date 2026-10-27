@@ -137,9 +137,21 @@ func _run_all() -> void:
 		run.active_ofuda.size() == 3)
 
 	# Aim the player at the center Ofuda and swing the katana physically straight down through it!
+	# Fresh cards (the orbs above may have levelled up a while ago), then a
+	# swing still going as they appear must not pick one by accident.
+	run._pending_level_ups += 1
+	run._present_level_up()
 	var center_ofuda := run.active_ofuda[1]
 	var chosen_id := String(center_ofuda.upgrade.get("id", ""))
 	player.swing_duration = 0.16
+	player.swing([Vector3(-0.15, 0.5, 0.0), Vector3(-0.15, -0.5, 0.0)])
+	await _wait(0.3)
+	_check("A cut through a card that is still drifting in does not pick it",
+		run.state == RunGame.RunState.LEVEL_UP and not center_ofuda.is_sliced)
+	var arm_deadline := Time.get_ticks_msec() + 2500
+	while not center_ofuda.is_ready_to_cut() and Time.get_ticks_msec() < arm_deadline:
+		await _wait(0.05)
+	_check("Cards settle and arm within a second", center_ofuda.is_ready_to_cut())
 	# The desktop right hand rests 22 cm off-center; offset the scripted cut so
 	# its swept blade, not merely the hand, passes through the center card.
 	player.swing([Vector3(-0.15, 0.5, 0.0), Vector3(-0.15, -0.5, 0.0)])

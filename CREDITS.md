@@ -12,6 +12,7 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Katana stand: "Katana Stand 01" by **Rico Cilliers** (Poly Haven, CC0)
 - Rocks in the water: "Rock Face 01" by **Dario Barresi**, "Rock Face 02" by **Dario Barresi and Rico Cilliers** (Poly Haven, CC0)
 - Platform stone texture: "Japanese Stone Wall" by **Rico Cilliers, Charlotte Baglioni and Dario Barresi** (Poly Haven, CC0)
+- Run forest floor: "Leafy Grass" by **Charlotte Baglioni**, "Forest Ground 01" by **Rob Tuytel**, "Rocky Trail" by **Amal Kumar** (Poly Haven, CC0)
 - Sword swing and clash sounds: **StarNinjas** (OpenGameArt, CC0)
 - Impact sounds + combat cuts/slaps/hurt/tells: **Kenney** Impact Sounds (kenney.nl, CC0), `assets/audio/sfx/impact/` & `cc0_combat/`
 - Run sting SFX (soul collect, firework, ofuda slice, level-up, yōkai slice): **Kenney** Interface Sounds & Impact Sounds (kenney.nl, CC0), in `assets/audio/sfx/kenney_run/`

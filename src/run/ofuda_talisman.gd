@@ -18,6 +18,17 @@ var index := 0
 var is_sliced := false
 var is_dismissed := false
 
+## Cards drift in from the fog and cannot be cut until settled: a swing that is
+## still going when the level-up hits must not pick one by accident.
+const ARM_TIME := 0.8
+const ARRIVE_DEPTH := 0.55
+const MIN_SLICE_SPEED := 1.6
+var _arm_t := 0.0
+var _armed := false
+## The blade has to be outside the card once after arming before a cut counts
+## (a blade already resting through the card does not pick it).
+var _blade_clear := false
+
 var _card_root := Node3D.new()
 var _mesh_inst := MeshInstance3D.new()
 var _mat := ShaderMaterial.new()
@@ -120,7 +131,7 @@ static func make_label(txt: String, font: Font, fsize: int, psize: float, col: C
 func _build_collider() -> void:
 	# Layer 4 (bit 8 = enemy_body) so HeldWeapon contacts report hits on it.
 	_body.name = "OfudaBody"
-	_body.collision_layer = 8
+	_body.collision_layer = 0  # layer 8 once armed
 	_body.collision_mask = 0
 	_body.set_meta("hit_receiver", self)
 	_body.set_meta("body_part", "ofuda")
@@ -135,11 +146,23 @@ func _build_collider() -> void:
 
 ## Called when HeldWeapon's contact solver hits this Ofuda.
 func receive_hit(_part: Node, hit: Dictionary) -> Dictionary:
+	hit["damage"] = 0.0
+	if not is_ready_to_cut():
+		return hit
 	var pt: Vector3 = hit.get("point", global_position)
 	var dir: Vector3 = hit.get("direction", Vector3.RIGHT)
 	slice(pt, dir)
 	hit["damage"] = 0.0
 	return hit
+
+
+func is_armed() -> bool:
+	return _armed
+
+
+## Armed and the blade has left the card since: the next real cut picks it.
+func is_ready_to_cut() -> bool:
+	return _armed and _blade_clear
 
 
 ## Slice this Ofuda in half and emit [signal sliced].
@@ -241,6 +264,19 @@ func _physics_process(_delta: float) -> void:
 			queue_free()
 		return
 
+	if not _armed:
+		_arm_t += dt
+		var e := ease(clampf(_arm_t / ARM_TIME, 0.0, 1.0), 0.4)
+		_card_root.position.z = -ARRIVE_DEPTH * (1.0 - e)
+		_mat.set_shader_parameter("opacity", e)
+		for lbl in [_header_lbl, _kanji_lbl, _title_lbl, _sub_lbl]:
+			if lbl and is_instance_valid(lbl):
+				lbl.modulate.a = e
+		if _arm_t >= ARM_TIME:
+			_armed = true
+			_card_root.position.z = 0.0
+			_body.collision_layer = 8
+
 	# Gentle floating hover in slow motion on the inner card root so global_position stays intact.
 	_card_root.position.y = sin(_clock * 2.4 + _phase) * 0.022
 	_card_root.rotation.z = sin(_clock * 1.7 + _phase) * 0.025
@@ -262,10 +298,10 @@ func _check_blade_slice(real_dt: float) -> void:
 		var prev_start: Vector3 = _prev_blade_starts.get(w, start)
 		_prev_blade_tips[w] = tip
 		_prev_blade_starts[w] = start
+		if not _armed:
+			continue
 		var tip_speed := tip.distance_to(prev_tip) / maxf(real_dt, 1e-4)
 		var speed := maxf(weapon.measured_tip_speed, tip_speed)
-		if speed < 1.1:
-			continue
 		# Check if the blade segment [start, tip] passes through the Ofuda's local rectangle.
 		var inv := _card_root.global_transform.affine_inverse()
 		var local_a := inv * start
@@ -275,10 +311,18 @@ func _check_blade_slice(real_dt: float) -> void:
 			Geometry3D.get_closest_point_to_segment(Vector3.ZERO, inv * prev_tip, local_b),
 			Geometry3D.get_closest_point_to_segment(Vector3.ZERO, inv * prev_start, local_a),
 		]
+		var hit_point := Vector3.INF
 		for closest in candidates:
 			# A fast VR cut is judged by the swept blade with a small hand-tracking
 			# allowance around the narrow paper, not a single-frame point sample.
 			if absf(closest.x) <= WIDTH * 0.90 and absf(closest.y) <= HEIGHT * 0.58 and absf(closest.z) <= 0.16:
-				var dir := (tip - prev_tip).normalized() if tip.distance_to(prev_tip) > 0.001 else Vector3.RIGHT
-				slice(_card_root.global_transform * closest, dir)
-				return
+				hit_point = closest
+				break
+		if not _blade_clear:
+			if hit_point == Vector3.INF:
+				_blade_clear = true
+			continue
+		if hit_point != Vector3.INF and speed >= MIN_SLICE_SPEED:
+			var dir := (tip - prev_tip).normalized() if tip.distance_to(prev_tip) > 0.001 else Vector3.RIGHT
+			slice(_card_root.global_transform * hit_point, dir)
+			return

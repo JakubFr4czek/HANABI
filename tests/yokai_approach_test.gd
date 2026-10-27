@@ -68,8 +68,10 @@ func _run() -> void:
 	await _frames(240)
 	var reused_end := _flat_dist(reused, player)
 	_check("Pooled yōkai is reused (%s)" % str(pack.has(reused)), pack.has(reused))
+	# A trunk sidestep bends the path, so the bar is "clearly closed in",
+	# not a straight 2 m/s line.
 	_check("Pooled yōkai approaches from its new spawn (%.1f m -> %.1f m)" % [reused_start, reused_end],
-		reused_start > 6.0 and reused_end < reused_start - 3.0)
+		reused_start > 6.0 and reused_end < reused_start - 1.5)
 
 	# Out in the forest: the ring follows the player and bodies follow the hills.
 	player.teleport(Vector3(30.0, 0.0, 22.0), 0.0)
