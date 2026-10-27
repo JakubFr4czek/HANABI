@@ -13,12 +13,10 @@ var tsuba_ring_front: MeshInstance3D
 var wrist_unit: Node3D
 var hp_charm_mesh: MeshInstance3D
 var wrist_hp_ring: MeshInstance3D
-var wrist_xp_ring: MeshInstance3D
 var wrist_label: Label3D
 
 var _tsuba_mat := ShaderMaterial.new()
 var _wrist_hp_mat := ShaderMaterial.new()
-var _wrist_xp_mat := ShaderMaterial.new()
 var _charm_mat := StandardMaterial3D.new()
 var _lacquer_mat := ShaderMaterial.new()
 var _trim_mat := ShaderMaterial.new()
@@ -92,7 +90,7 @@ func _setup_wrist_unit(player: Node3D) -> void:
 
 	# Vermilion-lacquer shrine trim on top & bottom edges of the wrist plate.
 	_trim_mat.shader = WET_SURFACE_SHADER
-	_trim_mat.set_shader_parameter("base_color", Color(0.52, 0.08, 0.08))
+	_trim_mat.set_shader_parameter("base_color", Color(0.34, 0.28, 0.16))
 	_trim_mat.set_shader_parameter("roughness_dry", 0.68)
 	_trim_mat.set_shader_parameter("roughness_wet", 0.34)
 	_trim_mat.set_shader_parameter("wetness", 0.45)
@@ -159,24 +157,7 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_unit.add_child(wrist_hp_ring)
 
 	# Inner XP ring around the charm.
-	wrist_xp_ring = MeshInstance3D.new()
-	wrist_xp_ring.name = "WristXpRing"
-	var xp_quad := QuadMesh.new()
-	xp_quad.size = Vector2(0.034, 0.034)
-	_wrist_xp_mat.shader = RING_SHADER
-	_wrist_xp_mat.set_shader_parameter("inner_radius", 0.62)
-	_wrist_xp_mat.set_shader_parameter("outer_radius", 0.88)
-	_wrist_xp_mat.set_shader_parameter("segments", 8)
-	_wrist_xp_mat.set_shader_parameter("fill_color", Color(0.38, 0.86, 1.0))
-	wrist_xp_ring.mesh = xp_quad
-	wrist_xp_ring.material_override = _wrist_xp_mat
-	wrist_xp_ring.position = Vector3(-0.040, 0.0075, 0.0)
-	wrist_xp_ring.rotation.x = -PI * 0.5
-	wrist_xp_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	wrist_xp_ring.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	wrist_unit.add_child(wrist_xp_ring)
-
-	# Engraved wrist readout (time, score, level) beside the charm.
+	# Engraved wrist readout (time, score, level) on the lacquer bracer.
 	var sys_font := SystemFont.new()
 	sys_font.font_names = PackedStringArray([
 		"Hiragino Mincho ProN", "YuMincho", "Noto Serif CJK JP", "Hiragino Sans", "Arial Unicode MS"
@@ -184,15 +165,15 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_label = Label3D.new()
 	wrist_label.name = "WristLabel"
 	wrist_label.font = sys_font
-	wrist_label.font_size = 30
-	wrist_label.pixel_size = 0.00044
+	wrist_label.font_size = 26
+	wrist_label.pixel_size = 0.00038
 	wrist_label.shaded = false
 	wrist_label.double_sided = true
 	wrist_label.outline_size = 6
 	wrist_label.outline_modulate = Color(0.01, 0.01, 0.02, 0.95)
 	wrist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	wrist_label.modulate = Color(0.90, 0.94, 1.0, 0.98)
-	wrist_label.position = Vector3(-0.012, 0.008, 0.0)
+	wrist_label.modulate = Color(0.82, 0.86, 0.92, 0.92)
+	wrist_label.position = Vector3(0.008, 0.008, 0.0)
 	wrist_label.rotation.x = -PI * 0.5
 	wrist_unit.add_child(wrist_label)
 
@@ -203,6 +184,7 @@ func _setup_wrist_unit(player: Node3D) -> void:
 		wrist_unit.rotation = Vector3(deg_to_rad(15.0), 0.0, deg_to_rad(-25.0))
 	elif player is DesktopPlayer:
 		var dp := player as DesktopPlayer
+		dp.set_screen_hud_visible(false)
 		dp.camera.add_child(wrist_unit)
 		# Held on the lower-left forearm in peripheral view, angled toward the eyes.
 		wrist_unit.position = Vector3(-0.22, -0.165, -0.38)
@@ -232,9 +214,6 @@ func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, 
 	_tsuba_mat.set_shader_parameter("fill_ratio", xp_ratio)
 	_tsuba_mat.set_shader_parameter("fill_color", elem_col)
 	_tsuba_mat.set_shader_parameter("glow_boost", 2.35 + _parry_glow * 6.0)
-	_wrist_xp_mat.set_shader_parameter("fill_ratio", xp_ratio)
-	_wrist_xp_mat.set_shader_parameter("fill_color", elem_col)
-
 	var hp_col := Color(0.26, 0.95, 0.76)
 	if hp_ratio < 0.35:
 		hp_col = Color(1.0, 0.20, 0.16)
