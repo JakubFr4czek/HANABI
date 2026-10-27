@@ -67,7 +67,7 @@ const BODY_MASK := 1 | 2 | 4
 ## Directional hit reaction (see [method apply_hit_reaction]): peak torso tilt
 ## (radians) per N·s of blow impulse, up to the clamp. Fully proportional, so a
 ## wrist flick barely moves the body while a committed swing visibly throws it.
-@export var react_angle_per_impulse := 0.022
+@export var react_angle_per_impulse := 0.032
 @export var react_angle_max := 0.55
 ## Safety net: no body part may ever travel faster than this (m/s) or spin
 ## faster than this (rad/s). Hit impulses, spawn overlaps and joint snaps are
@@ -462,13 +462,12 @@ func apply_hit_reaction(part: RagdollPart, point: Vector3, direction: Vector3, i
 	var direct := _capped_point_impulse(part, point, wanted)
 	part.apply_impulse(direct, point - part.global_position)
 	if _total_mass > 0.0:
+		# Whatever the cap trimmed off the direct kick, plus the remaining
+		# 40% of the blow, spreads over the rest of the body by mass —
+		# applied once. (A second identical spread used to double this push
+		# and shove whole bodies across the arena.)
 		var rest := dir * maxf(impulse * 0.6 - direct.length(), 0.0) + dir * impulse * 0.4
 		var spread := rest / _total_mass
-		for body in _all_bodies:
-			if body != part:
-				body.apply_central_impulse(spread * body.mass)
-	if _total_mass > 0.0:
-		var spread := dir * (impulse * 0.4 / _total_mass)
 		for body in _all_bodies:
 			if body != part:
 				body.apply_central_impulse(spread * body.mass)

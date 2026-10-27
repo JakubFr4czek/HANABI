@@ -25,7 +25,9 @@ func _run_all() -> void:
 
 	var elite := director.spawn_elite_at(Vector3(0.0, 0.0, 8.0), player.global_position, Elements.STORM)
 	await _frames(4)
-	_check("Elite spawns large with a halo", elite.scale.x > 1.05 and elite._elite_halo != null)
+	# Elites are not node-scaled (that tears rigid parts off their joints);
+	# they read as elite through the halo instead.
+	_check("Elite spawns unscaled with a halo", is_equal_approx(elite.scale.x, 1.0) and elite._elite_halo != null and elite._elite_halo.visible)
 	elite.die({})
 	# 0.95 s dissolve at 90 fps ≈ 86 frames; recycle happens on dissolve_finished.
 	await _frames(140)

@@ -9,7 +9,7 @@ extends CharacterBody3D
 ## X a wrist flick (no arm behind it),
 ## mouse wheel changes their speed. Hold Q to raise a high block (parry the
 ## dummy's overhead cut). E grabs or drops the weapon, 1 / 2 pick katana /
-## kanabō, C cycles grip location (handle / tsuba / blunt blade spine),
+## kanabō, C cycles grip position along the handle,
 ## V toggles two-handed grip, Z cycles the element, P toggles the dummy's attacks.
 
 signal toggle_attacks_requested
@@ -23,11 +23,11 @@ const SLASH_OVERHEAD := [Vector3(0.05, 0.5, 0), Vector3(0.0, -0.5, 0)]
 const THRUST := [Vector3(0, -0.2, -0.05), Vector3(0, -0.15, 0.42)]
 ## Hand pose (camera space) of the high block: blade across, above the eyes.
 var BLOCK_HIGH := Transform3D(Basis.from_euler(Vector3(deg_to_rad(12.0), deg_to_rad(90.0), 0.0), EULER_ORDER_YXZ), Vector3(0.3, 0.12, -0.42))
-## Preset local grip points cycled with C on desktop (handle, tsuba, blunt spine).
+## Preset local grip points cycled with C on desktop (along the handle only).
 const GRIP_PRESETS := [
 	Vector3.ZERO,
-	Vector3(0.0, 0.0, -0.085),
-	Vector3(-0.025, 0.018, -0.40),
+	Vector3(0.0, 0.0, -0.05),
+	Vector3(0.0, 0.0, 0.16),
 ]
 
 @export var move_speed := 3.0
@@ -51,7 +51,7 @@ var weapons: Array = []
 var block_amount := 0.0
 ## Force the block on (tests), regardless of the Q key.
 var force_block := false
-## Current desktop grip preset index (0 = handle, 1 = tsuba, 2 = mune).
+## Current desktop grip preset index (position along the handle).
 var grip_preset_index := 0
 ## Whether the off-hand holder also grips the weapon on desktop.
 var two_handed := false
@@ -205,11 +205,8 @@ func _apply_desktop_grip(weapon: HeldWeapon) -> void:
 	var primary_local: Vector3 = weapon.clamp_grip_point(GRIP_PRESETS[grip_preset_index])
 	holder.grab(weapon, Transform3D(Basis.IDENTITY, primary_local))
 	if two_handed:
-		# Place the second hand either at the pommel (when main hand is on the
-		# handle) or on the blunt blade spine (half-swording).
-		var secondary_target := Vector3(0.0, 0.0, 0.16) if grip_preset_index == 0 else Vector3(-0.025, 0.018, -0.42)
-		if grip_preset_index == 2:
-			secondary_target = Vector3(0.0, 0.0, 0.05)
+		# The second hand takes the other end of the handle.
+		var secondary_target := Vector3(0.0, 0.0, -0.02) if primary_local.z > 0.07 else Vector3(0.0, 0.0, 0.17)
 		var secondary_local: Vector3 = weapon.clamp_grip_point(secondary_target)
 		off_hand.position = secondary_local - primary_local
 		left_holder.grab(weapon, Transform3D(Basis.IDENTITY, secondary_local))

@@ -193,10 +193,30 @@ func spawn_in_fog_ring(target_pos: Vector3 = Vector3.ZERO, sector_bias: float = 
 	if sector_bias >= 0.0:
 		angle = wrapf(sector_bias * TAU + _rng.randf_range(-0.42, 0.42), 0.0, TAU)
 	var r := _rng.randf_range(spawn_radius_min, spawn_radius_max)
-	var pos := _ring_point(target_pos, angle, r)
+	var pos := _separated_ring_point(target_pos, angle, r)
 	if _rng.randf() < elite_spawn_chance(maxi(wave, 1)):
 		return spawn_elite_at(pos, target_pos, EnemyCatalog.elite_element_for_roll(_rng))
 	return spawn_enemy_at(pos, target_pos)
+
+
+## A ring point that does not stack a new body on top of a living one:
+## batch spawns share a sector, and two ragdolls born interpenetrated used
+## to pop apart at solver speed. Tries a few angles, keeps the best.
+func _separated_ring_point(center: Vector3, angle: float, radius: float) -> Vector3:
+	var best := _ring_point(center, angle, radius)
+	var best_clear := -1.0
+	for i in 6:
+		var candidate := _ring_point(center, angle + float(i) * 0.85, radius)
+		var clear := INF
+		for yokai in alive_enemies():
+			var rp := yokai.root_part().global_position
+			clear = minf(clear, Vector2(candidate.x - rp.x, candidate.z - rp.z).length())
+		if clear > best_clear:
+			best_clear = clear
+			best = candidate
+		if clear >= 1.3:
+			break
+	return best
 
 
 ## Ring around the player (not the world origin: the player roams the forest),
@@ -215,7 +235,7 @@ func recall_stragglers(player_pos: Vector3) -> void:
 		var rp := yokai.root_part().global_position
 		if Vector2(rp.x - player_pos.x, rp.z - player_pos.z).length() < straggler_distance:
 			continue
-		var pos := _ring_point(player_pos, _rng.randf() * TAU, spawn_radius_max)
+		var pos := _separated_ring_point(player_pos, _rng.randf() * TAU, spawn_radius_max)
 		var dir := player_pos - pos
 		yokai.place_at(pos, atan2(dir.x, dir.z))
 
