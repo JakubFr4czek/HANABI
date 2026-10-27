@@ -7,10 +7,19 @@ signal finished
 
 const PETAL_SHADER := preload("res://src/shaders/sakura_petal.gdshader")
 const SHADOW_SHADER := preload("res://src/shaders/seiza_shadow.gdshader")
+const AIR_STEP_SHADER := preload("res://src/shaders/air_step.gdshader")
 
 const HOVER_HEIGHT := 0.78
 const DESCENT_SEC := 3.1
 const PETAL_COUNT := 18
+## Steps the player takes down the air during the descent, and how long each
+## print's ripple lives.
+const AIR_STEPS := 6
+const AIR_STEP_LIFE := 0.9
+## The offered katana's soft light: blade emission and a small lamp.
+const GLOW_COLOR := Color(0.72, 0.84, 1.0)
+const GLOW_PEAK := 0.9
+const GLOW_LIGHT_ENERGY := 0.55
 
 var active := false
 
@@ -38,6 +47,14 @@ var _petals: Array[MeshInstance3D] = []
 var _petal_angles: PackedFloat32Array
 var _rng := RandomNumberGenerator.new()
 var _meditation_hand := Vector3(0.02, -0.38, -0.22)
+var _petal_fade := 1.0
+var _air_steps: Array[MeshInstance3D] = []
+var _air_step_age: PackedFloat32Array
+var _steps_taken := 0
+var _katana_mats: Array[ShaderMaterial] = []
+var _glow_light: OmniLight3D
+var _glow := 0.0
+var _glow_tween: Tween
 
 
 func setup(player: Node3D, katana: HeldWeapon, spawn_pos: Vector3, spawn_yaw: float,
@@ -64,6 +81,10 @@ func start() -> void:
 	_movement_unlocked = false
 	_ripple_t = 0.0
 	_katana_reveal = 0.0
+	_petal_fade = 1.0
+	_steps_taken = 0
+	for st in _air_steps:
+		st.visible = false
 	_set_ripple(0.0, 0.0)
 	_set_seal_glow(0.35)
 	_hide_katana()
@@ -75,6 +96,7 @@ func start() -> void:
 		(_shadow.material_override as ShaderMaterial).set_shader_parameter("shadow_strength", 0.92)
 	for p in _petals:
 		p.visible = true
+		p.scale = Vector3.ONE
 	GameEvents.log_event("run_intro_started", {})
 
 
@@ -100,6 +122,11 @@ func _physics_process(delta: float) -> void:
 		_set_seal_glow(0.35 + progress * 0.65)
 		_update_petals(real_delta, progress)
 		_update_shadow(progress)
+		# Each step lands where the feet are now, alternating feet, as if
+		# walking down an invisible stair.
+		var due := int(floor(progress * float(AIR_STEPS) + 0.35))
+		if due > _steps_taken and _steps_taken < AIR_STEPS:
+			_take_air_step(height)
 		if _player is DesktopPlayer:
 			var dp := _player as DesktopPlayer
 			dp.hand_offset = dp.hand_offset.lerp(_meditation_hand, real_delta * 4.5)
@@ -107,6 +134,7 @@ func _physics_process(delta: float) -> void:
 			_touchdown()
 	else:
 		_step_post_touchdown(real_delta)
+	_update_air_steps(real_delta)
 
 
 func _touchdown() -> void:
@@ -133,14 +161,14 @@ func _step_post_touchdown(delta: float) -> void:
 		if _ripple_t >= 0.9:
 			_ripple_playing = false
 			_set_ripple(0.0, 0.0)
-	_katana_reveal = minf(_katana_reveal + delta * 2.4, 1.0)
+	_katana_reveal = minf(_katana_reveal + delta * 1.4, 1.0)
 	_reveal_katana(_katana_reveal)
-	_update_petals(delta, 1.0)
+	_scatter_petals(delta)
 	if _waiting_grab:
 		_float_katana()
 		if _katana and _katana.is_held():
 			_finish_intro()
-	elif _katana_reveal >= 1.0 and not _ripple_playing:
+	elif _katana_reveal >= 1.0:
 		_begin_float()
 
 
@@ -160,8 +188,11 @@ func _finish_intro() -> void:
 		# already free and may have walked off — never yank them back.)
 		_place_player_at_height(0.0)
 		_lock_player(false)
+	for st in _air_steps:
+		st.visible = false
 	if _katana:
 		_katana.freeze = false
+	_fade_glow(0.0, 0.8)
 	# The grab path already holds it; the skip path still needs the grant.
 	if _katana and not _katana.is_held():
 		_grant_katana()
@@ -188,9 +219,15 @@ func _hide_katana() -> void:
 		xr.left_holder.release()
 		xr.right_holder.release()
 	if _katana:
+		# Parked, frozen, at the offering spot for the whole descent: left
+		# to physics it fell to the ground unseen and then rose back up.
 		_katana.visible = false
+		_katana.freeze = true
 		_katana.linear_velocity = Vector3.ZERO
 		_katana.angular_velocity = Vector3.ZERO
+		_float_basis = _offer_basis()
+		_katana.global_transform = _float_pose()
+	_set_glow(0.0)
 
 
 func _grant_katana() -> void:
@@ -206,8 +243,14 @@ func _grant_katana() -> void:
 			_katana.snap_to_hand()
 
 
-## The offering pose: chest height, half a metre before the player, blade
-## pointing down, turning slowly until taken.
+## Lying across before the player, handle to the right hand, edge up, the
+## point tipped a little up (blade along local -Z).
+func _offer_basis() -> Basis:
+	return Basis(Vector3.UP, _spawn_yaw + PI * 0.5) * Basis(Vector3.RIGHT, deg_to_rad(8.0))
+
+
+## The offering pose: chest height, half a metre before the player, swaying
+## gently until taken (it no longer spins, so the handle stays at hand).
 func _float_pose() -> Transform3D:
 	var fwd := (Basis(Vector3.UP, _spawn_yaw) * Vector3.FORWARD)
 	fwd.y = 0.0
@@ -215,14 +258,14 @@ func _float_pose() -> Transform3D:
 		fwd = Vector3.FORWARD
 	else:
 		fwd = fwd.normalized()
-	var pos := _spawn_pos + fwd * 0.55 + Vector3.UP * (_ground_y + 1.25 + sin(_t * 1.8) * 0.03)
-	return Transform3D(Basis(Vector3.UP, _t * 0.55) * _float_basis, pos)
+	var pos := _spawn_pos + fwd * 0.55 + Vector3.UP * (_ground_y + 1.2 + sin(_t * 1.8) * 0.025)
+	var sway := Basis(Vector3.UP, sin(_t * 0.7) * deg_to_rad(6.0)) * Basis(Vector3.FORWARD, sin(_t * 1.1) * deg_to_rad(3.0))
+	return Transform3D(sway * _float_basis, pos)
 
 
 func _begin_float() -> void:
 	_waiting_grab = true
 	if _katana:
-		_float_basis = _katana.global_basis.orthonormalized()
 		_katana.freeze = true
 		_katana.linear_velocity = Vector3.ZERO
 		_katana.angular_velocity = Vector3.ZERO
@@ -233,17 +276,60 @@ func _float_katana() -> void:
 	if _katana == null:
 		return
 	_katana.global_transform = _float_pose()
+	# A slow breath of light while it waits.
+	_set_glow(GLOW_PEAK * (0.78 + 0.22 * sin(_t * 2.1)))
 
 
+## The blade appears where it is offered and its soft light swells: no
+## swirl, no fly-in.
 func _reveal_katana(amount: float) -> void:
 	if _katana == null:
 		return
 	_katana.visible = amount > 0.02
-	if _waiting_grab or amount >= 0.98:
+	if _waiting_grab:
 		return
-	# The blade flies in to the offering spot while it materializes.
-	_katana.global_transform = _katana.global_transform.interpolate_with(
-		_float_pose(), clampf(amount * 1.5, 0.0, 1.0))
+	_katana.global_transform = _float_pose()
+	var e := amount * amount * (3.0 - 2.0 * amount)
+	_set_glow(GLOW_PEAK * (0.3 + 1.1 * e) if amount < 1.0 else GLOW_PEAK)
+
+
+func _katana_steel_materials() -> Array[ShaderMaterial]:
+	if not _katana_mats.is_empty() or _katana == null:
+		return _katana_mats
+	for mi in _katana.find_children("*", "MeshInstance3D", true, false):
+		var surf := mi as MeshInstance3D
+		for si in surf.get_surface_override_material_count():
+			var mat := surf.get_surface_override_material(si)
+			if mat is ShaderMaterial and (mat as ShaderMaterial).shader \
+					and String((mat as ShaderMaterial).shader.resource_path).ends_with("katana_steel.gdshader"):
+				_katana_mats.append(mat)
+	return _katana_mats
+
+
+func _set_glow(v: float) -> void:
+	_glow = v
+	for m in _katana_steel_materials():
+		m.set_shader_parameter("spirit_glow", v)
+		m.set_shader_parameter("spirit_color", GLOW_COLOR)
+	if _katana and _glow_light == null:
+		_glow_light = OmniLight3D.new()
+		_glow_light.name = "OfferingGlow"
+		_glow_light.light_color = GLOW_COLOR
+		_glow_light.omni_range = 1.6
+		_glow_light.omni_attenuation = 1.6
+		_glow_light.shadow_enabled = false
+		_katana.add_child(_glow_light)
+		_glow_light.position = Vector3(0.0, 0.0, -0.35)
+	if _glow_light:
+		_glow_light.light_energy = GLOW_LIGHT_ENERGY * v / GLOW_PEAK
+		_glow_light.visible = v > 0.01
+
+
+func _fade_glow(to: float, seconds: float) -> void:
+	if _glow_tween and _glow_tween.is_valid():
+		_glow_tween.kill()
+	_glow_tween = create_tween()
+	_glow_tween.tween_method(_set_glow, _glow, to, seconds).set_trans(Tween.TRANS_SINE)
 
 
 func _lock_player(locked: bool) -> void:
@@ -294,6 +380,63 @@ func _update_petals(delta: float, progress: float) -> void:
 		p.rotation.z += delta * 2.6
 
 
+## At touchdown the petal swirl breaks: the petals drift outward and up and
+## shrink away instead of circling the offered blade.
+func _scatter_petals(delta: float) -> void:
+	_petal_fade = maxf(_petal_fade - delta * 1.6, 0.0)
+	var center := _player.global_position + Vector3(0.0, 0.7, 0.0) if _player else Vector3.ZERO
+	for p in _petals:
+		if not p.visible:
+			continue
+		var out := p.global_position - center
+		out.y = 0.0
+		p.global_position += (out.normalized() * 1.6 + Vector3.UP * 0.5) * delta
+		p.rotation.z += delta * 3.5
+		p.scale = Vector3.ONE * maxf(_petal_fade, 0.01)
+		p.visible = _petal_fade > 0.0
+
+
+func _feet_xz() -> Vector3:
+	var cam := _player.get_viewport().get_camera_3d() if _player and _player.get_viewport() else null
+	if _player is XRPlayer and cam:
+		return Vector3(cam.global_position.x, 0.0, cam.global_position.z)
+	return Vector3(_player.global_position.x, 0.0, _player.global_position.z)
+
+
+func _take_air_step(height: float) -> void:
+	var i := _steps_taken % _air_steps.size()
+	_steps_taken += 1
+	var step := _air_steps[i]
+	var side := -1.0 if _steps_taken % 2 == 1 else 1.0
+	var facing := Basis(Vector3.UP, _spawn_yaw)
+	var feet := _feet_xz() + facing * Vector3(0.11 * side, 0.0, -0.05)
+	step.global_position = Vector3(feet.x, _spawn_pos.y + height + 0.02, feet.z)
+	step.rotation = Vector3(-PI * 0.5, _spawn_yaw, 0.0)
+	step.visible = true
+	_air_step_age[i] = 0.0
+	(step.material_override as ShaderMaterial).set_shader_parameter("progress", 0.0)
+	# A soft chime per step, rising a little like walking down a scale.
+	Sfx.play_at("soul_collect", step.global_position, -15.0, 3.0, 0.8 + 0.06 * float(_steps_taken))
+	if _player is XRPlayer:
+		var xr := _player as XRPlayer
+		var ctrl := xr.left_controller if side < 0.0 else xr.right_controller
+		if ctrl:
+			ctrl.trigger_haptic_pulse("haptic", 0.0, 0.25, 0.05, 0.0)
+
+
+func _update_air_steps(delta: float) -> void:
+	for i in _air_steps.size():
+		var step := _air_steps[i]
+		if not step.visible:
+			continue
+		_air_step_age[i] += delta
+		var prog := _air_step_age[i] / AIR_STEP_LIFE
+		if prog >= 1.0:
+			step.visible = false
+			continue
+		(step.material_override as ShaderMaterial).set_shader_parameter("progress", prog)
+
+
 func _build_visuals() -> void:
 	_rng.randomize()
 	_shadow = MeshInstance3D.new()
@@ -308,6 +451,22 @@ func _build_visuals() -> void:
 	_shadow.material_override = sm
 	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_shadow)
+
+	var step_mesh := QuadMesh.new()
+	step_mesh.size = Vector2(0.62, 0.62)
+	_air_step_age.resize(AIR_STEPS)
+	for i in AIR_STEPS:
+		var step := MeshInstance3D.new()
+		step.name = "AirStep%d" % i
+		step.mesh = step_mesh
+		var m := ShaderMaterial.new()
+		m.shader = AIR_STEP_SHADER
+		m.render_priority = 3
+		step.material_override = m
+		step.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		step.visible = false
+		_air_steps.append(step)
+		add_child(step)
 
 	var mesh := QuadMesh.new()
 	mesh.size = Vector2(0.15, 0.22)
