@@ -85,7 +85,7 @@ func _run_all() -> void:
 	await _wait(0.3)
 	clawer.brain.force_attack("right")
 	var hp_before := player.health.hp
-	await _wait(1.0)
+	await _wait(1.45)
 	_check("Yōkai telegraphed claw strike damages the player (HP %.1f -> %.1f)" % [hp_before, player.health.hp],
 		player.health.hp < hp_before)
 	player.health.heal_full()

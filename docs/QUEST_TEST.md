@@ -26,12 +26,19 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 - [ ] Parry / stagger Oni: czytelne, **bez zmiany chwytu** katany.
 - [ ] Błyskawica za wielkim torii.
 
-## Audio (§10 + §15)
+## Audio (§10 + §15 + §18)
 
-- [ ] **CC0 deszcz** na Ambience (nie „syntetyczny szum”).
+- [ ] **CC0 deszcz** na Ambience (nie „syntetyczny szum”); wiatr lasu też na **Ambience**, nie Music.
 - [ ] Grzmot po błyskawicy; **stal** z nagrań (clash), nie procedural ring.
-- [ ] **Muzyka** `orientalsomber` na szynie Music — cicho, nie zagłusza SFX.
+- [ ] **Cięcie / trafienie / obrażenia**: Kenney Impact (`cc0_combat/`), 2–3 warianty + pitch — nie `assets/audio/generated/`.
+- [ ] **Muzyka** `orientalsomber` na szynie Music — cicho (~−23 dB + limiter), **crossfade** na końcu utworu (bez kliku), **duck −9 dB** na level-up.
 - [ ] Swing katany: pitch z prędkością; kill stinger + soul; slow-mo: lekki low-pass ambience.
+
+## Wydajność §18 (po §16.3)
+
+- [ ] Fala 8+ yōkai + 1 kill firework: **lights ≤ 3** (pool flash), **audio~** wraca < 20 po 2 s (Sfx soft-cap na tell/ring).
+- [ ] Oni w walce: rim Omni **tylko < 14 m** (poza zasięgiem wyłączony).
+- [ ] Headless `quest_perf_test` z symulacją 3× `VfxPool.spawn_firework_flash` + `ElementFirework` — draw ≤ 345, lights ≤ 12.
 
 ## Komfort VR
 
