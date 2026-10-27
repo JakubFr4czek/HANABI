@@ -41,7 +41,6 @@ func _on_struck(direction: Vector2) -> void:
 	var cam := get_viewport().get_camera_3d()
 	var origin := cam.global_position if cam else Vector3.ZERO
 	var dir := Vector3(direction.x, 0.3, direction.y).normalized()
-	Sfx.play_at("thunder_crack", origin + dir * 18.0, -6.0, 22.0)
 	var delay := _rng.randf_range(thunder_delay_min, thunder_delay_max)
 	get_tree().create_timer(delay, true, false, true).timeout.connect(_thunder.bind(direction, delay))
 

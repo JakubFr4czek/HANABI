@@ -18,6 +18,6 @@ func _ready() -> void:
 		stream = dup
 	_player.stream = stream
 	_player.volume_db = -22.0
-	_player.bus = Sfx.AMBIENCE_BUS
+	_player.bus = Sfx.MUSIC_BUS
 	add_child(_player)
 	_player.play()

@@ -1,0 +1,5 @@
+Kenney Interface Sounds & Impact Sounds (CC0 1.0)
+https://kenney.nl/assets/interface-sounds
+https://kenney.nl/assets/impact-sounds
+
+Files in this folder are renamed subsets used by HANABI run SFX.

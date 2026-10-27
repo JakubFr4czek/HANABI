@@ -11,26 +11,28 @@ const CATEGORIES := {
 	"impact_heavy": ["res://assets/audio/sfx/impact", "impactPunch"],
 	"blade_ring": ["res://assets/audio/generated", "blade_ring"],
 	"thunder": ["res://assets/audio/generated", "thunder"],
-	"thunder_crack": ["res://assets/audio/sfx/hanabi_proc", "thunder_crack"],
 	"enemy_tell": ["res://assets/audio/generated", "enemy_tell"],
 	"player_hurt": ["res://assets/audio/generated", "player_hurt"],
 	"cut": ["res://assets/audio/generated", "cut"],
 	"slap": ["res://assets/audio/generated", "slap"],
-	"firework": ["res://assets/audio/sfx/hanabi_proc", "firework_pop"],
-	"soul_collect": ["res://assets/audio/sfx/hanabi_proc", "soul_collect"],
-	"ofuda_slice": ["res://assets/audio/sfx/hanabi_proc", "ofuda_slice"],
-	"level_up": ["res://assets/audio/sfx/hanabi_proc", "level_up"],
-	"yokai_slice": ["res://assets/audio/sfx/hanabi_proc", "yokai_slice"],
+	"firework": ["res://assets/audio/sfx/kenney_run", "firework"],
+	"soul_collect": ["res://assets/audio/sfx/kenney_run", "soul_collect"],
+	"ofuda_slice": ["res://assets/audio/sfx/kenney_run", "ofuda_slice"],
+	"level_up": ["res://assets/audio/sfx/kenney_run", "level_up"],
+	"yokai_slice": ["res://assets/audio/sfx/kenney_run", "yokai_slice"],
 }
 const POOL_SIZE := 24
 const WORLD_BUS := &"World"
 const AMBIENCE_BUS := &"Ambience"
+const MUSIC_BUS := &"Music"
 const MAX_WORLD_DB := 4.0
 
 var _streams := {}  # category -> AudioStreamRandomizer
 var _pool: Array[AudioStreamPlayer3D] = []
 var _next := 0
 var _ambience_lowpass_idx := -1
+var _ambience_base_db := 0.0
+var _music_base_db := 0.0
 
 
 func _ready() -> void:
@@ -115,6 +117,13 @@ func _update_slow_mo_audio(_force: bool = false) -> void:
 	var lp_fx := AudioServer.get_bus_effect(bus, _ambience_lowpass_idx) as AudioEffectLowPassFilter
 	if lp_fx:
 		lp_fx.cutoff_hz = 900.0 if slow else 20500.0
+	var duck := -10.0 if slow else 0.0
+	var amb := AudioServer.get_bus_index(AMBIENCE_BUS)
+	if amb >= 0:
+		AudioServer.set_bus_volume_db(amb, _ambience_base_db + duck)
+	var mus := AudioServer.get_bus_index(MUSIC_BUS)
+	if mus >= 0:
+		AudioServer.set_bus_volume_db(mus, _music_base_db + duck)
 
 
 func _setup_buses() -> void:
@@ -141,3 +150,10 @@ func _setup_buses() -> void:
 		AudioServer.add_bus(i)
 		AudioServer.set_bus_name(i, AMBIENCE_BUS)
 		AudioServer.set_bus_send(i, &"Master")
+		_ambience_base_db = AudioServer.get_bus_volume_db(i)
+	if AudioServer.get_bus_index(MUSIC_BUS) < 0:
+		var j := AudioServer.bus_count
+		AudioServer.add_bus(j)
+		AudioServer.set_bus_name(j, MUSIC_BUS)
+		AudioServer.set_bus_send(j, &"Master")
+		_music_base_db = AudioServer.get_bus_volume_db(j)
