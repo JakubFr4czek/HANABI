@@ -30,6 +30,23 @@ func _run_all() -> void:
 	_check("the offering floats within reach of the spawn (gap %.2f m)" % gap,
 		gap > 0.2 and gap < 1.6)
 
+	# Movement is already back before the grab: the player is not frozen in
+	# place while the run waits for the katana to be taken.
+	var dp0 := run.player as DesktopPlayer
+	_check("the player can move before taking the katana", not dp0.movement_locked)
+	var before := dp0.global_position
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_W
+	ev.pressed = true
+	Input.parse_input_event(ev)
+	await _frames(45)
+	var ev_up := InputEventKey.new()
+	ev_up.physical_keycode = KEY_W
+	ev_up.pressed = false
+	Input.parse_input_event(ev_up)
+	_check("walking works before the grab (moved %.2f m)" % dp0.global_position.distance_to(before),
+		dp0.global_position.distance_to(before) > 0.4)
+
 	# Desktop E-grab stands in for the XR grip: taking starts the run.
 	var dp := run.player as DesktopPlayer
 	dp.take_weapon(run.katana)

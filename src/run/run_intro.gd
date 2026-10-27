@@ -29,6 +29,9 @@ var _katana_reveal := 0.0
 ## After the descent the katana hangs in the air before the player and the run
 ## only starts once it is taken: the grab is the start button.
 var _waiting_grab := false
+## Movement is handed back at touchdown: the player may walk around (and
+## walk up to the katana) while the run itself still waits for the grab.
+var _movement_unlocked := false
 var _float_basis := Basis.IDENTITY
 var _shadow: MeshInstance3D
 var _petals: Array[MeshInstance3D] = []
@@ -58,12 +61,14 @@ func start() -> void:
 	_descent_done = false
 	_ripple_playing = false
 	_waiting_grab = false
+	_movement_unlocked = false
 	_ripple_t = 0.0
 	_katana_reveal = 0.0
 	_set_ripple(0.0, 0.0)
 	_set_seal_glow(0.35)
 	_hide_katana()
 	_lock_player(true)
+	_player.rotation = Vector3(0.0, _spawn_yaw, 0.0)
 	_place_player_at_height(HOVER_HEIGHT)
 	if _shadow:
 		_shadow.visible = true
@@ -107,6 +112,11 @@ func _physics_process(delta: float) -> void:
 func _touchdown() -> void:
 	_descent_done = true
 	_place_player_at_height(0.0)
+	# Feet are on the ground: hand movement back. The run still starts only
+	# when the katana is taken, but the player is not frozen in place until
+	# then — they can walk up to the blade (or look around) first.
+	_movement_unlocked = true
+	_lock_player(false)
 	_set_seal_glow(1.0)
 	_ripple_playing = true
 	_ripple_t = 0.0
@@ -144,10 +154,12 @@ func _finish_intro() -> void:
 		p.visible = false
 	if _shadow:
 		_shadow.visible = false
-	# Land before unlocking: an XR body released mid-hover would fall and drag
-	# the origin below the floor.
-	_place_player_at_height(0.0)
-	_lock_player(false)
+	if not _movement_unlocked:
+		# Land before unlocking: an XR body released mid-hover would fall and
+		# drag the origin below the floor. (After touchdown the player is
+		# already free and may have walked off — never yank them back.)
+		_place_player_at_height(0.0)
+		_lock_player(false)
 	if _katana:
 		_katana.freeze = false
 	# The grab path already holds it; the skip path still needs the grant.
@@ -158,8 +170,9 @@ func _finish_intro() -> void:
 
 
 func _place_player_at_height(hover: float) -> void:
+	# Position only: rewriting the rig's yaw every physics tick fought the
+	# headset/snap-turn and made the camera judder through the whole descent.
 	_player.global_position = Vector3(_spawn_pos.x, _spawn_pos.y + hover, _spawn_pos.z)
-	_player.rotation = Vector3(0.0, _spawn_yaw, 0.0)
 	if _shadow:
 		_shadow.global_position = Vector3(_spawn_pos.x, _ground_y + 0.015, _spawn_pos.z)
 		_shadow.rotation.y = _spawn_yaw

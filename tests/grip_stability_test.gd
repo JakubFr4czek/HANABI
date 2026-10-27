@@ -6,7 +6,7 @@ extends Node
 
 const ROOM := preload("res://scenes/test_room.tscn")
 const BASE_POSE := Transform3D(Basis.IDENTITY, Vector3(-3.0, 1.4, 3.0))
-const MUNE_GRIP := Vector3(-0.025, 0.02, -0.40)
+const HANDLE_GRIP := Vector3(0.0, 0.0, 0.16)
 
 var room: Node3D
 var player: DesktopPlayer
@@ -71,20 +71,24 @@ func _run() -> void:
 	# grip; a normal fist takes the normal one.
 	_place(katana, BASE_POSE)
 	var handle_world := BASE_POSE * Vector3(0.0, 0.0, 0.12)
-	var flip_grip := katana.compute_local_grip(Transform3D(Basis(Vector3.RIGHT, PI), handle_world))
+	var flip_grip := katana.compute_local_grip(Transform3D(Basis(Vector3.UP, PI), handle_world))
 	var norm_grip := katana.compute_local_grip(Transform3D(Basis.IDENTITY, handle_world))
 	_check("grabbing blade-down takes the reversed grip",
-		flip_grip.basis.get_rotation_quaternion().angle_to(Basis(Vector3.RIGHT, PI).get_rotation_quaternion()) < 0.05)
+		flip_grip.basis.get_rotation_quaternion().angle_to(Basis(Vector3.UP, PI).get_rotation_quaternion()) < 0.05)
 	_check("grabbing normally keeps the natural grip",
 		norm_grip.basis.get_rotation_quaternion().angle_to(Quaternion.IDENTITY) < 0.05)
-	# End to end: held reversed, the tip ends up on the other side of the fist.
+	# End to end: held reversed, the tip ends up on the other side of the fist,
+	# and the cutting edge stays on the same side of the hand as in the normal
+	# grip (a backhand meets the enemy edge-first, not spine-first).
 	var hr := _new_holder("right")
 	_place(katana, BASE_POSE)
-	hr.global_transform = Transform3D(Basis(Vector3.RIGHT, PI), BASE_POSE.origin)
+	hr.global_transform = Transform3D(Basis(Vector3.UP, PI), BASE_POSE.origin)
 	hr.grab(katana)
 	await _wait(0.6)
 	var tip_side := (katana.get_tip_global() - hr.global_position).dot((hr.global_transform.basis * Vector3.FORWARD).normalized())
 	_check("held reversed, the blade points back along the fist (tip side %.2f)" % tip_side, tip_side < -0.3)
+	var edge_side := (katana.global_basis * -katana.spine_direction).normalized().dot((-hr.global_transform.basis.y).normalized())
+	_check("held reversed, the edge faces the same way as in a normal grip (edge side %.2f)" % edge_side, edge_side > 0.9)
 	hr.release()
 	hr.queue_free()
 
@@ -94,7 +98,7 @@ func _run() -> void:
 
 
 ## Grab [param weapon] at the base pose (optionally with a second hand on the
-## blunt spine), let it settle, then hold still with tracking noise for 3 s.
+## handle), let it settle, then hold still with tracking noise for 3 s.
 func _hold_still(weapon: HeldWeapon, two_handed: bool, hz: int) -> Dictionary:
 	Engine.physics_ticks_per_second = hz
 	var h1 := _new_holder("right")
@@ -102,7 +106,7 @@ func _hold_still(weapon: HeldWeapon, two_handed: bool, hz: int) -> Dictionary:
 	_place(weapon, BASE_POSE)
 	h1.global_transform = BASE_POSE
 	h1.grab(weapon)
-	var h2_pose := BASE_POSE * Transform3D(Basis.IDENTITY, weapon.clamp_grip_point(MUNE_GRIP))
+	var h2_pose := BASE_POSE * Transform3D(Basis.IDENTITY, weapon.clamp_grip_point(HANDLE_GRIP))
 	if two_handed:
 		h2.global_transform = h2_pose
 		h2.grab(weapon)

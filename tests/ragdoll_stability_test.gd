@@ -20,6 +20,7 @@ func _ready() -> void:
 func _run_all() -> void:
 	await _test_heavy_hit_stays_bounded()
 	await _test_overlapping_spawns_separate()
+	await _test_yokai_body_invariants()
 
 
 ## A kanabo-grade blow to the forearm: the arm may fly, the body must not.
@@ -74,6 +75,51 @@ func _test_overlapping_spawns_separate() -> void:
 				max_speed = maxf(max_speed, (p as RagdollPart).linear_velocity.length())
 	print("    overlap: peak part speed %.1f m/s" % max_speed)
 	_check("overlapping spawns separate without detonating (peak %.1f m/s)" % max_speed, max_speed < 14.0)
+	run.queue_free()
+
+
+## A standing yōkai's parts must not collide with their own layer (the body
+## tore itself apart on self-overlaps), elites must not scale the physics
+## node, and a knocked-down yōkai must land on the terrain and get back up
+## instead of sinking through the world.
+func _test_yokai_body_invariants() -> void:
+	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
+	add_child(run)
+	await _frames(12)
+	run.wave_director.stop_director()
+	run.wave_director.clear_enemies()
+	await _frames(4)
+	var gy := float(run.wave_director.ground_height.call(0.0, 6.0))
+	var yokai: Yokai = run.wave_director.spawn_enemy_at(Vector3(0.0, gy, 6.0), Vector3.ZERO)
+	await _frames(10)
+	var self_collision := false
+	for p in yokai.parts.values():
+		self_collision = self_collision or ((p as RagdollPart).collision_mask & 2) != 0
+	_check("standing yokai parts ignore their own layer (no self-collision)", not self_collision)
+	yokai.configure_kind(Yokai.Kind.ELITE, Elements.NONE, 200.0)
+	_check("elite yokai does not scale its physics node (scale %s)" % yokai.scale, yokai.scale == Vector3.ONE)
+	yokai.configure_kind(Yokai.Kind.SWARM, Elements.NONE, 95.0)
+	# Knock it flat and watch: it must land near the ground, then stand again.
+	yokai.weaken(1.0, 1.0)
+	_check("full weaken knocks the yokai down", yokai.state == Yokai.State.KNOCKED_DOWN)
+	var min_pelvis := INF
+	for i in 120:
+		await get_tree().physics_frame
+		min_pelvis = minf(min_pelvis, yokai.root_part().global_position.y)
+	_check("knocked-down yokai lands on the terrain instead of falling through (min pelvis %.2f, ground %.2f)" % [min_pelvis, gy],
+		min_pelvis > gy - 0.85)
+	var rose := false
+	for i in 600:
+		await get_tree().physics_frame
+		if yokai.state == Yokai.State.STANDING:
+			rose = true
+			break
+	if rose:
+		await _frames(240)
+	var pelvis_h := yokai.root_part().global_position.y - float(run.wave_director.ground_height.call(
+		yokai.root_part().global_position.x, yokai.root_part().global_position.z))
+	_check("yokai gets back up after a knockdown (pelvis %.2f m over ground)" % pelvis_h, rose and pelvis_h > 0.55)
 	run.queue_free()
 
 

@@ -146,21 +146,20 @@ func _pressed_once(key: String, pressed: bool) -> bool:
 
 
 ## Scripted rig moves (run intro hover, respawn on the seal): XR Tools'
-## PlayerBody is top-level and applies gravity to the origin every physics
-## frame, so it would pull a hover back down. Locking freezes the body and
-## locomotion and recenters the origin on this node so moving the rig root
-## places the player exactly.
+## PlayerBody applies gravity to the origin every physics frame, so it
+## would pull a hover back down. Locking only freezes the body and the
+## locomotion providers. It deliberately does NOT touch the origin
+## transform or teleport the body: resetting the origin to identity threw
+## away the body's seating under the headset (a camera snap at lock and
+## again at unlock, and the eye ending up wherever the body re-seated),
+## and teleporting the body to the rig root made it yank the origin —
+## and the camera — sideways on the next physics frame.
 func set_rig_locked(locked: bool) -> void:
-	var origin := $XROrigin3D as XROrigin3D
-	# The unlocked body stands height_offset below the origin; keep that while
-	# locked too so the eye height does not jump on touchdown.
-	origin.transform = Transform3D(Basis.IDENTITY, Vector3(0.0, height_offset, 0.0))
-	var body := origin.get_node_or_null("PlayerBody")
+	var body := _body()
 	if body:
 		body.set("enabled", not locked)
 		if not locked:
 			body.set("velocity", Vector3.ZERO)
-			(body as Node3D).global_transform = global_transform
 	for path in ["XROrigin3D/LeftHand/MovementDirect", "XROrigin3D/RightHand/MovementTurn"]:
 		var provider := get_node_or_null(path)
 		if provider:
