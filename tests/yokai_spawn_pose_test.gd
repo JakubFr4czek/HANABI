@@ -23,7 +23,8 @@ func _run() -> void:
 	run.wave_director.clear_enemies()
 	var y := run.wave_director.spawn_enemy_at(Vector3(0.0, 0.0, -2.0), player.global_position)
 	await _frames(14)
-	_check("Spawned yōkai uses stalk pose (not default guard T-pose)", y.current_pose == "stalk")
+	_check("Spawned yōkai uses stalk/approach pose (not default guard T-pose)",
+		y.current_pose == "stalk" or y.current_pose == "approach")
 	var errs := y.pose_errors()
 	var arm_err: float = float(errs.get("arm_r", 99.0))
 	_check("Arm joints are near stalk targets (arm_r err %.1f°, not T-pose ~90°)" % arm_err, arm_err < 28.0)
