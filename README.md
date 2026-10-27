@@ -4,7 +4,7 @@ VR melee survivor-like for Meta Quest: Blade & Sorcery–style physics swordplay
 
 The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [`docs/HANABI_agent_prompt.md`](docs/HANABI_agent_prompt.md).
 
-## Current state: milestone 1 (sword physics) + Dojo of the Storm training arena
+## Current state: sword physics + survival loop + four element builds
 
 | Works | Stubbed / temporary |
 |---|---|
@@ -17,7 +17,7 @@ The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [
 | No clipping (CCD) and **no bulldozing**: when the blade is held back by a wall or an enemy the arm gives way (strength drops to 30%), with a light haptic buzz | |
 | **Hit-stop** 50–80 ms on hits ≥ 40 damage, **micro hit-stop** 25–35 ms (partial slow-down) on medium hits and blade clashes; **haptic patterns** per event (hit, clash, parry with a softer echo in the free hand) | |
 | **Storm audio**: stereo rain bed, distant thunder 1–2.5 s after each flash from the bolt's direction, steel ring on metal clashes/parries/cuts, open-air reverb on all positional sounds | Rain, thunder and steel ring are synthesized placeholders (`tools/gen_storm_audio.py`) until real recordings are added |
-| **Blade trail** (CPU ribbon, works on Quest's Compatibility renderer) colored by element: none / sakura / storm / ink / shadow | Elements change the trail color and highlight their quadrant on the `桜 雷 墨 影` floor seal (abilities come in milestone 3) |
+| **Four element trees** with a two-element / six-slot cap: Sakura cutting and orbiting glass petals plus light healing; Storm chain lightning and charged strikes; Ink slowing blade-painted pools and tendrils; Shadow combat blink and confusing darkness. Maxed Storm+Ink evolves into black lightning; Sakura+Shadow into phantom petals. The blade trail, diegetic HUD and unlocked `桜 雷 墨 影` seal quadrants follow the build | |
 | **Parry**: meeting the dummy's attacking blade fast enough and across it (≥ 25°) is a parry: sparks, compensated slow-mo ×0.3 for 0.6 s (your blade stays real-time), dummy **staggered**, **counter window** 1.5 s with ×1.5 damage | |
 | **Duelist AI** (`DuelistBrain` + `SwordArmIK`): the sword arm moves by real-time IK, so the guard follows you fluidly (point on your throat, leaning toward your blade). It sees your blade with a reaction delay, reads your wind-up (covers high, side or low before the cut), lays its blade across cuts that come, or steps out of reach. A light cut into its guard is deflected and answered with a riposte; a committed full-arm cut breaks the guard and staggers it. It attacks into openings (after your miss, a blade held high/low/wide, you stepping in without a cut ready, or when its patience runs out) with vertical / horizontal cuts and thrusts, combos and feints, on planted feet with one step in, then steps back to ma-ai. **Fair by rule**: every strike shows at least 0.4 s of wind-up (pose + glowing eyes + rising whoosh) inside your view, a wind-up is dropped if you look away, and it never flanks out of view. Difficulty presets easy / normal / hard are data (`DuelistDifficulty`) | Attack poses are hand-tuned on the primitive dummy |
 | **Player HP** 100 with feedback: red edge vignette (pulses below 35 %), heavy haptic pattern in both hands, hurt sound; at 0 HP you are down for 3 s, the dummy backs off and you get back up at full health | No death / run-over screen yet (milestone 2) |
@@ -69,6 +69,8 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/blade_feel_test.tscn -- --
 $GODOT --headless --path . --fixed-fps 90 res://tests/arena_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/enemy_motion_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/sword_ik_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/run_loop_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/elements_test.tscn -- --desktop
 # Diagnostics: 40 s of sparring stats per difficulty, block traces
 $GODOT --headless --path . --fixed-fps 90 res://tests/diag/diag_spar.tscn -- --desktop normal
 ```

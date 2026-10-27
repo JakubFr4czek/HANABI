@@ -27,6 +27,7 @@ var _homes := {}  # weapon -> Transform3D on the stand
 var _seal_material: ShaderMaterial
 var _seal_labels: Array[Label3D] = []
 var _last_seal_element := ""
+var _seal_progress_mode := false
 
 
 func _ready() -> void:
@@ -60,6 +61,8 @@ static func is_xr_available() -> bool:
 
 
 func _process(_delta: float) -> void:
+	if _seal_progress_mode:
+		return
 	var active_elem := Elements.NONE
 	if katana and katana.is_held():
 		active_elem = katana.element
@@ -200,12 +203,7 @@ func _setup_seal_kanji(seal_root: Node3D) -> void:
 
 ## The seal is a dim silver inlay; only the active element's glyph lights up.
 func _update_seal_element(elem: String) -> void:
-	var idx := -1
-	match elem:
-		Elements.SAKURA: idx = 0
-		Elements.STORM: idx = 1
-		Elements.INK: idx = 2
-		Elements.SHADOW: idx = 3
+	var idx := Elements.seal_index(elem)
 	if _seal_material:
 		_seal_material.set_shader_parameter("active_element_index", idx)
 	var neon := [
@@ -217,6 +215,33 @@ func _update_seal_element(elem: String) -> void:
 	var inlay := Color(0.2, 0.21, 0.27, 0.8)
 	for i in _seal_labels.size():
 		_seal_labels[i].modulate = neon[i] if idx == i else inlay
+
+
+## Run mode: keep every unlocked quadrant lit and reserve the inner star for
+## an evolution. Training mode still highlights only the held weapon's element.
+func set_seal_progress(unlocked: Array[String], evolution_mask: int = 0) -> void:
+	_seal_progress_mode = true
+	var mask := 0
+	for element in unlocked:
+		var idx := Elements.seal_index(element)
+		if idx >= 0:
+			mask |= 1 << idx
+	if _seal_material:
+		_seal_material.set_shader_parameter("active_element_index", -1)
+		_seal_material.set_shader_parameter("active_elements_mask", mask)
+		_seal_material.set_shader_parameter("evolution_mask", evolution_mask)
+	var inlay := Color(0.2, 0.21, 0.27, 0.8)
+	for i in _seal_labels.size():
+		var element := Elements.COMBAT_ELEMENTS[i]
+		_seal_labels[i].modulate = Elements.accent_color(element) * 0.92 if unlocked.has(element) else inlay
+
+
+func clear_seal_progress() -> void:
+	_seal_progress_mode = false
+	if _seal_material:
+		_seal_material.set_shader_parameter("active_elements_mask", 0)
+		_seal_material.set_shader_parameter("evolution_mask", 0)
+	_update_seal_element(Elements.NONE)
 
 
 func _style_torii_gates(arena: Node) -> void:
@@ -275,7 +300,8 @@ static func _scanned_wet_material(orig: StandardMaterial3D, tint: Color, rough_w
 	return m
 
 
-static func _wet_material(color: Color, rough_dry: float, rough_wet: float, wetness: float, waterline_y: float) -> ShaderMaterial:
+static func _wet_material(color: Color, rough_dry: float, rough_wet: float, wetness: float,
+		waterline_y: float, fill: float = 1.0) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = WET_SURFACE_SHADER
 	m.set_shader_parameter("base_color", color)
@@ -283,4 +309,5 @@ static func _wet_material(color: Color, rough_dry: float, rough_wet: float, wetn
 	m.set_shader_parameter("roughness_wet", rough_wet)
 	m.set_shader_parameter("wetness", wetness)
 	m.set_shader_parameter("waterline_y", waterline_y)
+	m.set_shader_parameter("fill", fill)
 	return m

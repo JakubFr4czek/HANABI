@@ -126,7 +126,9 @@ func _run_all() -> void:
 	var center_ofuda := run.active_ofuda[1]
 	var chosen_id := String(center_ofuda.upgrade.get("id", ""))
 	player.swing_duration = 0.16
-	player.swing(DesktopPlayer.SLASH_OVERHEAD)
+	# The desktop right hand rests 22 cm off-center; offset the scripted cut so
+	# its swept blade, not merely the hand, passes through the center card.
+	player.swing([Vector3(-0.15, 0.5, 0.0), Vector3(-0.15, -0.5, 0.0)])
 	await _wait(0.45)
 
 	_check("Physical katana swing slices the Ofuda, applies upgrade '%s', and exits slow-mo" % chosen_id,

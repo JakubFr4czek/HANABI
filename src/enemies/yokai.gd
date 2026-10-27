@@ -37,6 +37,9 @@ var _last_tell := 0.0
 var _flash_time := 0.0
 var _dissolve_timer := 0.0
 var _dissolve_duration := 0.95
+var _slow_time := 0.0
+var _slow_scale := 1.0
+var _confusion_time := 0.0
 
 
 func _ready() -> void:
@@ -429,6 +432,55 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	return hit
 
 
+## Damage from bounded run abilities (petals, lightning and ink tendrils).
+## Kept separate from weapon contacts so it cannot recursively proc on-hit effects.
+func receive_element_damage(amount: float, element: String, point: Vector3, direction: Vector3) -> float:
+	if is_dead or amount <= 0.0:
+		return 0.0
+	last_kill_element = element
+	var damage := snappedf(amount * profile.damage_multiplier("torso", element), 0.1)
+	hp = maxf(hp - damage, 0.0)
+	var chest := parts.get("chest") as RagdollPart
+	if chest:
+		chest.apply_impulse(direction.normalized() * minf(damage * 0.045, 1.8), point - chest.global_position)
+	weaken(damage * profile.muscle_damage_scale * 0.45, damage * profile.poise_damage_scale * 0.35)
+	var hit := {
+		"attacker": "element_ability",
+		"element": element,
+		"target": profile.display_name,
+		"part": "chest",
+		"zone": "torso",
+		"damage": damage,
+		"point": point,
+		"direction": direction,
+		"hp_left": hp,
+	}
+	GameEvents.log_event("element_hit", hit)
+	_flash_time = 0.10
+	if brain:
+		brain.on_hit(hit)
+	if hp <= 0.0:
+		die(hit)
+	return damage
+
+
+func apply_slow(duration: float, scale: float) -> void:
+	_slow_time = maxf(_slow_time, duration)
+	_slow_scale = minf(_slow_scale, clampf(scale, 0.25, 1.0))
+
+
+func apply_confusion(duration: float) -> void:
+	_confusion_time = maxf(_confusion_time, duration)
+
+
+func is_slowed() -> bool:
+	return _slow_time > 0.0
+
+
+func is_confused() -> bool:
+	return _confusion_time > 0.0
+
+
 func die(hit: Dictionary = {}) -> void:
 	if is_dead:
 		return
@@ -484,6 +536,10 @@ func _physics_process(delta: float) -> void:
 			queue_free()
 		return
 
+	_slow_time = maxf(0.0, _slow_time - delta)
+	if _slow_time <= 0.0:
+		_slow_scale = 1.0
+	_confusion_time = maxf(0.0, _confusion_time - delta)
 	var intent := brain.think(delta, _perceive())
 	set_pose(intent.get("pose", "stalk"))
 	var attacking: bool = intent.get("attacking", false) and state == State.STANDING
@@ -512,6 +568,11 @@ func _perceive() -> Dictionary:
 	if head:
 		ctx["player_position"] = head.global_position
 		ctx["player_forward"] = -head.global_basis.z
+		if _confusion_time > 0.0:
+			var real_to_player := head.global_position - self_pos
+			var false_angle := sin(_confusion_time * 4.2 + float(get_instance_id() % 17)) * 1.25
+			ctx["player_position"] = self_pos + real_to_player.rotated(Vector3.UP, false_angle)
+			ctx["player_forward"] = (-head.global_basis.z).rotated(Vector3.UP, -false_angle * 0.6)
 	var health := get_tree().get_first_node_in_group("player_health") as PlayerHealth
 	ctx["player_alive"] = health == null or health.is_alive()
 
@@ -534,6 +595,7 @@ func _perceive() -> Dictionary:
 
 func _apply_move(move: Vector3, delta: float, planted := false) -> void:
 	move.y = 0.0
+	move *= _slow_scale
 	if state != State.STANDING or is_dead:
 		move_velocity = Vector3.ZERO
 		overlay_pose = ""
