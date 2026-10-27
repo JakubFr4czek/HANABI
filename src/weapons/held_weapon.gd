@@ -103,6 +103,8 @@ const PLAYER_BODY_LAYER := 1 << 19
 @export var damage_per_speed := 9.0
 ## Cap on base damage of a single hit.
 @export var max_damage := 120.0
+## Run upgrade multiplier applied to base damage.
+@export var damage_multiplier := 1.0
 ## Hits doing at least this much damage trigger hit-stop.
 @export var hit_stop_damage := 40.0
 ## Hits from this much damage up to [member hit_stop_damage] get a micro-stop.
@@ -867,7 +869,7 @@ func _handle_hit(c: Dictionary) -> void:
 	var strike := classify_strike(c.point, c.direction)
 	var mom := strike_momentum(c.point, c.direction, c.speed)
 	var base_damage := clampf((c.speed - min_hit_speed) * damage_per_speed, 0.0, max_damage) \
-		* lerpf(flick_damage, 1.0, mom.power) * float(strike.multiplier)
+		* lerpf(flick_damage, 1.0, mom.power) * float(strike.multiplier) * damage_multiplier
 	var hit := {
 		"attacker": weapon_name,
 		"element": element,

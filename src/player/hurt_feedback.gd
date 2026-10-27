@@ -51,7 +51,8 @@ func _process(_delta: float) -> void:
 	if health and health.is_alive():
 		low = clampf(1.0 - health.hp / (health.max_hp * 0.35), 0.0, 1.0)
 	elif health:
-		low = 1.0
+		# Subtle crimson edge when fallen so the in-world Memorial Stele remains clear.
+		low = 0.22
 	_material.set_shader_parameter("intensity", intensity)
 	_material.set_shader_parameter("low_health", low)
 	if vignette:

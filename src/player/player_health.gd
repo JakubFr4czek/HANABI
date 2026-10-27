@@ -5,9 +5,11 @@ extends Node
 ##
 ## Timers run in real time (hit-stop and slow-mo do not stretch them). In the
 ## training arena a defeat is not the end: after [member revive_time] the
-## player is back at full health.
+## player is back at full health. In a run ([member auto_revive] = false),
+## death ends the run.
 
 signal damaged(amount: float, hp_left: float, source: Vector3)
+signal healed(amount: float, hp_left: float)
 signal died
 signal revived
 
@@ -15,6 +17,10 @@ signal revived
 ## Seconds of invulnerability after a hit, so one cut cannot hit twice.
 @export var invulnerable_time := 0.6
 @export var revive_time := 3.0
+## True in the training arena; false in a survival run where death ends the run.
+@export var auto_revive := true
+## Passive HP regenerated per real second.
+@export var regen_per_sec := 0.0
 ## Hurtbox: a capsule from just above the eyes down this far, this thick.
 @export var torso_length := 0.75
 @export var radius := 0.2
@@ -60,16 +66,40 @@ func take_hit(amount: float, source: Vector3, info: Dictionary = {}) -> bool:
 	return true
 
 
+func heal(amount: float) -> float:
+	if not is_alive() or amount <= 0.0:
+		return 0.0
+	var before := hp
+	hp = minf(hp + amount, max_hp)
+	var gained := hp - before
+	if gained > 0.0:
+		healed.emit(gained, hp)
+	return gained
+
+
+func add_max_hp(bonus: float, also_heal: bool = true) -> void:
+	if bonus <= 0.0:
+		return
+	max_hp += bonus
+	if also_heal and is_alive():
+		hp = minf(hp + bonus, max_hp)
+		healed.emit(bonus, hp)
+
+
 func heal_full() -> void:
 	hp = max_hp
 	_down_time = 0.0
 	_invulnerable = 0.0
+	healed.emit(max_hp, hp)
 
 
 func _physics_process(_delta: float) -> void:
 	var dt := TimeController.real_tick()
 	_invulnerable = maxf(_invulnerable - dt, 0.0)
-	if not is_alive():
+	if is_alive():
+		if regen_per_sec > 0.0 and hp < max_hp:
+			hp = minf(hp + regen_per_sec * dt, max_hp)
+	elif auto_revive:
 		_down_time -= dt
 		if _down_time <= 0.0:
 			heal_full()
