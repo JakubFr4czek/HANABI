@@ -44,8 +44,8 @@ func _ready() -> void:
 	_mask.set_shader_parameter("roughness_dry", 0.58)
 	_mask.set_shader_parameter("roughness_wet", 0.22)
 	_mask.set_shader_parameter("wetness", 0.48)
-	_mask.set_shader_parameter("fill", 2.55)
-	_mask.set_shader_parameter("fog_rim", 1.85)
+	_mask.set_shader_parameter("fill", 2.75)
+	_mask.set_shader_parameter("fog_rim", 2.15)
 	_mask.set_shader_parameter("normal_texture", ONI_MASK_NRM)
 	_mask.set_shader_parameter("normal_depth", 1.35)
 	_mask.set_shader_parameter("procedural_ao", 0.42)
@@ -127,8 +127,8 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 	mask_mi.name = "OniMask"
 	var mesh := _oni_mask_mesh()
 	mask_mi.mesh = mesh if mesh else _fallback_mask_mesh()
-	mask_mi.position = Vector3(0.0, 0.03, 0.11)
-	mask_mi.scale = Vector3(1.08, 1.12, 1.05)
+	mask_mi.position = Vector3(0.0, 0.02, 0.12)
+	mask_mi.scale = Vector3(1.14, 1.18, 1.08)
 	mask_mi.material_override = _mask
 	var eye_l := MeshInstance3D.new()
 	var eye_m := SphereMesh.new()
