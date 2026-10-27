@@ -4,7 +4,7 @@ VR melee survivor-like for Meta Quest: Blade & Sorcery–style physics swordplay
 
 The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [`docs/HANABI_agent_prompt.md`](docs/HANABI_agent_prompt.md).
 
-## Current state: sword physics + survival loop + four element builds
+## Current state: sword physics + survival loop + elements + endless forest run
 
 | Works | Stubbed / temporary |
 |---|---|
@@ -71,6 +71,7 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/enemy_motion_test.tscn -- 
 $GODOT --headless --path . --fixed-fps 90 res://tests/sword_ik_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/run_loop_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/elements_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/forest_world_test.tscn -- --desktop
 # Diagnostics: 40 s of sparring stats per difficulty, block traces
 $GODOT --headless --path . --fixed-fps 90 res://tests/diag/diag_spar.tscn -- --desktop normal
 ```

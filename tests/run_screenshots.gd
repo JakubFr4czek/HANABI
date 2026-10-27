@@ -42,6 +42,13 @@ func _ready() -> void:
 	await _frames(16)
 	await _shot("1_yokai_wave_and_hud")
 
+	# 1b. Endless forest hills, torii and lanterns swallowed by run fog.
+	player.teleport(Vector3(0.0, 0.0, 2.2), 0.0)
+	player.camera.rotation.x = deg_to_rad(-8.0)
+	run.wave_director.clear_enemies()
+	await _frames(20)
+	await _shot("1b_forest_horizon")
+
 	# 2. Slain yōkai dissolving + Hitodama soul orbs swirling in toward the player
 	if is_instance_valid(e1):
 		e1.queue_free()
