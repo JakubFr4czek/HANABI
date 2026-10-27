@@ -73,6 +73,8 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/run_loop_test.tscn -- --de
 $GODOT --headless --path . --fixed-fps 90 res://tests/gdd_loop_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/point12_readability_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/yokai_spawn_pose_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/firework_flash_cap_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/point14_fog_torii_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/elements_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/forest_world_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/enemy_variants_test.tscn -- --desktop

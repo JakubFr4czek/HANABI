@@ -105,6 +105,11 @@ sakura trees; do not touch grip/hand logic).
   `held_weapon.gd`; elite yōkai respect `counter` hits in `yokai.gd`.
 - Headless: `gdd_loop_test.tscn`; visual: `run_screenshots.gd` shot 7.
 
+## 14. Close gaps from points 12–13
+- Oni: dedicated mid-poly mask mesh + PBR (`oni_mask_run.glb`, `run_oni_boss.gd`).
+- Firework death VFX: cap dynamic flash lights (`VfxPool.MAX_FIREWORK_FLASH_LIGHTS`).
+- Fog past giant torii: tighter env fog + forest view range / ground discard (`point14_fog_torii_test`).
+
 ## 8. Quest pools, forest GI look, on-device profiling
 - Pool soul orbs, spark bursts and elemental death rings (`VfxPool` autoload) so
   waves do not allocate VFX nodes mid-fight.
