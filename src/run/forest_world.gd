@@ -8,7 +8,10 @@ const CHUNK_SIZE := 28.0
 const CHUNK_RADIUS := 1
 const CLEARING_RADIUS := 10.4
 const PROP_CLEARING_RADIUS := 13.2
-const TERRAIN_RES := 15
+const TERRAIN_RES := 13
+const VIEW_RANGE_END := 17.5
+const HILL_FADE_START := 11.0
+const HILL_FADE_END := 14.0
 const GROUND_SHADER := preload("res://src/shaders/forest_ground.gdshader")
 const WET_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const ROCK_SCENE := preload("res://assets/models/environment/rocks/rock_face_01/rock_face_01.gltf")
@@ -36,9 +39,16 @@ var _tree_mat: ShaderMaterial
 var _torii_mat: ShaderMaterial
 var _lantern_mat: ShaderMaterial
 var _rock_mat: ShaderMaterial
+var _tree_mesh_lod: Mesh
+var _lightmap_gi: LightmapGI
+var _static_gi := false
 
 
-func setup(p_follow: Node3D) -> void:
+func uses_static_gi() -> bool:
+	return _static_gi
+
+
+func setup(p_follow: Node3D, arena_lightmap: LightmapGI = null) -> void:
 	follow = p_follow
 	_height_noise.seed = 0x464F52455354
 	_height_noise.frequency = 0.028
@@ -49,6 +59,8 @@ func setup(p_follow: Node3D) -> void:
 	_corridor_noise.frequency = 0.018
 	_build_materials()
 	_build_meshes()
+	_lightmap_gi = arena_lightmap
+	_static_gi = _lightmap_gi != null
 	_rebuild_active_chunks()
 
 
@@ -78,7 +90,10 @@ func height_at(wx: float, wz: float) -> float:
 		return -0.42
 	var blend := smoothstep(CLEARING_RADIUS - 1.5, CLEARING_RADIUS + 5.5, d)
 	var n := _height_noise.get_noise_2d(wx, wz)
-	return lerpf(-0.42, n * 3.8, blend)
+	var h := lerpf(-0.42, n * 3.8, blend)
+	if d > HILL_FADE_START:
+		h = lerpf(h, -0.46, smoothstep(HILL_FADE_START, HILL_FADE_END, d))
+	return h
 
 
 func props_in_clearing() -> int:
@@ -117,10 +132,11 @@ func _make_chunk(coord: Vector2i) -> Node3D:
 	terrain.material_override = _ground_mat
 	terrain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	terrain.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+	_set_view_range(terrain)
 	root.add_child(terrain)
 
 	var clearing_props := 0
-	clearing_props += _populate_multimesh(root, "Trees", _tree_mesh, _tree_mat, MAX_TREES_PER_CHUNK, coord, 0)
+	clearing_props += _populate_multimesh(root, "Trees", _tree_mesh, _tree_mat, MAX_TREES_PER_CHUNK, coord, 0, _tree_mesh_lod)
 	clearing_props += _populate_multimesh(root, "Torii", _torii_mesh, _torii_mat, MAX_TORII_PER_CHUNK, coord, 1)
 	clearing_props += _populate_multimesh(root, "Lanterns", _lantern_mesh, _lantern_mat, MAX_LANTERNS_PER_CHUNK, coord, 2)
 	clearing_props += _populate_multimesh(root, "Rocks", _rock_mesh, _rock_mat, MAX_ROCKS_PER_CHUNK, coord, 3)
@@ -130,10 +146,9 @@ func _make_chunk(coord: Vector2i) -> Node3D:
 
 
 func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material, max_count: int,
-		coord: Vector2i, kind: int) -> int:
-	var mm_inst := MultiMeshInstance3D.new()
-	mm_inst.name = label
+		coord: Vector2i, kind: int, lod_mesh: Mesh = null) -> int:
 	var transforms: Array[Transform3D] = []
+	var lod_transforms: Array[Transform3D] = []
 	var clearing_hits := 0
 	for i in max_count:
 		var seed := _hash_coord(coord, kind, i)
@@ -160,12 +175,28 @@ func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 			scale *= 0.45 + _hash01(seed, 4) * 0.35
 		var angle := _hash01(seed, 5) * TAU
 		var basis := Basis.from_euler(Vector3(0.0, angle, 0.0)) * Basis.from_scale(Vector3.ONE * scale)
-		transforms.append(Transform3D(basis, Vector3(lx, hy, lz)))
+		var xf := Transform3D(basis, Vector3(lx, hy, lz))
+		var dist := Vector2(wx, wz).length()
+		if kind == 0 and lod_mesh != null and dist > 11.5:
+			lod_transforms.append(xf)
+		else:
+			transforms.append(xf)
 		var props: Array = root.get_meta("prop_world_positions", [])
 		props.append(Vector3(wx, hy, wz))
 		root.set_meta("prop_world_positions", props)
-	if transforms.is_empty():
+	if not transforms.is_empty():
+		_commit_multimesh(root, label, mesh, mat, transforms)
+	if not lod_transforms.is_empty() and lod_mesh != null:
+		_commit_multimesh(root, label + "LOD", lod_mesh, mat, lod_transforms)
+	if transforms.is_empty() and lod_transforms.is_empty():
 		return clearing_hits
+	return clearing_hits
+
+
+func _commit_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
+		transforms: Array[Transform3D]) -> void:
+	var mm_inst := MultiMeshInstance3D.new()
+	mm_inst.name = label
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = mesh
@@ -176,9 +207,9 @@ func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 	mm_inst.material_override = mat
 	mm_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mm_inst.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+	_set_view_range(mm_inst)
 	root.add_child(mm_inst)
 	call_deferred("_refresh_multimesh_transforms", mm_inst, transforms)
-	return clearing_hits
 
 
 func _refresh_multimesh_transforms(mm_inst: MultiMeshInstance3D, transforms: Array[Transform3D]) -> void:
@@ -192,7 +223,7 @@ func _refresh_multimesh_transforms(mm_inst: MultiMeshInstance3D, transforms: Arr
 
 func _place_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 	var corridor_val := _corridor_noise.get_noise_2d(float(coord.x) * 1.7, float(coord.y) * 1.7)
-	if corridor_val < 0.58:
+	if corridor_val < 0.64:
 		return
 	var axis_x := corridor_val > 0.72
 	var mm_inst := MultiMeshInstance3D.new()
@@ -205,6 +236,7 @@ func _place_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 	mm_inst.material_override = _torii_mat
 	mm_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mm_inst.gi_mode = GeometryInstance3D.GI_MODE_STATIC
+	_set_view_range(mm_inst)
 	root.add_child(mm_inst)
 
 	var transforms: Array[Transform3D] = []
@@ -217,7 +249,7 @@ func _place_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 		var lz := -CHUNK_SIZE * 0.15 if axis_x else along
 		var wx := root.position.x + lx
 		var wz := root.position.z + lz
-		if Vector2(wx, wz).length() < PROP_CLEARING_RADIUS:
+		if Vector2(wx, wz).length() < PROP_CLEARING_RADIUS + 0.35:
 			continue
 		var hy := height_at(wx, wz)
 		var s := 0.42 + float(g) * 0.02
@@ -308,8 +340,15 @@ func _build_materials() -> void:
 	_rock_mat.set_shader_parameter("fill", 1.2)
 
 
+func _set_view_range(inst: GeometryInstance3D) -> void:
+	inst.visibility_range_begin = 0.0
+	inst.visibility_range_end = VIEW_RANGE_END
+	inst.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+
+
 func _build_meshes() -> void:
 	_tree_mesh = _build_tree_mesh()
+	_tree_mesh_lod = _box_mesh(Vector3(0.35, 1.25, 0.35), Vector3(0.0, 0.62, 0.0))
 	_torii_mesh = _build_torii_mesh()
 	_lantern_mesh = _build_lantern_mesh()
 	_rock_mesh = _extract_rock_mesh()
