@@ -350,6 +350,35 @@ func set_pose(pose_name: String) -> void:
 	if not _poses.has(pose_name) or pose_name == current_pose:
 		return
 	current_pose = pose_name
+	_seed_pose_variation(pose_name)
+
+
+## Apply a pose immediately (spawn / pool reuse) so limbs are not stuck in rest T-pose.
+func snap_pose(pose_name: String) -> void:
+	if not _poses.has(pose_name):
+		return
+	current_pose = pose_name
+	_seed_pose_variation(pose_name)
+	var pose: Dictionary = _poses[pose_name]
+	for part_name in _order:
+		if _defs[part_name].get("parent", "") == "":
+			continue
+		var to: Quaternion = pose.get(part_name, Quaternion.IDENTITY)
+		if _variation.has(part_name):
+			to = to * (_variation[part_name] as Quaternion)
+		var b: JointBlend = _joint_blends.get(part_name)
+		if b == null:
+			b = JointBlend.new()
+			_joint_blends[part_name] = b
+		b.from = to
+		b.to = to
+		b.now = to
+		b.t = 1.0
+		b.duration = 0.001
+	_update_final_targets()
+
+
+func _seed_pose_variation(pose_name: String) -> void:
 	_variation.clear()
 	if pose_variation_deg <= 0.0:
 		return
