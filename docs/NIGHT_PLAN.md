@@ -105,6 +105,11 @@ sakura trees; do not touch grip/hand logic).
   `held_weapon.gd`; elite yōkai respect `counter` hits in `yokai.gd`.
 - Headless: `gdd_loop_test.tscn`; visual: `run_screenshots.gd` shot 7.
 
+## 16. Oni mask audit, yōkai motion, Quest perf pass
+- Oni mask: verified project CC0 (`ONI_MASK_LICENSE.txt`, regenerated mesh).
+- Yōkai: approach / flinch poses blended with ActiveRagdoll (`yokai_combat_motion_test`).
+- Quest: perf probe lights/audio + `QUEST_TEST.md` morning checklist §9–§15.
+
 ## 15. Polish after point 13 (premium HUD, stele, CC0 audio)
 - Wrist HUD: billboard readout, HP ring only when critical, shrine palette (`diegetic_hud.gd`).
 - Memorial stele: larger VR type, shorter 拾得 upgrade line (`run_game.gd`).
