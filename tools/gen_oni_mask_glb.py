@@ -25,44 +25,73 @@ def _horn(sx: float) -> trimesh.Trimesh:
     return horn
 
 
+def _displace_mask_shell(mesh: trimesh.Trimesh) -> None:
+    v = mesh.vertices
+    for i in range(len(v)):
+        x, y, z = v[i]
+        if z < 0.02:
+            continue
+        # Deep ocular cavities (read at 2–6 m in fog).
+        for ex in (-0.062, 0.062):
+            d = ((x - ex) ** 2) / 0.0018 + ((y - 0.035) ** 2) / 0.0012 + ((z - 0.105) ** 2) / 0.0009
+            if d < 1.0:
+                v[i, 2] -= 0.032 * (1.0 - d)
+        # Brow ridge + nasal bridge.
+        brow = np.exp(-((x) ** 2 / 0.004 + (y - 0.11) ** 2 / 0.003)) * 0.028
+        nose = np.exp(-((x) ** 2 / 0.002 + (y + 0.02) ** 2 / 0.006)) * 0.022
+        v[i, 2] += brow + nose
+        # Cheek flare.
+        cheek = np.exp(-((abs(x) - 0.11) ** 2 / 0.003 + (y + 0.02) ** 2 / 0.008)) * 0.018
+        v[i, 2] += cheek
+    mesh.vertices = v
+
+
 def build_mesh() -> trimesh.Trimesh:
-    face = trimesh.creation.icosphere(subdivisions=3, radius=0.145)
-    face.vertices[:, 2] *= 0.48
-    face.vertices[:, 1] *= 1.10
-    face.vertices[:, 0] *= 0.90
-    face.vertices[:, 2] += 0.03
-    face.vertices[:, 1] -= 0.025
+    face = trimesh.creation.icosphere(subdivisions=3, radius=0.148)
+    face.vertices[:, 2] *= 0.46
+    face.vertices[:, 1] *= 1.12
+    face.vertices[:, 0] *= 0.88
+    face.vertices[:, 2] += 0.035
+    face.vertices[:, 1] -= 0.03
+    _displace_mask_shell(face)
 
-    brow = trimesh.creation.box(extents=[0.24, 0.065, 0.10])
-    brow.apply_translation([0.0, 0.12, 0.075])
-    brow.vertices[:, 2] += 0.02
+    brow_l = trimesh.creation.box(extents=[0.11, 0.055, 0.085])
+    brow_l.apply_translation([-0.065, 0.115, 0.088])
+    brow_r = brow_l.copy()
+    brow_r.apply_translation([0.13, 0.0, 0.0])
+    brow_center = trimesh.creation.box(extents=[0.08, 0.04, 0.07])
+    brow_center.apply_translation([0.0, 0.125, 0.095])
 
+    jaw = trimesh.creation.box(extents=[0.18, 0.09, 0.12])
+    jaw.apply_translation([0.0, -0.115, 0.09])
+    jaw.vertices[:, 2] += 0.015
+
+    snout = trimesh.creation.box(extents=[0.11, 0.07, 0.09])
+    snout.apply_translation([0.0, -0.055, 0.125])
+
+    lip = trimesh.creation.box(extents=[0.14, 0.035, 0.05])
+    lip.apply_translation([0.0, -0.155, 0.115])
+
+    parts = [face, brow_l, brow_r, brow_center, jaw, snout, lip]
     for sx in (-1, 1):
-        ridge = trimesh.creation.box(extents=[0.09, 0.04, 0.06])
-        ridge.apply_translation([0.07 * sx, 0.10, 0.09])
-        brow = trimesh.util.concatenate([brow, ridge])
-
-    jaw = trimesh.creation.box(extents=[0.17, 0.08, 0.11])
-    jaw.apply_translation([0.0, -0.11, 0.085])
-
-    snout = trimesh.creation.box(extents=[0.12, 0.06, 0.08])
-    snout.apply_translation([0.0, -0.06, 0.12])
-
-    parts = [face, brow, jaw, snout]
-    for sx in (-1, 1):
-        socket = trimesh.creation.icosphere(subdivisions=2, radius=0.032)
-        socket.vertices[:, 2] *= 0.35
-        socket.apply_translation([0.058 * sx, 0.045, 0.11])
-        parts.append(socket)
-        cheek = trimesh.creation.box(extents=[0.05, 0.11, 0.09])
-        cheek.apply_translation([0.12 * sx, -0.02, 0.06])
+        rim = trimesh.creation.torus(major_radius=0.034, minor_radius=0.008, major_sections=14, minor_sections=8)
+        rim.apply_translation([0.06 * sx, 0.038, 0.108])
+        rim.apply_transform(trimesh.transformations.rotation_matrix(np.radians(18), [0, 1, 0]))
+        parts.append(rim)
+        cheek = trimesh.creation.box(extents=[0.055, 0.12, 0.1])
+        cheek.apply_translation([0.125 * sx, -0.025, 0.065])
         parts.append(cheek)
 
-    for i, tx in enumerate(np.linspace(-0.07, 0.07, 7)):
-        fang = trimesh.creation.cone(radius=0.012 if i % 2 == 0 else 0.009, height=0.055, sections=8)
-        fang.apply_translation([tx, -0.14, 0.12])
-        fang.apply_transform(trimesh.transformations.rotation_matrix(np.radians(12), [1, 0, 0]))
+    for i, tx in enumerate(np.linspace(-0.075, 0.075, 5)):
+        fang = trimesh.creation.cone(radius=0.014 if i % 2 == 0 else 0.01, height=0.062, sections=8)
+        fang.apply_translation([tx, -0.148, 0.125])
+        fang.apply_transform(trimesh.transformations.rotation_matrix(np.radians(14), [1, 0, 0]))
         parts.append(fang)
+    for tx in (-0.04, 0.04):
+        tusk = trimesh.creation.cone(radius=0.018, height=0.075, sections=9)
+        tusk.apply_translation([tx, -0.165, 0.11])
+        tusk.apply_transform(trimesh.transformations.rotation_matrix(np.radians(8), [1, 0, 0]))
+        parts.append(tusk)
 
     for sx in (-1, 1):
         parts.append(_horn(sx))
@@ -99,7 +128,7 @@ def write_normal_png(path: str) -> None:
     h = height_field(uu, vv)
     du = np.gradient(h, axis=1)
     dv = np.gradient(h, axis=0)
-    strength = 4.5
+    strength = 5.8
     nx = -du * strength
     ny = -dv * strength
     nz = np.ones_like(nx)
