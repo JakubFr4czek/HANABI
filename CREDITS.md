@@ -20,7 +20,8 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Run ambient music: Tozan "Oriental Somber" (OpenGameArt CC0), `assets/audio/music/cc0_run/orientalsomber.ogg`
 - Run forest trees: "Tree1" from **Quaternius** Simple Nature Pack (CC0, via quaternius-showcase mirror)
 - Run forest torii (distant MultiMesh): procedural torii gate from **polyfork.dev** (commercial/CC0 kit, no attribution required; credited here by choice)
-- Oni boss mask mesh: `assets/models/enemies/oni_mask_run.glb` (~350 verts), **project CC0** (`assets/models/enemies/ONI_MASK_LICENSE.txt`, `tools/gen_oni_mask_glb.py`) — no third-party download; PBR via `wet_surface` in-game
+- Oni boss mask: `oni_mask_run.glb` + `oni_mask_run_normal.png` (~1.1k verts, project CC0, `tools/gen_oni_mask_glb.py`; no account-free external GLB found in §17)
+- Memorial stele engraving font: **Yuji Boku** (Kinuta, SIL OFL), `assets/fonts/YujiBoku-Regular.ttf`
 
 ## Required attributions (CC BY 4.0)
 These are also shown in game on the `CreditsLabel` under the controls board at the arena's edge.
