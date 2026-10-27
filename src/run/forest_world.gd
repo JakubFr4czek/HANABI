@@ -1153,14 +1153,14 @@ func _rebuild_crown(scan: Mesh) -> ArrayMesh:
 	for t in range(0, idx.size() - 2, 3):
 		var uv_c := (uvs[idx[t]] + uvs[idx[t + 1]] + uvs[idx[t + 2]]) / 3.0
 		var p_c := (verts[idx[t]] + verts[idx[t + 1]] + verts[idx[t + 2]]) / 3.0
-		# Boughs map to the atlas's bottom-left strips; the trunk itself to a
-		# small bark square, so it is kept by position (on the axis, below
-		# the crown) instead.
-		# Above the clumps' underside the boughs only poke out as shards.
-		var bough := uv_c.x < 0.34 and uv_c.y > 0.66 and p_c.y < 8.8
-		var trunk := Vector2(p_c.x, p_c.z).length() < 0.9 and p_c.y < 9.0
-		if not bough and not trunk:
-			continue  # leaf card
+		# Trunk and boughs are mapped to the atlas's bottom-left bark strips.
+		# Everything else is a leaf card, including a ring of dark ground
+		# shards at the foot (the atlas's top-right square) that showed as
+		# jagged black fragments around every trunk. Above the clumps'
+		# underside the boughs only poke out as shards.
+		var bark := uv_c.x < 0.34 and uv_c.y > 0.66 and p_c.y < 8.8
+		if not bark:
+			continue
 		for k in 3:
 			st.set_normal(normals[idx[t + k]])
 			st.set_uv(uvs[idx[t + k]])

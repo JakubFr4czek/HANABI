@@ -568,10 +568,14 @@ func _estimate_body_forward_dir() -> Vector3:
 		var hands_forward = up_player.cross(tangent).normalized()
 
 		# Rotate our forward towards our hand direction but not more than 60 degrees
-		var dot = forward.dot(hands_forward)
-		var cross = forward.cross(hands_forward).normalized()
-		var angle = clamp(acos(dot) * body_forward_mix, 0.0, 0.33 * PI)
-		forward = forward.rotated(cross, angle)
+		# HANABI: skip when the hands give no direction (one hand above the
+		# other, e.g. a vertical two-handed grip) or it is parallel to the
+		# view; the rotation axis is zero there and Basis errors every tick.
+		var dot = clampf(forward.dot(hands_forward), -1.0, 1.0)
+		var cross = forward.cross(hands_forward)
+		if hands_forward.length_squared() > 0.5 and cross.length_squared() > 1e-8:
+			var angle = clamp(acos(dot) * body_forward_mix, 0.0, 0.33 * PI)
+			forward = forward.rotated(cross.normalized(), angle)
 
 	return forward
 

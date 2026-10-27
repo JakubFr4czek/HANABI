@@ -74,7 +74,7 @@ func _run() -> void:
 		reused_start > 6.0 and reused_end < reused_start - 1.5)
 
 	# Out in the forest: the ring follows the player and bodies follow the hills.
-	player.teleport(Vector3(30.0, 0.0, 22.0), 0.0)
+	player.teleport(Vector3(30.0, run.forest_world.height_at(30.0, 22.0), 22.0), 0.0)
 	await _frames(30)
 	var far := run.wave_director.spawn_in_fog_ring(player.global_position, 0.0)
 	far.brain.attacks_enabled = false
@@ -86,7 +86,7 @@ func _run() -> void:
 		far_start > 6.0 and far_start < 12.0)
 	_check("Yōkai pelvis stands on the hill (pelvis %.2f m above ground)" % (rp.y - ground),
 		rp.y - ground > 0.5 and rp.y - ground < 1.4)
-	player.teleport(Vector3(30.0, 0.0, 50.0), 0.0)
+	player.teleport(Vector3(30.0, run.forest_world.height_at(30.0, 50.0), 50.0), 0.0)
 	await _frames(4)
 	run.wave_director.recall_stragglers(player.global_position)
 	await _frames(4)

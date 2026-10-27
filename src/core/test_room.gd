@@ -36,7 +36,12 @@ func _ready() -> void:
 	_setup_dojo_visuals()
 	GameEvents.clear()
 	TimeController.clear()
-	var use_xr := is_xr_available() and not OS.get_cmdline_user_args().has("--desktop")
+	# --xr-sim: the real XR player without a headset, driven by fake trackers
+	# (XrSim) so the VR code paths run under scripts and the RuntimeGuard.
+	var xr_sim := OS.get_cmdline_user_args().has("--xr-sim")
+	if xr_sim and get_tree().get_first_node_in_group("xr_sim") == null:
+		add_child(XrSim.new())
+	var use_xr := (is_xr_available() or xr_sim) and not OS.get_cmdline_user_args().has("--desktop")
 	GameEvents.log_event("session_start", {"scene": "training_arena", "xr": use_xr})
 	if use_xr:
 		Sfx.route_to_xr_headset()
