@@ -61,7 +61,8 @@ const GENERIC_UPGRADES: Array[Dictionary] = [
 	},
 ]
 
-const ELEMENT_SLOT_LIMIT := 6
+## One element per run, three tiers: the element slots are exactly one tree.
+const ELEMENT_SLOT_LIMIT := 3
 const ELEMENT_UPGRADES: Array[Dictionary] = [
 	{
 		"id": "sakura_petals", "element": Elements.SAKURA, "tier": 1,

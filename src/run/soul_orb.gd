@@ -37,8 +37,8 @@ func _ready() -> void:
 	_phase = randf() * TAU
 	if _shared_mesh == null:
 		_shared_mesh = SphereMesh.new()
-		_shared_mesh.radius = 0.066
-		_shared_mesh.height = 0.15
+		_shared_mesh.radius = 0.042
+		_shared_mesh.height = 0.10
 		_shared_mesh.radial_segments = 14
 		_shared_mesh.rings = 8
 	var col := orb_color(element)
@@ -55,7 +55,7 @@ func _ready() -> void:
 	if _wisp_quad == null:
 		_wisp_quad = QuadMesh.new()
 		_wisp_quad.size = Vector2(0.018, 0.065)
-	_wisp.amount = 5
+	_wisp.amount = 3
 	_wisp.lifetime = 0.38
 	_wisp.local_coords = false
 	_wisp.direction = Vector3.UP
@@ -79,15 +79,17 @@ func _ready() -> void:
 	add_child(_wisp)
 
 
+## Pale ghost-fire tints: souls read as drifting hitodama, not arcade candy.
+## Element variants stay muted washes over the same ghostly base.
 static func orb_color(elem: String) -> Color:
 	match elem:
-		Elements.SAKURA: return Color(1.0, 0.30, 0.70)
-		Elements.STORM: return Color(0.34, 0.84, 1.0)
-		Elements.INK: return Color(0.54, 0.64, 0.95)
-		Elements.SHADOW: return Color(0.74, 0.30, 1.0)
-		Elements.BLACK_LIGHTNING: return Color(0.32, 0.76, 1.0)
-		Elements.PHANTOM_PETALS: return Color(0.96, 0.30, 0.94)
-	return Color(0.40, 0.90, 0.98)
+		Elements.SAKURA: return Color(0.92, 0.62, 0.78)
+		Elements.STORM: return Color(0.62, 0.78, 0.95)
+		Elements.INK: return Color(0.66, 0.72, 0.92)
+		Elements.SHADOW: return Color(0.72, 0.58, 0.92)
+		Elements.BLACK_LIGHTNING: return Color(0.60, 0.76, 0.95)
+		Elements.PHANTOM_PETALS: return Color(0.90, 0.60, 0.88)
+	return Color(0.62, 0.80, 0.94)
 
 
 ## Spawn a burst of [param count] soul orbs at [param origin].
@@ -170,10 +172,8 @@ func _collect() -> void:
 	if _collected:
 		return
 	_collected = true
-	Sfx.play_at("soul_collect", global_position, -8.0, 2.2, 1.05)
-	Sfx.play_at("blade_ring", global_position, -14.0, 2.5)
-	if is_inside_tree() and get_tree().current_scene:
-		SparkBurst.spawn(get_tree().current_scene, global_position, Vector3.UP, orb_color(element) * 1.6, 8, 1.8)
+	# Quiet intake: one soft breath of sound, no spark show.
+	Sfx.play_at("soul_collect", global_position, -14.0, 2.2, 1.05)
 	collected.emit(xp_value, element)
 	if VfxPool:
 		VfxPool.release_soul_orb(self)

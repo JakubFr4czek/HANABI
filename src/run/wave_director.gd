@@ -27,7 +27,9 @@ var ground_height: Callable
 @export var initial_wave_delay := 0.6
 @export var between_wave_delay := 4.5
 @export var max_wave_duration := 18.0
-@export var base_enemy_hp := 42.0
+## Two committed cuts kill a wave yōkai (a solid edge hit lands ~85);
+## a wrist flick only chips.
+@export var base_enemy_hp := 95.0
 @export var base_enemy_speed := 2.05
 @export var base_enemy_damage := 12.0
 @export var oni_spawn_interval := 100.0

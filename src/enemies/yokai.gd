@@ -117,10 +117,10 @@ func _ready() -> void:
 	if profile == null:
 		profile = EnemyProfile.new()
 		profile.display_name = "Yokai"
-		profile.max_hp = 45.0
-		profile.poise_per_impulse = 0.045
-		profile.poise_damage_scale = 0.018
-		profile.muscle_damage_scale = 0.01
+		profile.max_hp = 95.0
+		profile.poise_per_impulse = 0.03
+		profile.poise_damage_scale = 0.012
+		profile.muscle_damage_scale = 0.006
 		profile.knockdown_time = 0.9
 		profile.getup_time = 1.1
 	hp = profile.max_hp

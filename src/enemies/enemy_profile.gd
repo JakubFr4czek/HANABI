@@ -12,13 +12,14 @@ extends Resource
 ## Below 1 = resistant, above 1 = weak. Missing = 1.
 @export var resistances := {}
 ## How much balance one point of damage removes (0..1 scale). Higher = staggers easier.
-@export var poise_damage_scale := 0.012
+@export var poise_damage_scale := 0.010
 ## Balance lost per N·s of hit impulse (a hit's momentum, see
 ## [method HeldWeapon.strike_momentum]); used instead of poise_damage_scale
 ## when the hit carries an impulse.
-@export var poise_per_impulse := 0.03
-## How much muscle strength one point of damage removes.
-@export var muscle_damage_scale := 0.006
+@export var poise_per_impulse := 0.026
+## How much muscle strength one point of damage removes. Kept low so bodies
+## stay firm instead of going limp from the first touch.
+@export var muscle_damage_scale := 0.0045
 ## Balance / muscle regained per second while standing.
 @export var balance_regen := 0.7
 @export var muscle_regen := 0.9

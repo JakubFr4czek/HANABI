@@ -31,11 +31,11 @@ radius = 0.046
 [node name="Katana" type="RigidBody3D"]
 collision_layer = 4
 collision_mask = 59
-mass = 1.1
+mass = 1.45
 physics_material_override = SubResource("PhysicsMaterial_steel")
 center_of_mass_mode = 1
 center_of_mass = Vector3(0, 0, -0.15)
-inertia = Vector3(0.1045, 0.0935, 0.002)
+inertia = Vector3(0.138, 0.123, 0.0026)
 continuous_cd = true
 script = ExtResource("1_script")
 blade_start = Vector3(0, 0.002, -0.095)
