@@ -144,6 +144,7 @@ func _test_sakura() -> void:
 	await _fresh_run()
 	for id in ["sakura_petals", "sakura_orbit", "sakura_heal"]:
 		run._apply_upgrade({"id": id})
+	_check("Sakura card without gate spawns 0 orbit petals", run.element_system._orbit_petals.size() == 0)
 	run.element_system.imbue(Elements.SAKURA)
 	run._update_element_seal()
 	_check("Sakura binds alone and colors the blade", run.katana.element == Elements.SAKURA)

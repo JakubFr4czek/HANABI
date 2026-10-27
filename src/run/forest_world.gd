@@ -560,30 +560,33 @@ func _rebuild_chunk(coord: Vector2i) -> void:
 
 
 func is_clear_of_props(wx: float, wz: float, clearance: float) -> bool:
-	var coord := _world_to_chunk(Vector3(wx, 0.0, wz))
-	for ox in range(-1, 2):
-		for oz in range(-1, 2):
-			var packed: Dictionary = _tree_spot_cache.get(coord + Vector2i(ox, oz), {})
-			for s in packed.get("spots", []):
-				var spot: Vector4 = s
-				if Vector2(wx - spot.x, wz - spot.y).length() < clearance + 0.35:
-					return false
-	for key in _chunks:
-		var chunk := _chunks[key] as Node3D
-		if chunk == null or not is_instance_valid(chunk):
-			continue
-		var props: Array = chunk.get_meta("prop_world_positions", [])
-		for p in props:
-			var prop_pos: Vector3 = p
-			if Vector2(wx - prop_pos.x, wz - prop_pos.z).length() < clearance:
-				return false
-		for m_name in ["Trees", "Rocks", "Lanterns", "Torii"]:
-			var mm_node := chunk.get_node_or_null(m_name) as MultiMeshInstance3D
-			if mm_node and mm_node.multimesh:
-				var mm := mm_node.multimesh
-				for i in mm.instance_count:
-					var inst_orig: Vector3 = chunk.global_transform * mm.get_instance_transform(i).origin
-					if Vector2(wx - inst_orig.x, wz - inst_orig.z).length() < clearance:
+	var cl_sq := clearance * clearance
+	var tree_cl_sq := (clearance + 0.35) * (clearance + 0.35)
+
+	var min_cx := int(round((wx - clearance - 0.35) / CHUNK_SIZE))
+	var max_cx := int(round((wx + clearance + 0.35) / CHUNK_SIZE))
+	var min_cz := int(round((wz - clearance - 0.35) / CHUNK_SIZE))
+	var max_cz := int(round((wz + clearance + 0.35) / CHUNK_SIZE))
+
+	for cx in range(min_cx, max_cx + 1):
+		for cz in range(min_cz, max_cz + 1):
+			var n_coord := Vector2i(cx, cz)
+			var chunk := _chunks.get(n_coord) as Node3D
+			if chunk != null and is_instance_valid(chunk):
+				var props: Array = chunk.get_meta("prop_world_positions", [])
+				for p in props:
+					var prop_pos: Vector3 = p
+					var dx := wx - prop_pos.x
+					var dz := wz - prop_pos.z
+					if dx * dx + dz * dz < cl_sq:
+						return false
+			else:
+				var packed: Dictionary = _tree_spot_cache.get(n_coord, {})
+				for s in packed.get("spots", []):
+					var spot: Vector4 = s
+					var dx := wx - spot.x
+					var dz := wz - spot.y
+					if dx * dx + dz * dz < tree_cl_sq:
 						return false
 	return true
 

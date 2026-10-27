@@ -28,7 +28,7 @@ const ZONE_HANDLE := "handle"
 const ZONE_TSUBA := "tsuba"
 const ZONE_MUNE := "mune"
 ## Physics layer of the player's own bodies (layer 20, "player_body").
-const PLAYER_BODY_LAYER := 1 << 19
+const PLAYER_BODY_LAYER: int = XRPlayer.COLLISION_LAYER_BODY
 
 ## Spring frequency (Hz) and damping ratio of the linear / angular controller.
 @export var follow_frequency := 9.0
