@@ -21,9 +21,12 @@ func _ready() -> void:
 	player.camera.rotation.x = deg_to_rad(-8.0)
 
 	var elite := run.wave_director.spawn_elite_at(Vector3(0.0, 0.0, -2.2), player.global_position, Elements.SHADOW)
-	run.wave_director.spawn_enemy_at(Vector3(-1.4, 0.0, -3.2), player.global_position)
-	run.wave_director.spawn_enemy_at(Vector3(1.3, 0.0, -3.0), player.global_position)
+	var s1 := run.wave_director.spawn_enemy_at(Vector3(-1.4, 0.0, -3.2), player.global_position)
+	var s2 := run.wave_director.spawn_enemy_at(Vector3(1.3, 0.0, -3.0), player.global_position)
+	s1.set_pose("stalk")
+	s2.set_pose("stalk")
 	elite.brain.force_attack("right")
+	elite.set_pose("stalk")
 	await _frames(28)
 	await _shot("elite_shadow_pack")
 

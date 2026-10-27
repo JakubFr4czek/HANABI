@@ -17,7 +17,7 @@ void fragment() {
 	// Fade the lower tail into the dense horizon fog behind the Torii
 	float tip_fade = smoothstep(0.0, 0.06, UV.y) * (1.0 - smoothstep(0.62, 0.94, UV.y));
 
-	vec3 col = (core_color * core * 3.4 + glow_color * corona * 1.5) * intensity * tip_fade;
+	vec3 col = (core_color * core * 5.2 + glow_color * corona * 2.35) * intensity * tip_fade;
 	ALBEDO = col;
 	ALPHA = clamp((core + corona * 0.65) * intensity * tip_fade, 0.0, 1.0);
 }

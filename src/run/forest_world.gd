@@ -15,7 +15,6 @@ const HILL_FADE_END := 14.0
 const GROUND_SHADER := preload("res://src/shaders/forest_ground.gdshader")
 const WET_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const ROCK_SCENE := preload("res://assets/models/environment/rocks/rock_face_01/rock_face_01.gltf")
-
 const MAX_TREES_PER_CHUNK := 14
 const MAX_TORII_PER_CHUNK := 4
 const MAX_LANTERNS_PER_CHUNK := 5
@@ -356,18 +355,41 @@ func _build_meshes() -> void:
 
 func _build_tree_mesh() -> ArrayMesh:
 	var parts: Array[Mesh] = []
-	parts.append(_box_mesh(Vector3(0.14, 1.05, 0.14), Vector3(0.0, 0.52, 0.0)))
-	parts.append(_box_mesh(Vector3(0.95, 0.55, 0.95), Vector3(0.0, 1.35, 0.0)))
-	parts.append(_box_mesh(Vector3(0.72, 0.42, 0.72), Vector3(0.0, 1.78, 0.0)))
+	var trunk := CylinderMesh.new()
+	trunk.top_radius = 0.09
+	trunk.bottom_radius = 0.13
+	trunk.height = 1.15
+	trunk.radial_segments = 10
+	parts.append(trunk)
+	for i in 3:
+		var canopy := SphereMesh.new()
+		canopy.radius = 0.55 - float(i) * 0.08
+		canopy.height = canopy.radius * 1.6
+		canopy.radial_segments = 12
+		canopy.rings = 8
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		st.append_from(canopy, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 1.25 + float(i) * 0.22, 0.0)))
+		parts.append(st.commit())
 	return _merge_meshes(parts)
 
 
 func _build_torii_mesh() -> ArrayMesh:
+	# Mid-poly torii for MultiMesh (full GLB torii blows Quest primitive budgets).
 	var parts: Array[Mesh] = []
-	parts.append(_box_mesh(Vector3(0.16, 1.65, 0.16), Vector3(-0.72, 0.82, 0.0)))
-	parts.append(_box_mesh(Vector3(0.16, 1.65, 0.16), Vector3(0.72, 0.82, 0.0)))
-	parts.append(_box_mesh(Vector3(1.72, 0.12, 0.14), Vector3(0.0, 1.52, 0.0)))
-	parts.append(_box_mesh(Vector3(1.52, 0.1, 0.12), Vector3(0.0, 1.18, 0.0)))
+	for sx in [-1.0, 1.0]:
+		var pillar := CylinderMesh.new()
+		pillar.height = 1.62
+		pillar.top_radius = 0.065
+		pillar.bottom_radius = 0.085
+		pillar.radial_segments = 8
+		var st_p := SurfaceTool.new()
+		st_p.begin(Mesh.PRIMITIVE_TRIANGLES)
+		st_p.append_from(pillar, 0, Transform3D(Basis.IDENTITY, Vector3(0.78 * sx, 0.81, 0.0)))
+		parts.append(st_p.commit())
+	parts.append(_box_mesh(Vector3(1.72, 0.11, 0.14), Vector3(0.0, 1.38, 0.0)))
+	parts.append(_box_mesh(Vector3(1.88, 0.16, 0.18), Vector3(0.0, 1.52, -0.02)))
+	parts.append(_box_mesh(Vector3(0.22, 0.08, 0.22), Vector3(0.0, 1.02, 0.0)))
 	return _merge_meshes(parts)
 
 
@@ -380,14 +402,25 @@ func _build_lantern_mesh() -> ArrayMesh:
 
 
 func _extract_rock_mesh() -> Mesh:
-	var inst := ROCK_SCENE.instantiate()
+	var mesh := _extract_scene_mesh(ROCK_SCENE, 1.0)
+	return mesh if mesh else _box_mesh(Vector3(0.8, 0.5, 0.7), Vector3.ZERO)
+
+
+static func _extract_scene_mesh(scene: PackedScene, scale_factor: float) -> Mesh:
+	var inst := scene.instantiate()
 	var found: Mesh
 	for mi in inst.find_children("*", "MeshInstance3D", true, false):
 		if (mi as MeshInstance3D).mesh:
 			found = (mi as MeshInstance3D).mesh
 			break
 	inst.free()
-	return found if found else _box_mesh(Vector3(0.8, 0.5, 0.7), Vector3.ZERO)
+	if found == null:
+		return null
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var xform := Transform3D(Basis.from_scale(Vector3.ONE * scale_factor), Vector3.ZERO)
+	st.append_from(found, 0, xform)
+	return st.commit()
 
 
 static func _box_mesh(size: Vector3, center: Vector3) -> ArrayMesh:
