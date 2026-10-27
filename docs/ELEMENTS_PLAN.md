@@ -166,7 +166,21 @@
 
 ## (c) Torii Gates: Spawning, Spacing, & Reactivation
 
-### 1. Pacing & The 20-Second Loop Math
+### 1. Visual Aesthetics & Element Appearance (GDD Art Direction)
+- **Authentic Shinto Architecture**: Built from classical timber construction with vermilion posts, black lintel caps (*kasagi*), and stone bases (*kamebara*).
+- **Muted Element Appearance in GDD Palette Accents (Never Gaudy, Never Disco)**:
+  - **Sakura Torii**: Weathered dark vermilion lacquer, subtle pale blossom petals caught at lintel corners; soft rose lantern glow `Color(1.0, 0.32, 0.74)`.
+  - **Storm Torii**: Lightning-blackened petrified timber, faint hairline static discharges; cool cyan lantern glow `Color(0.32, 0.82, 1.0)`.
+  - **Ink Torii**: Matte jet-black sumi lacquer, base shrouded in dark ground-clinging mist; deep indigo wash lantern `Color(0.56, 0.68, 0.94)`.
+  - **Shadow Torii**: Aged grey cypress (*hinoki*) timber with deep purple grain patination; soft violet lantern glow `Color(0.78, 0.34, 1.0)`.
+- **Fog Readability without UI Clutter**:
+  - **No floating 2D arrows or mini-maps**.
+  - Readability through the 10.5 m milk fog across 18–32 m distances is achieved diegetically via:
+    1. **Volumetric Lantern Glow**: Hanging paper/stone *andon* lantern with unshaded emissive halo cutting through the milk fog up to 35 m.
+    2. **Silhouette Framing**: Distinct vertical architectural silhouette framed against the moonlit canopy.
+    3. **Spatialized 3D Audio Cue**: Authentic *fūrin* (wind chime) resonance on gate lintel (`max_distance = 40.0 m`).
+
+### 2. Pacing & The 20-Second Loop Math
 
 - **Movement Speed Analysis**:
   - Maximum linear locomotion speed: `3.0 m/s` (`movement_direct.gd: max_speed = 3.0`).
@@ -185,7 +199,7 @@
   - Automated headless test (`tests/elements_test.gd`) simulates a standard 120-second combat-traversal segment and asserts:
     $$\text{element\_uptime\_ratio} \ge 0.65$$
 
-### 2. Spawning & Collision Prevention Algorithm in `ForestWorld`
+### 3. Spawning & Collision Prevention Algorithm in `ForestWorld`
 - **Minimum Clearance Zone**: A gate requires a clear bounding cylinder of **radius = 3.2 m, height = 4.5 m**.
 - **Collider Mask Validation**:
   - Before committing a Torii gate transform, a multi-point spatial raycast / sphere cast is performed against `ForestWorld.TRUNK_LAYER` (layer 4) and environment obstacles.
@@ -194,7 +208,7 @@
 - **Separation from Combat Spawns**: Torii gates must never spawn within 14 m of an active yōkai spawn node or the initial shrine spawn disc.
 - **Shuffle Bag Guarantee**: Elements rotate via a 4-item shuffle bag `[Sakura, Storm, Ink, Shadow]` ensuring all 4 elements appear every 4 gates.
 
-### 3. Gate Crossing Plane Detection
+### 4. Gate Crossing Plane Detection
 - **Head/Body Crossing Only (No Sword Taps)**:
   - The gate defines a planar trigger volume: width 2.8 m, height 3.2 m, thickness 0.4 m.
   - The crossing is evaluated against the player's physical body tracking node (`PlayerBody` / `XRCamera3D`), **explicitly filtering out weapon colliders, held items, and hand controllers**.
@@ -202,7 +216,7 @@
     $$\text{sign}\left((P_{t-1} - G_\text{pos}) \cdot G_\text{normal}\right) \neq \text{sign}\left((P_t - G_\text{pos}) \cdot G_\text{normal}\right)$$
     and $P_t$ lies within the horizontal and vertical aperture bounds.
 
-### 4. Single Deterministic Reactivation Rule
+### 5. Single Deterministic Reactivation Rule
 
 ```
 [Active Gate] ──(Player Body Crosses Plane)──► Katana Imbued (20s)
@@ -390,13 +404,13 @@ Everything the player needs to know is conveyed naturally in the game world with
 ## (h) Step-by-Step Implementation Roadmap (E2a – E2d)
 
 ### Phase E2a: Element Core & Torii Gate World Spawning
-- [ ] **E2a.1: Katana Imbue State Machine**: Update `HeldWeapon` and `ElementSystem` with `current_element`, `element_time_remaining`, `const ELEMENT_DURATION = 20.0`, fade warning state, and clean reversion to `Elements.NONE`.
-- [ ] **E2a.2: Torii Gate Interactive Scene (`scenes/world/torii_gate.tscn`)**: Build authentic PBR gate with element-specific lantern/rune, body crossing detector (plane normal crossing), 45.0m distance reactivation rule, and spatial chime audio.
-- [ ] **E2a.3: Torii World Streaming & Clearance**: Integrate `ToriiManager` into `ForestWorld`. Ensure gates spawn 18–32 m from player, never collide with trees/rocks (sphere clearance 3.2 m), and persist through chunk streaming.
-- [ ] **Critical Tests**:
+- [x] **E2a.1: Katana Imbue State Machine**: Update `HeldWeapon` and `ElementSystem` with `current_element`, `element_time_remaining`, `const ELEMENT_DURATION = 20.0`, fade warning state, and clean reversion to `Elements.NONE`.
+- [x] **E2a.2: Torii Gate Interactive Scene (`scenes/world/torii_gate.tscn`)**: Build authentic PBR gate with element-specific lantern/rune, body crossing detector (plane normal crossing), 45.0m distance reactivation rule, and spatial chime audio.
+- [x] **E2a.3: Torii World Streaming & Clearance**: Integrate `ToriiManager` into `ForestWorld`. Ensure gates spawn 18–32 m from player, never collide with trees/rocks (sphere clearance 3.2 m), and persist through chunk streaming.
+- [x] **Critical Tests**:
   - `tests/torii_gate_test.tscn`: Crossing plane triggers imbue; sword touch alone does not trigger; same gate refreshes timer; different gate replaces element; 20 s timer expires to plain steel; gate reactivates after 45m distance.
   - `tests/torii_placement_test.tscn`: No gate spawns overlapping trunk/boulder colliders; at least one gate exists in 18–32m radius; uptime ratio >= 0.65 in 120s test.
-- [ ] **Quest Perf Risk**: MultiMesh terrain must cleanly exclude trees in the gate radius without regenerating entire chunk meshes. Torii lanterns must use unshaded emissive materials + ambient fill (zero dynamic OmniLight3D additions).
+- [x] **Quest Perf Risk**: MultiMesh terrain must cleanly exclude trees in the gate radius without regenerating entire chunk meshes. Torii lanterns must use unshaded emissive materials + ambient fill (zero dynamic OmniLight3D additions).
 
 ### Phase E2b: The 8 Active Abilities & Controller Bindings
 - [ ] **E2b.1: Input Architecture**: Bind Button A (`ax_button`) to Ability 1 and Button B (`by_button`) to Ability 2 on the sword hand in `XRPlayer.gd` and `DesktopPlayer.gd` (`J` and `K`). Ensure recall only activates when hand is empty (`held == null`).

@@ -32,6 +32,7 @@ const RUN_FOG_COLOR := Color(0.5, 0.53, 0.6)
 
 var state := RunState.INTRO
 var run_time := 0.0
+var element_active_seconds := 0.0
 var xp := 0
 var level := 1
 var xp_to_next := 24
@@ -447,6 +448,10 @@ func _on_xr_primary_button() -> void:
 		run_intro.skip()
 
 
+func element_uptime_ratio() -> float:
+	return element_active_seconds / maxf(run_time, 0.001)
+
+
 func _on_run_intro_finished() -> void:
 	_begin_play_after_intro()
 
@@ -460,6 +465,8 @@ func _physics_process(delta: float) -> void:
 	var p_pos := _player_center()
 	if state == RunState.PLAYING:
 		run_time += delta
+		if (element_system and element_system.current_element != Elements.NONE) or (katana and katana.element != Elements.NONE):
+			element_active_seconds += delta
 		wave_director.step_director(delta, p_pos)
 		for enemy in wave_director.alive_enemies():
 			enemy.apply_distance_lod(p_pos.distance_to(enemy.root_part().global_position))
