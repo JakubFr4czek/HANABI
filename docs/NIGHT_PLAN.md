@@ -90,6 +90,21 @@ lightning ripple across the floor on touchdown, katana materializes; skippable.
   meshes in MultiMesh within Quest budgets; capture death firework + hitodama shots;
   stabilize flaky `grip_stability_test` without changing grip logic.
 
+## 11. GDD loop audit (§3, §4, §5, §6, §9)
+Close gaps vs `docs/GDD.md` for the survivor loop (skip LLM, comfort, calories,
+sakura trees; do not touch grip/hand logic).
+- End run in-world: score, time, kills, **element build**, upgrades, local high
+  score, Restart Ofuda slice → `run_game.gd`, `run_loop_test.gd`.
+- Diegetic HUD: tsuba XP, wrist HP charm, **score (pt) + kills (斬) + time**;
+  brief tsuba flare on parry.
+- Spawn seal 桜雷墨影 on stone platform; quadrants + evolution star via
+  `set_seal_progress` — `gdd_loop_test.gd`, `elements_test.gd`.
+- Two elements / six upgrade slots, Storm+Ink and Sakura+Shadow evolutions —
+  `element_system.gd`, `upgrade_pool.gd`, `elements_test.gd`.
+- Parry slow-mo + counter window on duelists (dummy / Oni) — `combat_test.gd`,
+  `held_weapon.gd`; elite yōkai respect `counter` hits in `yokai.gd`.
+- Headless: `gdd_loop_test.tscn`; visual: `run_screenshots.gd` shot 7.
+
 ## 8. Quest pools, forest GI look, on-device profiling
 - Pool soul orbs, spark bursts and elemental death rings (`VfxPool` autoload) so
   waves do not allocate VFX nodes mid-fight.
