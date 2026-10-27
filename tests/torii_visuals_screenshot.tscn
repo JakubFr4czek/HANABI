@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://torii_visuals_shot_uid"]
+
+[ext_resource type="Script" path="res://tests/torii_visuals_screenshot.gd" id="1_shot"]
+
+[node name="ToriiVisualsScreenshot" type="Node"]
+script = ExtResource("1_shot")

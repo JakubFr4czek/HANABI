@@ -531,15 +531,32 @@ func _too_close_to_trees(spots: Array[Vector4], halo: Array[Vector2], wx: float,
 ## True when (wx, wz) intrudes on an occupied spot. Entries are Vector3
 ## (x, z, radius); clearance adds on top.
 func suppress_props_near(wx: float, wz: float, radius: float) -> void:
+	var affected_coords: Array[Vector2i] = []
 	for c in _tree_spot_cache.keys():
 		var packed: Dictionary = _tree_spot_cache[c]
 		var spots: Array[Vector4] = []
+		var changed := false
 		for s in packed.get("spots", []):
 			var spot: Vector4 = s
 			if Vector2(spot.x - wx, spot.y - wz).length() >= radius:
 				spots.append(spot)
-		packed["spots"] = spots
-		_tree_spot_cache[c] = packed
+			else:
+				changed = true
+		if changed:
+			packed["spots"] = spots
+			_tree_spot_cache[c] = packed
+			affected_coords.append(c)
+	for c in affected_coords:
+		if _chunks.has(c):
+			_rebuild_chunk(c)
+
+func _rebuild_chunk(coord: Vector2i) -> void:
+	if not _chunks.has(coord):
+		return
+	var old := _chunks[coord] as Node3D
+	_forget_trunks(old)
+	old.queue_free()
+	_chunks[coord] = _make_chunk(coord)
 
 
 func is_clear_of_props(wx: float, wz: float, clearance: float) -> bool:
@@ -560,6 +577,14 @@ func is_clear_of_props(wx: float, wz: float, clearance: float) -> bool:
 			var prop_pos: Vector3 = p
 			if Vector2(wx - prop_pos.x, wz - prop_pos.z).length() < clearance:
 				return false
+		for m_name in ["Trees", "Rocks", "Lanterns", "Torii"]:
+			var mm_node := chunk.get_node_or_null(m_name) as MultiMeshInstance3D
+			if mm_node and mm_node.multimesh:
+				var mm := mm_node.multimesh
+				for i in mm.instance_count:
+					var inst_orig: Vector3 = chunk.global_transform * mm.get_instance_transform(i).origin
+					if Vector2(wx - inst_orig.x, wz - inst_orig.z).length() < clearance:
+						return false
 	return true
 
 
