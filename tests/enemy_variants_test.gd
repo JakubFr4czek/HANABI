@@ -58,7 +58,7 @@ func _run_all() -> void:
 		elite._nav_agent != null and elite.use_pathfinding)
 
 	run.wave_director.active = true
-	run.wave_director.run_seconds = 55.0
+	run.wave_director.run_seconds = run.wave_director.oni_spawn_min_run_time + 5.0
 	run.wave_director._oni_cooldown = 0.05
 	run.wave_director.step_director(0.1, player.global_position)
 	await _frames(4)

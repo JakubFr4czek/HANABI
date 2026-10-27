@@ -28,6 +28,8 @@ var use_pathfinding := false
 
 var _nav_agent: NavigationAgent3D
 var _nav_repath := 0
+var _detour_side := 1.0
+var _detour_time := 0.0
 var _nav_dir := Vector3.ZERO
 
 var _skin := ShaderMaterial.new()
@@ -35,6 +37,8 @@ var _mask_mat := ShaderMaterial.new()
 var _sash := ShaderMaterial.new()
 var _horn_mat := StandardMaterial3D.new()
 var _eyes := StandardMaterial3D.new()
+## Fog-piercing glow points over the eye slits (EyeGlow).
+var _eye_glows: Array[MeshInstance3D] = []
 var _claw_mat := StandardMaterial3D.new()
 var _sigil_mat := StandardMaterial3D.new()
 
@@ -58,6 +62,7 @@ var _torso_lag_pitch := 0.0
 
 
 func prepare_for_spawn() -> void:
+	EyeGlow.set_glow(_eye_glows, 1.0)
 	is_dead = false
 	_dissolve_timer = 0.0
 	_slow_time = 0.0
@@ -68,9 +73,12 @@ func prepare_for_spawn() -> void:
 	for p: RagdollPart in parts.values():
 		p.scale = Vector3.ONE
 		p.collision_layer = 2
-		p.collision_mask = 1 | 2 | 8
-	reset_body()
-	snap_pose("stalk")
+		p.collision_mask = 2 | 4 | 8
+	# The pool calls this before add_child. reset_body reads global transforms,
+	# which are identity off the tree; place_at() resets once the body is back.
+	if is_inside_tree():
+		reset_body()
+		snap_pose("stalk")
 	if brain:
 		brain.reset()
 
@@ -79,6 +87,10 @@ func prepare_for_spawn() -> void:
 func place_at(pos: Vector3, yaw: float) -> void:
 	global_position = pos
 	global_rotation = Vector3(0.0, yaw, 0.0)
+	_nav_dir = Vector3.ZERO
+	_nav_repath = 0
+	_move_blocked = false
+	_detour_time = 0.0
 	reset_body()
 	snap_pose("stalk")
 	if brain:
@@ -163,6 +175,13 @@ func _ready() -> void:
 	default_pose_blend = 0.38
 	sway_poses = PackedStringArray(["stalk", "approach", "idle", "flinch"])
 	super._ready()
+	# Standing swarm bodies live on layer 2. The ground mesh and the trunks are
+	# not in the mask: both snag or launch a foot, and the height spring carries
+	# the body. Parts are born on the fallen-body layer; a fresh spawn skips
+	# prepare_for_spawn.
+	for p: RagdollPart in parts.values():
+		p.collision_layer = 2
+		p.collision_mask = 2 | 4 | 8
 
 	for child in get_children():
 		if child is YokaiBrain:
@@ -213,6 +232,7 @@ func is_staggered() -> bool:
 
 func _apply_kind_visuals() -> void:
 	if kind != Kind.ELITE:
+		EyeGlow.set_color(_eye_glows, Color(1.0, 0.24, 0.1))
 		return
 	scale = Vector3.ONE * 1.14
 	var accent := Elements.accent_color(elite_element)
@@ -220,6 +240,7 @@ func _apply_kind_visuals() -> void:
 	_sigil_mat.emission_energy_multiplier = 0.95
 	_eyes.emission = accent * 1.6
 	_eyes.emission_energy_multiplier = 1.05
+	EyeGlow.set_color(_eye_glows, accent)
 	_sash.set_shader_parameter("base_color", accent.darkened(0.55))
 	_claw_mat.emission = accent * 1.2
 	_attach_elite_halo(accent)
@@ -500,6 +521,8 @@ func _decorate_part(part_name: String, part: RagdollPart, def: Dictionary) -> vo
 				eye.rotation.z = deg_to_rad(-11.0 * sx)
 				eye.material_override = _eyes
 				part.add_child(eye)
+				if sx > 0.0:
+					_eye_glows.append(EyeGlow.attach(part, Vector3(0.0, eye.position.y, eye.position.z), Color(1.0, 0.24, 0.1), 0.088))
 
 				# Crimson cheek war-paint stripe.
 				var cheek := MeshInstance3D.new()
@@ -698,6 +721,7 @@ func _physics_process(delta: float) -> void:
 		_mask_mat.set_shader_parameter("fill", lerpf(1.75, 0.1, t))
 		_sash.set_shader_parameter("fill", lerpf(1.60, 0.1, t))
 		_eyes.emission_energy_multiplier = maxf(0.0, (1.0 - t * 2.0) * 0.85)
+		EyeGlow.set_glow(_eye_glows, maxf(0.0, 1.0 - t * 2.5))
 		_sigil_mat.emission_energy_multiplier = maxf(0.0, (1.0 - t * 2.0) * 0.55)
 		# Gently sink and shrink limbs in the final half of the dissolve.
 		if t > 0.35:
@@ -737,6 +761,14 @@ func _physics_process(delta: float) -> void:
 		var pulse := 1.06 + sin(Time.get_ticks_msec() * 0.007) * 0.14
 		_elite_halo.scale = Vector3(pulse, pulse, pulse)
 	super._physics_process(delta)
+	# No ground under the feet to lean on, so a standing pelvis is kept upright
+	# directly. Knockdowns skip this and fall for real.
+	if state == State.STANDING and not is_dead:
+		var pelvis := root_part()
+		var upright := Basis(Vector3.UP, _facing_yaw)
+		pelvis.global_transform = Transform3D(upright, pelvis.global_position)
+		var spin := pelvis.angular_velocity
+		pelvis.angular_velocity = Vector3(0.0, spin.y, 0.0)
 	_apply_secondary_motion_overlay()
 
 
@@ -841,6 +873,9 @@ func _perceive() -> Dictionary:
 		var d := diff.length()
 		if d > 0.001 and d < 1.15:
 			sep += (diff / d) * ((1.15 - d) / 1.15)
+	var forest := get_tree().get_first_node_in_group("forest_world") as ForestWorld
+	if forest and ctx.has("player_position"):
+		sep += forest.trunk_push(self_pos, (ctx.player_position as Vector3) - self_pos)
 	ctx["separation"] = sep.limit_length(1.5)
 	return ctx
 
@@ -859,14 +894,22 @@ func _apply_move(move: Vector3, delta: float, planted := false) -> void:
 		_move_blocked = false
 	else:
 		_move_blocked = _blocked_toward(move.normalized())
+	_detour_time = maxf(_detour_time - delta, 0.0)
 	if _move_blocked and move.length_squared() > 0.01:
+		# Walk around a trunk: widen the angle until clear, preferring the side
+		# chosen last time so the yōkai does not dither in front of it.
 		var forward := move.normalized()
-		var side := Vector3(-forward.z, 0.0, forward.x)
-		for flip in [-1.0, 1.0]:
-			var detour: Vector3 = (forward + side * flip * 0.72).normalized()
-			if not _blocked_toward(detour):
-				move = detour * move.length()
-				_move_blocked = false
+		var sides: Array[float] = [_detour_side, -_detour_side]
+		for angle in [0.6, 1.05, 1.57]:
+			for flip in sides:
+				var detour := forward.rotated(Vector3.UP, angle * flip)
+				if not _blocked_toward(detour):
+					move = detour * move.length()
+					_move_blocked = false
+					_detour_side = flip
+					_detour_time = 0.8
+					break
+			if not _move_blocked:
 				break
 	if _move_blocked:
 		move_velocity = Vector3.ZERO
@@ -892,7 +935,9 @@ func _blocked_toward(dir: Vector3) -> bool:
 	for h in [-0.5, -0.1]:
 		var a := Vector3(from.x, from.y + h, from.z)
 		var q := PhysicsRayQueryParameters3D.create(a, a + dir * 0.45, 1, own)
-		if not space.intersect_ray(q).is_empty():
+		var hit := space.intersect_ray(q)
+		# A rising hillside is ground to walk up, not a wall (trunks are).
+		if not hit.is_empty() and (hit.normal as Vector3).y < 0.55:
 			return true
 	return false
 
@@ -924,6 +969,7 @@ func _try_claw_player(damage: float, attack: String) -> void:
 
 func _show_tell(tell: float) -> void:
 	_eyes.emission_energy_multiplier = 0.85 + tell * tell * 4.5
+	EyeGlow.set_glow(_eye_glows, 1.0 + tell * tell * 1.8)
 	_claw_mat.emission_energy_multiplier = 0.32 + tell * tell * 3.8
 	_sigil_mat.emission_energy_multiplier = 0.55 + tell * tell * 2.5
 	if tell > 0.05 and _last_tell <= 0.05:

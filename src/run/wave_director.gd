@@ -17,15 +17,21 @@ signal oni_defeated(oni: RunOniBoss, hit: Dictionary)
 @export var straggler_distance := 17.0
 ## (x, z) -> ground y; RunGame binds ForestWorld.height_at.
 var ground_height: Callable
-@export var max_concurrent_enemies := 10
+## Hard cap; the live cap ramps up to it over the run (concurrent_cap()).
+@export var max_concurrent_enemies := 12
+## Live yōkai allowed at the very start, and seconds per extra one.
+@export var start_concurrent_enemies := 2
+@export var seconds_per_extra_enemy := 20.0
+## Seconds of run time over which spawn trickle and wave breaks tighten.
+@export var ramp_seconds := 180.0
 @export var initial_wave_delay := 0.6
-@export var between_wave_delay := 1.8
+@export var between_wave_delay := 4.5
 @export var max_wave_duration := 18.0
 @export var base_enemy_hp := 42.0
 @export var base_enemy_speed := 2.05
 @export var base_enemy_damage := 12.0
-@export var oni_spawn_interval := 78.0
-@export var oni_spawn_min_run_time := 42.0
+@export var oni_spawn_interval := 100.0
+@export var oni_spawn_min_run_time := 120.0
 
 var active := false
 var wave := 0
@@ -104,10 +110,12 @@ func step_director(delta: float, player_pos: Vector3) -> void:
 	_wave_timer += delta
 	var alive := alive_count()
 
-	if pending_spawns > 0 and alive < max_concurrent_enemies:
+	if pending_spawns > 0 and alive < concurrent_cap():
 		_spawn_stagger_timer -= delta
 		if _spawn_stagger_timer <= 0.0:
-			_spawn_stagger_timer = 0.22
+			# Early on yōkai drift out of the fog one at a time; later in quick
+			# succession.
+			_spawn_stagger_timer = lerpf(1.3, 0.35, _ramp())
 			pending_spawns -= 1
 			spawn_in_fog_ring(player_pos)
 			alive += 1
@@ -126,7 +134,7 @@ func step_director(delta: float, player_pos: Vector3) -> void:
 func start_next_wave(player_pos: Vector3 = Vector3.ZERO) -> void:
 	wave += 1
 	_wave_timer = 0.0
-	_next_wave_cooldown = between_wave_delay
+	_next_wave_cooldown = lerpf(between_wave_delay, 2.0, _ramp())
 	var count := wave_enemy_count(wave, run_seconds)
 	pending_spawns = count
 	GameEvents.log_event("wave_started", {
@@ -135,14 +143,26 @@ func start_next_wave(player_pos: Vector3 = Vector3.ZERO) -> void:
 		"run_time": snappedf(run_seconds, 0.1),
 	})
 	wave_started.emit(wave, count)
-	var batch := mini(pending_spawns, maxi(1, max_concurrent_enemies - alive_count()))
+	# Only the first of a wave appears at once; the rest trickle in (step).
+	var batch := mini(pending_spawns, 1 if _ramp() < 0.35 else maxi(1, concurrent_cap() - alive_count()) / 2)
 	for i in batch:
 		pending_spawns -= 1
 		spawn_in_fog_ring(player_pos, float(i) / float(maxi(batch, 1)))
 
 
 func wave_enemy_count(wave_num: int, elapsed: float) -> int:
-	return 3 + int(floor(float(wave_num - 1) * 1.35 + elapsed / 28.0))
+	return 2 + int(floor(float(wave_num - 1) * 0.9 + elapsed / 40.0))
+
+
+## How many yōkai may be alive at once right now: a couple at the start,
+## one more about every [member seconds_per_extra_enemy] s, up to the hard cap.
+func concurrent_cap() -> int:
+	return clampi(start_concurrent_enemies + int(run_seconds / seconds_per_extra_enemy),
+		start_concurrent_enemies, max_concurrent_enemies)
+
+
+func _ramp() -> float:
+	return clampf(run_seconds / ramp_seconds, 0.0, 1.0)
 
 
 func scaled_hp(wave_num: int, elapsed: float) -> float:
@@ -161,7 +181,9 @@ func scaled_damage(wave_num: int) -> float:
 
 
 func elite_spawn_chance(wave_num: int) -> float:
-	return clampf(0.10 + float(maxi(wave_num, 1) - 1) * 0.05, 0.10, 0.42)
+	if wave_num < 3:
+		return 0.0
+	return clampf(0.10 + float(wave_num - 3) * 0.05, 0.10, 0.42)
 
 
 func spawn_in_fog_ring(target_pos: Vector3 = Vector3.ZERO, sector_bias: float = -1.0) -> Yokai:

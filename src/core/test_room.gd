@@ -39,6 +39,7 @@ func _ready() -> void:
 	var use_xr := is_xr_available() and not OS.get_cmdline_user_args().has("--desktop")
 	GameEvents.log_event("session_start", {"scene": "training_arena", "xr": use_xr})
 	if use_xr:
+		Sfx.route_to_xr_headset()
 		player = XR_PLAYER.instantiate()
 		player.reset_requested.connect(reset_room)
 		player.toggle_attacks_requested.connect(toggle_dummy_attacks)

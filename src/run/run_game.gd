@@ -17,7 +17,9 @@ signal upgrade_chosen(upgrade: Dictionary, level: int)
 signal run_ended(summary: Dictionary)
 signal run_started
 
-const RUN_FOG_END := 13.5
+const RUN_FOG_END := 9.0
+## Night "milk" fog (sRGB): pale moonlit haze that swallows the forest.
+const RUN_FOG_COLOR := Color(0.5, 0.53, 0.6)
 
 @export var high_score_path := "user://high_score.cfg"
 @export var base_magnet_radius := 3.8
@@ -57,7 +59,6 @@ var _base_max_torque := 40.0
 var _base_follow_freq := 9.0
 var _base_angular_freq := 9.0
 var _rng := RandomNumberGenerator.new()
-var _sky_dome: Node3D
 ## Linear storm_fog_color the run sets for the sky horizon (see _configure_run_forest).
 var horizon_fog_color := Color.BLACK
 
@@ -110,6 +111,7 @@ func _prepare_run_arena() -> void:
 	var bodies: Array = [player] if player is CharacterBody3D else player.find_children("*", "CharacterBody3D", true, false)
 	for pb in bodies:
 		(pb as CharacterBody3D).collision_mask &= ~(2 | 8)
+		(pb as CharacterBody3D).collision_mask |= ForestWorld.TRUNK_LAYER
 
 	# Configure player health for survival runs (death ends the run).
 	var health := _player_health()
@@ -147,21 +149,42 @@ func _configure_run_navigation() -> void:
 	NavigationServer3D.parse_source_geometry_data(nav_mesh, src, floor_body)
 	NavigationServer3D.bake_from_source_geometry_data(nav_mesh, src)
 	region.navigation_mesh = nav_mesh
+	# The bake source must not stay in the world: it was an invisible 88 m
+	# floor under the hills.
+	floor_body.queue_free()
+
+
+## Dojo set pieces the run does not show: it spawns in a forest clearing, with
+## no stone disc, seal circle or arena gates (sky, moon and lightning stay).
+const DOJO_ONLY_NODES := [
+	"Arena/WaterMirror", "Arena/WaterMistLow", "Arena/WaterMistHigh", "Arena/PlatformDisc",
+	"Arena/PlatformRim", "Arena/NorthThreshold", "Arena/SpawnSeal", "Arena/ToriiGates",
+	"Arena/Rocks", "Room/WeaponRest", "Kanabo", "Arena/SkyDome",
+]
 
 
 func _configure_run_forest() -> void:
-	var arena := get_node_or_null("Arena")
-	if arena:
-		var water := arena.get_node_or_null("WaterMirror") as MeshInstance3D
-		if water:
-			water.visible = false
-		var rocks := arena.get_node_or_null("Rocks") as Node3D
-		if rocks:
-			rocks.visible = false
-		var torii_group := arena.get_node_or_null("ToriiGates") as Node3D
-		if torii_group:
-			for child in torii_group.get_children():
-				child.visible = child.name == "GiantTorii"
+	for path in DOJO_ONLY_NODES:
+		var n := get_node_or_null(path) as Node3D
+		if n == null:
+			continue
+		n.visible = false
+		n.process_mode = Node.PROCESS_MODE_DISABLED
+		for body in ([n] if n is CollisionObject3D else []) + n.find_children("*", "CollisionObject3D", true, false):
+			(body as CollisionObject3D).collision_layer = 0
+			(body as CollisionObject3D).collision_mask = 0
+	# The run is katana-only: keep the dojo kanabō out of reach and recall.
+	if kanabo:
+		kanabo.remove_from_group("player_weapons")
+		kanabo.freeze = true
+		kanabo.global_position = Vector3(0.0, -60.0, 0.0)
+	if player is DesktopPlayer:
+		(player as DesktopPlayer).weapons = [katana]
+	# The forest terrain is the floor now, not the dojo's square slab.
+	var room_floor := get_node_or_null("Room/Floor") as CollisionObject3D
+	if room_floor:
+		room_floor.collision_layer = 0
+		room_floor.collision_mask = 0
 	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
 	var arena_lm := get_node_or_null("Arena/LightmapGI") as LightmapGI
 	if we and we.environment:
@@ -172,12 +195,21 @@ func _configure_run_forest() -> void:
 		# hills and gates 30 m away as hard dark silhouettes.
 		we.environment.fog_enabled = true
 		we.environment.fog_mode = Environment.FOG_MODE_DEPTH
-		we.environment.fog_depth_begin = 2.2
+		we.environment.fog_light_color = RUN_FOG_COLOR
+		we.environment.fog_light_energy = 1.0
+		we.environment.fog_depth_begin = 0.4
 		we.environment.fog_depth_end = RUN_FOG_END
-		we.environment.fog_depth_curve = 1.25
+		we.environment.fog_depth_curve = 1.0
+		# Inside milk fog there is no sky: the background is the fog itself,
+		# so nothing ever outlines the forest edge.
+		we.environment.background_mode = Environment.BG_COLOR
+		we.environment.background_color = RUN_FOG_COLOR
+		if lightning:
+			lightning.base_fog_light_color = RUN_FOG_COLOR
 		we.environment.fog_density = 1.0
 		we.environment.fog_height_density = 0.0
-		we.environment.fog_sky_affect = 0.0
+		# The background is fogged too, so it is the fog color by construction.
+		we.environment.fog_sky_affect = 1.0
 		# Environment colors are sRGB but the sky shader's storm_fog_color is
 		# read as linear: the same numbers rendered the fog dark navy and the
 		# horizon pale lavender, so fogged hills never dissolved into the sky.
@@ -195,6 +227,9 @@ func _configure_run_forest() -> void:
 		forest_world.name = "ForestWorld"
 		add_child(forest_world)
 		move_child(forest_world, 0)
+	var moon := get_node_or_null("Moon") as DirectionalLight3D
+	if moon:
+		forest_world.moon_direction = moon.global_basis.z.normalized()
 	forest_world.setup(player, arena_lm)
 	if get_node_or_null("RunForestAmbience") == null:
 		var forest_amb := RunForestAmbience.new()
@@ -387,7 +422,6 @@ static func xp_for_level(current_level: int) -> int:
 
 func _physics_process(delta: float) -> void:
 	var p_pos := _player_center()
-	_follow_sky(p_pos)
 	if state == RunState.PLAYING:
 		run_time += delta
 		wave_director.step_director(delta, p_pos)
@@ -408,16 +442,6 @@ func _physics_process(delta: float) -> void:
 			(child as SoulOrb).step_orb(delta, p_pos, soul_magnet_radius)
 
 	_refresh_hud()
-
-
-## The storm sky is a 125 m dome built for the static dojo; once the player
-## walks into the forest it has to travel with them or its rim shows.
-func _follow_sky(p_pos: Vector3) -> void:
-	if _sky_dome == null:
-		_sky_dome = get_node_or_null("Arena/SkyDome") as Node3D
-		if _sky_dome == null:
-			return
-	_sky_dome.global_position = Vector3(p_pos.x, _sky_dome.global_position.y, p_pos.z)
 
 
 func _unhandled_input(event: InputEvent) -> void:

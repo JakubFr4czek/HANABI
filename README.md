@@ -185,7 +185,9 @@ On Quest the renderer switches to **Compatibility** automatically (`rendering_me
 4. Optional: export with the **"PCVR (Windows)"** preset (requires Godot's Windows export templates).
 
 ## VR controls (run)
-Same as the test room for moving and holding the katana. **A/X** skips the seiza intro, thumbstick **click** fires the bound element ability (Shadow blink), slice an ofuda to pick an upgrade and the Restart ofuda on the memorial stele to run again. Enemies never push you: the rig only collides with the world.
+Same as the test room for moving and holding the katana. **A/X** skips the seiza intro, thumbstick **click** fires the bound element ability (Shadow blink), slice an ofuda to pick an upgrade (cards drift in for ~0.8 s and cannot be cut before) and the Restart ofuda on the memorial stele to run again. Enemies never push you: the rig only collides with the world (and tree trunks).
+
+View (run and dojo): **hold B or Y** for 0.6 s to recenter on the headset; **hold B and push the right stick up / down** to raise or lower your eye height (±45 cm, saved to `user://hanabi_vr.cfg`). Your real standing height is used otherwise (XR Tools' auto-calibration is off). Over Link / Air Link the game routes audio to the headset's output device when Windows lists one (`Sfx.route_to_xr_headset`, logged at start).
 
 ## VR controls (test room)
 | Input | Action |
