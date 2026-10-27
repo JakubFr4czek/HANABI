@@ -18,12 +18,15 @@ func _ready() -> void:
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
 	var oni := run.wave_director.spawn_oni_boss(player.global_position)
-	oni.global_position = Vector3(0.0, 0.0, -2.2)
+	oni.global_position = Vector3(0.0, 1.0, -4.5)
 	oni.home_position = oni.global_position
 	oni.set_attacks_enabled(false)
 	oni.set_pose("guard")
-	player.teleport(Vector3(0.0, 0.0, 3.0), 0.0)
-	player.camera.rotation.x = deg_to_rad(-4.0)
+	var face := player.global_position
+	face.y = oni.global_position.y
+	oni.look_at(face, Vector3.UP)
+	player.teleport(Vector3(0.0, 0.0, 2.8), 0.0)
+	player.camera.rotation.x = deg_to_rad(-2.0)
 	await _frames(32)
 	await _shot("oni_mask_close_fog")
 	run.queue_free()
