@@ -18,6 +18,7 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 
 	run = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
 	run.high_score_path = "user://screenshots_high_score.cfg"
 	add_child(run)
 	player = run.player as DesktopPlayer

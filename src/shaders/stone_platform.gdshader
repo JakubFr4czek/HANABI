@@ -10,6 +10,9 @@ render_mode blend_mix, depth_draw_opaque, cull_back, specular_schlick_ggx;
 
 #include "res://src/shaders/rain_ripples.gdshaderinc"
 
+global uniform float intro_ripple_radius;
+global uniform float intro_ripple_gain;
+
 uniform vec3 stone_light : source_color = vec3(0.24, 0.24, 0.26);
 uniform vec3 stone_dark : source_color = vec3(0.09, 0.09, 0.105);
 // Scanned stone (Poly Haven japanese_stone_wall, ARM = AO/rough/metal), tiled
@@ -89,6 +92,10 @@ void fragment() {
 	if (top > 0.01) {
 		NORMAL = normalize(mix(NORMAL, (VIEW_MATRIX * vec4(n_world, 0.0)).xyz, top));
 	}
+
+	float intro_r = length(xz);
+	float intro_ring = smoothstep(0.55, 0.0, abs(intro_r - intro_ripple_radius)) * intro_ripple_gain;
+	col += vec3(0.28, 0.52, 1.05) * intro_ring * (0.35 + puddle * 0.65);
 
 	ALBEDO = col;
 	float rough_stone = mix(0.72, 0.86, n_mid) * mix(1.0, clamp(sarm.g * 1.05, 0.55, 1.0), stone_texture_mix);

@@ -14,6 +14,7 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 
 	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
 	add_child(run)
 	var player := run.player as DesktopPlayer
 	run.wave_director.stop_director()

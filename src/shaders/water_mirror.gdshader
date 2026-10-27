@@ -14,6 +14,8 @@ render_mode unshaded, cull_back, depth_draw_opaque;
 global uniform vec3 moon_direction;
 global uniform float storm_flash;
 global uniform vec2 storm_flash_dir;
+global uniform float intro_ripple_radius;
+global uniform float intro_ripple_gain;
 
 uniform vec3 deep_color : source_color = vec3(0.012, 0.014, 0.026);
 uniform vec3 moon_color : source_color = vec3(0.8, 0.86, 1.0);
@@ -86,5 +88,8 @@ void fragment() {
 	vec3 col = mix(deep_color, refl, fresnel);
 	// Raindrop crowns catch a little light close to the viewer.
 	col += vec3(0.1, 0.11, 0.16) * rr.z * (1.0 + storm_flash * 2.0);
+	float intro_r = length(v_world_pos.xz);
+	float intro_ring = smoothstep(0.65, 0.0, abs(intro_r - intro_ripple_radius)) * intro_ripple_gain;
+	col += lightning_tint * intro_ring * (0.25 + storm_flash * 0.35);
 	ALBEDO = col;
 }

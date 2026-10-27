@@ -15,6 +15,7 @@ uniform vec3 shadow_color : source_color = vec3(0.66, 0.26, 1.0);
 uniform int active_element_index = -1; // -1 = none, 0 = sakura, 1 = storm, 2 = ink, 3 = shadow
 uniform int active_elements_mask = 0;  // bitmask: 1=sakura(0), 2=storm(1), 4=ink(2), 8=shadow(3)
 uniform int evolution_mask = 0;        // bitmask: 1=black_lightning, 2=phantom_petals
+uniform float intro_seal_glow : hint_range(0.0, 1.0) = 0.0;
 
 float line(float d, float w) {
 	return 1.0 - smoothstep(w * 0.5, w, d);
@@ -45,7 +46,10 @@ void fragment() {
 	float pulse = 0.86 + 0.14 * sin(TIME * 1.8 + float(quad) * 1.2);
 	float fill = quad_active ? smoothstep(0.52, 0.60, r) * (1.0 - smoothstep(0.80, 0.87, r)) * gap * 0.055 : 0.0;
 
-	vec3 col = inlay_color * pattern * (1.0 + storm_flash * 1.5);
+	float intro_lift = intro_seal_glow * (0.35 + 0.65 * pulse);
+	vec3 intro_tint = mix(sakura_color, storm_color, 0.35 + 0.25 * sin(TIME * 1.4));
+	vec3 col = inlay_color * pattern * (1.0 + storm_flash * 1.5 + intro_lift);
+	col = max(col, intro_tint * pattern * intro_lift * 0.82);
 	if (quad_active) {
 		col = elem * (0.56 * pattern + fill * 0.40) * pulse;
 	}

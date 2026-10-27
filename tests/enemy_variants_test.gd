@@ -15,6 +15,7 @@ func _ready() -> void:
 
 func _run_all() -> void:
 	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
 	add_child(run)
 	await _frames(12)
 	run.wave_director.stop_director()
