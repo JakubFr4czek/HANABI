@@ -148,6 +148,9 @@ Pominięte: §8 Meta AI, §14 VR comfort, §15 kalorie, powrót sakury na arenie
   grass, stones), full-size torii now and then, moonlight shafts.
 - Run light is the fog: ambient is the fog color, sky reflections off, moon
   diffuse and grey with no specular. Forest props don't self-light blue.
+- Forest floor has roots and leaf pockets on the flats (steep hills stay
+  walkable). Wrist plate faces the eyes; on desktop it sits on the left wrist,
+  not on the sword hand.
 - Night milk fog: pale depth fog full at 9 m, background fogged too; yōkai and
   Oni eyes are fog-piercing points that grow as they come.
 - Waves ramp from 2 alive to 12 over ~3 min, elites from wave 3, Oni at 2 min.
