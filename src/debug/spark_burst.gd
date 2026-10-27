@@ -73,6 +73,7 @@ static func _shared_base_mat() -> StandardMaterial3D:
 		_base_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		_base_mat.albedo_texture = _soft_streak()
 		_base_mat.vertex_color_use_as_albedo = true
+		_base_mat.disable_fog = true
 	return _base_mat
 
 
