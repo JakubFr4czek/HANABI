@@ -89,10 +89,13 @@ func _run_all() -> void:
 
 	# Desktop E-grab stands in for the XR grip: taking starts the run.
 	var dp := run.player as DesktopPlayer
+	var walked_to := dp.global_position
 	dp.take_weapon(run.katana)
 	await _frames(30)
 	_check("taking the katana starts the run",
 		run.katana.is_held() and run.state == RunGame.RunState.PLAYING)
+	_check("taking it does not yank the player back to the spawn (moved %.2f m)" % dp.global_position.distance_to(walked_to),
+		dp.global_position.distance_to(walked_to) < 0.1)
 	await _frames(90)
 	_check("the glow fades out once the katana is taken (glow %.2f)" % intro._glow, intro._glow < 0.02)
 	run.queue_free()

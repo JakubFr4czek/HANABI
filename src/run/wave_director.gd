@@ -56,6 +56,16 @@ func _ready() -> void:
 	_rng.randomize()
 
 
+## Pooled bodies sit off the tree, so nothing frees them with the scene:
+## free them with the director (they leaked on every scene change / exit).
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		for y in _yokai_pool:
+			if is_instance_valid(y) and not y.is_inside_tree():
+				y.free()
+		_yokai_pool.clear()
+
+
 func start_director() -> void:
 	clear_enemies()
 	wave = 0

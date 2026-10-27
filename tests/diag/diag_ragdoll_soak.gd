@@ -9,6 +9,7 @@ const RUN_SCENE := preload("res://scenes/run.tscn")
 const TEAR_LIMIT := 0.6
 
 var _incidents := 0
+var _gap_incidents := 0
 var _worst := {}  # instance id -> worst tear reported this life
 
 
@@ -81,7 +82,7 @@ func _ready() -> void:
 		for h in hits:
 			kinds[h.get("strike", "?")] = int(kinds.get(h.get("strike", "?"), 0)) + 1
 		print("  strikes: %s, edge hits %d" % [kinds, rows.size()])
-	print("SOAK %.0f s: %d swings, %d kills, max %d bodies, %d incidents, severed %s" % [seconds, swings, deaths[0], max_alive, _incidents, severed])
+	print("SOAK %.0f s: %d swings, %d kills, max %d bodies, %d incidents, %d joint-gap ticks, severed %s" % [seconds, swings, deaths[0], max_alive, _incidents, _gap_incidents, severed])
 	get_tree().quit(1 if _incidents > 0 else 0)
 
 
@@ -99,6 +100,29 @@ func _inspect(r: ActiveRagdoll, t: float, player_pos: Vector3) -> void:
 		if tear > worst:
 			worst = tear
 			worst_part = part_name
+	# The real detachment measure: how far apart each joint's two halves are
+	# (the anchor carried by the parent vs by the child). A raised arm moves
+	# far from the pelvis legitimately; a torn joint opens a gap.
+	var gap := 0.0
+	var gap_part := ""
+	for part_name in r.parts:
+		var def: Dictionary = r._defs.get(part_name, {})
+		if not def.has("parent") or not def.has("joint"):
+			continue
+		if r is Yokai and (r as Yokai).is_severed(part_name):
+			continue
+		var parent := r.parts.get(String(def.parent)) as RagdollPart
+		var child := r.parts[part_name] as RagdollPart
+		var j: Vector3 = def.joint
+		var a := parent.global_transform * ((r._rest[parent.name] as Transform3D).affine_inverse() * j)
+		var b := child.global_transform * ((r._rest[part_name] as Transform3D).affine_inverse() * j)
+		if a.distance_to(b) > gap:
+			gap = a.distance_to(b)
+			gap_part = part_name
+	if gap > 0.12:
+		_gap_incidents += 1
+		if _gap_incidents <= 12:
+			print("t=%6.2f %s JOINT GAP %.2f m at %s | state %d dead %s" % [t, r.name, gap, gap_part, r.state, r.get("is_dead") == true])
 	var far := pelvis.global_position.distance_to(player_pos)
 	var id := r.get_instance_id()
 	var dead: bool = r.get("is_dead") == true

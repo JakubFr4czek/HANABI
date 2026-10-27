@@ -414,16 +414,23 @@ func start_run() -> void:
 
 func _begin_play_after_intro() -> void:
 	state = RunState.PLAYING
+	# The intro places the player itself and hands movement back at
+	# touchdown, so they may have walked off before taking the katana: only a
+	# run without the intro is put on the spawn here. (Teleporting after the
+	# grab yanked a VR player, camera and all, back to the spawn.)
+	var place := skip_run_intro
 	if player is DesktopPlayer:
 		var dp := player as DesktopPlayer
-		dp.teleport(spawn.global_position, spawn.global_rotation.y)
+		if place:
+			dp.teleport(spawn.global_position, spawn.global_rotation.y)
 		if katana and not katana.is_held():
 			dp.take_weapon(katana)
 	elif player is XRPlayer:
 		var xr := player as XRPlayer
-		xr.set_rig_locked(true)
-		xr.global_transform = spawn.global_transform
-		xr.set_rig_locked(false)
+		if place:
+			xr.set_rig_locked(true)
+			xr.global_transform = spawn.global_transform
+			xr.set_rig_locked(false)
 		if xr.right_holder and katana and not katana.is_held():
 			xr.right_holder.grab(katana)
 			katana.snap_to_hand()
@@ -912,11 +919,18 @@ func _player_view_frame() -> Transform3D:
 	return Transform3D(Basis.IDENTITY, Vector3(0.0, 1.65, 1.8))
 
 
+## Lent soul orbs live under _souls_root: hand them back to the pool before
+## this scene is freed, or they die with it.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		_clear_souls()
+
+
 func _clear_souls() -> void:
 	if _souls_root == null:
 		return
 	for c in _souls_root.get_children():
-		if c is SoulOrb and VfxPool:
+		if c is SoulOrb and is_instance_valid(VfxPool):
 			VfxPool.release_soul_orb(c as SoulOrb)
 		else:
 			c.queue_free()
