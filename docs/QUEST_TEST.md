@@ -22,7 +22,8 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 - [ ] Trafienia: iskry czytelne, nie biały szum.
 - [ ] **Śmierć:** firework w kolorze żywiołu we mgle; przy wielu killach naraz **max 2–3 błyski światła** (reszta emisja).
 - [ ] Elita: halo w kolorze żywiołu.
-- [ ] **Oni:** maska **project CC0** (`oni_mask_run.glb`) — z bliska widać szczękę/rogi, nie gładką kulę; combat fog ~8 m.
+- [ ] **Oni (§19):** maska `oni_mask_run.glb` (sculpt v2 ~1k v) — **~2 m**: biały lakier, oczodoły, kły/rogi; **~6 m**: sylwetka + czerwone oczy we mgle; nie „gładka kula”.
+- [ ] **Yōkai (§19):** przejście stalk→approach płynne (bez szarpnięcia); trafienie = krótki **flinch** z lekkim kołysaniem, potem powrót do stalk.
 - [ ] Parry / stagger Oni: czytelne, **bez zmiany chwytu** katany.
 - [ ] Błyskawica za wielkim torii.
 
@@ -64,7 +65,10 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 
 ```bash
 GODOT=".tools/Godot.app/Contents/MacOS/Godot"
+# Pełny zestaw README (26 scen): wszystkie powinny kończyć się ALL PASSED (0 failed).
 $GODOT --headless --path . --fixed-fps 90 res://tests/quest_perf_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/yokai_combat_motion_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/run_loop_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/vfx_pool_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/firework_flash_cap_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/yokai_combat_motion_test.tscn -- --desktop
@@ -74,8 +78,10 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/point12_readability_test.t
 ## Zrzuty desktop (porównanie z GDD przed Questem)
 
 ```bash
+GODOT=".tools/Godot.app/Contents/MacOS/Godot"
+$GODOT --path . --fixed-fps 90 res://tests/point19_combat_screenshots.tscn -- --desktop --shots /tmp/hanabi_point19_combat
 $GODOT --path . --fixed-fps 90 res://tests/point14_oni_screenshot.tscn -- --desktop --shots /tmp/hanabi_oni16
 $GODOT --path . --fixed-fps 90 res://tests/point12_screenshots.tscn -- --desktop --shots /tmp/hanabi_point12_shots
 ```
 
-Sprawdź: `3_oni_close_mask` (maska Oni), `4_firework_in_fog`, nadgarstek w `point15_wrist_screenshot`.
+Sprawdź §19: `oni_fog_2m_wave`, `oni_fog_6m_wave`, `yokai_approach_stride`, `yokai_flinch_hit`. Starsze: `3_oni_close_mask`, firework, nadgarstek (`point15_wrist_screenshot`).
