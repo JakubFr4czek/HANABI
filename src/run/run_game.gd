@@ -39,6 +39,7 @@ var upgrade_stacks := {}  # upgrade_id -> int
 var wave_director: WaveDirector
 var diegetic_hud: DiegeticHud
 var element_system: ElementSystem
+var forest_world: ForestWorld
 var active_ofuda: Array[OfudaTalisman] = []
 var restart_ofuda: OfudaTalisman = null
 
@@ -119,6 +120,34 @@ func _prepare_run_arena() -> void:
 		if not health.died.is_connected(_on_player_died):
 			health.died.connect(_on_player_died)
 
+	_configure_run_forest()
+
+
+func _configure_run_forest() -> void:
+	var arena := get_node_or_null("Arena")
+	if arena:
+		var water := arena.get_node_or_null("WaterMirror") as MeshInstance3D
+		if water:
+			water.visible = false
+		var rocks := arena.get_node_or_null("Rocks") as Node3D
+		if rocks:
+			rocks.visible = false
+		var torii_group := arena.get_node_or_null("ToriiGates") as Node3D
+		if torii_group:
+			for child in torii_group.get_children():
+				child.visible = child.name == "GiantTorii"
+	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if we and we.environment:
+		we.environment.fog_depth_end = minf(we.environment.fog_depth_end, 13.5)
+		we.environment.fog_density = maxf(we.environment.fog_density, 1.06)
+		we.environment.fog_height_density = maxf(we.environment.fog_height_density, 0.5)
+	if forest_world == null:
+		forest_world = ForestWorld.new()
+		forest_world.name = "ForestWorld"
+		add_child(forest_world)
+		move_child(forest_world, 0)
+	forest_world.setup(player)
+
 
 func _setup_run_nodes() -> void:
 	_souls_root = Node3D.new()
@@ -173,6 +202,8 @@ func start_run() -> void:
 	upgrade_stacks.clear()
 	soul_magnet_radius = base_magnet_radius
 	element_system.reset()
+	if forest_world:
+		forest_world.reset()
 	set_seal_progress([], 0)
 
 	var health := _player_health()
