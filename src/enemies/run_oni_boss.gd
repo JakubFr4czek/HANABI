@@ -5,7 +5,10 @@ extends TrainingDummy
 
 signal boss_defeated(oni: RunOniBoss, hit: Dictionary)
 
+const ONI_MASK_GLB := preload("res://assets/models/enemies/oni_mask_run.glb")
+
 var is_dead := false
+static var _cached_mask_mesh: Mesh
 var _last_hit := {}
 var _flesh := ShaderMaterial.new()
 var _armor := ShaderMaterial.new()
@@ -108,24 +111,11 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 			return
 	var mask_mi := MeshInstance3D.new()
 	mask_mi.name = "OniMask"
-	var m := BoxMesh.new()
-	m.size = Vector3(0.26, 0.30, 0.065)
-	mask_mi.mesh = m
-	mask_mi.position = Vector3(0, 0.04, 0.12)
+	var mesh := _oni_mask_mesh()
+	mask_mi.mesh = mesh if mesh else _fallback_mask_mesh()
+	mask_mi.position = Vector3(0.0, 0.03, 0.11)
+	mask_mi.scale = Vector3(1.08, 1.12, 1.05)
 	mask_mi.material_override = _mask
-	var brow := MeshInstance3D.new()
-	brow.name = "OniBrow"
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.22, 0.028, 0.04)
-	brow.mesh = bm
-	brow.position = Vector3(0, 0.1, 0.145)
-	var brow_mat := StandardMaterial3D.new()
-	brow_mat.albedo_color = Color(0.62, 0.06, 0.05)
-	brow_mat.emission_enabled = true
-	brow_mat.emission = Color(0.95, 0.12, 0.06)
-	brow_mat.emission_energy_multiplier = 0.55
-	brow.material_override = brow_mat
-	mask_mi.add_child(brow)
 	var eye_l := MeshInstance3D.new()
 	var eye_m := SphereMesh.new()
 	eye_m.radius = 0.018
@@ -143,23 +133,25 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 		e.position = Vector3(0.055 * sx, 0.02, 0.14)
 		mask_mi.add_child(e)
 	head.add_child(mask_mi)
-	for sx in [-1.0, 1.0]:
-		var horn := MeshInstance3D.new()
-		var cyl := CylinderMesh.new()
-		cyl.bottom_radius = 0.032
-		cyl.top_radius = 0.006
-		cyl.height = 0.26
-		cyl.radial_segments = 10
-		horn.mesh = cyl
-		horn.position = Vector3(0.07 * sx, 0.16, 0.09)
-		horn.rotation = Vector3(deg_to_rad(-35.0), 0.0, deg_to_rad(-22.0 * sx))
-		var hm := StandardMaterial3D.new()
-		hm.albedo_color = Color(0.08, 0.05, 0.06)
-		hm.emission_enabled = true
-		hm.emission = Color(0.85, 0.12, 0.05)
-		hm.emission_energy_multiplier = 0.95
-		horn.material_override = hm
-		head.add_child(horn)
+
+
+static func _oni_mask_mesh() -> Mesh:
+	if _cached_mask_mesh != null:
+		return _cached_mask_mesh
+	var inst := ONI_MASK_GLB.instantiate()
+	for node in inst.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh:
+			_cached_mask_mesh = mi.mesh
+			break
+	inst.free()
+	return _cached_mask_mesh
+
+
+static func _fallback_mask_mesh() -> Mesh:
+	var m := BoxMesh.new()
+	m.size = Vector3(0.26, 0.30, 0.065)
+	return m
 
 
 func _attach_oni_armor(chest: RagdollPart) -> void:
