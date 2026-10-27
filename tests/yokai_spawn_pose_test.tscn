@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/yokai_spawn_pose_test.gd" id="1"]
+
+[node name="YokaiSpawnPoseTest" type="Node"]
+script = ExtResource("1")
