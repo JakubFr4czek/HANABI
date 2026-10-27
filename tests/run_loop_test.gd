@@ -167,6 +167,8 @@ func _run_all() -> void:
 	_check("Diegetic wrist shows score points and kill count separately",
 		run.diegetic_hud.wrist_label.text.contains("pt")
 		and run.diegetic_hud.wrist_label.text.contains("斬 7"))
+	_check("Wrist HP ring hidden until critical health",
+		run.diegetic_hud.wrist_hp_ring != null and not run.diegetic_hud.wrist_hp_ring.visible)
 
 	player.health.take_hit(999.0, Vector3.ZERO, {"attacker": "Yokai"})
 	await _wait(0.15)
