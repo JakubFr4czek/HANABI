@@ -128,6 +128,8 @@ func _ready() -> void:
 	run.level = 5
 	run.run_time = 135.0
 	run.upgrade_stacks = {"damage": 2, "arm_strength": 1, "magnet": 1}
+	for id in ["storm_chain", "storm_charge", "ink_pool"]:
+		run._apply_upgrade({"id": id})
 	run._clear_souls()
 	run.element_system._clear_runtime_vfx()
 	player.teleport(Vector3(0.0, 0.0, 2.2), 0.0)

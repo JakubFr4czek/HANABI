@@ -214,6 +214,8 @@ func _setup_run_nodes() -> void:
 	diegetic_hud.name = "DiegeticHud"
 	add_child(diegetic_hud)
 	diegetic_hud.setup(player, katana)
+	if not GameEvents.parry.is_connected(_on_parry_diegetic):
+		GameEvents.parry.connect(_on_parry_diegetic)
 
 	element_system = ElementSystem.new()
 	element_system.name = "ElementSystem"
@@ -580,6 +582,7 @@ func _on_player_died() -> void:
 		"level": level,
 		"wave": wave_director.wave,
 		"upgrades": upgrade_stacks.duplicate(),
+		"build": element_system.build_summary() if element_system else "Unbound",
 	}
 	GameEvents.log_event("run_ended", summary)
 	_build_end_screen(summary)
@@ -648,8 +651,12 @@ func _build_end_screen(summary: Dictionary) -> void:
 	var stats_text := "SCORE  %d%s\nHIGH SCORE  %d\nTIME  %02d:%02d   ·   YŌKAI SLAIN  %d   ·   LEVEL  %d (WAVE %d)" % [
 		int(summary.score), rec_tag, int(summary.high_score), mins, secs, int(summary.kills), int(summary.level), int(summary.wave)
 	]
-	var stats_lbl := OfudaTalisman.make_label(stats_text, sys_font, 30, 0.00105, Color(0.92, 0.94, 1.0), Vector3(0, 0.02, 0.024))
+	var stats_lbl := OfudaTalisman.make_label(stats_text, sys_font, 30, 0.00105, Color(0.92, 0.94, 1.0), Vector3(0, 0.06, 0.024))
 	board.add_child(stats_lbl)
+
+	var build_text := String(summary.get("build", "Unbound"))
+	var build_lbl := OfudaTalisman.make_label("BUILD  %s" % build_text, sys_font, 28, 0.0010, Color(0.88, 0.72, 1.0), Vector3(0, -0.06, 0.024))
+	board.add_child(build_lbl)
 
 	var upg_parts: Array[String] = []
 	for u_id in upgrade_stacks:
@@ -657,7 +664,7 @@ func _build_end_screen(summary: Dictionary) -> void:
 		var name_str := String(def.get("title", String(u_id).to_upper()))
 		upg_parts.append("%s ×%d" % [name_str, int(upgrade_stacks[u_id])])
 	var upg_line := "UPGRADES: " + (", ".join(upg_parts) if not upg_parts.is_empty() else "None")
-	var upg_lbl := OfudaTalisman.make_label(upg_line, sys_font, 24, 0.00095, Color(0.76, 0.82, 0.94), Vector3(0, -0.17, 0.024))
+	var upg_lbl := OfudaTalisman.make_label(upg_line, sys_font, 22, 0.00088, Color(0.76, 0.82, 0.94), Vector3(0, -0.20, 0.024))
 	board.add_child(upg_lbl)
 
 	# Floating Restart Ofuda positioned cleanly to the right of the Memorial Stele:
@@ -710,7 +717,12 @@ func _refresh_hud() -> void:
 	var hp_val := health.hp if health else 100.0
 	var max_hp_val := health.max_hp if health else 100.0
 	var elem := element_system.visual_element() if element_system else (katana.element if katana else Elements.NONE)
-	diegetic_hud.update_hud(hp_val, max_hp_val, xp, xp_to_next, level, maxi(wave_director.wave, 1), score, run_time, elem)
+	diegetic_hud.update_hud(hp_val, max_hp_val, xp, xp_to_next, level, maxi(wave_director.wave, 1), score, kills, run_time, elem)
+
+
+func _on_parry_diegetic(_info: Dictionary) -> void:
+	if diegetic_hud:
+		diegetic_hud.on_parry()
 
 
 func _player_health() -> PlayerHealth:
