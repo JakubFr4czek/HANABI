@@ -178,6 +178,24 @@ func _test_shadow() -> void:
 		and player.global_position.distance_to(before_blink) < 3.1)
 	_check("Blink darkness confuses nearby enemies",
 		confused.is_confused() and not run.element_system._darkness_areas.is_empty())
+	var gy := run.forest_world.height_at(player.global_position.x, player.global_position.z)
+	_check("the blink lands on the ground there (%.2f m off the terrain)" % (player.global_position.y - gy),
+		absf(player.global_position.y - gy) < 0.15)
+
+	# Blink straight at a trunk: the player must stop short of the bark,
+	# not end up inside the tree.
+	run.element_system.blink_cooldown = 0.0
+	var at := player.global_position
+	var trunk_xf := Transform3D(Basis.IDENTITY, Vector3(at.x - 1.6, run.forest_world.height_at(at.x - 1.6, at.z), at.z))
+	var trunk := run.forest_world._build_trunk_colliders([trunk_xf], 0, Node3D.new())
+	run.add_child(trunk)
+	await _frames(3)
+	run.element_system.try_shadow_blink(Vector3.LEFT)
+	await _frames(3)
+	var gap := Vector2(player.global_position.x - trunk_xf.origin.x, player.global_position.z - trunk_xf.origin.z).length()
+	_check("a blink at a tree stops short of the bark (%.2f m from the axis, bark ~%.2f m)" % [gap, run.forest_world._trunk_chest_radius],
+		gap > run.forest_world._trunk_chest_radius + 0.2)
+	trunk.queue_free()
 	_check("Spawn seal lights the Shadow quadrant and no evolution star",
 		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 8
 		and int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("evolution_mask")) == 0)
