@@ -27,10 +27,10 @@ func _ready() -> void:
 	await _frames(40)
 	await _shot("1_forest_cc0_torii_near")
 
-	# Through giant torii: hills/trees must dissolve — no hard horizon line.
-	player.teleport(Vector3(0.0, 0.0, 0.35), deg_to_rad(180.0))
-	player.camera.rotation.x = deg_to_rad(-3.0)
-	await _frames(35)
+	# Through giant torii (z≈-10.5): only fog beyond the gate — torii silhouette readable.
+	player.teleport(Vector3(0.0, 0.0, -7.2), 0.0)
+	player.camera.rotation.x = deg_to_rad(-4.0)
+	await _frames(40)
 	await _shot("2_beyond_giant_torii_fog")
 
 	# Oni readable at ma-ai (~3 m).
