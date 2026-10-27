@@ -17,7 +17,7 @@ const HUD_FONT_PATH := "res://assets/fonts/YujiBoku-Regular.ttf"
 const PLATE_SIZE := Vector2(0.1, 0.054)
 const CHARM_X := -0.031
 const TEXT_X := -0.009
-const MAX_FACE_TILT_DEG := 25.0
+const MAX_FACE_TILT_DEG := 10.0
 
 var wrist_unit: Node3D
 var wrist_face: Node3D
@@ -153,8 +153,8 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	if ResourceLoader.exists(HUD_FONT_PATH):
 		font.fallbacks = [load(HUD_FONT_PATH)]
 	font.variation_embolden = 0.35
-	hp_label = _make_label("HpLabel", font, 44, Vector3(TEXT_X, 0.0012, -0.0085))
-	wrist_label = _make_label("WristLabel", font, 26, Vector3(TEXT_X, 0.0012, 0.0062))
+	hp_label = _make_label("HpLabel", font, 44, Vector3(TEXT_X, 0.0021, -0.0085))
+	wrist_label = _make_label("WristLabel", font, 26, Vector3(TEXT_X, 0.0021, 0.0062))
 	wrist_label.line_spacing = -2.0
 	wrist_face.add_child(hp_label)
 	wrist_face.add_child(wrist_label)
@@ -191,9 +191,15 @@ func _setup_wrist_unit(player: Node3D) -> void:
 		var xr := player as XRPlayer
 		xr.left_controller.add_child(wrist_unit)
 		# Back of the left wrist, rolled a little toward the thumb so a
-		# "check the watch" turn of the forearm shows it to the eyes.
-		wrist_unit.position = Vector3(0.0, 0.032, 0.058)
-		wrist_unit.rotation = Vector3(deg_to_rad(12.0), 0.0, deg_to_rad(-22.0))
+		# "check the watch" turn of the forearm shows it to the eyes. The
+		# mount stands clear of the hand mesh: measured on the XR Tools
+		# hand, its surface rises to y≈0.062 (controller space) under the
+		# old mount while the plate dipped to y≈0.003 — the readout sank
+		# into the hand. Higher, farther up the wrist and flatter keeps
+		# the whole plate above the skin (headless probe:
+		# tests/diag/probe_hud.tscn).
+		wrist_unit.position = Vector3(0.0, 0.058, 0.066)
+		wrist_unit.rotation = Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(-14.0))
 		_follow_eyes = true
 	elif player is DesktopPlayer:
 		var dp := player as DesktopPlayer
@@ -226,7 +232,7 @@ func _ring_quad(node_name: String, mat: ShaderMaterial, size: float, inner: floa
 	mat.set_shader_parameter("segments", segments)
 	ring.mesh = q
 	ring.material_override = mat
-	ring.position = Vector3(CHARM_X, 0.0009, 0.0)
+	ring.position = Vector3(CHARM_X, 0.0017, 0.0)
 	ring.rotation.x = -PI * 0.5
 	_no_shadow(ring)
 	return ring
@@ -287,6 +293,11 @@ func _orient_wrist_face(delta: float) -> void:
 			tilt = Quaternion(axis.normalized(), angle)
 	var current := wrist_face.quaternion
 	wrist_face.quaternion = current.slerp(tilt, clampf(delta * 10.0, 0.0, 1.0))
+	# Leaning the plate drops its far edge toward the hand by
+	# sin(angle)·half-width; lift the face by the same amount so the edge
+	# never dips below the untilted plane into the hand mesh.
+	var lean := wrist_face.quaternion.get_angle()
+	wrist_face.position.y = sin(lean) * PLATE_SIZE.x * 0.57
 
 
 func on_parry() -> void:
