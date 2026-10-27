@@ -94,20 +94,23 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_unit.add_child(wrist_face)
 
 	_lacquer_mat.shader = WET_SURFACE_SHADER
-	_lacquer_mat.set_shader_parameter("base_color", Color(0.07, 0.07, 0.11))
-	_lacquer_mat.set_shader_parameter("roughness_dry", 0.78)
-	_lacquer_mat.set_shader_parameter("roughness_wet", 0.42)
-	_lacquer_mat.set_shader_parameter("wetness", 0.38)
+	_lacquer_mat.set_shader_parameter("base_color", Color(0.11, 0.10, 0.14))
+	_lacquer_mat.set_shader_parameter("roughness_dry", 0.72)
+	_lacquer_mat.set_shader_parameter("roughness_wet", 0.34)
+	_lacquer_mat.set_shader_parameter("wetness", 0.52)
 	_lacquer_mat.set_shader_parameter("waterline_y", -10.0)
-	_lacquer_mat.set_shader_parameter("fill", 1.55)
+	_lacquer_mat.set_shader_parameter("fill", 2.15)
+	_lacquer_mat.set_shader_parameter("fog_rim", 0.35)
+	_lacquer_mat.set_shader_parameter("emission_tint", Color(0.18, 0.14, 0.22))
 
 	_trim_mat.shader = WET_SURFACE_SHADER
-	_trim_mat.set_shader_parameter("base_color", Color(0.42, 0.09, 0.08))
-	_trim_mat.set_shader_parameter("roughness_dry", 0.7)
-	_trim_mat.set_shader_parameter("roughness_wet", 0.36)
-	_trim_mat.set_shader_parameter("wetness", 0.4)
+	_trim_mat.set_shader_parameter("base_color", Color(0.62, 0.14, 0.10))
+	_trim_mat.set_shader_parameter("roughness_dry", 0.58)
+	_trim_mat.set_shader_parameter("roughness_wet", 0.28)
+	_trim_mat.set_shader_parameter("wetness", 0.55)
 	_trim_mat.set_shader_parameter("waterline_y", -10.0)
-	_trim_mat.set_shader_parameter("fill", 1.65)
+	_trim_mat.set_shader_parameter("fill", 2.35)
+	_trim_mat.set_shader_parameter("emission_tint", Color(0.45, 0.10, 0.06))
 
 	var bracer := MeshInstance3D.new()
 	bracer.name = "BracerPlate"
@@ -118,6 +121,22 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	bracer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	bracer.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	wrist_face.add_child(bracer)
+
+	var rim := MeshInstance3D.new()
+	rim.name = "BracerRimGlow"
+	var rq := QuadMesh.new()
+	rq.size = Vector2(0.128, 0.072)
+	var rim_mat := StandardMaterial3D.new()
+	rim_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rim_mat.albedo_color = Color(0.85, 0.32, 0.18, 0.22)
+	rim_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rim_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	rim.mesh = rq
+	rim.material_override = rim_mat
+	rim.position = Vector3(0.0, 0.005, 0.0)
+	rim.rotation.x = -PI * 0.5
+	rim.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	wrist_face.add_child(rim)
 
 	for sz in [-1.0, 1.0]:
 		var rail := MeshInstance3D.new()
@@ -180,10 +199,10 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_label.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
 	wrist_label.shaded = false
 	wrist_label.double_sided = false
-	wrist_label.outline_size = 5
-	wrist_label.outline_modulate = Color(0.02, 0.02, 0.04, 0.92)
+	wrist_label.outline_size = 6
+	wrist_label.outline_modulate = Color(0.08, 0.04, 0.02, 0.95)
 	wrist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	wrist_label.modulate = Color(0.78, 0.8, 0.86, 0.94)
+	wrist_label.modulate = Color(0.92, 0.90, 0.84, 0.98)
 	wrist_label.position = Vector3(0.006, 0.006, 0.0)
 	wrist_label.rotation.x = -PI * 0.5
 	wrist_face.add_child(wrist_label)
