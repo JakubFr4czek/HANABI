@@ -105,6 +105,41 @@ sakura trees; do not touch grip/hand logic).
   `held_weapon.gd`; elite yōkai respect `counter` hits in `yokai.gd`.
 - Headless: `gdd_loop_test.tscn`; visual: `run_screenshots.gd` shot 7.
 
+## 20. GDD gap audit (2026-10-27) — missing / placeholder vs `docs/GDD.md`
+
+Pominięte: §8 Meta AI, §14 VR comfort, §15 kalorie, powrót sakury na arenie treningowej.
+
+### Pętla rozgrywki (§3, §6, §7, §10)
+- **DONE:** run endless, fale, hitodama, XP/ofuda slice, high score, stele BUILD, śmierć kończy run (`auto_revive` off).
+- **DONE:** intro seiza (skippable), diegetic HUD (tsuba/wrist), parry slow-mo + tsuba flare.
+- **GAP:** **deszcz wizualny + krople na katannie w `run.tscn`** — tylko Dojo (`StormRain` w `test_room.gd`); GDD §9/§10.
+- **GAP:** bonshō / temple bell w ambience (CC0) — brak.
+- **PARTIAL:** hitodama w kolorze żywiołu — `last_kill_element`; elity / brak żywiołu na mieczu → często neutralne (§20 fix: elita + aktywny żywioł ostrza).
+- **PARTIAL:** śmierć gracza = natychmiastowy game over (GDD §7 wspomina 3 s down w arenie — w runie OK, ale bez „down” feedbacku).
+
+### Żywioły (§5)
+- **DONE:** 4 drzewka, limit 2 elementy / 6 slotów, ewolucje Storm+Ink / Sakura+Shadow, trail + on-hit.
+- **GAP:** „petal storm” jako osobny tier — orbit/petals są, brak nazwanego storm VFX.
+- **GAP:** Storm „lightning dash” — jest charge/overload, nie dash.
+- **GAP:** Ink malowany **dłonią** — tylko ostrze; Shadow pełna niewidzialność — tylko blink + confusion.
+- **PARTIAL:** ofuda jako selector na seal w świecie — seal świeci kwadranty, brak ręcznego wyboru przed runem.
+
+### Świat (§9)
+- **DONE:** las chunkowany, torii MultiMesh, latarnie, mgła, giant torii, seal 桜雷墨影, błyskawice.
+- **GAP:** **neonowe sakura w lesie** (GDD palette) — drzewa Quaternius ciemne/wet, nie różowe emissive.
+- **GAP:** senbon torii jako czytelne korytarze — torii rozrzucone, bez długich osi.
+- **PARTIAL:** odbicie/lustro wody na runie — water mirror ukryty, las zastępuje.
+- **PARTIAL:** LightmapGI na arenie Quest — run forest = shader AO (świadomy trade-off §16).
+
+### Wrogowie / AI (§7)
+- **DONE:** swarm yōkai, elity + resist, Oni timer + DuelistBrain, fairness wind-up/tell, pathfinding.
+- **PLACEHOLDER:** yōkai mesh = ragdoll prymitywy + maska (brak Quaternius/skin).
+- **GAP:** pełny duelist (feinty, combo tempo) tylko na dummy/Oni — swarm nie ma miecza/IK.
+- **PARTIAL:** Oni sylwetka §21 — procedural shell, nie zewnętrzny asset.
+- **DONE (audit):** GameEvents telemetry pod przyszły Meta AI.
+
+**§20.1 implementacja:** `RunStormRain` + blade drips + shader `droplets` w runie; hitodama z żywiołu elity/ostrza; test `gdd_loop_test`.
+
 ## 21. Premium Oni silhouette + yōkai secondary motion
 - Oni: hide ragdoll primitives; procedural body shell + kanabō visual (wet PBR).
 - Yōkai: torso lag overlay + recover pose after attacks.
