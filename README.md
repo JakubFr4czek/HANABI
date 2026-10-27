@@ -71,6 +71,7 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/enemy_motion_test.tscn -- 
 $GODOT --headless --path . --fixed-fps 90 res://tests/sword_ik_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/run_loop_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/gdd_loop_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/point12_readability_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/elements_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/forest_world_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/enemy_variants_test.tscn -- --desktop

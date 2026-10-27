@@ -10,14 +10,30 @@ static func spawn(parent: Node, at: Vector3, element: String, scale: float = 1.0
 	if parent == null:
 		return
 	var col := _burst_color(element)
+	var vis := scale * 1.14
 	var up := Vector3.UP
-	SparkBurst.spawn(parent, at, up, col * 1.15, int(14 * scale), 3.2 * scale)
-	SparkBurst.spawn(parent, at, Vector3(0.2, 0.85, 0.1).normalized(), col * 0.85, int(10 * scale), 2.4 * scale)
+	SparkBurst.spawn(parent, at, up, col * 1.35, int(18 * vis), 3.65 * vis)
+	SparkBurst.spawn(parent, at, Vector3(0.2, 0.85, 0.1).normalized(), col * 1.05, int(12 * vis), 2.85 * vis)
+	_fog_flash(parent, at, col, vis)
 	if VfxPool:
-		VfxPool.spawn_element_ring(parent, at, col, scale)
+		VfxPool.spawn_element_ring(parent, at, col, scale * 1.08)
 	else:
 		_ring_ephemeral(parent, at, col, scale)
 	Sfx.play_at("firework", at, -7.0, 4.5 * scale, clampf(0.9 + scale * 0.12, 0.85, 1.25))
+
+
+static func _fog_flash(parent: Node, at: Vector3, col: Color, vis: float) -> void:
+	var lamp := OmniLight3D.new()
+	lamp.light_color = col.lerp(Color(1.0, 0.92, 0.95), 0.22)
+	lamp.light_energy = 2.4 * vis
+	lamp.omni_range = 3.8 * vis
+	lamp.omni_attenuation = 1.35
+	lamp.shadow_enabled = false
+	parent.add_child(lamp)
+	lamp.global_position = at + Vector3(0.0, 0.35, 0.0)
+	var tw := parent.get_tree().create_tween()
+	tw.tween_property(lamp, "light_energy", 0.0, 0.16)
+	tw.tween_callback(lamp.queue_free)
 
 
 static func _burst_color(element: String) -> Color:
@@ -58,6 +74,7 @@ static func _ring_ephemeral(parent: Node, at: Vector3, col: Color, scale: float)
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat.albedo_color = col * 0.75
 	mat.vertex_color_use_as_albedo = true
+	mat.disable_fog = true
 	p.material_override = mat
 	var ramp := Gradient.new()
 	ramp.set_color(0, Color(1, 1, 1, 0.9))
