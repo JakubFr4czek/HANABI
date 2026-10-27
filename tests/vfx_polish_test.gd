@@ -20,9 +20,11 @@ func _run_all() -> void:
 	var player := run.player as DesktopPlayer
 	var y := run.wave_director.spawn_enemy_at(Vector3(0.0, 0.0, -2.0), player.global_position)
 	await _frames(6)
-	y.set_pose("stalk")
-	await _frames(4)
-	_check("Yōkai hold stalk pose instead of a bind T-pose", y.current_pose == "stalk")
+	y.snap_pose("stalk")
+	await _frames(6)
+	var arm_err: float = float(y.pose_errors().get("arm_r", 99.0))
+	_check("Yōkai hold stalk pose instead of a bind T-pose",
+		(y.current_pose == "stalk" or y.current_pose == "approach") and arm_err < 28.0)
 	y.prepare_for_spawn()
 	_check("prepare_for_spawn resets dead state", not y.is_dead and y.current_pose == "stalk")
 	var oni: RunOniBoss = run.wave_director.spawn_oni_boss(player.global_position)

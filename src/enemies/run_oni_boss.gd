@@ -105,7 +105,11 @@ func _apply_oni_visuals() -> void:
 				if mi.material_override == _straw:
 					mi.material_override = _flesh
 	if parts.has("head"):
-		_attach_oni_mask(parts["head"] as RagdollPart)
+		var head := parts["head"] as RagdollPart
+		for c in head.get_children():
+			if c is MeshInstance3D and c.name != "OniMask":
+				(c as MeshInstance3D).visible = false
+		_attach_oni_mask(head)
 	if parts.has("chest"):
 		_attach_oni_armor(parts["chest"] as RagdollPart)
 
