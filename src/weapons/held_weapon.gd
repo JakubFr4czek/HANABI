@@ -188,6 +188,9 @@ var strength := 1.0
 var grip_error := 0.0
 
 var _local_grips := {}  # holder -> Transform3D in weapon local space
+## While set, no hand can take this weapon (grip or recall), e.g. while the
+## intro is still drawing it out of the spirit gate.
+var grab_locked := false
 var _grip_zones := {}   # holder -> String (ZONE_HANDLE / ZONE_TSUBA / ZONE_MUNE)
 var _prev_contacts := {}  # collider instance id -> true, contacts in previous tick
 var _receiver_cooldown := {}  # receiver instance id -> time left

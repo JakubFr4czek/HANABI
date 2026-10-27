@@ -21,7 +21,15 @@ uniform float droplets : hint_range(0.0, 1.0) = 1.0;
 uniform float spirit_glow : hint_range(0.0, 2.0) = 0.0;
 uniform vec3 spirit_color : source_color = vec3(0.7, 0.82, 1.0);
 
+// Intro spirit gate: steel still on the far side of the gate plane is not
+// drawn, and a thin glowing seam marks where the blade crosses it.
+uniform float portal_active = 0.0;
+uniform vec3 portal_point = vec3(0.0);
+uniform vec3 portal_normal = vec3(0.0, 0.0, 1.0);
+uniform vec3 portal_color : source_color = vec3(0.8, 0.65, 1.0);
+
 varying vec3 v_local;
+varying vec3 v_world;
 
 float hash21(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21));
@@ -31,9 +39,15 @@ float hash21(vec2 p) {
 
 void vertex() {
 	v_local = VERTEX;
+	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
+	float gate_side = dot(v_world - portal_point, portal_normal);
+	if (portal_active > 0.5 && gate_side < 0.0) {
+		discard;
+	}
+	float gate_seam = portal_active * (1.0 - smoothstep(0.0, 0.03, gate_side));
 	vec3 albedo = texture(albedo_texture, UV).rgb;
 	vec3 arm = texture(arm_texture, UV).rgb;
 	float rough = arm.g;
@@ -72,5 +86,6 @@ void fragment() {
 	ROUGHNESS = rough;
 	METALLIC = metal;
 	EMISSION = lightning_tint * storm_flash * blade * (0.15 + 1.2 * fres)
-		+ spirit_color * spirit_glow * (0.25 + 0.75 * blade) * (0.3 + 0.9 * fres);
+		+ spirit_color * spirit_glow * (0.25 + 0.75 * blade) * (0.3 + 0.9 * fres)
+		+ portal_color * gate_seam * 3.0;
 }

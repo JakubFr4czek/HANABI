@@ -19,15 +19,29 @@ func _ready() -> void:
 func _run_all() -> void:
 	var run: RunGame = RUN_SCENE.instantiate()
 	add_child(run)
-	# No skip: ride the whole descent, ripple and materialize (~4.5 s real).
+	# No skip: ride the whole descent, the gate and the katana coming out.
 	# Watch the parked katana: it must never drop to the ground and rise again.
 	var intro := run.run_intro
 	var min_katana_y := INF
 	var max_steps_lit := 0
 	var steps_by_touchdown := -1
-	for i in 560:
+	var gate_max := 0.0
+	var clipped_mid := false
+	var early_grab_blocked := false
+	var dp_early := run.player as DesktopPlayer
+	for i in 1100:
 		await get_tree().physics_frame
+		if intro._waiting_grab:
+			break
 		min_katana_y = minf(min_katana_y, run.katana.global_position.y)
+		if intro._portal:
+			gate_max = maxf(gate_max, float((intro._portal.material_override as ShaderMaterial).get_shader_parameter("open")) if intro._portal.visible else 0.0)
+		var emerging := intro._portal_t > RunIntro.PORTAL_OPEN_SEC + 0.6 and intro._portal_t < RunIntro.PORTAL_OPEN_SEC + 1.6
+		if emerging and not clipped_mid:
+			clipped_mid = float(intro._katana_steel_materials()[0].get_shader_parameter("portal_active")) > 0.5
+			# Reaching for it now must not take it out of the gate early.
+			dp_early.holder.recall()
+			early_grab_blocked = not run.katana.is_held() and run.katana.grab_locked
 		var lit := 0
 		for st in intro._air_steps:
 			lit += 1 if st.visible else 0
@@ -37,6 +51,11 @@ func _run_all() -> void:
 	var ground := run.spawn.global_position.y
 	_check("the katana waits at the offering instead of falling (lowest %.2f m over ground)" % (min_katana_y - ground),
 		min_katana_y - ground > 0.9)
+	_check("a spirit gate opens after touchdown (open %.2f)" % gate_max, gate_max > 0.9)
+	_check("the katana slides out of the gate: the part still inside is clipped", clipped_mid)
+	_check("it cannot be taken while it is still coming out", early_grab_blocked)
+	_check("once fully out the gate is closed and the katana can be taken",
+		intro._waiting_grab and not intro._portal.visible and not run.katana.grab_locked)
 	_check("the descent leaves glowing steps in the air (%d steps, up to %d lit at once)" % [steps_by_touchdown, max_steps_lit],
 		steps_by_touchdown == RunIntro.AIR_STEPS and max_steps_lit >= 1)
 	var petals_left := intro._petals.filter(func(p): return p.visible).size()

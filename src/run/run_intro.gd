@@ -8,6 +8,7 @@ signal finished
 const PETAL_SHADER := preload("res://src/shaders/sakura_petal.gdshader")
 const SHADOW_SHADER := preload("res://src/shaders/seiza_shadow.gdshader")
 const AIR_STEP_SHADER := preload("res://src/shaders/air_step.gdshader")
+const PORTAL_SHADER := preload("res://src/shaders/spirit_portal.gdshader")
 
 const HOVER_HEIGHT := 0.78
 const DESCENT_SEC := 3.1
@@ -20,6 +21,18 @@ const AIR_STEP_LIFE := 0.9
 const GLOW_COLOR := Color(0.72, 0.84, 1.0)
 const GLOW_PEAK := 0.9
 const GLOW_LIGHT_ENERGY := 0.55
+## The spirit gate after touchdown: it opens, the katana is drawn out of it
+## handle first toward the player, then the gate closes while the blade
+## turns to lie across, and only then can it be taken.
+const PORTAL_OPEN_SEC := 0.6
+const PORTAL_EMERGE_SEC := 2.8
+const PORTAL_SETTLE_SEC := 0.9
+const PORTAL_SIZE := 0.5
+## Gate plane distance before the offering origin (just past the blade tip,
+## local z = -0.796), and how far behind it the katana starts (handle end
+## at the plane: handle back z = 0.21).
+const PORTAL_AHEAD := 0.84
+const EMERGE_TRAVEL := 1.07
 
 var active := false
 
@@ -34,7 +47,11 @@ var _t := 0.0
 var _descent_done := false
 var _ripple_t := 0.0
 var _ripple_playing := false
-var _katana_reveal := 0.0
+## Seconds since touchdown on the gate's clock (open, emerge, settle).
+var _portal_t := 0.0
+var _portal: MeshInstance3D
+var _portal_light: OmniLight3D
+var _gate_rang := false
 ## After the descent the katana hangs in the air before the player and the run
 ## only starts once it is taken: the grab is the start button.
 var _waiting_grab := false
@@ -80,7 +97,9 @@ func start() -> void:
 	_waiting_grab = false
 	_movement_unlocked = false
 	_ripple_t = 0.0
-	_katana_reveal = 0.0
+	_portal_t = 0.0
+	_gate_rang = false
+	_set_portal_open(0.0)
 	_petal_fade = 1.0
 	_steps_taken = 0
 	for st in _air_steps:
@@ -161,15 +180,13 @@ func _step_post_touchdown(delta: float) -> void:
 		if _ripple_t >= 0.9:
 			_ripple_playing = false
 			_set_ripple(0.0, 0.0)
-	_katana_reveal = minf(_katana_reveal + delta * 1.4, 1.0)
-	_reveal_katana(_katana_reveal)
 	_scatter_petals(delta)
 	if _waiting_grab:
 		_float_katana()
 		if _katana and _katana.is_held():
 			_finish_intro()
-	elif _katana_reveal >= 1.0:
-		_begin_float()
+	else:
+		_step_portal(delta)
 
 
 func _finish_intro() -> void:
@@ -193,6 +210,10 @@ func _finish_intro() -> void:
 	if _katana:
 		_katana.freeze = false
 	_fade_glow(0.0, 0.8)
+	_set_portal_open(0.0)
+	_set_katana_clip(false)
+	if _katana:
+		_katana.grab_locked = false
 	# The grab path already holds it; the skip path still needs the grant.
 	if _katana and not _katana.is_held():
 		_grant_katana()
@@ -222,6 +243,7 @@ func _hide_katana() -> void:
 		# Parked, frozen, at the offering spot for the whole descent: left
 		# to physics it fell to the ground unseen and then rose back up.
 		_katana.visible = false
+		_katana.grab_locked = true
 		_katana.freeze = true
 		_katana.linear_velocity = Vector3.ZERO
 		_katana.angular_velocity = Vector3.ZERO
@@ -267,6 +289,7 @@ func _begin_float() -> void:
 	_waiting_grab = true
 	if _katana:
 		_katana.freeze = true
+		_katana.grab_locked = false
 		_katana.linear_velocity = Vector3.ZERO
 		_katana.angular_velocity = Vector3.ZERO
 	GameEvents.log_event("katana_offered", {})
@@ -280,17 +303,72 @@ func _float_katana() -> void:
 	_set_glow(GLOW_PEAK * (0.78 + 0.22 * sin(_t * 2.1)))
 
 
-## The blade appears where it is offered and its soft light swells: no
-## swirl, no fly-in.
-func _reveal_katana(amount: float) -> void:
+func _forward() -> Vector3:
+	var fwd := Basis(Vector3.UP, _spawn_yaw) * Vector3.FORWARD
+	fwd.y = 0.0
+	return fwd.normalized() if fwd.length_squared() > 1e-4 else Vector3.FORWARD
+
+
+func _gate_point() -> Vector3:
+	return _float_pose().origin + _forward() * PORTAL_AHEAD
+
+
+## Open the gate, draw the katana out of it handle first, then close it while
+## the blade turns to lie across for the taking.
+func _step_portal(delta: float) -> void:
+	if _portal_t <= 0.0:
+		Sfx.play_at("swing", _gate_point(), -9.0, 3.0, 0.5)
+	_portal_t += delta
+	var fwd := _forward()
+	var out_basis := Basis.looking_at(fwd, Vector3.UP)  # blade into the gate, handle to the player
+	var rest := _float_pose()
+	var emerge_t := clampf((_portal_t - PORTAL_OPEN_SEC) / PORTAL_EMERGE_SEC, 0.0, 1.0)
+	var settle_t := clampf((_portal_t - PORTAL_OPEN_SEC - PORTAL_EMERGE_SEC) / PORTAL_SETTLE_SEC, 0.0, 1.0)
+	# Gate: opens, holds, closes as the blade turns away from it.
+	var open := smoothstep(0.0, PORTAL_OPEN_SEC, _portal_t) * (1.0 - smoothstep(0.0, 0.8, settle_t))
+	_set_portal_open(open)
 	if _katana == null:
 		return
-	_katana.visible = amount > 0.02
-	if _waiting_grab:
+	_katana.visible = true
+	if settle_t <= 0.0:
+		# Slow at first, then drawn steadily, easing as the point clears.
+		var e := emerge_t * emerge_t * (3.0 - 2.0 * emerge_t)
+		var behind := EMERGE_TRAVEL * (1.0 - e)
+		_katana.global_transform = Transform3D(out_basis, rest.origin + fwd * behind)
+		_set_katana_clip(true)
+		_set_glow(GLOW_PEAK * lerpf(0.35, 1.0, e))
+		if emerge_t >= 1.0 and not _gate_rang:
+			_gate_rang = true
+			Sfx.play_at("blade_ring", rest.origin, -12.0, 3.0, 1.25)
+	else:
+		_set_katana_clip(false)
+		var s := settle_t * settle_t * (3.0 - 2.0 * settle_t)
+		_katana.global_transform = Transform3D(out_basis, rest.origin).interpolate_with(rest, s)
+		_set_glow(GLOW_PEAK)
+		if settle_t >= 1.0:
+			_begin_float()
+
+
+func _set_katana_clip(on: bool) -> void:
+	var point := _gate_point()
+	var normal := -_forward()
+	for m in _katana_steel_materials():
+		m.set_shader_parameter("portal_active", 1.0 if on else 0.0)
+		m.set_shader_parameter("portal_point", point)
+		m.set_shader_parameter("portal_normal", normal)
+
+
+func _set_portal_open(v: float) -> void:
+	if _portal == null:
 		return
-	_katana.global_transform = _float_pose()
-	var e := amount * amount * (3.0 - 2.0 * amount)
-	_set_glow(GLOW_PEAK * (0.3 + 1.1 * e) if amount < 1.0 else GLOW_PEAK)
+	_portal.visible = v > 0.001
+	(_portal.material_override as ShaderMaterial).set_shader_parameter("open", v)
+	if _player:
+		var p := _gate_point()
+		_portal.global_transform = Transform3D(Basis.looking_at(_forward(), Vector3.UP), p)
+	if _portal_light:
+		_portal_light.light_energy = 0.9 * v
+		_portal_light.visible = v > 0.01
 
 
 func _katana_steel_materials() -> Array[ShaderMaterial]:
@@ -451,6 +529,26 @@ func _build_visuals() -> void:
 	_shadow.material_override = sm
 	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_shadow)
+
+	_portal = MeshInstance3D.new()
+	_portal.name = "SpiritGate"
+	var gate_quad := QuadMesh.new()
+	gate_quad.size = Vector2(PORTAL_SIZE, PORTAL_SIZE)
+	_portal.mesh = gate_quad
+	var gm := ShaderMaterial.new()
+	gm.shader = PORTAL_SHADER
+	gm.render_priority = 2
+	_portal.material_override = gm
+	_portal.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_portal.visible = false
+	add_child(_portal)
+	_portal_light = OmniLight3D.new()
+	_portal_light.light_color = Color(0.7, 0.55, 1.0)
+	_portal_light.omni_range = 2.2
+	_portal_light.shadow_enabled = false
+	_portal_light.visible = false
+	_portal.add_child(_portal_light)
+	_portal_light.position = Vector3(0.0, 0.0, 0.15)
 
 	var step_mesh := QuadMesh.new()
 	step_mesh.size = Vector2(0.62, 0.62)
