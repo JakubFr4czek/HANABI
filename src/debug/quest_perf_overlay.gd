@@ -66,6 +66,9 @@ func _process(_delta: float) -> void:
 	var ms: float = float(info.get("process_ms", 0.0))
 	var draw: int = int(info.get("draw_calls", 0))
 	var prims: int = int(info.get("primitives", 0))
-	var parts := RunPerfProbe.estimate_particles(get_tree().current_scene)
-	_label.text = "Quest perf  F3 toggle\n%.0f fps (%.1f ms)  draw %d  prims %d  particles~%d" % [
-		_smooth_fps, ms, draw, prims, parts]
+	var root := get_tree().current_scene
+	var parts := RunPerfProbe.estimate_particles(root)
+	var lights := RunPerfProbe.count_dynamic_lights(root)
+	var voices := RunPerfProbe.count_audio_voices(root)
+	_label.text = "Quest perf  F3 toggle\n%.0f fps (%.1f ms)  draw %d  prims %d\nparticles~%d  lights %d  audio~%d" % [
+		_smooth_fps, ms, draw, prims, parts, lights, voices]
