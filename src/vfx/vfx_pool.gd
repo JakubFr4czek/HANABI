@@ -17,6 +17,7 @@ var _rings_allocated := 0
 var _souls_allocated := 0
 var _ring_free: Array[CPUParticles3D] = []
 var _soul_free: Array[SoulOrb] = []
+var _souls_lent: Array[SoulOrb] = []
 
 var _spark_mesh: QuadMesh
 var _spark_mat: StandardMaterial3D
@@ -60,12 +61,12 @@ func spawn_firework_flash(parent: Node, at: Vector3, col: Color, vis: float) -> 
 	parent.add_child(lamp)
 	lamp.global_position = at + Vector3(0.0, 0.35, 0.0)
 	_firework_flashes.append(lamp)
-	var tw := parent.get_tree().create_tween()
+	# Bound to the lamp: if its scene is freed first, the tween goes with it
+	# (a scene-tree tween then called back into a freed lamp). Stale entries
+	# are pruned from _firework_flashes on the next count.
+	var tw := lamp.create_tween()
 	tw.tween_property(lamp, "light_energy", 0.0, 0.15)
-	tw.tween_callback(func() -> void:
-		_firework_flashes.erase(lamp)
-		if is_instance_valid(lamp):
-			lamp.queue_free())
+	tw.tween_callback(lamp.queue_free)
 
 
 func _prune_firework_flashes() -> void:
@@ -101,6 +102,8 @@ func acquire_soul_orb(parent: Node):
 	var orb: SoulOrb
 	if _soul_free.is_empty():
 		if _souls_allocated >= MAX_SOUL:
+			_heal_soul_count()
+		if _souls_allocated >= MAX_SOUL:
 			return null
 		orb = _make_soul_orb()
 	else:
@@ -109,7 +112,20 @@ func acquire_soul_orb(parent: Node):
 		orb.get_parent().remove_child(orb)
 	parent.add_child(orb)
 	orb.activate_from_pool()
+	_souls_lent.append(orb)
 	return orb
+
+
+## Orbs lent to a scene die with it when that scene is freed. Forget the
+## dead ones so the cap counts only orbs that still exist (otherwise a few
+## scene changes exhaust the pool and kills stop dropping souls).
+func _heal_soul_count() -> void:
+	var alive: Array[SoulOrb] = []
+	for o in _souls_lent:
+		if is_instance_valid(o):
+			alive.append(o)
+	_souls_allocated -= _souls_lent.size() - alive.size()
+	_souls_lent = alive
 
 
 func release_soul_orb(orb: SoulOrb) -> void:
@@ -119,7 +135,9 @@ func release_soul_orb(orb: SoulOrb) -> void:
 	if orb.get_parent():
 		orb.get_parent().remove_child(orb)
 	add_child(orb)
-	_soul_free.append(orb)
+	_souls_lent.erase(orb)
+	if not _soul_free.has(orb):
+		_soul_free.append(orb)
 
 
 func spawn_spark(parent: Node, at: Vector3, normal: Vector3, color: Color, amount_: int = 24, speed: float = 3.0) -> void:
@@ -130,9 +148,13 @@ func spawn_spark(parent: Node, at: Vector3, normal: Vector3, color: Color, amoun
 		s = _make_spark()
 	else:
 		s = _spark_free.pop_back()
-	if s.get_parent():
-		s.get_parent().remove_child(s)
-	parent.add_child(s)
+	# Sparks stay children of the pool (an autoload in the root world) and
+	# are only moved: lent into a scene they died with it, the pool never
+	# got them back and once the cap was reached no spark spawned at all.
+	if s.get_parent() != self:
+		if s.get_parent():
+			s.get_parent().remove_child(s)
+		add_child(s)
 	s.fire_from_pool(at, normal, color, amount_, speed)
 	get_tree().create_timer(s.lifetime + 0.08).timeout.connect(func() -> void:
 		_return_spark(s), CONNECT_ONE_SHOT)
@@ -146,9 +168,10 @@ func spawn_element_ring(parent: Node, at: Vector3, col: Color, scale: float) -> 
 		p = _make_ring()
 	else:
 		p = _ring_free.pop_back()
-	if p.get_parent():
-		p.get_parent().remove_child(p)
-	parent.add_child(p)
+	if p.get_parent() != self:
+		if p.get_parent():
+			p.get_parent().remove_child(p)
+		add_child(p)
 	p.amount = mini(ElementFirework.MAX_PARTICLES, int(22 * scale))
 	p.initial_velocity_min = 1.6 * scale
 	p.initial_velocity_max = 3.1 * scale
@@ -166,9 +189,6 @@ func _return_spark(s: SparkBurst) -> void:
 	if _spark_free.has(s):
 		return
 	s.emitting = false
-	if s.get_parent():
-		s.get_parent().remove_child(s)
-	add_child(s)
 	_spark_free.append(s)
 
 
@@ -178,9 +198,6 @@ func _return_ring(p: CPUParticles3D) -> void:
 	if _ring_free.has(p):
 		return
 	p.emitting = false
-	if p.get_parent():
-		p.get_parent().remove_child(p)
-	add_child(p)
 	_ring_free.append(p)
 
 

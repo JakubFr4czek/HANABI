@@ -23,6 +23,7 @@ var _life: PackedFloat32Array
 var _phase: PackedFloat32Array
 var _size: PackedFloat32Array
 var _tint: PackedColorArray
+var _buffer := PackedFloat32Array()
 var _age := 0.0
 var _max_life := 0.0
 
@@ -157,17 +158,25 @@ func petal_center() -> Vector3:
 	return sum / maxf(float(_pos.size()), 1.0)
 
 
+## One buffer upload per frame instead of two RenderingServer calls per
+## petal (up to ~1000 calls a frame with a few bursts alive on Quest).
+## Layout per instance: 3x4 transform, rows (12 floats), then RGBA.
 func _write(_delta: float) -> void:
-	var mm := multimesh
-	for i in _pos.size():
+	var n := _pos.size()
+	if _buffer.size() != n * 16:
+		_buffer.resize(n * 16)
+	for i in n:
 		var t := clampf(_age / _life[i], 0.0, 1.0)
-		var a := petal_alpha(i)
-		var s := _size[i] * lerpf(1.0, 0.7, t)
-		var b := Basis(_axis[i], _angle[i]).scaled(Vector3.ONE * s)
-		mm.set_instance_transform(i, Transform3D(b, _pos[i]))
+		var sz := _size[i] * lerpf(1.0, 0.7, t)
+		var b := Basis(_axis[i], _angle[i]).scaled(Vector3.ONE * sz)
+		var o := _pos[i]
+		var k := i * 16
+		_buffer[k] = b.x.x; _buffer[k + 1] = b.y.x; _buffer[k + 2] = b.z.x; _buffer[k + 3] = o.x
+		_buffer[k + 4] = b.x.y; _buffer[k + 5] = b.y.y; _buffer[k + 6] = b.z.y; _buffer[k + 7] = o.y
+		_buffer[k + 8] = b.x.z; _buffer[k + 9] = b.y.z; _buffer[k + 10] = b.z.z; _buffer[k + 11] = o.z
 		var c := _tint[i]
-		c.a = a
-		mm.set_instance_color(i, c)
+		_buffer[k + 12] = c.r; _buffer[k + 13] = c.g; _buffer[k + 14] = c.b; _buffer[k + 15] = petal_alpha(i)
+	multimesh.buffer = _buffer
 
 
 func _exit_tree() -> void:
