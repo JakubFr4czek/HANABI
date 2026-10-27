@@ -145,6 +145,19 @@ const PLAYER_BODY_LAYER := 1 << 19
 ## Cap on the impulse (N·s) of a single hit.
 @export var max_hit_impulse := 30.0
 
+@export_group("Cut resistance")
+## Share of the blow's impulse that pushes back on the blade: flesh resists the
+## cut, so the blade loses speed along it. A sharp cut passes through (small
+## bite), a flat/spine/hilt slap or a club stops harder. The loss is Δv = J/m,
+## so a heavier weapon plows through while a light one is checked — and the
+## arm has to re-accelerate the blade, which is where its weight is felt.
+@export var edge_bite := 0.22
+@export var blunt_bite := 0.5
+@export var slap_bite := 0.55
+## Caps on what one hit may take from the blade (m/s of travel, rad/s of spin).
+@export var max_bite_speed := 3.5
+@export var max_bite_spin := 6.0
+
 @export_group("Parry")
 ## A clash with an attacking enemy blade is a parry above this relative speed (m/s)...
 @export var parry_min_speed := 1.5
@@ -888,12 +901,19 @@ func _handle_hit(c: Dictionary) -> void:
 	if receiver.has_method("receive_hit"):
 		hit = receiver.receive_hit(part, hit)
 	var dmg: float = hit.get("damage", base_damage)
+	_apply_cut_resistance(c, mom, strike.kind)
 	var loud := linear_to_db(clampf(0.4 + c.speed / 12.0, 0.4, 1.2))
 	match strike.kind:
 		"edge", "thrust":
 			# Clean cut: crisp slice, bright thin sparks along the cut, a sharp bite in the palm.
 			var amp := clampf(0.3 + dmg / 70.0, 0.3, 1.0)
-			_pulse_pattern([[amp, 0.025], [amp * 0.35, 0.02 + clampf(dmg / 1000.0, 0.0, 0.08)]])
+			var steps := [[amp, 0.025], [amp * 0.35, 0.02 + clampf(dmg / 1000.0, 0.0, 0.08)]]
+			if dmg >= hit_stop_damage:
+				# A heavy cut lands: a beat of silence, then the weight thuds
+				# through the hilt, harder for a committed swing.
+				steps.append([0.0, 0.035])
+				steps.append([clampf(0.6 + float(mom.power) * 0.4, 0.0, 1.0), 0.09])
+			_pulse_pattern(steps)
 			Sfx.play_at("cut", c.point, loud)
 			if dmg >= 30.0:
 				Sfx.play_at("impact_heavy", c.point, loud - 6.0)
@@ -902,7 +922,11 @@ func _handle_hit(c: Dictionary) -> void:
 				Sfx.play_at("blade_ring", c.point, linear_to_db(clampf(dmg / 120.0, 0.12, 0.45)))
 		"blunt":
 			var amp := clampf(0.25 + dmg / 80.0, 0.25, 1.0)
-			_pulse_pattern([[amp, 0.03], [amp * 0.45, 0.02 + clampf(dmg / 1000.0, 0.0, 0.08)]])
+			var steps := [[amp, 0.03], [amp * 0.45, 0.02 + clampf(dmg / 1000.0, 0.0, 0.08)]]
+			if dmg >= hit_stop_damage:
+				steps.append([0.0, 0.035])
+				steps.append([clampf(0.6 + float(mom.power) * 0.4, 0.0, 1.0), 0.1])
+			_pulse_pattern(steps)
 			Sfx.play_at("impact_heavy" if dmg >= 30.0 else "impact_light", c.point, loud)
 		_:
 			# Flat, spine or hilt: a dull slap with no bite and a few dim, slow sparks.
@@ -910,10 +934,37 @@ func _handle_hit(c: Dictionary) -> void:
 			Sfx.play_at("slap", c.point, loud)
 			SparkBurst.spawn(get_tree().current_scene, c.point, -c.direction, Color(0.9, 0.5, 0.25), 5, 1.2)
 	if dmg >= hit_stop_damage:
-		# 50 ms for a solid hit, up to 80 ms for the heaviest ones.
-		TimeController.hit_stop(lerpf(0.05, 0.08, clampf((dmg - hit_stop_damage) / 60.0, 0.0, 1.0)))
+		# 50 ms for a solid hit, up to 80 ms for the heaviest ones; a flick
+		# stops slightly shorter than a committed swing at the same damage.
+		var stop := lerpf(0.05, 0.08, clampf((dmg - hit_stop_damage) / 60.0, 0.0, 1.0)) \
+			* lerpf(0.85, 1.0, clampf(float(mom.power), 0.0, 1.0))
+		TimeController.hit_stop(clampf(stop, 0.05, 0.08))
 	elif dmg >= micro_stop_damage:
 		TimeController.micro_stop(lerpf(0.025, 0.035, (dmg - micro_stop_damage) / (hit_stop_damage - micro_stop_damage)))
+
+
+## The target's flesh pushes back: part of the blow's momentum stays in the
+## target, so the blade loses speed along the cut (and some spin about the
+## contact). Applied as a direct velocity change, so the impact-kick limiter
+## (which only caps what the solver adds on top of the arm) leaves it alone;
+## the PD arm then has to re-accelerate the blade, which reads as weight.
+func _apply_cut_resistance(c: Dictionary, mom: Dictionary, kind: String) -> void:
+	var bite := slap_bite
+	match kind:
+		"edge", "thrust":
+			bite = edge_bite
+		"blunt":
+			bite = blunt_bite
+	var j := float(mom.impulse) * bite
+	if j <= 0.0:
+		return
+	var dv: Vector3 = -c.direction * minf(j / maxf(mass, 0.2), max_bite_speed)
+	linear_velocity += dv
+	var st := PhysicsServer3D.body_get_direct_state(get_rid())
+	if st != null:
+		var r: Vector3 = c.point - (global_position + st.center_of_mass)
+		var dw: Vector3 = st.inverse_inertia_tensor * r.cross(-c.direction * j)
+		angular_velocity += dw.limit_length(max_bite_spin)
 
 
 ## What part of the weapon met a target at world [param point] while moving in

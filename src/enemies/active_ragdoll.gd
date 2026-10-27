@@ -64,6 +64,11 @@ const BODY_MASK := 1 | 2 | 4
 ## [member sway_poses]: a living guard instead of a frozen one.
 @export var idle_sway_deg := 0.0
 @export var sway_poses: PackedStringArray = ["guard", "idle"]
+## Directional hit reaction (see [method apply_hit_reaction]): peak torso tilt
+## (radians) per N·s of blow impulse, up to the clamp. Fully proportional, so a
+## wrist flick barely moves the body while a committed swing visibly throws it.
+@export var react_angle_per_impulse := 0.022
+@export var react_angle_max := 0.55
 ## Seconds to fade procedural (IK) joint targets in or out.
 @export var ik_fade_time := 0.22
 
@@ -101,6 +106,15 @@ var _pose_blend := {}  # pose name -> Vector2(blend seconds, index in _EASES)
 var _joint_blends := {}  # part name -> JointBlend toward its current target
 var _stiffness_now := 1.0  # pose stiffness, blended like the joint targets
 var _yaw_rate := 0.0
+## Directional hit reaction state (see apply_hit_reaction): world tilt axis and
+## peak angle the torso leans with the blow, which part was hit (flung extra),
+## and the remaining / total decay time.
+var _react_axis := Vector3.RIGHT
+var _react_angle := 0.0
+var _react_part := ""
+var _react_strength := 0.0
+var _react_time := 0.0
+var _react_dur := 0.3
 var _variation := {}  # part name -> Quaternion offset for the current pose entry
 var _sway_time := 0.0
 var _sway_weight := 0.0  # 0..1, eases in and out with the sway poses
@@ -415,6 +429,51 @@ func weaken(muscle_loss: float, balance_loss: float) -> void:
 		_set_state(State.KNOCKED_DOWN)
 
 
+## Directional hit reaction: the blow's momentum spreads through the body and
+## the torso (plus the hit limb extra) leans WITH the cut while it decays, so
+## the body visibly folds toward where the blade travelled: a hit in the left
+## arm throws that arm and the torso to the blade's side, an overhead cut folds
+## the torso forward, a rising cut arches it back.
+## [param part] is the hit body, [param point] the world contact point,
+## [param direction] the world direction the blade travelled in, [param impulse]
+## the blow's impulse in N·s (see [method HeldWeapon.strike_momentum]).
+func apply_hit_reaction(part: RagdollPart, point: Vector3, direction: Vector3, impulse: float) -> void:
+	if part == null or impulse <= 0.0 or direction.length_squared() < 1e-6:
+		return
+	var dir := direction.normalized()
+	# Most of the blow lands where the blade met the body, with a spin about
+	# the contact (a cut to the arm rotates that arm); the rest pushes the
+	# whole body along, weighted by mass, so the torso drifts with the cut.
+	var direct := dir * impulse * 0.6
+	part.apply_impulse(direct.limit_length(30.0), point - part.global_position)
+	part.apply_torque_impulse((point - part.global_position).cross(direct) * 0.35)
+	if _total_mass > 0.0:
+		var spread := dir * (impulse * 0.4 / _total_mass)
+		for body in _all_bodies:
+			if body != part:
+				body.apply_central_impulse(spread * body.mass)
+	# Pose-level flinch with the blow, decaying over a fraction of a second.
+	_react_dur = clampf(0.22 + impulse * 0.008, 0.22, 0.45)
+	_react_time = _react_dur
+	_react_strength = clampf(impulse / 16.0, 0.0, 1.0)
+	var peak := clampf(impulse * react_angle_per_impulse, 0.0, react_angle_max)
+	var flat := dir - Vector3.UP * dir.dot(Vector3.UP)
+	if flat.length() < 0.25:
+		# Near-vertical blow: fold about the facing-right axis. A downward cut
+		# bows the torso forward, a rising cut arches it back.
+		var up_sign := -signf(dir.dot(Vector3.UP))
+		if up_sign == 0.0:
+			up_sign = 1.0
+		_react_axis = (Basis(Vector3.UP, _facing_yaw) * Vector3.RIGHT).normalized()
+		_react_angle = peak * up_sign
+	else:
+		# Horizontal component: tilt about (up x blow) moves the head toward
+		# the blade's travel by construction (d/dθ R(θ)·up = blow at θ = 0).
+		_react_axis = Vector3.UP.cross(flat.normalized()).normalized()
+		_react_angle = peak
+	_react_part = part.name
+
+
 ## Teleport back to the rest pose at the anchor, at full strength.
 func reset_body() -> void:
 	_facing_yaw = global_rotation.y
@@ -435,6 +494,9 @@ func reset_body() -> void:
 	anchor_position = global_position
 	move_velocity = Vector3.ZERO
 	overlay_pose = ""
+	_react_time = 0.0
+	_react_strength = 0.0
+	_react_part = ""
 	_set_state(State.STANDING)
 
 
@@ -449,6 +511,7 @@ func _set_state(new_state: State) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_react_time = maxf(_react_time - delta, 0.0)
 	if state == State.STANDING:
 		anchor_position += Vector3(move_velocity.x, 0.0, move_velocity.z) * delta
 		if max_anchor_lead > 0.0:
@@ -570,8 +633,33 @@ func _update_final_targets() -> void:
 		if ik_weight > 0.0 and ik_targets.has(part_name):
 			q = q.slerp(ik_targets[part_name], ik_weight)
 		_final[part_name] = q
+	_apply_hit_reaction_pose()
 	if _final_prev.is_empty():
 		_final_prev = _final.duplicate()
+
+
+## Lean the torso (and fling the hit limb extra) with the blow while the hit
+## reaction decays. The tilt is premultiplied in the facing frame, where the
+## parents' world orientation roughly is, so the body folds toward the blade's
+## travel in world space whatever pose or overlay is playing underneath.
+func _apply_hit_reaction_pose() -> void:
+	if _react_time <= 0.0 or _react_strength <= 0.0:
+		return
+	var w := clampf(_react_time / maxf(_react_dur, 0.01), 0.0, 1.0)
+	var e := w * w * _react_strength
+	if e < 0.002:
+		return
+	var axis_l: Vector3 = Basis(Vector3.UP, _facing_yaw).inverse() * _react_axis
+	if axis_l.length_squared() < 1e-6:
+		return
+	axis_l = axis_l.normalized()
+	var torso := Quaternion(axis_l, _react_angle * e)
+	if _final.has("chest"):
+		_final["chest"] = torso * (_final["chest"] as Quaternion)
+	if _final.has("head"):
+		_final["head"] = Quaternion(axis_l, _react_angle * 0.7 * e) * (_final["head"] as Quaternion)
+	if _react_part != "" and _react_part != "chest" and _final.has(_react_part):
+		_final[_react_part] = Quaternion(axis_l, _react_angle * 1.7 * e) * (_final[_react_part] as Quaternion)
 
 
 ## Smooth drift of one joint for the living guard: two slow sines per axis
