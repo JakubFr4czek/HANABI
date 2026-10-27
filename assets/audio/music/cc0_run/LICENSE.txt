@@ -1,0 +1,7 @@
+CC0 run music (commit to repo).
+
+- orientalsomber.ogg — Tozan, OpenGameArt "Oriental Somber" (CC0)
+  https://opengameart.org/content/oriental-somber
+- kamogawa_nightbreak.mp3 — Ruskerdax, OpenGameArt "Kamogawa Nightbreak" (CC0)
+  https://opengameart.org/content/kamogawa-nightbreak
+  (alternate; shipped loop uses orientalsomber.ogg)

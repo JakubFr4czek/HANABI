@@ -6,6 +6,8 @@ var failures := 0
 func _ready() -> void:
 	_check("Sfx exposes Kenney run categories", Sfx._streams.has("firework") and Sfx._streams.has("soul_collect"))
 	_check("Thunder uses single distant roll (no crack category)", not Sfx.CATEGORIES.has("thunder_crack"))
+	_check("Blade ring uses recorded sword clashes (not generated)", Sfx.CATEGORIES["blade_ring"][0].contains("sword_clash"))
+	_check("Thunder loads CC0 storm recordings", Sfx.CATEGORIES["thunder"][0].contains("cc0_storm"))
 	_check("Sfx pool is pre-sized for combat", Sfx._pool.size() >= 20)
 	Sfx.play_at("soul_collect", Vector3.ZERO, -20.0)
 	Sfx.play_at("firework", Vector3(1, 0, 0), -20.0)

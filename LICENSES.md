@@ -26,6 +26,8 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/audio/sfx/sword_clash/sword_clash.*.ogg` | same pack | StarNinjas | CC0 |
 | `assets/audio/sfx/impact/impactPlank_medium_*.ogg`, `impactPunch_heavy_*.ogg` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 |
 | `assets/audio/sfx/kenney_run/*.ogg` | https://kenney.nl/assets/interface-sounds & https://kenney.nl/assets/impact-sounds | Kenney | CC0 1.0 (`assets/audio/sfx/kenney_run/LICENSE.txt`) |
+| `assets/audio/sfx/cc0_storm/*` | https://opengameart.org/content/amb-rain-loop-1 , https://opengameart.org/content/rain-long-thunder , thunderclap WAV on OGA | Kresiek The Furry / WuxiaScrub / OGA submitters | CC0 (`assets/audio/sfx/cc0_storm/LICENSE.txt`) |
+| `assets/audio/music/cc0_run/orientalsomber.ogg` | https://opengameart.org/content/oriental-somber | Tozan | CC0 |
 | `assets/models/environment/torii_bazylonator/` ("Japanese Torii gate Game Asset", hero torii) | https://sketchfab.com/3d-models/japanese-torii-gate-game-asset-e12d2fa1b2b94928b8b87cb7787e2462 | Bazylonator | **CC BY 4.0**, modified (rescaled, rain/wet shading); credited in `CREDITS.md` and in game |
 | `assets/models/environment/torii_old_primagenevieve/` ("Old Torii", sunken torii) | https://sketchfab.com/3d-models/old-torii-34f21f85784a4dcf9e0f9c6b9d772e37 | Sarah Nguyen (Nguyen Phuong Hoa) (primagenevieve) | **CC BY 4.0**, modified (rescaled, darkened, wet shading); credited in `CREDITS.md` and in game |
 | `assets/models/enemies/oni_mask_run.glb` | generated in-repo (`tools/gen_oni_mask_glb.py`) | Jakub Frączek (HANABI) | CC0 1.0 |
