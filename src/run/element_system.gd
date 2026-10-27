@@ -44,7 +44,12 @@ var _petal_mesh: QuadMesh
 var _petal_mat: ShaderMaterial
 
 
+func _ready() -> void:
+	add_to_group("element_system")
+
+
 func setup(p_run_game: RunGame, p_weapon: HeldWeapon) -> void:
+	add_to_group("element_system")
 	run_game = p_run_game
 	weapon = p_weapon
 	_rng.seed = 0x48414E414249
@@ -136,28 +141,28 @@ func on_blade_hit(hit: Dictionary) -> void:
 	var point: Vector3 = hit.get("point", weapon.get_tip_global())
 	var direction: Vector3 = hit.get("direction", Vector3.FORWARD)
 
-	if active_elements.has(Elements.SAKURA):
+	if current_element == Elements.SAKURA:
 		var petal_targets := _nearest_enemies(point, 1, 1.2)
 		if not petal_targets.is_empty():
 			petal_targets[0].receive_element_damage(3.0, Elements.SAKURA, point, direction)
 		if is_inside_tree() and get_tree().current_scene:
 			SparkBurst.spawn(get_tree().current_scene, point, direction, Elements.color(Elements.SAKURA), 6, 1.2)
-	if active_elements.has(Elements.STORM) and _chain_cooldown <= 0.0:
+	elif current_element == Elements.STORM and _chain_cooldown <= 0.0:
 		_chain_cooldown = 0.30
 		_release_chain_lightning(point, direction)
-	if active_elements.has(Elements.INK):
+	elif current_element == Elements.INK:
 		paint_ink(point)
-	if active_elements.has(Elements.SHADOW):
+	elif current_element == Elements.SHADOW:
 		for enemy in _nearest_enemies(point, 1, 1.4):
 			enemy.apply_confusion(0.75)
 
-	if int(stacks.get("storm_charge", 0)) > 0 and storm_charge >= 1.0:
+	if current_element == Elements.STORM and int(stacks.get("storm_charge", 0)) > 0 and storm_charge >= 1.0:
 		storm_charge = 0.0
 		_release_charged_strike(point)
 
 
 func on_enemy_died(_enemy: Yokai) -> void:
-	if int(stacks.get("sakura_heal", 0)) <= 0 or run_game == null:
+	if current_element != Elements.SAKURA or int(stacks.get("sakura_heal", 0)) <= 0 or run_game == null:
 		return
 	var health := run_game._player_health()
 	if health:
@@ -166,7 +171,7 @@ func on_enemy_died(_enemy: Yokai) -> void:
 
 
 func try_shadow_blink(direction: Vector3 = Vector3.ZERO) -> bool:
-	if not active_elements.has(Elements.SHADOW) or blink_cooldown > 0.0 or run_game == null or run_game.player == null:
+	if current_element != Elements.SHADOW or blink_cooldown > 0.0 or run_game == null or run_game.player == null:
 		return false
 	var dir := direction
 	if dir.length_squared() < 0.01:
@@ -218,7 +223,7 @@ func try_shadow_blink(direction: Vector3 = Vector3.ZERO) -> bool:
 
 
 func paint_ink(at: Vector3) -> void:
-	if not active_elements.has(Elements.INK):
+	if current_element != Elements.INK:
 		return
 	var ground := _ground_below(at)
 	var radius := 1.55 if int(stacks.get("ink_depth", 0)) > 0 else 1.12
@@ -281,12 +286,12 @@ func _physics_process(delta: float) -> void:
 	var tip := weapon.get_tip_global()
 	var motion := tip - _prev_tip
 	_prev_tip = tip
-	if active_elements.has(Elements.SAKURA) and _petal_swing_cooldown <= 0.0 \
+	if current_element == Elements.SAKURA and _petal_swing_cooldown <= 0.0 \
 			and weapon.measured_tip_speed >= 6.2 and motion.length_squared() > 0.0004 \
 			and Engine.get_physics_frames() - weapon.teleported_frame > 2:
 		_petal_swing_cooldown = 0.36
 		_spawn_swing_petals(motion.normalized())
-	if int(stacks.get("storm_charge", 0)) > 0 and weapon.is_held() and weapon.measured_tip_speed > 4.5:
+	if current_element == Elements.STORM and int(stacks.get("storm_charge", 0)) > 0 and weapon.is_held() and weapon.measured_tip_speed > 4.5:
 		storm_charge = minf(1.0, storm_charge + delta * (0.18 + weapon.measured_tip_speed * 0.045))
 	if storm_charge >= 1.0 and _charge_vfx_cooldown <= 0.0:
 		_charge_vfx_cooldown = 0.28
@@ -373,6 +378,9 @@ func _rebuild_orbit_petals() -> void:
 		if is_instance_valid(p):
 			p.queue_free()
 	_orbit_petals.clear()
+	# Elemental effects depend exclusively on current_element from a Torii gate!
+	if current_element != Elements.SAKURA:
+		return
 	if int(stacks.get("sakura_orbit", 0)) <= 0:
 		return
 	var count := 3

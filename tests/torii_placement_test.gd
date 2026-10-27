@@ -42,6 +42,25 @@ func _run_all() -> void:
 	_check("At least one gate exists in 18–32m radius (nearest=%.1f m)" % nearest_dist,
 		has_gate_in_range and nearest_dist >= ToriiManager.MIN_SPAWN_DIST and nearest_dist <= ToriiManager.MAX_SPAWN_DIST)
 
+	# Verify player body collision layer matches XRPlayer.COLLISION_LAYER_BODY (1 << 19)
+	var player_body_layer := 0
+	if run.player is DesktopPlayer:
+		player_body_layer = (run.player as DesktopPlayer).collision_layer
+	elif run.player is XRPlayer:
+		var b := (run.player as XRPlayer)._body() as CharacterBody3D
+		if b:
+			player_body_layer = b.collision_layer
+	_check("Player body in run game has XRPlayer.COLLISION_LAYER_BODY (layer=%d, expected=%d)" % [player_body_layer, XRPlayer.COLLISION_LAYER_BODY],
+		(player_body_layer & XRPlayer.COLLISION_LAYER_BODY) != 0)
+
+	# Benchmark execution time of one _attempt_spawn_gate_in_range (< 2.0 ms on desktop)
+	var t_start := Time.get_ticks_usec()
+	var bench_gate := tm._attempt_spawn_gate_in_range(p_pos)
+	var elapsed_ms := (Time.get_ticks_usec() - t_start) / 1000.0
+	_check("_attempt_spawn_gate_in_range runs under 2.0 ms (took %.3f ms)" % elapsed_ms, elapsed_ms < 2.0)
+	if bench_gate and is_instance_valid(bench_gate):
+		bench_gate.queue_free()
+
 	# 2. Gate never spawns overlapping trunk or boulder colliders (clearance >= 3.2 m)
 	# Real physics space query on TRUNK_LAYER (layer 64) with CylinderShape3D
 	var space := run.get_world_3d().direct_space_state

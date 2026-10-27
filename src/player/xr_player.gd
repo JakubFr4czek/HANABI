@@ -12,6 +12,10 @@ signal reset_requested
 signal toggle_attacks_requested
 signal element_ability_requested(direction: Vector3)
 
+## Standard collision layer for player body (layer 20, 1 << 19). Shared across
+## XR Tools PlayerBody, DesktopPlayer, HeldWeapon, and Torii gates.
+const COLLISION_LAYER_BODY: int = 1 << 19
+
 @onready var left_controller: XRController3D = $XROrigin3D/LeftHand
 @onready var right_controller: XRController3D = $XROrigin3D/RightHand
 @onready var left_holder: WeaponHolder = $XROrigin3D/LeftHand/WeaponHolder

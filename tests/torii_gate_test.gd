@@ -34,6 +34,7 @@ func _run_all() -> void:
 	var fake_body := StaticBody3D.new()
 	fake_body.name = "PlayerBody"
 	fake_body.collision_layer = ToriiGate.PLAYER_BODY_LAYER
+	fake_body.add_to_group("player_body")
 	fake_body.position = Vector3(0.0, 1.5, 1.0)
 	var shape := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
@@ -148,6 +149,27 @@ func _run_all() -> void:
 	fake_body.position = storm_gate.global_position + Vector3(0.0, 0.0, 46.0)
 	await _frames(4)
 	_check("Gate reactivates when player moves >= 45.0 m away", storm_gate.is_active)
+
+	# 9. Sakura card without gate = 0 orbit petals; after Sakura gate = 3 petals; after 20s expiry = 0 petals
+	elem_sys.reset()
+	katana.set_element(Elements.NONE)
+	elem_sys.apply_upgrade("sakura_orbit", {"sakura_orbit": 1})
+	_check("Sakura card without gate spawns 0 orbit petals", elem_sys._orbit_petals.size() == 0)
+
+	# Cross gate with Sakura element
+	gate.element = Elements.SAKURA
+	gate.reactivate()
+	fake_body.position = Vector3(0.0, 1.5, 1.0)
+	await _frames(2)
+	fake_body.position = Vector3(0.0, 1.5, -1.0)
+	await _frames(4)
+	_check("After Sakura gate crossed, orbit petals spawn (count=3)", elem_sys._orbit_petals.size() == 3)
+
+	# Expire after 20s
+	for _i in 210:
+		elem_sys._physics_process(0.1)
+		katana._physics_process(0.1)
+	_check("After 20s expiry, orbit petals are cleared (count=0)", elem_sys._orbit_petals.size() == 0)
 
 	katana.queue_free()
 	elem_sys.queue_free()

@@ -68,7 +68,8 @@ var _hud := Label.new()
 
 
 func _ready() -> void:
-	collision_layer = 1 << 19  # player_body (same layer as XR Tools)
+	collision_layer = XRPlayer.COLLISION_LAYER_BODY  # player_body (same layer as XR Tools)
+	add_to_group("player_body")
 	collision_mask = 1 | 2 | 8
 	var shape := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()

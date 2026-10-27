@@ -23,7 +23,7 @@ const APERTURE_HEIGHT: float = 3.2
 const APERTURE_DEPTH: float = 0.8
 const CLEARANCE_RADIUS: float = 3.2
 const REACTIVATION_DISTANCE: float = 45.0
-const PLAYER_BODY_LAYER := 2
+const PLAYER_BODY_LAYER: int = XRPlayer.COLLISION_LAYER_BODY
 
 @export var element: String = Elements.SAKURA:
 	set(val):
@@ -198,7 +198,7 @@ func _build_components() -> void:
 		_crossing_area = Area3D.new()
 		_crossing_area.name = "CrossingArea"
 		_crossing_area.collision_layer = 0
-		_crossing_area.collision_mask = PLAYER_BODY_LAYER | 4 | 16 | 64
+		_crossing_area.collision_mask = PLAYER_BODY_LAYER
 		_crossing_area.monitorable = false
 		add_child(_crossing_area)
 
@@ -435,24 +435,37 @@ func _apply_active_state() -> void:
 func _is_weapon_or_hand(body: Node) -> bool:
 	if body == null:
 		return false
-	if body == _static_body or body.get_parent() == self or body.owner == self or body.name.to_lower().contains("toriicollision"):
+	if body == self or body == _static_body or body.get_parent() == self or body.owner == self:
 		return true
-	if body is BladeBody or body is HeldWeapon:
+	if body is BladeBody or body is HeldWeapon or body is XRController3D:
 		return true
-	if body.is_in_group("weapons") or body.is_in_group("hands"):
-		return true
-	var n_low := body.name.to_lower()
-	if n_low.contains("blade") or n_low.contains("katana") or n_low.contains("weapon") or n_low.contains("hand") or n_low.contains("controller") or n_low.contains("torii"):
+	if body.is_in_group("weapons") or body.is_in_group("player_weapons") or body.is_in_group("hands"):
 		return true
 	var p := body.get_parent()
 	if p:
-		if p is HeldWeapon or p is BladeBody or p.is_in_group("weapons") or p.is_in_group("hands"):
+		if p is HeldWeapon or p is BladeBody or p is XRController3D:
+			return true
+		if p.is_in_group("weapons") or p.is_in_group("player_weapons") or p.is_in_group("hands"):
 			return true
 	return false
 
 
-func _on_body_entered(body: Node3D) -> void:
+func _is_player_body(body: Node) -> bool:
+	if body == null:
+		return false
 	if _is_weapon_or_hand(body):
+		return false
+	if body.is_in_group("player_body"):
+		return true
+	if body is XRPlayer or body is DesktopPlayer:
+		return true
+	if body is CollisionObject3D and ((body as CollisionObject3D).collision_layer & PLAYER_BODY_LAYER) != 0:
+		return true
+	return false
+
+
+func _on_body_entered(body: Node3D) -> void:
+	if not _is_player_body(body):
 		return
 	_tracked_bodies[body] = body.global_position
 
@@ -521,8 +534,8 @@ func _eval_crossing(prev_pos: Vector3, curr_pos: Vector3) -> bool:
 func trigger_cross(body: Node = null) -> void:
 	if not is_active:
 		return
-	if _is_weapon_or_hand(body):
-		return # Weapons and hands never trigger gate crossing
+	if body != null and not _is_player_body(body):
+		return
 	is_active = false
 	_imbue_target(body)
 	gate_crossed.emit(element, self)
@@ -530,36 +543,27 @@ func trigger_cross(body: Node = null) -> void:
 
 
 var target_element_system: ElementSystem = null
-var target_weapon: HeldWeapon = null
 
-func _imbue_target(body: Node) -> void:
+func _imbue_target(_body: Node) -> void:
 	if target_element_system and is_instance_valid(target_element_system):
 		target_element_system.imbue(element, ElementSystem.ELEMENT_DURATION)
-		return
-	if target_weapon and is_instance_valid(target_weapon):
-		target_weapon.imbue_element(element, HeldWeapon.ELEMENT_DURATION)
 		return
 	var run := _find_run_game()
 	if run and run.element_system and is_instance_valid(run.element_system):
 		run.element_system.imbue(element, ElementSystem.ELEMENT_DURATION)
 		return
-	if run and run.katana and is_instance_valid(run.katana):
-		run.katana.imbue_element(element, HeldWeapon.ELEMENT_DURATION)
-		return
-	var scene := get_tree().current_scene if get_tree() else null
-	if scene:
-		for child in scene.get_children():
-			if child is ElementSystem:
-				child.imbue(element, ElementSystem.ELEMENT_DURATION)
-				return
-		for child in scene.get_children():
-			if child is HeldWeapon:
-				child.imbue_element(element, HeldWeapon.ELEMENT_DURATION)
-				return
-	if body and body.has_method("imbue_element"):
-		body.call("imbue_element", element)
-	elif body and body.get_parent() and body.get_parent().has_method("imbue_element"):
-		body.get_parent().call("imbue_element", element)
+	if get_tree():
+		var es := get_tree().get_first_node_in_group("element_system") as ElementSystem
+		if es and is_instance_valid(es):
+			es.imbue(element, ElementSystem.ELEMENT_DURATION)
+			return
+		var scene := get_tree().current_scene
+		if scene:
+			for child in scene.get_children():
+				if child is ElementSystem:
+					child.imbue(element, ElementSystem.ELEMENT_DURATION)
+					return
+	push_warning("ToriiGate: No ElementSystem found to imbue element '%s'. Imbue skipped to prevent untimed element state." % element)
 
 
 func reactivate() -> void:
