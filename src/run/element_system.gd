@@ -15,8 +15,9 @@ const MAX_TRANSIENT_MESHES := 18
 
 var run_game: RunGame
 var weapon: HeldWeapon
+## A run binds a single element: the first element upgrade locks the build and
+## later hands only offer its remaining tiers (plus generics).
 var active_elements: Array[String] = []
-var evolutions: Array[String] = []
 var stacks: Dictionary = {}
 
 var storm_charge := 0.0
@@ -36,7 +37,6 @@ var _orbit_clock := 0.0
 var _rng := RandomNumberGenerator.new()
 var _petal_mesh: QuadMesh
 var _petal_mat: ShaderMaterial
-var _phantom_petal_mat: ShaderMaterial
 
 
 func setup(p_run_game: RunGame, p_weapon: HeldWeapon) -> void:
@@ -49,7 +49,6 @@ func setup(p_run_game: RunGame, p_weapon: HeldWeapon) -> void:
 
 func reset() -> void:
 	active_elements.clear()
-	evolutions.clear()
 	stacks.clear()
 	storm_charge = 0.0
 	blink_cooldown = 0.0
@@ -65,38 +64,27 @@ func apply_upgrade(id: String, all_stacks: Dictionary) -> void:
 	stacks = all_stacks.duplicate()
 	var element := UpgradePool.element_for_upgrade(id)
 	if element != Elements.NONE and not active_elements.has(element):
-		if active_elements.size() >= 2:
+		if active_elements.size() >= 1:
 			return
 		active_elements.append(element)
-	_refresh_evolutions()
 	_rebuild_orbit_petals()
 	if weapon:
 		weapon.set_element(visual_element())
-	effect_triggered.emit("upgrade", {"id": id, "element": element, "evolutions": evolutions.duplicate()})
+	effect_triggered.emit("upgrade", {"id": id, "element": element})
 
 
 func visual_element() -> String:
-	if evolutions.has(Elements.BLACK_LIGHTNING):
-		return Elements.BLACK_LIGHTNING
-	if evolutions.has(Elements.PHANTOM_PETALS):
-		return Elements.PHANTOM_PETALS
 	return active_elements[-1] if not active_elements.is_empty() else Elements.NONE
 
 
-## Human-readable build for the end-screen stele (active elements + evolutions).
+## Human-readable build for the end-screen stele (the bound element, if any).
 func build_summary() -> String:
-	if active_elements.is_empty() and evolutions.is_empty():
+	if active_elements.is_empty():
 		return "Unbound"
 	var parts: Array[String] = []
 	for e in active_elements:
 		parts.append(Elements.build_label(e))
-	for ev in evolutions:
-		parts.append(Elements.build_label(ev))
 	return " · ".join(parts)
-
-
-func has_evolution(id: String) -> bool:
-	return evolutions.has(id)
 
 
 func on_blade_hit(hit: Dictionary) -> void:
@@ -120,7 +108,7 @@ func on_blade_hit(hit: Dictionary) -> void:
 		paint_ink(point)
 	if active_elements.has(Elements.SHADOW):
 		for enemy in _nearest_enemies(point, 1, 1.4):
-			enemy.apply_confusion(0.75 if not has_evolution(Elements.PHANTOM_PETALS) else 1.6)
+			enemy.apply_confusion(0.75)
 
 	if int(stacks.get("storm_charge", 0)) > 0 and storm_charge >= 1.0:
 		storm_charge = 0.0
@@ -132,8 +120,8 @@ func on_enemy_died(_enemy: Yokai) -> void:
 		return
 	var health := run_game._player_health()
 	if health:
-		health.heal(5.0 if has_evolution(Elements.PHANTOM_PETALS) else 3.0)
-		effect_triggered.emit("sakura_heal", {"amount": 5.0 if has_evolution(Elements.PHANTOM_PETALS) else 3.0})
+		health.heal(3.0)
+		effect_triggered.emit("sakura_heal", {"amount": 3.0})
 
 
 func try_shadow_blink(direction: Vector3 = Vector3.ZERO) -> bool:
@@ -199,8 +187,6 @@ func paint_ink(at: Vector3) -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = INK_SHADER
 	mat.set_shader_parameter("lifetime", lifetime)
-	if has_evolution(Elements.BLACK_LIGHTNING):
-		mat.set_shader_parameter("edge_color", Color(0.18, 0.55, 0.98))
 	mesh_instance.material_override = mat
 	root.add_child(mesh_instance)
 	_ink_pools.append({
@@ -255,27 +241,17 @@ func _physics_process(delta: float) -> void:
 	_update_transients(delta)
 
 
-func _refresh_evolutions() -> void:
-	evolutions.clear()
-	if UpgradePool.tree_complete(Elements.STORM, stacks) and UpgradePool.tree_complete(Elements.INK, stacks):
-		evolutions.append(Elements.BLACK_LIGHTNING)
-	if UpgradePool.tree_complete(Elements.SAKURA, stacks) and UpgradePool.tree_complete(Elements.SHADOW, stacks):
-		evolutions.append(Elements.PHANTOM_PETALS)
-
-
 func _build_shared_petals() -> void:
 	_petal_mesh = QuadMesh.new()
 	_petal_mesh.size = Vector2(0.075, 0.16)
 	_petal_mat = ShaderMaterial.new()
 	_petal_mat.shader = PETAL_SHADER
-	_phantom_petal_mat = _petal_mat.duplicate() as ShaderMaterial
-	_phantom_petal_mat.set_shader_parameter("phantom", 1.0)
 
 
 func _spawn_swing_petals(direction: Vector3) -> void:
 	if _petals.size() >= MAX_PETALS:
 		_free_petal(0)
-	var count := 5 if has_evolution(Elements.PHANTOM_PETALS) else 3
+	var count := 3
 	var origin := weapon.get_tip_global()
 	var right := direction.cross(Vector3.UP)
 	if right.length_squared() < 0.01:
@@ -285,9 +261,9 @@ func _spawn_swing_petals(direction: Vector3) -> void:
 		if _petals.size() >= MAX_PETALS:
 			_free_petal(0)
 		var node := MeshInstance3D.new()
-		node.name = "PhantomPetal" if has_evolution(Elements.PHANTOM_PETALS) else "CuttingPetal"
+		node.name = "CuttingPetal"
 		node.mesh = _petal_mesh
-		node.material_override = _phantom_petal_mat if has_evolution(Elements.PHANTOM_PETALS) else _petal_mat
+		node.material_override = _petal_mat
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		add_child(node)
@@ -301,7 +277,7 @@ func _spawn_swing_petals(direction: Vector3) -> void:
 		node.look_at(node.global_position + velocity, Vector3.UP)
 		node.rotate_object_local(Vector3.FORWARD, fan * 0.24 + _rng.randf_range(-0.22, 0.22))
 		_petals.append({"node": node, "velocity": velocity, "age": 0.0, "hit": {}})
-	effect_triggered.emit("sakura_petals", {"count": count, "phantom": has_evolution(Elements.PHANTOM_PETALS)})
+	effect_triggered.emit("sakura_petals", {"count": count})
 
 
 func _update_petals(delta: float) -> void:
@@ -316,21 +292,13 @@ func _update_petals(delta: float) -> void:
 			_free_petal(i)
 			continue
 		var velocity: Vector3 = p.velocity
-		if has_evolution(Elements.PHANTOM_PETALS):
-			var targets := _nearest_enemies(node.global_position, 1, 4.0)
-			if not targets.is_empty():
-				var target_dir := (_enemy_center(targets[0]) - node.global_position).normalized()
-				velocity = velocity.lerp(target_dir * velocity.length(), clampf(delta * 4.5, 0.0, 1.0))
 		node.global_position += velocity * delta
 		node.rotate_object_local(Vector3.FORWARD, delta * 8.0)
 		p.velocity = velocity
 		_petals[i] = p
 		for enemy in _nearest_enemies(node.global_position, 1, 0.42):
-			enemy.receive_element_damage(13.0 if has_evolution(Elements.PHANTOM_PETALS) else 8.0,
-				Elements.PHANTOM_PETALS if has_evolution(Elements.PHANTOM_PETALS) else Elements.SAKURA,
+			enemy.receive_element_damage(8.0, Elements.SAKURA,
 				node.global_position, velocity.normalized())
-			if has_evolution(Elements.PHANTOM_PETALS):
-				enemy.apply_confusion(1.4)
 			_free_petal(i)
 			break
 
@@ -342,12 +310,12 @@ func _rebuild_orbit_petals() -> void:
 	_orbit_petals.clear()
 	if int(stacks.get("sakura_orbit", 0)) <= 0:
 		return
-	var count := 5 if has_evolution(Elements.PHANTOM_PETALS) else 3
+	var count := 3
 	for i in count:
 		var petal := MeshInstance3D.new()
 		petal.name = "OrbitPetal"
 		petal.mesh = _petal_mesh
-		petal.material_override = _phantom_petal_mat if has_evolution(Elements.PHANTOM_PETALS) else _petal_mat
+		petal.material_override = _petal_mat
 		petal.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		petal.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		add_child(petal)
@@ -382,13 +350,9 @@ func _release_chain_lightning(origin: Vector3, direction: Vector3) -> void:
 	for enemy in targets:
 		var point := _enemy_center(enemy)
 		points.append(point)
-		enemy.receive_element_damage(damage, Elements.BLACK_LIGHTNING if has_evolution(Elements.BLACK_LIGHTNING) else Elements.STORM,
-			point, direction)
-		if has_evolution(Elements.BLACK_LIGHTNING):
-			paint_ink(point)
-	var color := Color(0.18, 0.48, 1.8) if has_evolution(Elements.BLACK_LIGHTNING) else Color(0.35, 1.0, 2.4)
-	_spawn_lightning(points, color, 0.26, 0.010, has_evolution(Elements.BLACK_LIGHTNING))
-	effect_triggered.emit("chain_lightning", {"targets": targets.size(), "black": has_evolution(Elements.BLACK_LIGHTNING)})
+		enemy.receive_element_damage(damage, Elements.STORM, point, direction)
+	_spawn_lightning(points, Color(0.35, 1.0, 2.4), 0.26, 0.010)
+	effect_triggered.emit("chain_lightning", {"targets": targets.size()})
 
 
 func _release_charged_strike(origin: Vector3) -> void:
@@ -397,15 +361,11 @@ func _release_charged_strike(origin: Vector3) -> void:
 	for enemy in targets:
 		var point := _enemy_center(enemy)
 		points.append(point)
-		enemy.receive_element_damage(22.0, Elements.BLACK_LIGHTNING if has_evolution(Elements.BLACK_LIGHTNING) else Elements.STORM,
+		enemy.receive_element_damage(22.0, Elements.STORM,
 			point, (point - origin).normalized())
-		if has_evolution(Elements.BLACK_LIGHTNING):
-			paint_ink(point)
 	if points.size() == 1:
 		points.append(origin + Vector3.UP * 2.2)
-	var blackened := has_evolution(Elements.BLACK_LIGHTNING)
-	_spawn_lightning(points, Color(0.16, 0.42, 1.5) if blackened else Color(0.46, 1.2, 2.8),
-		0.42, 0.012, blackened)
+	_spawn_lightning(points, Color(0.46, 1.2, 2.8), 0.42, 0.012)
 	effect_triggered.emit("charged_strike", {"targets": targets.size()})
 
 
@@ -429,8 +389,7 @@ func _update_ink_pools(delta: float) -> void:
 			pool.pulse = 1.0
 			for enemy in trapped.slice(0, mini(3, trapped.size())):
 				var point := _enemy_center(enemy)
-				enemy.receive_element_damage(6.0, Elements.BLACK_LIGHTNING if has_evolution(Elements.BLACK_LIGHTNING) else Elements.INK,
-					point, Vector3.UP)
+				enemy.receive_element_damage(6.0, Elements.INK, point, Vector3.UP)
 				_spawn_ink_tendril(pool.position, point)
 		_ink_pools[i] = pool
 
@@ -441,7 +400,7 @@ func _spawn_ink_tendril(from: Vector3, to: Vector3) -> void:
 		from.lerp(to, 0.45) + Vector3.UP * 0.55,
 		to,
 	]
-	_spawn_lightning(points, Color(0.24, 0.28, 0.52), 0.38, 0.012, true)
+	_spawn_lightning(points, Color(0.24, 0.28, 0.52), 0.38, 0.012)
 
 
 func _spawn_darkness(at: Vector3) -> void:
@@ -493,8 +452,7 @@ func _spawn_shadow_trace(from: Vector3, to: Vector3) -> void:
 	_spawn_lightning(points, Color(0.58, 0.16, 1.2), 0.30, 0.018)
 
 
-func _spawn_lightning(points: Array[Vector3], color: Color, lifetime: float, width: float = 0.010,
-		blackened: bool = false) -> void:
+func _spawn_lightning(points: Array[Vector3], color: Color, lifetime: float, width: float = 0.010) -> void:
 	if points.size() < 2:
 		return
 	var edges: Array = []
@@ -516,15 +474,11 @@ func _spawn_lightning(points: Array[Vector3], color: Color, lifetime: float, wid
 			edges.append([previous, next])
 			previous = next
 
-	# Two mesh ribbons give a soft colored envelope and a razor-white core
-	# without a light, particles, bloom dependency or screen-space pass.
-	if blackened:
-		_spawn_lightning_layer(edges, Color(0.004, 0.006, 0.014), lifetime, width * 3.0, 0.78, 0.0, false)
-		_spawn_lightning_layer(edges, Color(0.10, 0.55, 1.40), lifetime, width * 0.82, 0.86, 0.90, true)
-	else:
-		_spawn_lightning_layer(edges, color * 0.42, lifetime, width * 2.5, 0.16, 0.24, true)
-		var core := Color(0.72 + color.r * 0.12, 0.82 + color.g * 0.10, 1.02 + color.b * 0.08)
-		_spawn_lightning_layer(edges, core, lifetime, width * 0.72, 0.88, 0.95, true)
+	# A glass tube: a translucent colored body (normal blend, like tinted glass)
+	# around a razor-white hot core (additive), no light or screen-space pass.
+	_spawn_lightning_layer(edges, color * 0.42, lifetime, width * 2.5, 0.38, 0.24, false)
+	var core := Color(0.72 + color.r * 0.12, 0.82 + color.g * 0.10, 1.02 + color.b * 0.08)
+	_spawn_lightning_layer(edges, core, lifetime, width * 0.72, 0.88, 0.95, true)
 
 
 func _spawn_lightning_layer(edges: Array, color: Color, lifetime: float, width: float,
