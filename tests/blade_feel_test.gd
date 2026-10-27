@@ -120,7 +120,7 @@ func _test_fixed_handle_grip() -> void:
 	var blade_grip := katana.get_local_grip(holder)
 	_check("a grip on the blade slides to the handle and snaps (zone %s, z %.3f)" % [katana.get_grip_zone(holder), blade_grip.origin.z],
 		katana.get_grip_zone(holder) == HeldWeapon.ZONE_HANDLE
-		and blade_grip.origin.z >= katana.guard_z + katana.guard_half_length - 0.001
+		and blade_grip.origin.z >= katana.grip_min_z() - 0.001
 		and blade_grip.basis.is_equal_approx(Basis.IDENTITY))
 	holder.release()
 	holder.queue_free()

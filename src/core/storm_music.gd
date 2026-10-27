@@ -7,7 +7,7 @@ const TRACK := preload("res://assets/audio/music/cc0_run/orientalsomber.ogg")
 const CROSSFADE_SEC := 0.5
 const LOOP_TAIL_TRIM_SEC := 0.2
 
-@export var volume_db := -23.5
+@export var volume_db := -12.0
 
 var _players: Array[AudioStreamPlayer] = []
 var _lead := 0
@@ -46,6 +46,11 @@ func _process(_delta: float) -> void:
 		return
 	var lead := _players[_lead]
 	if not lead.playing:
+		# Never let the run go silent: an interrupted or finished lead
+		# (audio focus change on the headset, a stream hiccup) restarts
+		# instead of leaving the music dead for the rest of the session.
+		lead.volume_db = _target_volume_db()
+		lead.play()
 		return
 	var tail := maxf(2.0, _track_length - LOOP_TAIL_TRIM_SEC)
 	if lead.get_playback_position() >= tail - CROSSFADE_SEC:

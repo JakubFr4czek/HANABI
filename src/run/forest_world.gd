@@ -532,7 +532,7 @@ func _populate_trees(root: Node3D, coord: Vector2i) -> int:
 		# Plant from the rendered mesh, sunk below the lowest ground in ribbon
 		# reach: on a slope the analytic height floats above the downhill
 		# mesh, which left roots standing in the air.
-		var base := _mesh_min_height(wx, wz, 3.3) - 0.05 * scale
+		var base := _mesh_min_height(wx, wz, 2.1) - 0.05 * scale
 		# Lean with the hill, not the mound, so the roots lie on the slope
 		# instead of sticking out on the downhill side.
 		var up := Vector3.UP.lerp(_hill_normal(wx, wz), 0.72).normalized()
@@ -1024,11 +1024,73 @@ func _rebuild_crown(scan: Mesh) -> ArrayMesh:
 	noise.seed = 0x4C454146
 	noise.frequency = 0.9
 	for c in CROWN_CLUMPS.size():
-		_add_foliage_clump(st, CROWN_CLUMPS[c][0], float(CROWN_CLUMPS[c][1]), noise, c)
+		# Slightly oversized so neighbouring clumps merge into one canopy
+		# mass instead of reading as separate balloons.
+		_add_foliage_clump(st, CROWN_CLUMPS[c][0], float(CROWN_CLUMPS[c][1]) * 1.18, noise, c)
+	# The scan's own boughs are cut at 8.8 m, well below the clump centres:
+	# without a branch into each clump the crown read as floating balloons
+	# tied to nothing. Grow a tapered bough from the fork into every clump.
+	for c in CROWN_CLUMPS.size():
+		_add_branch(st, CROWN_CLUMPS[c][0], float(CROWN_CLUMPS[c][1]), c)
 	# The bark is normal-mapped: without tangents its lighting turns to NaN
 	# and the trunks vanish.
 	st.generate_tangents()
 	return st.commit()
+
+
+## A tapered bough from the trunk fork (near the axis, just under where the
+## scan's boughs end) into a foliage clump, ending inside the leaf mass.
+## Three rings with a slight mid droop; UVs sit in the atlas bark strip so
+## the tree shader treats it as bark, not leaf or root.
+func _add_branch(st: SurfaceTool, clump_center: Vector3, clump_radius: float, seed_i: int) -> void:
+	var fork := Vector3(clump_center.x * 0.10, 7.3 + float(seed_i % 3) * 0.45, clump_center.z * 0.10)
+	var to_center := clump_center - fork
+	var end := clump_center - to_center.normalized() * clump_radius * 0.45
+	var mid := fork.lerp(end, 0.52) + Vector3(0.0, -0.22, 0.0)
+	var rings: Array[Vector3] = [fork, mid, end]
+	var radii: Array[float] = [0.21, 0.12, 0.045]
+	var segs := 7
+	var frames: Array = []
+	for r in rings.size():
+		var tan: Vector3
+		if r == 0:
+			tan = (rings[1] - rings[0]).normalized()
+		elif r == rings.size() - 1:
+			tan = (rings[r] - rings[r - 1]).normalized()
+		else:
+			tan = (rings[r + 1] - rings[r - 1]).normalized()
+		var side := tan.cross(Vector3.UP)
+		if side.length_squared() < 1e-4:
+			side = tan.cross(Vector3.RIGHT)
+		side = side.normalized()
+		var up2 := side.cross(tan).normalized()
+		var ring: Array = []
+		for s in segs:
+			var a := TAU * float(s) / float(segs)
+			var n := (side * cos(a) + up2 * sin(a)).normalized()
+			ring.append({"p": rings[r] + n * radii[r], "n": n, "u": float(s) / float(segs)})
+		frames.append(ring)
+	for r in frames.size() - 1:
+		for s in segs:
+			var s2 := (s + 1) % segs
+			var a: Dictionary = frames[r][s]
+			var b: Dictionary = frames[r][s2]
+			var c: Dictionary = frames[r + 1][s2]
+			var d: Dictionary = frames[r + 1][s]
+			var v0 := 0.68 + 0.24 * (float(r) / float(frames.size() - 1))
+			var v1 := 0.68 + 0.24 * (float(r + 1) / float(frames.size() - 1))
+			_branch_vert(st, a, v0)
+			_branch_vert(st, b, v0)
+			_branch_vert(st, c, v1)
+			_branch_vert(st, a, v0)
+			_branch_vert(st, c, v1)
+			_branch_vert(st, d, v1)
+
+
+func _branch_vert(st: SurfaceTool, v: Dictionary, vcoord: float) -> void:
+	st.set_normal(v.n)
+	st.set_uv(Vector2(0.06 + 0.24 * float(v.u), vcoord))
+	st.add_vertex(v.p)
 
 
 ## A lumpy, slightly flattened foliage mass with smooth normals. UV.y = 2
@@ -1072,7 +1134,7 @@ func _append_root_flare(mesh: Mesh) -> ArrayMesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.append_from(mesh, 0, Transform3D.IDENTITY)
 	var angles: Array[float] = [0.15, 1.05, 2.15, 3.25, 4.35, 5.35]
-	var lengths: Array[float] = [2.15, 1.7, 2.45, 1.55, 2.3, 1.9]
+	var lengths: Array[float] = [1.15, 0.9, 1.3, 0.85, 1.2, 1.0]
 	for i in angles.size():
 		_add_root_ribbon(st, angles[i], lengths[i])
 	_add_root_collar(st)
@@ -1082,20 +1144,26 @@ func _append_root_flare(mesh: Mesh) -> ArrayMesh:
 func _add_root_ribbon(st: SurfaceTool, angle: float, length: float) -> void:
 	var dir := Vector3(cos(angle), 0.0, sin(angle))
 	var side := Vector3(-dir.z, 0.0, dir.x)
-	# Inner edge overlaps the trunk; the tip lies on the mound.
-	var radii: Array[float] = [0.85, 0.85 + length * 0.45, 0.85 + length]
-	# Sit on the soil apron, so the ridge reads above the heap.
-	var heights: Array[float] = [0.58, 0.3, 0.07]
-	var half_w: Array[float] = [0.34, 0.2, 0.07]
-	var along: Array[float] = [0.0, 0.45, 1.0]
+	# A root is a low ridge, not a flat fin: a raised spine with two skirts
+	# falling to the soil. It dives below the local ground plane before its
+	# tip, so on any slope the end is buried instead of hovering — the old
+	# long flat ribbons floated over the downhill side like a black star.
+	var frac: Array[float] = [0.0, 0.38, 0.72, 1.0]
+	var heights: Array[float] = [0.62, 0.30, 0.04, -0.30]
+	var half_w: Array[float] = [0.30, 0.21, 0.12, 0.045]
+	var skirt := 0.16
+	var ridge: Array[Vector3] = []
 	var left: Array[Vector3] = []
 	var right: Array[Vector3] = []
+	for k in 4:
+		var r := 0.78 + length * frac[k]
+		var c := dir * r + Vector3(0.0, heights[k], 0.0)
+		ridge.append(c)
+		left.append(c - side * half_w[k] + Vector3(0.0, -skirt, 0.0))
+		right.append(c + side * half_w[k] + Vector3(0.0, -skirt, 0.0))
 	for k in 3:
-		var c := dir * radii[k] + Vector3(0.0, heights[k], 0.0)
-		left.append(c - side * half_w[k])
-		right.append(c + side * half_w[k])
-	for k in 2:
-		_add_root_quad(st, left[k], right[k], right[k + 1], left[k + 1], along[k], along[k + 1])
+		_add_root_quad(st, left[k], ridge[k], ridge[k + 1], left[k + 1], frac[k], frac[k + 1])
+		_add_root_quad(st, ridge[k], right[k], right[k + 1], ridge[k + 1], frac[k], frac[k + 1])
 
 
 func _add_root_quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, along0: float, along1: float) -> void:
@@ -1120,8 +1188,8 @@ func _root_vert(st: SurfaceTool, p: Vector3, n: Vector3, along: float) -> void:
 ## bark so the mesh's flat bottom never meets the ground as a cut circle.
 func _add_root_collar(st: SurfaceTool) -> void:
 	var segs := 12
-	var radii: Array[float] = [0.7, 1.35, 2.45]
-	var heights: Array[float] = [0.5, 0.24, 0.03]
+	var radii: Array[float] = [0.7, 1.1, 1.5]
+	var heights: Array[float] = [0.48, 0.16, -0.22]
 	var along: Array[float] = [0.0, 0.4, 0.92]
 	var ring: Array = []
 	for i in segs:

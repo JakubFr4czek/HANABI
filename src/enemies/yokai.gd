@@ -66,6 +66,7 @@ var _dissolve_duration := 0.95
 var _petal_burst_done := false
 ## Petals a whole yōkai comes apart into.
 const DEATH_PETALS := 90
+const MASK_FILL := 0.55
 var _slow_time := 0.0
 var _slow_scale := 1.0
 var _confusion_time := 0.0
@@ -162,12 +163,17 @@ func _ready() -> void:
 
 	# Weathered pale bone Noh/oni mask.
 	_mask_mat.shader = WET_SURFACE_SHADER
-	_mask_mat.set_shader_parameter("base_color", Color(0.86, 0.81, 0.73))
+	# Aged bone, not a glowing white plate: the face reads in the fog without
+	# shining like a signal.
+	_mask_mat.set_shader_parameter("base_color", Color(0.46, 0.4, 0.34))
 	_mask_mat.set_shader_parameter("roughness_dry", 0.72)
 	_mask_mat.set_shader_parameter("roughness_wet", 0.38)
 	_mask_mat.set_shader_parameter("wetness", 0.42)
 	_mask_mat.set_shader_parameter("waterline_y", -10.0)
-	_mask_mat.set_shader_parameter("fill", 1.75)
+	_mask_mat.set_shader_parameter("fill", MASK_FILL)
+	# Hit flash on the mask is the same ember as the skin, not the shader's
+	# pale default — a white blink on the face read as a UI clue.
+	_mask_mat.set_shader_parameter("flash_color", Color(0.9, 0.3, 0.16))
 
 	# Rain-soaked crimson-vermilion armour lacquer (sode & chest wrap).
 	_sash.shader = WET_SURFACE_SHADER
@@ -289,7 +295,7 @@ func _reset_spawn_look() -> void:
 	_elite_halo = null
 	_skin.set_shader_parameter("fill", 1.65)
 	_skin.set_shader_parameter("flash", 0.0)
-	_mask_mat.set_shader_parameter("fill", 1.75)
+	_mask_mat.set_shader_parameter("fill", MASK_FILL)
 	_mask_mat.set_shader_parameter("flash", 0.0)
 	_sash.set_shader_parameter("base_color", Color(0.46, 0.055, 0.075))
 	_sash.set_shader_parameter("fill", 1.60)
@@ -1137,10 +1143,13 @@ func _try_claw_player(damage: float, attack: String) -> void:
 
 
 func _show_tell(tell: float) -> void:
-	_eyes.emission_energy_multiplier = 0.85 + tell * tell * 4.5
-	EyeGlow.set_glow(_eye_glows, 1.0 + tell * tell * 1.8)
-	_claw_mat.emission_energy_multiplier = 0.32 + tell * tell * 3.8
-	_sigil_mat.emission_energy_multiplier = 0.55 + tell * tell * 2.5
+	# The wind-up reads from the pose and the sound; the glow only warms
+	# slightly. The old multipliers blew the eyes/claws out to white-hot
+	# signal lights, which read as UI markers instead of a creature.
+	_eyes.emission_energy_multiplier = 0.85 + tell * tell * 1.6
+	EyeGlow.set_glow(_eye_glows, 1.0 + tell * tell * 0.7)
+	_claw_mat.emission_energy_multiplier = 0.32 + tell * tell * 1.4
+	_sigil_mat.emission_energy_multiplier = 0.55 + tell * tell * 1.0
 	if tell > 0.05 and _last_tell <= 0.05:
 		var head_part: RagdollPart = parts.get("head")
 		Sfx.play_at("enemy_tell", head_part.global_position if head_part else global_position, -5.0)
@@ -1152,4 +1161,4 @@ func _process(delta: float) -> void:
 		_flash_time -= delta
 		var f := clampf(_flash_time / 0.12, 0.0, 1.0) * 0.55
 		_skin.set_shader_parameter("flash", f)
-		_mask_mat.set_shader_parameter("flash", f * 0.5)
+		_mask_mat.set_shader_parameter("flash", f * 0.3)

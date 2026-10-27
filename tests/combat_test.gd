@@ -225,7 +225,7 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 	_check("grabbing the guard slides to the handle end (z=%.3f, zone=%s, err=%.3f m)" % [
 		katana.get_local_grip(h1).origin.z, katana.get_grip_zone(h1), tsuba_err],
 		katana.get_grip_zone(h1) == HeldWeapon.ZONE_HANDLE
-		and absf(katana.get_local_grip(h1).origin.z - (katana.guard_z + katana.guard_half_length)) < 0.01
+		and absf(katana.get_local_grip(h1).origin.z - katana.grip_min_z()) < 0.01
 		and tsuba_err < 0.03)
 
 	# 7c. Grabbing the blade itself: the grip lands on the handle, never on
@@ -244,8 +244,8 @@ func _test_free_and_two_handed_grip(kanabo_1h_settle: float) -> void:
 	_check("grabbing the blade puts the hand on the handle (zone=%s, z=%.3f, err=%.3f m)" % [
 		katana.get_grip_zone(h1), blade_grip_local.z, blade_err],
 		katana.get_grip_zone(h1) == HeldWeapon.ZONE_HANDLE
-		and blade_grip_local.z >= katana.guard_z + katana.guard_half_length - 0.001
-		and blade_grip_local.z <= katana.handle_back_z + 0.001
+		and blade_grip_local.z >= katana.grip_min_z() - 0.001
+		and blade_grip_local.z <= katana.grip_max_z() + 0.001
 		and blade_err < 0.03)
 	# And from farther along the blade the weapon is not grabbable at all.
 	katana.release_all()

@@ -6,7 +6,7 @@ extends Node
 
 const RAIN := preload("res://assets/audio/sfx/cc0_storm/amb_rain_loop_1.ogg")
 
-@export var rain_volume_db := -10.0
+@export var rain_volume_db := -14.0
 @export var thunder_volume_db := 2.0
 ## Seconds between the flash and the thunder (distant storm).
 @export var thunder_delay_min := 0.9
