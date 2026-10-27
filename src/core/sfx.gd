@@ -22,6 +22,8 @@ const CATEGORIES := {
 	"yokai_slice": ["res://assets/audio/sfx/kenney_run", "yokai_slice"],
 }
 const POOL_SIZE := 24
+const MAX_ACTIVE_WORLD_VOICES := 20
+const SOFT_CAP_CATEGORIES := ["enemy_tell", "blade_ring", "slap"]
 const WORLD_BUS := &"World"
 const AMBIENCE_BUS := &"Ambience"
 const MUSIC_BUS := &"Music"
@@ -57,6 +59,8 @@ func _process(_delta: float) -> void:
 func play_at(category: String, position: Vector3, volume_db: float = 0.0, unit_size: float = 4.0, pitch_scale: float = 1.0) -> void:
 	if not _streams.has(category):
 		return
+	if SOFT_CAP_CATEGORIES.has(category) and _active_world_voices() >= MAX_ACTIVE_WORLD_VOICES:
+		return
 	var player := _acquire_player()
 	player.stream = _streams[category]
 	player.volume_db = clampf(volume_db, -36.0, MAX_WORLD_DB)
@@ -64,6 +68,14 @@ func play_at(category: String, position: Vector3, volume_db: float = 0.0, unit_s
 	player.unit_size = unit_size
 	player.global_position = position
 	player.play()
+
+
+func _active_world_voices() -> int:
+	var n := 0
+	for p in _pool:
+		if p.playing:
+			n += 1
+	return n
 
 
 func _acquire_player() -> AudioStreamPlayer3D:
@@ -158,3 +170,7 @@ func _setup_buses() -> void:
 		AudioServer.set_bus_name(j, MUSIC_BUS)
 		AudioServer.set_bus_send(j, &"Master")
 		_music_base_db = AudioServer.get_bus_volume_db(j)
+		var music_limiter := AudioEffectHardLimiter.new()
+		music_limiter.ceiling_db = -2.5
+		music_limiter.pre_gain_db = 0.0
+		AudioServer.add_bus_effect(j, music_limiter)

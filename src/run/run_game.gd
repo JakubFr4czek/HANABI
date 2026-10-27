@@ -198,6 +198,15 @@ func _configure_run_forest() -> void:
 		var forest_amb := RunForestAmbience.new()
 		forest_amb.name = "RunForestAmbience"
 		add_child(forest_amb)
+	if get_node_or_null("StormMusic") == null:
+		var music := StormMusic.new()
+		music.name = "StormMusic"
+		add_child(music)
+	if get_node_or_null("StormAmbience") == null:
+		var storm := StormAmbience.new()
+		storm.name = "StormAmbience"
+		storm.lightning = get_node_or_null("Arena/StormLightning") as StormLightning
+		add_child(storm)
 
 
 func _setup_run_nodes() -> void:
@@ -436,6 +445,9 @@ func _present_level_up() -> void:
 	var frame := _player_view_frame()
 	var chime_pos := frame.origin + (-frame.basis.z) * 0.8
 	Sfx.play_at("level_up", chime_pos, -4.0, 5.0)
+	var music := get_node_or_null("StormMusic") as StormMusic
+	if music:
+		music.duck_for_level_up(2.8, -9.0)
 
 	var health := _player_health()
 	var hp_ratio := (health.hp / maxf(health.max_hp, 1.0)) if health else 1.0
