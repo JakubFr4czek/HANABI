@@ -730,25 +730,26 @@ func _build_end_screen(summary: Dictionary) -> void:
 		post.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		board.add_child(post)
 
-	var title_lbl := MemorialTypography.stele_label("散華", 72, 0.00185, Color(1.12, 0.34, 0.26), Vector3(0, 0.24, 0.024))
-	board.add_child(title_lbl)
-	var sub_lbl := MemorialTypography.stele_label("RUN ENDED", 34, 0.00125, Color(0.86, 0.88, 0.94), Vector3(0, 0.17, 0.024))
-	board.add_child(sub_lbl)
-
+	# One single-line label per row at a fixed height: Label3D centers a
+	# multi-line text vertically, so an extra "NEW RECORD" line used to push
+	# the block into the subtitle above and the BUILD line below.
 	var mins := int(run_time) / 60
 	var secs := int(run_time) % 60
-	var rec_tag := "\n★ NEW RECORD" if summary.get("new_record", false) else ""
-	var stats_text := "%d pt%s\n%02d:%02d  ·  斬 %d  ·  LV %d  ·  波 %d\nBEST  %d" % [
-		int(summary.score), rec_tag, mins, secs, int(summary.kills), int(summary.level), int(summary.wave), int(summary.high_score)
+	var rows: Array = [
+		["散華", 72, 0.00185, Color(1.12, 0.34, 0.26), 0.235],
+		["RUN ENDED", 30, 0.00112, Color(0.78, 0.8, 0.88), 0.165],
+		["%d pt" % int(summary.score), 46, 0.00150, Color(0.96, 0.97, 1.0), 0.108],
 	]
-	var stats_lbl := MemorialTypography.stele_label(stats_text, 38, 0.00138, Color(0.94, 0.95, 1.0), Vector3(0, 0.04, 0.024))
-	stats_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	board.add_child(stats_lbl)
-
-	var build_text := String(summary.get("build", "Unbound"))
-	var build_lbl := MemorialTypography.stele_label("BUILD  %s" % build_text, 34, 0.00122, Color(0.9, 0.76, 1.0), Vector3(0, -0.10, 0.024))
-	build_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	board.add_child(build_lbl)
+	if summary.get("new_record", false):
+		rows.append(["★ NEW RECORD", 28, 0.00112, Color(1.1, 0.78, 0.42), 0.058])
+	rows.append(["%02d:%02d  ·  斬 %d  ·  LV %d  ·  波 %d" % [mins, secs, int(summary.kills), int(summary.level), int(summary.wave)],
+		32, 0.00118, Color(0.9, 0.92, 0.98), 0.005])
+	rows.append(["BEST  %d" % int(summary.high_score), 30, 0.00112, Color(0.8, 0.84, 0.94), -0.055])
+	rows.append(["BUILD  %s" % String(summary.get("build", "Unbound")), 32, 0.00118, Color(0.9, 0.76, 1.0), -0.115])
+	for row in rows:
+		var lbl := MemorialTypography.stele_label(String(row[0]), int(row[1]), float(row[2]), row[3] as Color, Vector3(0, float(row[4]), 0.024))
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		board.add_child(lbl)
 
 	var upg_parts: Array[String] = []
 	for u_id in upgrade_stacks:
@@ -758,7 +759,7 @@ func _build_end_screen(summary: Dictionary) -> void:
 			tag = String(def.get("title", String(u_id))).substr(0, 3)
 		upg_parts.append("%s×%d" % [tag, int(upgrade_stacks[u_id])])
 	var upg_line := _short_upgrade_line(upg_parts)
-	var upg_lbl := MemorialTypography.stele_label(upg_line, 28, 0.00108, Color(0.74, 0.8, 0.92), Vector3(0, -0.22, 0.024))
+	var upg_lbl := MemorialTypography.stele_label(upg_line, 28, 0.00108, Color(0.74, 0.8, 0.92), Vector3(0, -0.19, 0.024))
 	upg_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	board.add_child(upg_lbl)
 

@@ -79,12 +79,23 @@ func _build_labels(accent: Color) -> void:
 	_card_root.add_child(_kanji_lbl)
 
 	var title_str := String(upgrade.get("title", "UPGRADE"))
-	_title_lbl = make_label(title_str, sys_font, 34, 0.00105, Color(0.97, 0.96, 0.99), Vector3(0, -0.095, 0.004))
+	_title_lbl = make_label(title_str, sys_font, 30, 0.00092, Color(0.97, 0.96, 0.99), Vector3(0, -0.092, 0.004))
+	_fit_to_card(_title_lbl)
 	_card_root.add_child(_title_lbl)
 
 	var sub_str := String(upgrade.get("subtitle", ""))
-	_sub_lbl = make_label(sub_str, sys_font, 26, 0.00095, Color(0.78, 0.84, 0.94), Vector3(0, -0.165, 0.004))
+	_sub_lbl = make_label(sub_str, sys_font, 24, 0.00082, Color(0.84, 0.88, 0.96), Vector3(0, -0.158, 0.004))
+	_fit_to_card(_sub_lbl)
+	_sub_lbl.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_card_root.add_child(_sub_lbl)
+
+
+## Wraps a label inside the card's inner frame instead of letting long names
+## and descriptions run past the paper edges.
+static func _fit_to_card(lbl: Label3D) -> void:
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.width = WIDTH * 0.8 / lbl.pixel_size
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
 static func make_label(txt: String, font: Font, fsize: int, psize: float, col: Color, pos: Vector3) -> Label3D:
@@ -99,6 +110,10 @@ static func make_label(txt: String, font: Font, fsize: int, psize: float, col: C
 	lbl.outline_size = 6
 	lbl.outline_modulate = Color(0.01, 0.01, 0.02, 0.95)
 	lbl.position = pos
+	# Draw after the card paper (both are sorted as transparent); otherwise the
+	# paper often wins and the ink reads as a dim smudge behind it.
+	lbl.render_priority = 2
+	lbl.outline_render_priority = 1
 	return lbl
 
 
