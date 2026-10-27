@@ -125,9 +125,9 @@ func _test_cut_resistance() -> void:
 	katana.linear_velocity = Vector3(10, 0, 0)
 	katana._apply_cut_resistance({"point": point, "direction": Vector3.RIGHT}, {"impulse": 12.0}, "blunt")
 	var blunt_v := katana.linear_velocity.x
-	# edge: 12 * 0.22 / 1.1 kg = 2.4 m/s lost; blunt: capped at 3.5 m/s.
+	# edge: 12 * 0.30 / 1.45 kg = 2.48 m/s lost; blunt: capped at 3.5 m/s.
 	_check("sharp cut passes through with a small bite (10 -> %.2f m/s)" % edge_v,
-		absf(edge_v - 7.6) < 0.2)
+		absf(edge_v - 7.52) < 0.15)
 	_check("blunt impact stops the blade harder, capped (10 -> %.2f m/s)" % blunt_v,
 		absf(blunt_v - 6.5) < 0.2)
 	katana.linear_velocity = Vector3.ZERO

@@ -151,9 +151,9 @@ const PLAYER_BODY_LAYER := 1 << 19
 ## bite), a flat/spine/hilt slap or a club stops harder. The loss is Δv = J/m,
 ## so a heavier weapon plows through while a light one is checked — and the
 ## arm has to re-accelerate the blade, which is where its weight is felt.
-@export var edge_bite := 0.22
-@export var blunt_bite := 0.5
-@export var slap_bite := 0.55
+@export var edge_bite := 0.30
+@export var blunt_bite := 0.55
+@export var slap_bite := 0.6
 ## Caps on what one hit may take from the blade (m/s of travel, rad/s of spin).
 @export var max_bite_speed := 3.5
 @export var max_bite_spin := 6.0
@@ -301,18 +301,36 @@ func distance_to_grip(world_point: Vector3) -> float:
 	return world_point.distance_to(global_transform * clamped)
 
 
+## The reversed (blade-down) grip: 180° about the local X axis, which flips
+## both the blade end (-Z to +Z) and the edge side. Grabbing with the fist
+## already turned takes this grip instead of snapping back to normal.
+func _reversed_grip_basis() -> Basis:
+	return Basis(Vector3.RIGHT, PI)
+
+
+## Snap a hand orientation to the nearest canonical grip on the handle/guard:
+## normal, or reversed when the fist came in blade-down. Only grips on the
+## blade spine keep the exact hand orientation.
+func _snap_grip_basis(raw_basis: Basis, zone: String) -> Basis:
+	if zone == ZONE_MUNE:
+		return raw_basis.orthonormalized()
+	var q := raw_basis.get_rotation_quaternion()
+	var flip := _reversed_grip_basis().get_rotation_quaternion()
+	if q.angle_to(flip) < q.angle_to(Quaternion.IDENTITY):
+		return _reversed_grip_basis()
+	return Basis.IDENTITY
+
+
 ## Compute the local grip Transform3D for a hand grabbing at [param hand_global].
-## On the handle and guard the hand always takes the natural grip (blade out of
-## the fist along -Z, cutting edge on the fingers' side, i.e. leading a cut),
-## whatever angle the hand came in at; only grips on the blade spine keep it.
+## On the handle and guard the grip snaps to normal or reversed (blade-down),
+## whichever the fist is closer to; only grips on the blade spine keep the
+## exact hand orientation.
 func compute_local_grip(hand_global: Transform3D) -> Transform3D:
 	var raw_local := global_transform.affine_inverse() * hand_global
 	if raw_local.origin.length() < 0.005 and raw_local.basis.get_rotation_quaternion().angle_to(Quaternion.IDENTITY) < 0.01:
 		return Transform3D.IDENTITY
 	var origin := clamp_grip_point(raw_local.origin)
-	if classify_grip_zone(origin) != ZONE_MUNE:
-		return Transform3D(Basis.IDENTITY, origin)
-	return Transform3D(raw_local.basis.orthonormalized(), origin)
+	return Transform3D(_snap_grip_basis(raw_local.basis, classify_grip_zone(origin)), origin)
 
 
 func on_grabbed(by: Node3D, local_grip: Transform3D = Transform3D.IDENTITY) -> void:
@@ -324,8 +342,7 @@ func on_grabbed(by: Node3D, local_grip: Transform3D = Transform3D.IDENTITY) -> v
 			prev_secondary.call("release")
 		holders.append(by)
 	var clamped_grip := Transform3D(local_grip.basis.orthonormalized(), clamp_grip_point(local_grip.origin))
-	if classify_grip_zone(clamped_grip.origin) != ZONE_MUNE:
-		clamped_grip.basis = Basis.IDENTITY
+	clamped_grip.basis = _snap_grip_basis(clamped_grip.basis, classify_grip_zone(clamped_grip.origin))
 	if local_grip.is_equal_approx(Transform3D.IDENTITY):
 		clamped_grip = Transform3D.IDENTITY
 	_local_grips[by] = clamped_grip
@@ -553,13 +570,19 @@ func _keep_in_hand(target: Transform3D, target_vel: Vector3, last_target: Transf
 	var hits := _overlaps_at(pose)
 	if hits.blocked_by_static:
 		return true
+	var give_way := false
 	if not hits.enemy_bodies.is_empty():
 		if offset.length() <= max_contact_offset and angle <= max_contact_angle:
 			return true  # resting on the enemy: plain physics, the arm gives way
-		pose = _pose_within(target, g0, offset, q, q_target, angle, max_contact_offset, max_contact_angle)
-		for body in _overlaps_at(pose).enemy_bodies:
-			_cut_through(body, pose, target, last_target)
-			_release_wedge(body)
+		if target_vel.length() < 1.0:
+			# A slow shove, not a swing: the arm gives way instead of the
+			# blade sawing through the body (cut-through is for real cuts).
+			give_way = true
+		else:
+			pose = _pose_within(target, g0, offset, q, q_target, angle, max_contact_offset, max_contact_angle)
+			for body in _overlaps_at(pose).enemy_bodies:
+				_cut_through(body, pose, target, last_target)
+				_release_wedge(body)
 	global_transform = pose
 	# Carried by the hand from here: no velocity away from it, at most a real
 	# hand's speed toward it (a tracking jump must not fling the weapon past the
@@ -575,7 +598,7 @@ func _keep_in_hand(target: Transform3D, target_vel: Vector3, last_target: Transf
 		var spin_out := angular_velocity.dot(-back)
 		if spin_out > 0.0:
 			angular_velocity += back * spin_out
-	return false
+	return give_way
 
 
 ## The current pose pulled toward [param target] so the grip is at most

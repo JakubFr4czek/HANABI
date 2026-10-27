@@ -52,7 +52,7 @@ func _run_all() -> void:
 		and not run.upgrade_stacks.has("ink_pool"))
 
 	run.diegetic_hud.on_parry()
-	_check("Parry triggers diegetic tsuba glow (not screen-space UI)",
+	_check("Parry triggers the wrist charm glow (not screen-space UI)",
 		run.diegetic_hud._parry_glow > 0.25)
 
 	var rain := run.get_node_or_null("RunStormRain") as StormRain

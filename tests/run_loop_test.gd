@@ -48,11 +48,21 @@ func _run_all() -> void:
 		if (layer as CanvasLayer).visible:
 			any_2d_hud = true
 	_check("No floating 2D screen-space UI is visible", not any_2d_hud)
-	_check("Diegetic HUD has Tsuba XP ring and Wrist HP charm + label",
+	_check("Diegetic HUD: nothing on the katana, wrist HP charm + label",
 		run.diegetic_hud != null
-		and run.diegetic_hud.tsuba_ring != null
+		and run.katana.get_node_or_null("TsubaXpRing") == null
+		and run.katana.get_node_or_null("TsubaXpRingFront") == null
 		and run.diegetic_hud.hp_charm_mesh != null
 		and run.diegetic_hud.wrist_label != null)
+	# Distance gate (XR raises the real wrist; desktop pins it to the camera,
+	# so move the unit away to prove the gate, then put it back).
+	var wrist_home: Vector3 = run.diegetic_hud.wrist_unit.position
+	run.diegetic_hud.wrist_unit.position = Vector3(0.0, 0.0, -2.0)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var hidden_far := not run.diegetic_hud.wrist_label.visible
+	run.diegetic_hud.wrist_unit.position = wrist_home
+	_check("Wrist readout hides when the wrist is far from the face", hidden_far)
 
 	# 2. Wave director & yōkai walking from water onto the stone platform.
 	_check("Wave curve scales count, HP and speed with wave/time",
