@@ -62,6 +62,45 @@ func _pressed_once(key: String, pressed: bool) -> bool:
 	return pressed and not was
 
 
+## Scripted rig moves (run intro hover, respawn on the seal): XR Tools'
+## PlayerBody is top-level and applies gravity to the origin every physics
+## frame, so it would pull a hover back down. Locking freezes the body and
+## locomotion and recenters the origin on this node so moving the rig root
+## places the player exactly.
+func set_rig_locked(locked: bool) -> void:
+	var origin := $XROrigin3D as XROrigin3D
+	origin.transform = Transform3D.IDENTITY
+	var body := origin.get_node_or_null("PlayerBody")
+	if body:
+		body.set("enabled", not locked)
+		if not locked:
+			body.set("velocity", Vector3.ZERO)
+			(body as Node3D).global_transform = origin.global_transform
+	for path in ["XROrigin3D/LeftHand/MovementDirect", "XROrigin3D/RightHand/MovementTurn"]:
+		var provider := get_node_or_null(path)
+		if provider:
+			provider.set("enabled", not locked)
+
+
+## Where the player actually stands. Locomotion moves the XR origin, not this
+## root node, so the root stays at the spawn while the player walks away.
+func feet_position() -> Vector3:
+	var body := get_node_or_null("XROrigin3D/PlayerBody") as Node3D
+	if body:
+		return body.global_position
+	return ($XROrigin3D as Node3D).global_position
+
+
+## Moves the standing player to [param pos] (combat blink) through XR Tools so
+## the body and origin stay together.
+func teleport_feet(pos: Vector3) -> void:
+	var body := get_node_or_null("XROrigin3D/PlayerBody") as Node3D
+	if body and body.has_method("teleport"):
+		body.call("teleport", Transform3D(body.global_basis, pos))
+	else:
+		($XROrigin3D as Node3D).global_position = pos
+
+
 static func next_element(current: String) -> String:
 	var i := Elements.ALL.find(current)
 	return Elements.ALL[(i + 1) % Elements.ALL.size()]

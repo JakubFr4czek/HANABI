@@ -13,6 +13,10 @@ signal oni_defeated(oni: RunOniBoss, hit: Dictionary)
 
 @export var spawn_radius_min := 7.6
 @export var spawn_radius_max := 10.8
+## Beyond this flat distance from the player a yōkai is recalled into the ring.
+@export var straggler_distance := 17.0
+## (x, z) -> ground y; RunGame binds ForestWorld.height_at.
+var ground_height: Callable
 @export var max_concurrent_enemies := 10
 @export var initial_wave_delay := 0.6
 @export var between_wave_delay := 1.8
@@ -165,10 +169,31 @@ func spawn_in_fog_ring(target_pos: Vector3 = Vector3.ZERO, sector_bias: float = 
 	if sector_bias >= 0.0:
 		angle = wrapf(sector_bias * TAU + _rng.randf_range(-0.42, 0.42), 0.0, TAU)
 	var r := _rng.randf_range(spawn_radius_min, spawn_radius_max)
-	var pos := Vector3(sin(angle) * r, 0.0, cos(angle) * r)
+	var pos := _ring_point(target_pos, angle, r)
 	if _rng.randf() < elite_spawn_chance(maxi(wave, 1)):
 		return spawn_elite_at(pos, target_pos, EnemyCatalog.elite_element_for_roll(_rng))
 	return spawn_enemy_at(pos, target_pos)
+
+
+## Ring around the player (not the world origin: the player roams the forest),
+## dropped onto the terrain so nobody spawns inside a hill.
+func _ring_point(center: Vector3, angle: float, radius: float) -> Vector3:
+	var x := center.x + sin(angle) * radius
+	var z := center.z + cos(angle) * radius
+	var y := float(ground_height.call(x, z)) if ground_height.is_valid() else 0.0
+	return Vector3(x, y, z)
+
+
+## Yōkai the player has walked away from are pulled back into the fog ring
+## ahead of them instead of trudging after them for a minute out of sight.
+func recall_stragglers(player_pos: Vector3) -> void:
+	for yokai in alive_enemies():
+		var rp := yokai.root_part().global_position
+		if Vector2(rp.x - player_pos.x, rp.z - player_pos.z).length() < straggler_distance:
+			continue
+		var pos := _ring_point(player_pos, _rng.randf() * TAU, spawn_radius_max)
+		var dir := player_pos - pos
+		yokai.place_at(pos, atan2(dir.x, dir.z))
 
 
 func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO) -> Yokai:
@@ -176,6 +201,7 @@ func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO) -> Yoka
 	var hp_val := scaled_hp(maxi(wave, 1), run_seconds)
 	yokai.configure_kind(Yokai.Kind.SWARM, Elements.NONE, hp_val)
 	yokai.enable_pathfinding()
+	yokai.ground_probe = ground_height
 
 	var dir := facing_target - pos
 	dir.y = 0.0
@@ -183,6 +209,9 @@ func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO) -> Yoka
 	yokai.position = pos
 	yokai.rotation = Vector3(0.0, yaw, 0.0)
 	add_child(yokai)
+	# Pooled yōkai still carry the anchor of the spot they died on; without a
+	# reset in place the anchor spring drags them back there.
+	yokai.place_at(pos, yaw)
 
 	if yokai.brain:
 		yokai.brain.move_speed = scaled_speed(maxi(wave, 1), run_seconds)
@@ -208,8 +237,7 @@ func spawn_elite_at(pos: Vector3, facing_target: Vector3, element: String) -> Yo
 func spawn_oni_boss(facing_target: Vector3) -> RunOniBoss:
 	if has_active_oni():
 		return _active_oni
-	var angle := _rng.randf() * TAU
-	var pos := Vector3(sin(angle) * 9.2, 0.0, cos(angle) * 9.2)
+	var pos := _ring_point(facing_target, _rng.randf() * TAU, 9.2)
 	var oni := RunOniBoss.new()
 	oni.profile = EnemyCatalog.make_oni_profile(scaled_hp(maxi(wave, 1), run_seconds) * 6.5)
 	oni.hold_sword = true
@@ -218,6 +246,7 @@ func spawn_oni_boss(facing_target: Vector3) -> RunOniBoss:
 	oni.position = pos
 	oni.rotation.y = atan2(dir.x, dir.z) if dir.length_squared() > 0.001 else 0.0
 	oni.home_position = pos
+	oni.ground_probe = ground_height
 	add_child(oni)
 	oni.set_difficulty(EnemyCatalog.oni_difficulty())
 	oni.set_attacks_enabled(true)

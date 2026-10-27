@@ -261,7 +261,7 @@ func _physics_process(delta: float) -> void:
 	if Input.is_physical_key_pressed(KEY_W): input.y += 1
 	if Input.is_physical_key_pressed(KEY_S): input.y -= 1
 	if Input.is_physical_key_pressed(KEY_A): input.x -= 1
-	if Input.is_physical_key_pressed(KEY_D): input.x -= 1
+	if Input.is_physical_key_pressed(KEY_D): input.x += 1
 	var dir := (global_basis.x * input.x - global_basis.z * input.y).normalized() if input != Vector2.ZERO else Vector3.ZERO
 	velocity.x = dir.x * move_speed
 	velocity.z = dir.z * move_speed

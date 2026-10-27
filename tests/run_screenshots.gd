@@ -51,8 +51,12 @@ func _ready() -> void:
 	await _shot("1b_forest_horizon")
 
 	# 2. Slain yōkai dissolving + Hitodama soul orbs swirling in toward the player
-	if is_instance_valid(e1):
-		e1.queue_free()
+	# Shot 1b cleared the wave, so bring two yōkai back for the kill shot.
+	player.teleport(Vector3(0.0, 0.0, 2.2), 0.0)
+	player.camera.rotation.x = deg_to_rad(-4.0)
+	e2 = run.wave_director.spawn_enemy_at(Vector3(0.6, 0.0, 0.6), player.global_position)
+	e3 = run.wave_director.spawn_enemy_at(Vector3(-0.7, 0.0, 0.7), player.global_position)
+	await _frames(24)
 	e2.last_kill_element = Elements.SAKURA
 	e2.die({"element": Elements.SAKURA})
 	e3.last_kill_element = Elements.STORM

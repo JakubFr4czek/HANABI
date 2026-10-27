@@ -140,6 +140,29 @@ Pominięte: §8 Meta AI, §14 VR comfort, §15 kalorie, powrót sakury na arenie
 
 **§20.1 implementacja:** `RunStormRain` + blade drips + shader `droplets` w runie; hitodama z żywiołu elity/ostrza; test `gdd_loop_test`.
 
+## 22. Morning check of the night's work (2026-10-27)
+Played the night's features instead of trusting the tests:
+- **Unreachable:** `project.godot` booted the dojo and nothing loaded `run.tscn`;
+  the run is now the main scene (dojo loads by scene path).
+- **Not walkable:** the dojo's ring wall fenced the player onto the 5.2 m disc,
+  the floor was one flat 90 m box, hills were flattened past 11.5 m and the
+  ground shader cut everything >10.8 m from the world origin. Now: chunk
+  terrain colliders, camera-relative fades, waves / Oni spawn around the
+  player on the terrain, stragglers recalled, sky dome follows.
+- **No trees:** per-node visibility ranges are measured to the 28 m chunk
+  center, so every chunk but the current one was culled; the scatter threshold
+  kept ~40 props in 9 chunks. Scanned rock was 20k tris per copy.
+- **Fog never hid anything:** env fog color is sRGB, the sky's
+  `storm_fog_color` linear — fog rendered dark navy against a lavender
+  horizon. Depth fog now ends at 13.5 m in exactly the horizon color.
+- **Yōkai walked in, then back:** NavigationAgent3D pathed from the Yokai root
+  (left at spawn) not the pelvis; pooled yōkai kept the death-spot anchor; the
+  ragdoll anchor ran ahead of a lagging body, which then circled at ~6 m/s.
+- **VR:** A/X reset the hidden dummy; the intro could not be skipped from a
+  controller; XR Tools' body gravity fought the hover; blink moved the rig root,
+  not the body; packs and fallen bodies shoved the player. Desktop **D** strafed left.
+- Test: `yokai_approach_test` (approach, pool reuse, hills, recall, no shove).
+
 ## 21. Premium Oni silhouette + yōkai secondary motion
 - Oni: hide ragdoll primitives; procedural body shell + kanabō visual (wet PBR).
 - Yōkai: torso lag overlay + recover pose after attacks.

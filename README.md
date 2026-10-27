@@ -36,6 +36,7 @@ The design reference is [`docs/GDD.md`](docs/GDD.md). The development brief is [
    ```sh
    /Applications/Godot.app/Contents/MacOS/Godot --path /path/to/HANABI
    ```
+   The game starts the **survival run** (`scenes/run.tscn`): seiza intro on the shrine, then walk out into the endless foggy forest while yōkai waves close in. The **Dojo of the Storm** training arena with the sparring dummy loads on its own: add `res://scenes/test_room.tscn` after `--path`.
    With no OpenXR runtime (always the case on macOS) the game starts the **desktop rig**. To force it on a PC with a headset, add `-- --desktop`.
 2. Controls:
 
@@ -88,6 +89,7 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/vfx_polish_test.tscn -- --
 $GODOT --headless --path . --fixed-fps 90 res://tests/vfx_pool_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/audio_sfx_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/quest_perf_overlay_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/yokai_approach_test.tscn -- --desktop
 # Diagnostics: 40 s of sparring stats per difficulty, block traces
 $GODOT --headless --path . --fixed-fps 90 res://tests/diag/diag_spar.tscn -- --desktop normal
 ```
@@ -181,6 +183,9 @@ On Quest the renderer switches to **Compatibility** automatically (`rendering_me
 2. In the Meta Quest Link app: *Settings → General → OpenXR Runtime → Set Meta Quest Link as active*. SteamVR as the active OpenXR runtime also works.
 3. Open the project and press Play. With an active OpenXR runtime the game starts in VR automatically.
 4. Optional: export with the **"PCVR (Windows)"** preset (requires Godot's Windows export templates).
+
+## VR controls (run)
+Same as the test room for moving and holding the katana. **A/X** skips the seiza intro, thumbstick **click** fires the bound element ability (Shadow blink), slice an ofuda to pick an upgrade and the Restart ofuda on the memorial stele to run again. Enemies never push you: the rig only collides with the world.
 
 ## VR controls (test room)
 | Input | Action |

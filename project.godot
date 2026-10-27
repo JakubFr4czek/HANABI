@@ -12,7 +12,7 @@ config_version=5
 
 config/name="hanabi"
 config/description="HANABI (花火): VR Japanese dark-fantasy sword survivor."
-run/main_scene="res://scenes/test_room.tscn"
+run/main_scene="res://scenes/run.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 
 [autoload]
