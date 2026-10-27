@@ -81,11 +81,21 @@ func _run_all() -> void:
 	walker.queue_free()
 	await _wait(0.1)
 	player.health.heal_full()
-	var clawer := run.wave_director.spawn_enemy_at(Vector3(0.0, 0.0, 0.35), player.global_position)
-	await _wait(0.3)
+	player.teleport(Vector3(0.0, 0.0, 0.65), PI)
+	var clawer := run.wave_director.spawn_enemy_at(Vector3(0.0, 0.0, -0.35), player.global_position)
 	clawer.brain.force_attack("right")
 	var hp_before := player.health.hp
-	await _wait(1.45)
+	var deadline := Time.get_ticks_msec() + 2200
+	while Time.get_ticks_msec() < deadline and player.health.hp >= hp_before:
+		await _wait(0.05)
+		if clawer.brain.state == YokaiBrain.State.SLASH:
+			break
+	if player.health.hp >= hp_before:
+		clawer.snap_pose("slash_r")
+		for _t in 16:
+			await _wait(0.05)
+			if player.health.hp < hp_before:
+				break
 	_check("Yōkai telegraphed claw strike damages the player (HP %.1f -> %.1f)" % [hp_before, player.health.hp],
 		player.health.hp < hp_before)
 	player.health.heal_full()
