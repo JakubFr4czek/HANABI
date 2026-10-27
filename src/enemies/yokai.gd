@@ -80,6 +80,9 @@ func prepare_for_spawn() -> void:
 		p.scale = Vector3.ONE
 		p.collision_layer = 2
 		p.collision_mask = 4 | 8
+	# Before add_child: the joints re-anchor on entering the tree, so the
+	# body must be in its rest shape by then (see restore_rest_layout).
+	restore_rest_layout()
 	# The pool calls this before add_child. reset_body reads global transforms,
 	# which are identity off the tree; place_at() resets once the body is back.
 	if is_inside_tree():

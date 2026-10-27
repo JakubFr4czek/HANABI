@@ -525,6 +525,19 @@ func _clamp_part_velocities() -> void:
 			part.angular_velocity = part.angular_velocity.limit_length(max_part_spin)
 
 
+## Lay every part back in its rest place relative to this node, in local
+## space, so it also works off the tree. Joints anchor themselves from the
+## bodies' current positions when they enter the tree: a pooled body that
+## re-enters still crumpled where it died (often metres off its node) gets
+## every limb pinned that far apart, and the limbs fly around the map.
+func restore_rest_layout() -> void:
+	for part_name in _order:
+		var p: RagdollPart = parts[part_name]
+		p.transform = _rest[part_name]
+		p.linear_velocity = Vector3.ZERO
+		p.angular_velocity = Vector3.ZERO
+
+
 ## Teleport back to the rest pose at the anchor, at full strength.
 func reset_body() -> void:
 	_facing_yaw = global_rotation.y
