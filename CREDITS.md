@@ -13,7 +13,7 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Rocks in the water: "Rock Face 01" by **Dario Barresi**, "Rock Face 02" by **Dario Barresi and Rico Cilliers** (Poly Haven, CC0)
 - Platform stone texture: "Japanese Stone Wall" by **Rico Cilliers, Charlotte Baglioni and Dario Barresi** (Poly Haven, CC0)
 - Sword swing and clash sounds: **StarNinjas** (OpenGameArt, CC0)
-- Impact sounds: **Kenney** (kenney.nl, CC0)
+- Impact sounds + combat cuts/slaps/hurt/tells: **Kenney** Impact Sounds (kenney.nl, CC0), `assets/audio/sfx/impact/` & `cc0_combat/`
 - Run sting SFX (soul collect, firework, ofuda slice, level-up, yōkai slice): **Kenney** Interface Sounds & Impact Sounds (kenney.nl, CC0), in `assets/audio/sfx/kenney_run/`
 - Forest wind bed: procedural WAV in `assets/audio/sfx/hanabi_proc/` (project author, CC0)
 - Storm rain + thunder: Kresiek The Furry, WuxiaScrub, OpenGameArt CC0 in `assets/audio/sfx/cc0_storm/` (see `LICENSE.txt`)

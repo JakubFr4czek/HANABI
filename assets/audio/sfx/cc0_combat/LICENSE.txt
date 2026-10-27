@@ -1,0 +1,3 @@
+Kenney Impact Sounds — https://kenney.nl/assets/impact-sounds
+License: CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/)
+Files in this folder are renamed copies used for blade cuts, dull slaps, player hurt, and enemy telegraphs (HANABI §18).
