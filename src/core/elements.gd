@@ -48,3 +48,15 @@ static func seal_index(element: String) -> int:
 ## Ink is drawn dark over the scene (normal blend); the rest add light.
 static func is_additive(element: String) -> bool:
 	return element != INK
+
+
+## Short kanji label for memorial stele / build summaries (GDD §5–6).
+static func build_label(element: String) -> String:
+	match element:
+		SAKURA: return "桜"
+		STORM: return "雷"
+		INK: return "墨"
+		SHADOW: return "影"
+		BLACK_LIGHTNING: return "黒雷"
+		PHANTOM_PETALS: return "幻影桜"
+	return "—"
