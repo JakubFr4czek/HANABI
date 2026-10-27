@@ -165,16 +165,23 @@ func _configure_run_forest() -> void:
 			for child in torii_group.get_children():
 				child.visible = child.name == "GiantTorii"
 	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
+	var arena_lm := get_node_or_null("Arena/LightmapGI") as LightmapGI
 	if we and we.environment:
-		we.environment.fog_depth_end = minf(we.environment.fog_depth_end, 13.5)
-		we.environment.fog_density = maxf(we.environment.fog_density, 1.06)
-		we.environment.fog_height_density = maxf(we.environment.fog_height_density, 0.5)
+		# Beyond the giant torii (~10.5 m) the world must read as endless fog (GDD §9).
+		we.environment.fog_enabled = true
+		we.environment.fog_mode = Environment.FOG_MODE_EXPONENTIAL
+		we.environment.fog_depth_begin = 2.2
+		we.environment.fog_depth_end = 10.2
+		we.environment.fog_density = 1.32
+		we.environment.fog_height = 0.15
+		we.environment.fog_height_density = 0.68
+		we.environment.fog_sky_affect = 0.0
 	if forest_world == null:
 		forest_world = ForestWorld.new()
 		forest_world.name = "ForestWorld"
 		add_child(forest_world)
 		move_child(forest_world, 0)
-	forest_world.setup(player)
+	forest_world.setup(player, arena_lm)
 
 
 func _setup_run_nodes() -> void:
@@ -298,6 +305,8 @@ func _physics_process(delta: float) -> void:
 	if state == RunState.PLAYING:
 		run_time += delta
 		wave_director.step_director(delta, p_pos)
+		for enemy in wave_director.alive_enemies():
+			enemy.apply_distance_lod(p_pos.distance_to(enemy.root_part().global_position))
 		score = compute_score()
 
 	# Step soul orbs even during level-up slow-mo (using simulation delta).

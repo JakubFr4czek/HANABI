@@ -8,6 +8,7 @@ extends ActiveRagdoll
 
 signal hit_received(hit: Dictionary)
 signal died(yokai: Yokai, last_hit: Dictionary)
+signal dissolve_finished(yokai: Yokai)
 
 enum Kind { SWARM, ELITE }
 
@@ -47,6 +48,31 @@ var _dissolve_duration := 0.95
 var _slow_time := 0.0
 var _slow_scale := 1.0
 var _confusion_time := 0.0
+var _lod_far := false
+var _lod_tick := 0
+
+
+func prepare_for_spawn() -> void:
+	is_dead = false
+	_dissolve_timer = 0.0
+	_slow_time = 0.0
+	_slow_scale = 1.0
+	_confusion_time = 0.0
+	visible = true
+	for p: RagdollPart in parts.values():
+		p.scale = Vector3.ONE
+		p.collision_layer = 2
+		p.collision_mask = 1 | 2 | 8
+	reset_body()
+	if brain:
+		brain.reset()
+
+
+func apply_distance_lod(dist: float) -> void:
+	_lod_far = dist > 12.5
+	_eyes.emission_energy_multiplier = 0.22 if _lod_far else 0.85
+	if _horn_mat:
+		_horn_mat.albedo_color = Color(0.14, 0.11, 0.13) if not _lod_far else Color(0.1, 0.08, 0.09)
 
 
 func _ready() -> void:
@@ -595,14 +621,16 @@ func _physics_process(delta: float) -> void:
 			for p: RagdollPart in parts.values():
 				p.scale = Vector3.ONE * s
 		if _dissolve_timer >= _dissolve_duration:
-			queue_free()
+			dissolve_finished.emit(self)
 		return
 
 	_slow_time = maxf(0.0, _slow_time - delta)
 	if _slow_time <= 0.0:
 		_slow_scale = 1.0
 	_confusion_time = maxf(0.0, _confusion_time - delta)
-	var intent := brain.think(delta, _perceive())
+	_lod_tick += 1
+	var think_delta := delta if not _lod_far or _lod_tick % 2 == 0 else delta * 0.5
+	var intent := brain.think(think_delta, _perceive())
 	var move: Vector3 = intent.get("move", Vector3.ZERO)
 	if use_pathfinding and _nav_agent and move.length_squared() > 0.01 and state == State.STANDING:
 		var root_pos := root_part().global_position
