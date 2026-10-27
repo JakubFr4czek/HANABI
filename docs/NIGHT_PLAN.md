@@ -80,6 +80,11 @@ lightning ripple across the floor on touchdown, katana materializes; skippable.
 - Hits, deaths ("firework" bursts per element), level-up ofuda, souls; checked
   against the premium rule (sparse neon on a dark base, restrained bloom).
 
+## 9. Premium reads in fog + real forest meshes
+- Oni mask/armor/rim and elite halo readable in run fog; CC0 forest tree/torii
+  meshes in MultiMesh within Quest budgets; capture death firework + hitodama shots;
+  stabilize flaky `grip_stability_test` without changing grip logic.
+
 ## 8. Quest pools, forest GI look, on-device profiling
 - Pool soul orbs, spark bursts and elemental death rings (`VfxPool` autoload) so
   waves do not allocate VFX nodes mid-fight.

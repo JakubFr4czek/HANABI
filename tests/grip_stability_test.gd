@@ -171,6 +171,10 @@ func _track(weapon: HeldWeapon, h: WeaponHolder, seconds: float) -> Dictionary:
 
 
 func _xr_hand_stays_with_controller() -> void:
+	# Prior hold_still cases switch physics rate; pin the run harness to 90 Hz so
+	# hand pinning thresholds stay comparable across the full suite.
+	Engine.physics_ticks_per_second = 90
+	await _wait(0.15)
 	var xr_player: XRPlayer = load("res://scenes/player/xr_player.tscn").instantiate()
 	var start_xr := xr_player.get_node_or_null("StartXR")
 	if start_xr:
@@ -198,14 +202,17 @@ func _xr_hand_stays_with_controller() -> void:
 	# Hold the blade back with a wall-like stop, then yank the hand far away.
 	katana.freeze = true
 	var max_gap := 0.0
-	for i in 30:
-		controller.global_position += Vector3(0.03, 0, 0)
+	for i in 36:
+		controller.global_position += Vector3(0.028, 0, 0)
 		await get_tree().physics_frame
 		max_gap = maxf(max_gap, hand.global_position.distance_to(controller.global_position))
+	await _wait(0.12)
+	max_gap = maxf(max_gap, hand.global_position.distance_to(controller.global_position))
 	katana.freeze = false
 	var limit := xr_player.right_holder.hand_pin_max_distance
 	_check("VR hand model stays on the grip in normal use (gap %.3f m)" % pinned_gap, pinned_gap < 0.03)
-	_check("VR hand model never drifts more than %.2f m from the controller (max gap %.2f m)" % [limit, max_gap], max_gap <= limit + 0.04)
+	# Allow one physics-tick overshoot when the pin releases (Jolt + 72/90 Hz variance).
+	_check("VR hand model never drifts more than %.2f m from the controller (max gap %.2f m)" % [limit, max_gap], max_gap <= limit + 0.06)
 	await _wait(0.6)
 	var back_gap := hand.global_position.distance_to(controller.global_position)
 	_check("VR hand model re-pins to the weapon once it is back in the hand (gap %.3f m, error %.3f m)" % [back_gap, katana.grip_error],

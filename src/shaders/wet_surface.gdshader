@@ -34,6 +34,7 @@ uniform sampler2D orm_texture : hint_default_white, filter_linear_mipmap, repeat
 uniform int orm_mode : hint_range(0, 2) = 0;
 uniform vec3 emission_tint : source_color = vec3(0.0);
 uniform float procedural_ao : hint_range(0.0, 1.0) = 0.0;
+uniform float fog_rim : hint_range(0.0, 2.5) = 0.0;
 
 varying vec3 v_world_pos;
 varying vec3 v_local_pos;
@@ -110,5 +111,11 @@ void fragment() {
 	METALLIC = metal;
 	SPECULAR = 0.5;
 	float sky_fill = fill * (0.35 + 0.65 * clamp(wn.y * 0.5 + 0.5, 0.0, 1.0));
-	EMISSION = flash_color * flash + col * vec3(0.45, 0.5, 0.75) * sky_fill + tex * emission_tint;
+	vec3 emission = flash_color * flash + col * vec3(0.45, 0.5, 0.75) * sky_fill + tex * emission_tint;
+	if (fog_rim > 0.0) {
+		vec3 view_dir = normalize((INV_VIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
+		float rim = pow(clamp(1.0 - abs(dot(normalize(wn), view_dir)), 0.0, 1.0), 2.4);
+		emission += col * fog_rim * rim * 0.85;
+	}
+	EMISSION = emission;
 }

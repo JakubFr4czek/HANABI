@@ -14,6 +14,8 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Platform stone texture: "Japanese Stone Wall" by **Rico Cilliers, Charlotte Baglioni and Dario Barresi** (Poly Haven, CC0)
 - Sword swing and clash sounds: **StarNinjas** (OpenGameArt, CC0)
 - Impact sounds: **Kenney** (kenney.nl, CC0)
+- Run forest trees: "Tree1" from **Quaternius** Simple Nature Pack (CC0, via quaternius-showcase mirror)
+- Run forest torii (distant MultiMesh): procedural torii gate from **polyfork.dev** (commercial/CC0 kit, no attribution required; credited here by choice)
 
 ## Required attributions (CC BY 4.0)
 These are also shown in game on the `CreditsLabel` under the controls board at the arena's edge.
