@@ -196,7 +196,7 @@ func _nearest_weapon(max_distance: float, free_only: bool = false) -> HeldWeapon
 	var best_d := max_distance
 	for node in get_tree().get_nodes_in_group("player_weapons"):
 		var w := node as HeldWeapon
-		if w == null or w.is_held_by(self):
+		if w == null or w.is_held_by(self) or w.grab_locked:
 			continue
 		if free_only and w.is_held():
 			continue
