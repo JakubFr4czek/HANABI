@@ -36,16 +36,20 @@ Spawn at the shrine, then fight waves, collect soul drops, level up, pick an ofu
 - **Enemies:** active ragdolls (animation drives the body through forces). They stagger, react to hits and collapse.
 
 ## 5. Elements
-There are four elements. Each has an upgrade tree, applies to the blade (trail, on-hit effect), and grants abilities.
+There are four elements. Each grants 2 active abilities mapped to the two face buttons (A/B on the sword hand), alters the blade (trail, emissive aura), and has a dedicated 5-node upgrade tree powered by collectible Ofuda currency. Full technical specification is in [`docs/ELEMENTS_PLAN.md`](ELEMENTS_PLAN.md).
 
-| Element | Color | Fantasy | Example upgrades |
-|---|---|---|---|
-| **Sakura** 桜 | neon pink | beauty that cuts | cutting petals on swing, orbiting petal blades, petal storm, light healing |
-| **Storm** 雷 | electric blue | speed and chain damage | chain lightning between enemies, charged strike, lightning dash |
-| **Ink** 墨 | glossy black | control | paint traps and walls with the blade or hand, slowing ink pools, ink tendrils |
-| **Shadow** 影 | dark violet | trickery | short teleport, invisibility, darkness that confuses enemies |
+| Element | Color | Fantasy | Active Ability 1 (Button A) | Active Ability 2 (Button B) |
+|---|---|---|---|---|
+| **Sakura** 桜 | neon pink | beauty that cuts | **Senbonzakura** (razor fan of 6 cutting glass petals) | **Hanamai** (orbiting 4-petal barrier; cuts enemies & reduces damage) |
+| **Storm** 雷 | electric blue | speed and chain damage | **Raikiri** (focused strike releasing 4-target chain lightning) | **Shiden** (instant forward dash & shockwave stagger) |
+| **Ink** 墨 | glossy black | control | **Sumi-gaeshi** (ground ink sweep; 60% slow & continuous damage) | **Kage-nawa** (binding tendrils rooting 3 enemies & pulling to ma-ai) |
+| **Shadow** 影 | dark violet | trickery | **Kagemusha** (smoke decoy clone redirecting enemy aggro) | **Yami-watari** (shadow step behind target with +60% critical strike) |
 
-- **One element per run:** the first element pick locks the build; its tree has 3 tiers. Every run commits to a single school, so runs play differently.
+- **Single Element Imbue (~20 s Duration):** The katana holds at most ONE element at a time, imbued by walking the player body through an elemental Torii gate in the endless forest.
+- **Dynamic Re-Imbue & Refresh:** Passing a Torii gate of a different element immediately replaces the element and resets the 20s timer. Passing a gate of the same element refreshes the timer back to 20s. The final 3s pulse an expiration warning before reverting to plain steel.
+- **Empty Blade Behavior:** On plain steel, pressing Ability 1 or 2 fires an empty, muted haptic click with zero popups or errors.
+- **Skill Tree & Ofuda Currency:** Yōkai drop paper Ofuda talismans. A spatial 3D VR Menu (opened via off-hand Menu button) pauses the game (`get_tree().paused = true`, `process_mode = PROCESS_MODE_ALWAYS` for XR rig/hands/UI, zero `Engine.time_scale = 0`) to spend Ofuda on 4 per-element trees (5 nodes each with prerequisites). Progress is per-run (resets on death).
+- **Anti-Clipping UI Guarantee:** All UI panels and wrist HUD elements use depth-test-disabled materials (`flags_no_depth_test = true`, render priority 100) and adaptive forward raycasting to guarantee panels never clip through trees, rocks, or walls.
 
 ## 6. Progression and UI
 - **Drops:** enemies drop many glowing soul orbs (hitodama), colored by element. Orbs fly to the player when nearby.
