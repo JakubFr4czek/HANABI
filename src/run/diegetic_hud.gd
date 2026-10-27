@@ -196,9 +196,9 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_label.font = sys_font
 	wrist_label.font_size = 24
 	wrist_label.pixel_size = 0.00042
-	wrist_label.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	wrist_label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	wrist_label.shaded = false
-	wrist_label.double_sided = false
+	wrist_label.double_sided = true
 	wrist_label.outline_size = 6
 	wrist_label.outline_modulate = Color(0.08, 0.04, 0.02, 0.95)
 	wrist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -215,9 +215,11 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	elif player is DesktopPlayer:
 		var dp := player as DesktopPlayer
 		dp.set_screen_hud_visible(false)
-		dp.hand.add_child(wrist_unit)
-		wrist_unit.position = Vector3(-0.038, 0.018, 0.052)
-		wrist_unit.rotation = Vector3(deg_to_rad(8.0), deg_to_rad(-6.0), deg_to_rad(-18.0))
+		# The sword hand is the right. The readout stays on a left wrist in
+		# front of the body, so a slash does not whip the plate out of view.
+		dp.camera.add_child(wrist_unit)
+		wrist_unit.position = Vector3(-0.24, -0.22, -0.32)
+		wrist_unit.rotation = Vector3(deg_to_rad(50.0), deg_to_rad(16.0), 0.0)
 	else:
 		player.add_child(wrist_unit)
 
@@ -236,12 +238,23 @@ func _orient_wrist_face() -> void:
 		cam = get_viewport().get_camera_3d() if get_viewport() else null
 	if cam == null:
 		return
-	var origin := wrist_face.global_position
+	var origin := wrist_unit.global_position
 	var to_cam := cam.global_position - origin
 	if to_cam.length_squared() < 1e-6:
 		return
-	var up := wrist_unit.global_transform.basis.y
-	wrist_face.look_at(origin + to_cam.normalized(), up, true)
+	# The plate is a flat box in local XZ. Its readable side is +Y, so that
+	# axis has to point at the eyes. look_at() aims Z and was showing the edge.
+	var normal := to_cam.normalized()
+	var across := wrist_unit.global_transform.basis.x
+	if absf(across.dot(normal)) > 0.92:
+		across = wrist_unit.global_transform.basis.z
+	var x_axis := across.slide(normal)
+	if x_axis.length_squared() < 1e-8:
+		return
+	x_axis = x_axis.normalized()
+	# X cross Y must be Z. The other cross mirrors the plate and the text.
+	var z_axis := x_axis.cross(normal).normalized()
+	wrist_face.global_transform = Transform3D(Basis(x_axis, normal, z_axis), origin)
 
 
 func on_parry() -> void:

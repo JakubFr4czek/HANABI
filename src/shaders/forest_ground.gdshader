@@ -64,14 +64,27 @@ void fragment() {
 	float w_grass = smoothstep(0.44, 0.6, broad) * (1.0 - w_stone);
 	float w_soil = max(1.0 - w_stone - w_grass, 0.0);
 
-	vec3 alb = texture(soil_albedo, p / soil_tile).rgb * w_soil
-		+ texture(grass_albedo, p / grass_tile).rgb * w_grass
-		+ texture(stone_albedo, p / stone_tile).rgb * w_stone;
+	// A second, tighter sample so needles and grit stay visible at the feet.
+	vec3 soil = mix(texture(soil_albedo, p / soil_tile).rgb,
+		texture(soil_albedo, p / (soil_tile * 0.42) + vec2(2.0, 5.0)).rgb, 0.42);
+	vec3 grass = mix(texture(grass_albedo, p / grass_tile).rgb,
+		texture(grass_albedo, p / (grass_tile * 0.45) + vec2(8.0, 1.0)).rgb, 0.38);
+	vec3 stone = texture(stone_albedo, p / stone_tile).rgb;
 	vec3 nrm = texture(soil_normal, p / soil_tile).rgb * w_soil
 		+ texture(grass_normal, p / grass_tile).rgb * w_grass
 		+ texture(stone_normal, p / stone_tile).rgb * w_stone;
-
-	alb *= night_tint;
+	// Soil stays brown, grass stays green, stone stays cool. One grey tint
+	// was turning the whole floor into a single sheet.
+	vec3 alb = soil * vec3(0.58, 0.50, 0.44) * w_soil
+		+ grass * vec3(0.42, 0.52, 0.40) * w_grass
+		+ stone * vec3(0.50, 0.52, 0.54) * w_stone;
+	float litter = vnoise(p * 1.65 + 4.0);
+	float damp = vnoise(p * 0.27 + 11.0);
+	alb *= mix(0.74, 1.08, litter);
+	alb *= mix(0.82, 1.0, damp);
+	// Grooves in the scan sit a little darker, like pockets of wet needles.
+	alb *= mix(0.8, 1.04, smoothstep(0.32, 0.68, nrm.g));
+	alb *= mix(vec3(1.0), night_tint * 1.65, 0.28);
 	float radial = length(v_world_pos.xz - CAMERA_POSITION_WORLD.xz);
 	float fog_mix = smoothstep(fog_fade_start, fog_fade_end, radial);
 	if (fog_mix > 0.985) {
@@ -85,5 +98,5 @@ void fragment() {
 	ROUGHNESS = mix(roughness_dry, roughness_wet, wet);
 	METALLIC = 0.0;
 	// Shadowed soil takes the fog's color, not a lit copy of the daylight scan.
-	EMISSION = mix(alb, storm_fog_color.rgb, 0.75) * ambient_fill * (1.0 - fog_mix);
+	EMISSION = mix(alb, storm_fog_color.rgb, 0.4) * ambient_fill * (1.0 - fog_mix);
 }
