@@ -51,6 +51,7 @@ var _confusion_time := 0.0
 var _lod_far := false
 var _lod_tick := 0
 var _elite_halo: MeshInstance3D
+var _flinch_time := 0.0
 
 
 func prepare_for_spawn() -> void:
@@ -59,6 +60,7 @@ func prepare_for_spawn() -> void:
 	_slow_time = 0.0
 	_slow_scale = 1.0
 	_confusion_time = 0.0
+	_flinch_time = 0.0
 	visible = true
 	for p: RagdollPart in parts.values():
 		p.scale = Vector3.ONE
@@ -143,7 +145,9 @@ func _ready() -> void:
 
 	pose_variation_deg = 6.0
 	idle_sway_deg = 4.0
-	sway_poses = PackedStringArray(["stalk", "idle"])
+	overlay_blend = 0.22
+	default_pose_blend = 0.26
+	sway_poses = PackedStringArray(["stalk", "approach", "idle"])
 	super._ready()
 
 	for child in get_children():
@@ -285,6 +289,24 @@ func _define_poses() -> Dictionary:
 			"arm_l": Vector3(-52, 16, 22),
 			"leg_l": Vector3(-8, 0, 5),
 			"leg_r": Vector3(6, 0, -5),
+		},
+		"approach": {
+			"_blend": 0.24,
+			"chest": Vector3(28, 0, 4),
+			"head": Vector3(-8, 0, -6),
+			"arm_r": Vector3(-48, -12, -18),
+			"arm_l": Vector3(-48, 12, 18),
+			"leg_l": Vector3(-14, 0, 8),
+			"leg_r": Vector3(10, 0, -6),
+		},
+		"flinch": {
+			"_stiffness": 1.2,
+			"_blend": 0.10,
+			"_ease": "out",
+			"chest": Vector3(-22, 0, 0),
+			"head": Vector3(-28, 0, 0),
+			"arm_r": Vector3(-72, 8, -28),
+			"arm_l": Vector3(-72, -8, 28),
 		},
 		"windup_r": {
 			"_stiffness": 1.35,
@@ -546,6 +568,8 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	GameEvents.report_hit(hit)
 	if brain:
 		brain.on_hit(hit)
+	if brain == null or brain.state != YokaiBrain.State.STAGGER:
+		_flinch_time = maxf(_flinch_time, clampf(dmg / 40.0, 0.12, 0.28))
 	hit_received.emit(hit)
 	_flash_time = 0.12
 
@@ -665,6 +689,7 @@ func _physics_process(delta: float) -> void:
 	_confusion_time = maxf(0.0, _confusion_time - delta)
 	_lod_tick += 1
 	var think_delta := delta if not _lod_far or _lod_tick % 2 == 0 else delta * 0.5
+	_flinch_time = maxf(0.0, _flinch_time - delta)
 	var intent := brain.think(think_delta, _perceive())
 	var move: Vector3 = intent.get("move", Vector3.ZERO)
 	if use_pathfinding and _nav_agent and move.length_squared() > 0.01 and state == State.STANDING:
@@ -676,7 +701,10 @@ func _physics_process(delta: float) -> void:
 			steer.y = 0.0
 			if steer.length_squared() > 0.05:
 				move = steer.normalized() * move.length()
-	set_pose(intent.get("pose", "stalk"))
+	var pose_name := String(intent.get("pose", "stalk"))
+	if _flinch_time > 0.0 and brain.state != YokaiBrain.State.STAGGER:
+		pose_name = "flinch"
+	set_pose(pose_name)
 	var attacking: bool = intent.get("attacking", false) and state == State.STANDING
 	if attacking and not _was_attacking:
 		_hit_player_this_strike = false
@@ -762,8 +790,9 @@ func _apply_move(move: Vector3, delta: float, planted := false) -> void:
 	var v := move_velocity.length()
 	_stepping = not planted and (v > 0.2 or (_stepping and v > 0.08))
 	if _stepping:
-		_step_time += delta * 0.28 / clampf(0.14 / maxf(v, 0.01), 0.24, 0.48)
-		overlay_pose = "step_l" if fmod(_step_time, 0.56) < 0.28 else "step_r"
+		var cadence := clampf(0.14 / maxf(v, 0.01), 0.22, 0.42)
+		_step_time += delta * 0.32 / cadence
+		overlay_pose = "step_l" if fmod(_step_time, cadence * 2.0) < cadence else "step_r"
 	else:
 		overlay_pose = ""
 

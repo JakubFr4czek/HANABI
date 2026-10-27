@@ -168,8 +168,13 @@ func think(delta: float, ctx: Dictionary) -> Dictionary:
 				_attack_idx += 1
 				_enter(State.WINDUP)
 
+			var pose := "stalk"
+			if move.length() > 0.85:
+				pose = "approach"
+			elif dist <= attack_range:
+				pose = "stalk"
 			return {
-				"pose": "stalk",
+				"pose": pose,
 				"face_position": player_pos,
 				"move": move,
 				"plant": false,
