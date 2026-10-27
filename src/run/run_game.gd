@@ -38,6 +38,7 @@ var upgrade_stacks := {}  # upgrade_id -> int
 
 var wave_director: WaveDirector
 var diegetic_hud: DiegeticHud
+var element_system: ElementSystem
 var active_ofuda: Array[OfudaTalisman] = []
 var restart_ofuda: OfudaTalisman = null
 
@@ -142,6 +143,16 @@ func _setup_run_nodes() -> void:
 	add_child(diegetic_hud)
 	diegetic_hud.setup(player, katana)
 
+	element_system = ElementSystem.new()
+	element_system.name = "ElementSystem"
+	add_child(element_system)
+	element_system.setup(self, katana)
+	GameEvents.hit_landed.connect(_on_game_hit)
+	if player is XRPlayer:
+		var xr := player as XRPlayer
+		xr.run_element_mode = true
+		xr.element_ability_requested.connect(_on_element_ability_requested)
+
 
 func start_run() -> void:
 	TimeController.clear()
@@ -161,6 +172,8 @@ func start_run() -> void:
 	_pending_level_ups = 0
 	upgrade_stacks.clear()
 	soul_magnet_radius = base_magnet_radius
+	element_system.reset()
+	set_seal_progress([], 0)
 
 	var health := _player_health()
 	if health:
@@ -229,6 +242,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			start_run()
 		get_viewport().set_input_as_handled()
+	elif key == KEY_B and state == RunState.PLAYING:
+		element_system.try_shadow_blink()
+		get_viewport().set_input_as_handled()
 
 
 # --- Kills, Souls & XP ---------------------------------------------------------
@@ -237,6 +253,7 @@ func _on_enemy_died(yokai: Yokai, _hit: Dictionary) -> void:
 	if state == RunState.GAME_OVER:
 		return
 	kills += 1
+	element_system.on_enemy_died(yokai)
 	score = compute_score()
 	var origin: Vector3 = (yokai.parts["chest"] as RagdollPart).global_position if yokai.parts.has("chest") else yokai.global_position + Vector3(0, 1.0, 0)
 	var elem: String = yokai.last_kill_element if yokai.last_kill_element != "physical" else Elements.NONE
@@ -279,7 +296,9 @@ func _present_level_up() -> void:
 
 	var health := _player_health()
 	var hp_ratio := (health.hp / maxf(health.max_hp, 1.0)) if health else 1.0
-	var choices := UpgradePool.pick_choices(3, upgrade_stacks, hp_ratio, _rng)
+	var choices := UpgradePool.pick_choices(
+		3, upgrade_stacks, hp_ratio, _rng,
+		element_system.active_elements, UpgradePool.element_slot_count(upgrade_stacks))
 
 	var frame := _player_view_frame()
 	var center := frame.origin + (-frame.basis.z) * 1.16
@@ -336,6 +355,12 @@ func _apply_upgrade(upgrade: Dictionary) -> void:
 	var id := String(upgrade.get("id", ""))
 	if id == "":
 		return
+	var element := UpgradePool.element_for_upgrade(id)
+	if element != Elements.NONE:
+		if not element_system.active_elements.has(element) and element_system.active_elements.size() >= 2:
+			return
+		if int(upgrade_stacks.get(id, 0)) <= 0 and UpgradePool.element_slot_count(upgrade_stacks) >= UpgradePool.ELEMENT_SLOT_LIMIT:
+			return
 	var stacks := int(upgrade_stacks.get(id, 0)) + 1
 	upgrade_stacks[id] = stacks
 	var health := _player_health()
@@ -362,12 +387,35 @@ func _apply_upgrade(upgrade: Dictionary) -> void:
 		"regen":
 			if health:
 				health.regen_per_sec = 2.5 * float(stacks)
+		_:
+			if element != Elements.NONE:
+				element_system.apply_upgrade(id, upgrade_stacks)
+				_update_element_seal()
 
 	GameEvents.log_event("upgrade_picked", {
 		"id": id,
 		"stacks": stacks,
 		"level": level,
 	})
+
+
+func _on_game_hit(hit: Dictionary) -> void:
+	if state == RunState.PLAYING and element_system:
+		element_system.on_blade_hit(hit)
+
+
+func _on_element_ability_requested(direction: Vector3) -> void:
+	if state == RunState.PLAYING and element_system:
+		element_system.try_shadow_blink(direction)
+
+
+func _update_element_seal() -> void:
+	var evolution_mask := 0
+	if element_system.has_evolution(Elements.BLACK_LIGHTNING):
+		evolution_mask |= 1
+	if element_system.has_evolution(Elements.PHANTOM_PETALS):
+		evolution_mask |= 2
+	set_seal_progress(element_system.active_elements, evolution_mask)
 
 
 # --- Death, End Screen & High Score --------------------------------------------
@@ -534,7 +582,7 @@ func _refresh_hud() -> void:
 	var health := _player_health()
 	var hp_val := health.hp if health else 100.0
 	var max_hp_val := health.max_hp if health else 100.0
-	var elem := katana.element if katana else Elements.NONE
+	var elem := element_system.visual_element() if element_system else (katana.element if katana else Elements.NONE)
 	diegetic_hud.update_hud(hp_val, max_hp_val, xp, xp_to_next, level, maxi(wave_director.wave, 1), score, run_time, elem)
 
 

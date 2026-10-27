@@ -8,6 +8,7 @@ extends Node3D
 
 signal reset_requested
 signal toggle_attacks_requested
+signal element_ability_requested(direction: Vector3)
 
 @onready var left_controller: XRController3D = $XROrigin3D/LeftHand
 @onready var right_controller: XRController3D = $XROrigin3D/RightHand
@@ -16,6 +17,9 @@ signal toggle_attacks_requested
 
 var health := PlayerHealth.new()
 var hurt_feedback := HurtFeedback.new()
+## RunGame turns this on so thumbstick click invokes the bound combat ability
+## instead of the training-room element color cycler.
+var run_element_mode := false
 
 var _was_pressed := {}
 
@@ -46,7 +50,9 @@ func _process(_delta: float) -> void:
 			toggle_attacks_requested.emit()
 		if _pressed_once("click_" + c.name, c.is_button_pressed("primary_click")):
 			var holder := left_holder if c == left_controller else right_holder
-			if holder.held:
+			if run_element_mode:
+				element_ability_requested.emit(Vector3.ZERO)
+			elif holder.held:
 				holder.held.set_element(next_element(holder.held.element))
 
 

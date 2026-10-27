@@ -34,6 +34,7 @@ var _lower_half: MeshInstance3D
 var _half_vel_up := Vector3.ZERO
 var _half_vel_down := Vector3.ZERO
 var _prev_blade_tips := {}  # weapon -> Vector3
+var _prev_blade_starts := {}  # weapon -> Vector3
 
 
 func setup(p_upgrade: Dictionary, p_index: int = 0) -> void:
@@ -233,11 +234,14 @@ func _check_blade_slice(real_dt: float) -> void:
 		var weapon := w as HeldWeapon
 		if weapon == null or not weapon.is_held():
 			_prev_blade_tips.erase(w)
+			_prev_blade_starts.erase(w)
 			continue
 		var tip := weapon.get_tip_global()
 		var start := weapon.get_blade_start_global()
 		var prev_tip: Vector3 = _prev_blade_tips.get(w, tip)
+		var prev_start: Vector3 = _prev_blade_starts.get(w, start)
 		_prev_blade_tips[w] = tip
+		_prev_blade_starts[w] = start
 		var tip_speed := tip.distance_to(prev_tip) / maxf(real_dt, 1e-4)
 		var speed := maxf(weapon.measured_tip_speed, tip_speed)
 		if speed < 1.1:
@@ -246,8 +250,15 @@ func _check_blade_slice(real_dt: float) -> void:
 		var inv := _card_root.global_transform.affine_inverse()
 		var local_a := inv * start
 		var local_b := inv * tip
-		var closest := Geometry3D.get_closest_point_to_segment(Vector3.ZERO, local_a, local_b)
-		if absf(closest.x) <= WIDTH * 0.68 and absf(closest.y) <= HEIGHT * 0.58 and absf(closest.z) <= 0.16:
-			var dir := (tip - prev_tip).normalized() if tip.distance_to(prev_tip) > 0.001 else Vector3.RIGHT
-			slice(_card_root.global_transform * closest, dir)
-			return
+		var candidates: Array[Vector3] = [
+			Geometry3D.get_closest_point_to_segment(Vector3.ZERO, local_a, local_b),
+			Geometry3D.get_closest_point_to_segment(Vector3.ZERO, inv * prev_tip, local_b),
+			Geometry3D.get_closest_point_to_segment(Vector3.ZERO, inv * prev_start, local_a),
+		]
+		for closest in candidates:
+			# A fast VR cut is judged by the swept blade with a small hand-tracking
+			# allowance around the narrow paper, not a single-frame point sample.
+			if absf(closest.x) <= WIDTH * 0.90 and absf(closest.y) <= HEIGHT * 0.58 and absf(closest.z) <= 0.16:
+				var dir := (tip - prev_tip).normalized() if tip.distance_to(prev_tip) > 0.001 else Vector3.RIGHT
+				slice(_card_root.global_transform * closest, dir)
+				return
