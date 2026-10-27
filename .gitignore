@@ -24,3 +24,4 @@ export_presets.cfg.bak
 *.swp
 .vscode/
 .idea/
+/.tools/

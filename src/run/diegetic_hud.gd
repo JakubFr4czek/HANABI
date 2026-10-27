@@ -25,6 +25,9 @@ var hp_charm_mesh: MeshInstance3D
 var wrist_hp_ring: MeshInstance3D
 var wrist_label: Label3D
 var hp_label: Label3D
+## Debug builds: a small red count of RuntimeGuard violations on the plate,
+## so a problem is noticed in the headset (details in the console / log).
+var guard_label: Label3D
 var hp_gauge: MeshInstance3D
 var xp_bar: MeshInstance3D
 
@@ -158,6 +161,11 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_label.line_spacing = -2.0
 	wrist_face.add_child(hp_label)
 	wrist_face.add_child(wrist_label)
+	if RuntimeGuard.enabled:
+		guard_label = _make_label("GuardLabel", font, 22, Vector3(PLATE_SIZE.x * 0.5 - 0.03, 0.0012, -PLATE_SIZE.y * 0.5 + 0.006))
+		guard_label.modulate = Color(1.0, 0.25, 0.2)
+		guard_label.visible = false
+		wrist_face.add_child(guard_label)
 
 	var bar_w := PLATE_SIZE.x - 0.012
 	var track := MeshInstance3D.new()
@@ -266,6 +274,11 @@ func _process(delta: float) -> void:
 		_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2
 	_orient_wrist_face(delta)
 	_update_label_visibility()
+	if guard_label:
+		var n := RuntimeGuard.violation_count()
+		guard_label.visible = n > 0
+		if n > 0:
+			guard_label.text = "! %d" % n
 
 
 ## In VR the plate rides the wrist rigidly and only leans toward the eyes by

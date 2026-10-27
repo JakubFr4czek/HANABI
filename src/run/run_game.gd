@@ -67,6 +67,7 @@ var horizon_fog_color := Color.BLACK
 
 
 func _ready() -> void:
+	add_to_group("run_game")
 	_rng.randomize()
 	super._ready()
 	QuestPerfOverlay.attach_if_needed(self)
@@ -374,6 +375,7 @@ func start_run() -> void:
 	_clear_end_screen()
 	wave_director.clear_enemies()
 	wave_director.stop_director()
+	wave_director.started_this_run = false
 
 	state = RunState.INTRO
 	run_time = 0.0
@@ -584,8 +586,10 @@ func _present_level_up() -> void:
 		3, upgrade_stacks, hp_ratio, _rng,
 		element_system.active_elements, UpgradePool.element_slot_count(upgrade_stacks))
 
+	frame = _clear_frame(frame, [Vector3(-0.38, 0.0, -1.16), Vector3(0.0, 0.0, -1.16), Vector3(0.38, 0.0, -1.16), Vector3(0.0, 0.0, -0.6)])
 	var center := frame.origin + (-frame.basis.z) * 1.16
-	center.y = clampf(frame.origin.y - 0.14, 1.15, 1.55)
+	var ground := _ui_ground(frame.origin)
+	center.y = clampf(frame.origin.y - 0.14, ground + 1.15, ground + 1.55)
 	var right := frame.basis.x
 	var offsets: Array[float] = [-0.38, 0.0, 0.38]
 
@@ -747,8 +751,9 @@ func _on_player_died() -> void:
 func _build_end_screen(summary: Dictionary) -> void:
 	_clear_end_screen()
 	var frame := _player_view_frame()
+	frame = _clear_frame(frame, [Vector3(-0.24, 0.0, -1.44), Vector3(0.38, 0.0, -1.14), Vector3(0.1, 0.0, -0.6)])
 	var stele_pos := frame.origin + (-frame.basis.z) * 1.44 + frame.basis.x * (-0.24)
-	stele_pos.y = 1.36
+	stele_pos.y = _ui_height(frame.origin, stele_pos, 1.36)
 
 	var board := Node3D.new()
 	board.name = "MemorialStele"
@@ -836,7 +841,7 @@ func _build_end_screen(summary: Dictionary) -> void:
 		"color": Color(1.0, 0.34, 0.24),
 	}, 0)
 	var r_pos := frame.origin + (-frame.basis.z) * 1.14 + frame.basis.x * 0.38
-	r_pos.y = 1.24
+	r_pos.y = _ui_height(frame.origin, r_pos, 1.24)
 	_end_screen_root.add_child(restart_ofuda)
 	restart_ofuda.global_position = r_pos
 	var r_look := Vector3(frame.origin.x, r_pos.y, frame.origin.z)
@@ -900,6 +905,48 @@ func _player_health() -> PlayerHealth:
 	if player and player.get("health") is PlayerHealth:
 		return player.get("health") as PlayerHealth
 	return get_tree().get_first_node_in_group("player_health") as PlayerHealth
+
+
+## [param frame] turned about its origin until every local spot in
+## [param spots] (x right, -z ahead) is clear of trunks, gates, lanterns and
+## boulders: talismans and the stele spawned inside a tree could not be
+## cut (the blade now stops on bark). Tries 20 degree steps either way.
+func _clear_frame(frame: Transform3D, spots: Array[Vector3]) -> Transform3D:
+	if forest_world == null:
+		return frame
+	var best_f := frame
+	var best_push := INF
+	const ANGLES: Array[int] = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8, -8, 9]
+	for k in ANGLES:
+		var f := Transform3D(Basis(Vector3.UP, deg_to_rad(20.0 * float(k))) * frame.basis, frame.origin)
+		var fwd := -f.basis.z
+		fwd.y = 0.0
+		fwd = fwd.normalized() if fwd.length_squared() > 1e-4 else Vector3.FORWARD
+		var total_push := 0.0
+		for spot in spots:
+			var p := f.origin + f.basis.x * spot.x + fwd * -spot.z
+			var push_len := forest_world.trunk_push(p, fwd, 0.85).length()
+			total_push += push_len
+			if total_push > best_push:
+				break
+		if total_push < 0.001:
+			return f
+		if total_push < best_push:
+			best_push = total_push
+			best_f = f
+	return best_f
+
+
+## Terrain height under [param p] (0 off the forest, e.g. in the dojo).
+func _ui_ground(p: Vector3) -> float:
+	return forest_world.height_at(p.x, p.z) if forest_world else 0.0
+
+
+## Height for a talisman / stele [param offset] above the ground the player
+## stands on (the forest has hills: a fixed world height put them at the
+## knees on a rise, or into the ground), never sunk into a slope under it.
+func _ui_height(viewer: Vector3, at: Vector3, offset: float) -> float:
+	return maxf(_ui_ground(viewer) + offset, _ui_ground(at) + 0.6)
 
 
 func _player_center() -> Vector3:

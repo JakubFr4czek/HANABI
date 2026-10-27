@@ -140,13 +140,25 @@ func try_shadow_blink(direction: Vector3 = Vector3.ZERO) -> bool:
 	if run_game.player is XRPlayer:
 		player_pos = (run_game.player as XRPlayer).feet_position()
 	var distance := 2.8 if int(stacks.get("shadow_veil", 0)) > 0 else 2.2
+	# Sweep a body-sized sphere at waist height over the terrain AND the
+	# trunks, gates, lanterns and boulders (a ray on the terrain layer alone
+	# let the blink end inside a tree), and stop short of the first hit.
 	var from := player_pos + Vector3(0.0, 0.85, 0.0)
-	var desired := player_pos + dir * distance
-	var query := PhysicsRayQueryParameters3D.create(from, desired + Vector3(0.0, 0.85, 0.0), 1)
-	var collision := get_world_3d().direct_space_state.intersect_ray(query)
-	if not collision.is_empty():
-		desired = Vector3(collision.position.x, player_pos.y, collision.position.z) - dir * 0.38
-	if desired.distance_to(player_pos) < 0.45:
+	var sweep := PhysicsShapeQueryParameters3D.new()
+	var body := SphereShape3D.new()
+	body.radius = 0.32
+	sweep.shape = body
+	sweep.transform = Transform3D(Basis.IDENTITY, from)
+	sweep.motion = dir * distance
+	sweep.collision_mask = 1 | ForestWorld.TRUNK_LAYER
+	var fractions := get_world_3d().direct_space_state.cast_motion(sweep)
+	var safe := float(fractions[0]) if fractions.size() > 0 else 1.0
+	var desired := player_pos + dir * distance * safe
+	# Land on the ground there: on a hill the old fixed height put the
+	# player inside the slope.
+	if run_game.forest_world:
+		desired.y = run_game.forest_world.height_at(desired.x, desired.z)
+	if Vector2(desired.x - player_pos.x, desired.z - player_pos.z).length() < 0.45:
 		return false
 
 	_spawn_shadow_trace(player_pos + Vector3(0.0, 0.85, 0.0), desired + Vector3(0.0, 0.85, 0.0))

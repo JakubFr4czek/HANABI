@@ -36,6 +36,9 @@ var ground_height: Callable
 @export var oni_spawn_min_run_time := 120.0
 
 var active := false
+## Set by start_director, cleared by RunGame.start_run: lets the runtime
+## guard tell a deliberate hold from a run whose waves never started.
+var started_this_run := false
 var wave := 0
 var run_seconds := 0.0
 var pending_spawns := 0
@@ -76,6 +79,7 @@ func start_director() -> void:
 	_spawn_stagger_timer = 0.0
 	_next_wave_cooldown = initial_wave_delay
 	active = true
+	started_this_run = true
 
 
 func stop_director() -> void:

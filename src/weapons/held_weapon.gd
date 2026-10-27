@@ -681,10 +681,14 @@ func _update_wedges(delta: float) -> void:
 	for id in _wedged.keys():
 		var entry: Dictionary = _wedged[id]
 		entry.time += delta
-		var body: PhysicsBody3D = entry.body
-		if not is_instance_valid(body):
+		# Untyped first: assigning a freed body to a typed variable is a
+		# script error before is_instance_valid can catch it (a wedged limb
+		# freed with its yōkai on restart or pool overflow).
+		var maybe: Variant = entry.body
+		if not is_instance_valid(maybe):
 			_wedged.erase(id)
 			continue
+		var body := maybe as PhysicsBody3D
 		if entry.time < wedge_release_min_time or _overlaps_body(body):
 			continue
 		remove_collision_exception_with(body)
