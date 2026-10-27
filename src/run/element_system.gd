@@ -149,10 +149,12 @@ func try_shadow_blink(direction: Vector3 = Vector3.ZERO) -> bool:
 	dir = dir.normalized()
 
 	var player_pos := run_game.player.global_position
+	if run_game.player is XRPlayer:
+		player_pos = (run_game.player as XRPlayer).feet_position()
 	var distance := 2.8 if int(stacks.get("shadow_veil", 0)) > 0 else 2.2
 	var from := player_pos + Vector3(0.0, 0.85, 0.0)
 	var desired := player_pos + dir * distance
-	var query := PhysicsRayQueryParameters3D.create(from, desired + Vector3(0.0, 0.85, 0.0), 1 | RunGame.PLAYER_BOUNDARY_LAYER)
+	var query := PhysicsRayQueryParameters3D.create(from, desired + Vector3(0.0, 0.85, 0.0), 1)
 	var collision := get_world_3d().direct_space_state.intersect_ray(query)
 	if not collision.is_empty():
 		desired = Vector3(collision.position.x, player_pos.y, collision.position.z) - dir * 0.38
@@ -162,6 +164,8 @@ func try_shadow_blink(direction: Vector3 = Vector3.ZERO) -> bool:
 	_spawn_shadow_trace(player_pos + Vector3(0.0, 0.85, 0.0), desired + Vector3(0.0, 0.85, 0.0))
 	if run_game.player is DesktopPlayer:
 		(run_game.player as DesktopPlayer).teleport(desired, run_game.player.rotation.y)
+	elif run_game.player is XRPlayer:
+		(run_game.player as XRPlayer).teleport_feet(desired)
 	else:
 		run_game.player.global_position = desired
 	if int(stacks.get("shadow_darkness", 0)) > 0:

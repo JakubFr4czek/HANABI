@@ -1,7 +1,8 @@
 class_name RunCombatFog
 extends Node
-## Softens run fog within ~8 m of the player when enemies are close (GDD §9,
-## point-12 readability). Distant forest still vanishes into fog past the torii.
+## Clears run fog near the player when enemies are close (GDD §9, point-12
+## readability) by pushing the depth-fog start out. Fog strength and end stay
+## put, so the forest still dissolves fully before the edge of loaded chunks.
 
 const CLEAR_RADIUS := 8.0
 
@@ -50,6 +51,6 @@ func step(player_pos: Vector3, enemies: Array, active: bool) -> void:
 
 func _apply_bubble(bubble: float) -> void:
 	_last_bubble = bubble
-	_env.fog_density = lerpf(_base_density, _base_density * 0.66, bubble)
+	_env.fog_density = _base_density
 	_env.fog_depth_begin = lerpf(_base_begin, _base_begin + 3.6, bubble)
 	_env.fog_height_density = lerpf(_base_height_density, _base_height_density * 0.38, bubble)

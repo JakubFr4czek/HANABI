@@ -36,7 +36,9 @@ void fragment() {
 		cavity = mix(1.0, cavity, cavity_ao);
 	}
 	vec3 lit = albedo * (0.22 + up * fill * 0.14) * cavity;
-	float radial = length(v_world_pos.xz);
+	// Fade by distance from the camera, not the world origin, so the ground
+	// dissolves into fog at the chunk edge wherever the player has walked.
+	float radial = length(v_world_pos.xz - CAMERA_POSITION_WORLD.xz);
 	float fog_mix = smoothstep(fog_fade_start, fog_fade_end, radial);
 	vec3 fog_col = storm_fog_color.rgb * 0.58;
 	ALBEDO = mix(lit, fog_col, fog_mix);

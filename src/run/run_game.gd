@@ -17,7 +17,7 @@ signal upgrade_chosen(upgrade: Dictionary, level: int)
 signal run_ended(summary: Dictionary)
 signal run_started
 
-const PLAYER_BOUNDARY_LAYER := 64  # bit 7: blocks player body, lets yōkai walk onto platform
+const RUN_FOG_END := 13.5
 
 @export var high_score_path := "user://high_score.cfg"
 @export var base_magnet_radius := 3.8
@@ -57,6 +57,9 @@ var _base_max_torque := 40.0
 var _base_follow_freq := 9.0
 var _base_angular_freq := 9.0
 var _rng := RandomNumberGenerator.new()
+var _sky_dome: Node3D
+## Linear storm_fog_color the run sets for the sky horizon (see _configure_run_forest).
+var horizon_fog_color := Color.BLACK
 
 
 func _ready() -> void:
@@ -93,31 +96,20 @@ func _prepare_run_arena() -> void:
 			n.visible = false
 			n.set_process(false)
 
-	# Keep the player inside the 5.2 m platform circle, while allowing yōkai to
-	# wade in across the water onto the platform without hitting the boundary.
+	# The dojo's ring wall would keep the player on the 5.2 m disc; in a run the
+	# shrine is only the spawn point and the player walks out into the forest,
+	# whose chunks carry their own terrain colliders (ForestWorld).
 	var boundary := get_node_or_null("Room/Boundary") as StaticBody3D
 	if boundary:
-		boundary.collision_layer = PLAYER_BOUNDARY_LAYER
+		boundary.collision_layer = 0
 		boundary.collision_mask = 0
-	if player is CharacterBody3D:
-		(player as CharacterBody3D).collision_mask |= PLAYER_BOUNDARY_LAYER
-	elif player:
-		for pb in player.find_children("*", "CharacterBody3D", true, false):
-			(pb as CharacterBody3D).collision_mask |= PLAYER_BOUNDARY_LAYER
-
-	# Wide floor collider under the surrounding water so yōkai can walk from the
-	# fog rings (8-12 m out) onto the stone platform.
-	var room_node := get_node_or_null("Room")
-	if room_node and room_node.get_node_or_null("WaterFloor") == null:
-		var wf := StaticBody3D.new()
-		wf.name = "WaterFloor"
-		wf.position = Vector3(0, -0.5, 0)
-		var cs := CollisionShape3D.new()
-		var box := BoxShape3D.new()
-		box.size = Vector3(90.0, 1.0, 90.0)
-		cs.shape = box
-		wf.add_child(cs)
-		room_node.add_child(wf)
+	# A converging pack must not shove the player around, nor may they climb
+	# onto bodies on the ground: in VR both are camera motion the player did
+	# not make. Standing yōkai (layer 2) and fallen ones (layer 8) still stop
+	# at claw range on their own.
+	var bodies: Array = [player] if player is CharacterBody3D else player.find_children("*", "CharacterBody3D", true, false)
+	for pb in bodies:
+		(pb as CharacterBody3D).collision_mask &= ~(2 | 8)
 
 	# Configure player health for survival runs (death ends the run).
 	var health := _player_health()
@@ -173,15 +165,25 @@ func _configure_run_forest() -> void:
 	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
 	var arena_lm := get_node_or_null("Arena/LightmapGI") as LightmapGI
 	if we and we.environment:
-		# Beyond the giant torii (~10.5 m) the world must read as endless fog (GDD §9).
+		# Endless-forest illusion (GDD §9): depth fog reaches full strength at
+		# RUN_FOG_END, where everything takes the exact sky-horizon color
+		# (storm_fog_color), so the forest dissolves before the edge of the
+		# loaded chunks wherever the player walks. Exponential + height fog left
+		# hills and gates 30 m away as hard dark silhouettes.
 		we.environment.fog_enabled = true
-		we.environment.fog_mode = Environment.FOG_MODE_EXPONENTIAL
+		we.environment.fog_mode = Environment.FOG_MODE_DEPTH
 		we.environment.fog_depth_begin = 2.2
-		we.environment.fog_depth_end = 9.6
-		we.environment.fog_density = 1.42
-		we.environment.fog_height = 0.15
-		we.environment.fog_height_density = 0.68
+		we.environment.fog_depth_end = RUN_FOG_END
+		we.environment.fog_depth_curve = 1.25
+		we.environment.fog_density = 1.0
+		we.environment.fog_height_density = 0.0
 		we.environment.fog_sky_affect = 0.0
+		# Environment colors are sRGB but the sky shader's storm_fog_color is
+		# read as linear: the same numbers rendered the fog dark navy and the
+		# horizon pale lavender, so fogged hills never dissolved into the sky.
+		# Lock the horizon to the color the fog actually renders.
+		horizon_fog_color = we.environment.fog_light_color.srgb_to_linear()
+		RenderingServer.global_shader_parameter_set("storm_fog_color", horizon_fog_color)
 	if combat_fog == null:
 		combat_fog = RUN_COMBAT_FOG.new()
 		combat_fog.name = "RunCombatFog"
@@ -263,6 +265,8 @@ func _setup_run_nodes() -> void:
 	wave_director.name = "WaveDirector"
 	wave_director.enemy_died.connect(_on_enemy_died)
 	wave_director.oni_defeated.connect(_on_oni_defeated)
+	if forest_world:
+		wave_director.ground_height = forest_world.height_at
 	add_child(wave_director)
 
 	diegetic_hud = DiegeticHud.new()
@@ -281,6 +285,14 @@ func _setup_run_nodes() -> void:
 		var xr := player as XRPlayer
 		xr.run_element_mode = true
 		xr.element_ability_requested.connect(_on_element_ability_requested)
+		# The dojo maps A/X to "reset the dummy" and B/Y to its attack toggle;
+		# in a run the dummy is parked under the floor, so A/X skips the intro
+		# and B/Y does nothing.
+		if xr.reset_requested.is_connected(reset_room):
+			xr.reset_requested.disconnect(reset_room)
+		if xr.toggle_attacks_requested.is_connected(toggle_dummy_attacks):
+			xr.toggle_attacks_requested.disconnect(toggle_dummy_attacks)
+		xr.reset_requested.connect(_on_xr_primary_button)
 
 	run_intro = RunIntro.new()
 	run_intro.name = "RunIntro"
@@ -347,7 +359,9 @@ func _begin_play_after_intro() -> void:
 			dp.take_weapon(katana)
 	elif player is XRPlayer:
 		var xr := player as XRPlayer
+		xr.set_rig_locked(true)
 		xr.global_transform = spawn.global_transform
+		xr.set_rig_locked(false)
 		if xr.right_holder and katana and not katana.is_held():
 			xr.right_holder.grab(katana)
 			katana.snap_to_hand()
@@ -355,6 +369,11 @@ func _begin_play_after_intro() -> void:
 	GameEvents.log_event("run_started", {"high_score": high_score})
 	run_started.emit()
 	_refresh_hud()
+
+
+func _on_xr_primary_button() -> void:
+	if state == RunState.INTRO and run_intro and run_intro.is_active():
+		run_intro.skip()
 
 
 func _on_run_intro_finished() -> void:
@@ -368,12 +387,14 @@ static func xp_for_level(current_level: int) -> int:
 
 func _physics_process(delta: float) -> void:
 	var p_pos := _player_center()
+	_follow_sky(p_pos)
 	if state == RunState.PLAYING:
 		run_time += delta
 		wave_director.step_director(delta, p_pos)
 		for enemy in wave_director.alive_enemies():
 			enemy.apply_distance_lod(p_pos.distance_to(enemy.root_part().global_position))
 		score = compute_score()
+		wave_director.recall_stragglers(p_pos)
 		if combat_fog:
 			combat_fog.step(p_pos, wave_director.alive_enemies(), true)
 	elif combat_fog:
@@ -387,6 +408,16 @@ func _physics_process(delta: float) -> void:
 			(child as SoulOrb).step_orb(delta, p_pos, soul_magnet_radius)
 
 	_refresh_hud()
+
+
+## The storm sky is a 125 m dome built for the static dojo; once the player
+## walks into the forest it has to travel with them or its rim shows.
+func _follow_sky(p_pos: Vector3) -> void:
+	if _sky_dome == null:
+		_sky_dome = get_node_or_null("Arena/SkyDome") as Node3D
+		if _sky_dome == null:
+			return
+	_sky_dome.global_position = Vector3(p_pos.x, _sky_dome.global_position.y, p_pos.z)
 
 
 func _unhandled_input(event: InputEvent) -> void:

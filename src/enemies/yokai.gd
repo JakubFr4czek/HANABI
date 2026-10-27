@@ -27,6 +27,8 @@ var elite_element := Elements.NONE
 var use_pathfinding := false
 
 var _nav_agent: NavigationAgent3D
+var _nav_repath := 0
+var _nav_dir := Vector3.ZERO
 
 var _skin := ShaderMaterial.new()
 var _mask_mat := ShaderMaterial.new()
@@ -73,6 +75,16 @@ func prepare_for_spawn() -> void:
 		brain.reset()
 
 
+## Moves a living yōkai to [param pos] facing [param yaw] (straggler recall).
+func place_at(pos: Vector3, yaw: float) -> void:
+	global_position = pos
+	global_rotation = Vector3(0.0, yaw, 0.0)
+	reset_body()
+	snap_pose("stalk")
+	if brain:
+		brain.reset()
+
+
 func apply_distance_lod(dist: float) -> void:
 	_lod_far = dist > 12.5
 	_eyes.emission_energy_multiplier = 0.22 if _lod_far else 0.85
@@ -81,6 +93,7 @@ func apply_distance_lod(dist: float) -> void:
 
 
 func _ready() -> void:
+	max_anchor_lead = 0.4
 	add_to_group("yokai")
 	add_to_group("enemies")
 	if profile == null:
@@ -705,14 +718,7 @@ func _physics_process(delta: float) -> void:
 	var intent := brain.think(think_delta, _perceive())
 	var move: Vector3 = intent.get("move", Vector3.ZERO)
 	if use_pathfinding and _nav_agent and move.length_squared() > 0.01 and state == State.STANDING:
-		var root_pos := root_part().global_position
-		_nav_agent.target_position = root_pos + Vector3(move.x, 0.0, move.z).normalized() * 4.0
-		if NavigationServer3D.map_get_iteration_id(_nav_agent.get_navigation_map()) > 0:
-			var next := _nav_agent.get_next_path_position()
-			var steer := next - root_pos
-			steer.y = 0.0
-			if steer.length_squared() > 0.05:
-				move = steer.normalized() * move.length()
+		move = _steer_along_navmesh(move)
 	var pose_name := String(intent.get("pose", "stalk"))
 	if _flinch_time > 0.0 and brain.state != YokaiBrain.State.STAGGER:
 		pose_name = "flinch"
@@ -732,6 +738,38 @@ func _physics_process(delta: float) -> void:
 		_elite_halo.scale = Vector3(pulse, pulse, pulse)
 	super._physics_process(delta)
 	_apply_secondary_motion_overlay()
+
+
+## Bends [param move] around navmesh obstacles. The path is queried from the
+## pelvis, not from this node: the ragdoll walks away from the Yokai root, so a
+## NavigationAgent3D (which paths from its parent) kept steering the body back
+## toward its spawn point.
+func _steer_along_navmesh(move: Vector3) -> Vector3:
+	var flat := Vector3(move.x, 0.0, move.z)
+	var map := _nav_agent.get_navigation_map()
+	if flat.length_squared() < 1e-4 or NavigationServer3D.map_get_iteration_id(map) <= 0:
+		return move
+	_nav_repath -= 1
+	var root_pos := root_part().global_position
+	if _nav_repath <= 0:
+		_nav_repath = 6
+		_nav_dir = Vector3.ZERO
+		var path := NavigationServer3D.map_get_path(map, root_pos, root_pos + flat.normalized() * 4.0, true)
+		# Off the baked navmesh (deep in the forest) the path starts at the
+		# nearest mesh point, which says nothing about the way ahead.
+		if path.is_empty() or Vector2(path[0].x - root_pos.x, path[0].z - root_pos.z).length() > 1.0:
+			path = PackedVector3Array()
+		for point in path:
+			var steer := point - root_pos
+			steer.y = 0.0
+			if steer.length_squared() > 0.09:
+				_nav_dir = steer.normalized()
+				break
+	# A path that turns more than ~80° from where the brain wants to go is a
+	# navmesh artefact, not a detour; trust the brain.
+	if _nav_dir == Vector3.ZERO or _nav_dir.dot(flat.normalized()) < 0.17:
+		return move
+	return _nav_dir * move.length()
 
 
 func _apply_secondary_motion_overlay() -> void:
