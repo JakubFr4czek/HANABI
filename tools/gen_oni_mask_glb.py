@@ -106,19 +106,21 @@ def write_normal_png(path: str) -> None:
     n = np.stack([nx, ny, nz], axis=-1)
     n /= np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-6)
     rgb = ((n * 0.5 + 0.5) * 255.0).astype(np.uint8)
-    # Simple PNG writer (RGB)
-    raw = b"".join(
-        b"\x00" + rgb[y, x].tobytes() for y in range(TEX) for x in range(TEX)
-    )
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff)
-
-    ihdr = struct.pack(">IIBBBBB", TEX, TEX, 8, 2, 0, 0, 0)
-    idat = zlib.compress(raw, 9)
-    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "wb") as f:
-        f.write(png)
+    try:
+        from PIL import Image
+
+        Image.fromarray(rgb, mode="RGB").save(path, format="PNG")
+    except ImportError:
+        raw = b"".join(b"\x00" + rgb[y, :].tobytes() for y in range(TEX))
+        def chunk(tag: bytes, data: bytes) -> bytes:
+            return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff)
+
+        ihdr = struct.pack(">IIBBBBB", TEX, TEX, 8, 2, 0, 0, 0)
+        idat = zlib.compress(raw, 9)
+        png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
+        with open(path, "wb") as f:
+            f.write(png)
 
 
 def main() -> None:
