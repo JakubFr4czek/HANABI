@@ -195,6 +195,8 @@ var _local_grips := {}  # holder -> Transform3D in weapon local space
 ## While set, no hand can take this weapon (grip or recall), e.g. while the
 ## intro is still drawing it out of the spirit gate.
 var grab_locked := false
+## Real m/s at which the blade striking a trunk, gate or stone is felt and heard.
+var env_strike_speed := 1.6
 var _grip_zones := {}   # holder -> String (ZONE_HANDLE / ZONE_TSUBA / ZONE_MUNE)
 var _prev_contacts := {}  # collider instance id -> true, contacts in previous tick
 ## True while the blade physically rests against an enemy body this tick.
@@ -825,6 +827,8 @@ func _process_contacts() -> void:
 			_handle_clash(c)
 		elif c.collider.has_meta("hit_receiver"):
 			_handle_hit(c)
+		elif c.collider.has_meta("env_surface"):
+			_handle_env_strike(c)
 		else:
 			continue
 		_receiver_cooldown[rid] = 0.2
@@ -973,6 +977,22 @@ func _handle_hit(c: Dictionary) -> void:
 		TimeController.hit_stop(clampf(stop, 0.05, 0.08))
 	elif dmg >= micro_stop_damage:
 		TimeController.micro_stop(lerpf(0.025, 0.035, (dmg - micro_stop_damage) / (hit_stop_damage - micro_stop_damage)))
+
+
+## The blade meets the world (a trunk, a gate, stone): a thud in the hand and
+## a knock to hear, sparks off stone. No damage, it just stops.
+func _handle_env_strike(c: Dictionary) -> void:
+	if c.speed < env_strike_speed:
+		return
+	var surface := String(c.collider.get_meta("env_surface", "wood"))
+	var amp := clampf(0.25 + c.speed / 10.0, 0.25, 0.9)
+	_pulse_pattern([[amp, 0.03], [amp * 0.4, 0.05]])
+	var loud := linear_to_db(clampf(0.3 + c.speed / 12.0, 0.3, 1.0))
+	if surface == "stone":
+		Sfx.play_at("clash", c.point, loud - 4.0)
+		SparkBurst.spawn(get_tree().current_scene, c.point, c.normal, Color(2.0, 1.15, 0.45), 8, 2.0)
+	else:
+		Sfx.play_at("impact_light", c.point, loud)
 
 
 ## The target's flesh pushes back: part of the blow's momentum stays in the
