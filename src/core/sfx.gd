@@ -28,6 +28,8 @@ const WORLD_BUS := &"World"
 const AMBIENCE_BUS := &"Ambience"
 const MUSIC_BUS := &"Music"
 const MAX_WORLD_DB := 4.0
+## Output endpoints of Quest Link / Air Link / Virtual Desktop on Windows.
+const XR_HEADSET_AUDIO_KEYS := ["oculus", "meta quest", "quest", "rift", "virtual desktop"]
 
 var _streams := {}  # category -> AudioStreamRandomizer
 var _pool: Array[AudioStreamPlayer3D] = []
@@ -50,6 +52,28 @@ func _ready() -> void:
 		_pool.append(player)
 	if TimeController:
 		TimeController.effect_started.connect(_on_time_effect)
+
+
+## PCVR over Link / Air Link: Godot opens the Windows default output (often the
+## PC speakers or a monitor), not the headset, so a VR session is silent in
+## the headset. Pick the headset's endpoint when one is listed. Returns the
+## chosen device name ("" when nothing matched; output stays on Default).
+func route_to_xr_headset() -> String:
+	var devices := AudioServer.get_output_device_list()
+	print("Sfx: audio outputs ", devices, " current ", AudioServer.output_device)
+	var chosen := ""
+	for name in devices:
+		var low := String(name).to_lower()
+		for key in XR_HEADSET_AUDIO_KEYS:
+			if low.contains(key):
+				chosen = String(name)
+				break
+		if chosen != "":
+			break
+	if chosen != "" and chosen != AudioServer.output_device:
+		AudioServer.output_device = chosen
+	GameEvents.log_event("audio_output", {"devices": devices, "chosen": chosen, "current": AudioServer.output_device})
+	return chosen
 
 
 func _process(_delta: float) -> void:

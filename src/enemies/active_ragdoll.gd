@@ -479,7 +479,14 @@ func _update_state(delta: float) -> void:
 			muscle = minf(muscle + _muscle_regen() * delta, 1.0)
 			# Failsafe: if we ended up tangled (too low or leaning a lot) for a
 			# while, go through the get-up again instead of staying stuck.
-			if pelvis_height() < _pelvis_rest_height * 0.85 or lean_degrees() > 35.0:
+			# Height is above the ground under the pelvis, not above this node:
+			# a swarm yōkai walks away from the node it spawned on, and a hill
+			# under that node made every walker look like it had fallen.
+			var pelvis_pos := root_part().global_position
+			var ground_y := global_position.y
+			if ground_probe.is_valid():
+				ground_y = float(ground_probe.call(pelvis_pos.x, pelvis_pos.z))
+			if pelvis_pos.y - ground_y < _pelvis_rest_height * 0.85 or lean_degrees() > 35.0:
 				_stuck_time += delta
 				if _stuck_time > 2.0:
 					_set_state(State.GETTING_UP)

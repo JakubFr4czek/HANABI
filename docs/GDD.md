@@ -80,9 +80,9 @@ Do not implement during prototyping. Prepare the architecture: swappable enemy b
 
 ## 9. World and art direction
 - **Setting:** an endless night in a mythical Japan. Fog, darkness, cold light.
-- **Procedural world:** `FastNoiseLite` places red torii of many sizes, from small to gigantic, including long corridors of gates like Fushimi Inari's Senbon Torii. Also stone lanterns (tōrō), shrine props, sakura trees and rocks.
+- **Procedural world:** an endless dark forest under fog, generated with `FastNoiseLite` (rolling hills, dense trees, stone lanterns, rocks) and walkable in every direction. Every so often the forest holds a full-size red torii (now and then a short Senbon-style row of them), met unexpectedly in the fog; they are part of the generated world and stay where they are (decided 2026-10-27).
 - **Palette:** near-black and deep blue-grey, red torii, with emissive neon accents: pink sakura, electric blue lightning, glossy black ink.
-- **Spawn point:** a round stone platform under the largest torii. A glowing symbol on the floor is split into four parts (桜 雷 墨 影), one per element. Parts light up as elements are unlocked. It can double as an in-world element selector.
+- **Spawn point:** a small glade in the forest itself, with no platform or circle on the ground (decided 2026-10-27). The four-part 桜 雷 墨 影 seal stays in the Dojo of the Storm; in a run the build shows on the blade trail and wrist HUD.
 - **VFX:** GPU particles for petals, procedural lightning, an ink/darkness shader with noise, and blade trails (GPUTrail).
 - **Performance:** on standalone Quest use simple fog and particles. Volumetric fog is a PCVR-only setting for recording.
 
@@ -113,10 +113,10 @@ The physics-test mannequin lives here. It is the dummy test level: its own scene
 - **IP:** our own shapes and our own palette. No form, symbol or music that would be recognizable from another game.
 
 ### Run intro
-At the start of a run the player hovers about 0.5–1 m above the arena in a meditative cross-legged pose (seiza / lotus-like), then descends onto the 桜雷墨影 seal.
+At the start of a run the player hovers about 0.5–1 m above the forest floor in a meditative cross-legged pose (seiza / lotus-like), then descends into the glade.
 
-- **Descent:** slow and smooth. The seal glows below, and sakura petals swirl around the player.
-- **Touchdown:** a ripple of lightning runs across the water-mirror floor, and the katana materializes in the hand.
+- **Descent:** slow and smooth, sakura petals swirl around the player.
+- **Touchdown:** a lightning flash lights the forest, and the katana materializes in the hand. The player lands at their real standing height (in VR: hold B/Y to recenter, hold B + right stick to adjust eye height).
 - **Body:** no visible legs. The pose shows only as a shadow, or as a reflection in the water.
 - **Comfort:** linear motion, no sudden deceleration, horizon stable. Nothing takes over the camera beyond the vertical offset. A few seconds at most, and skippable.
 

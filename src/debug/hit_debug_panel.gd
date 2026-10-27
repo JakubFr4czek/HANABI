@@ -35,12 +35,17 @@ func _ready() -> void:
 
 
 func _on_hit(hit: Dictionary) -> void:
-	_best_speed = maxf(_best_speed, hit.speed)
+	# Hidden in runs: no floating damage numbers there, and element / ofuda
+	# hits carry no blade speed.
+	if not is_visible_in_tree():
+		return
+	var speed := float(hit.get("speed", 0.0))
+	_best_speed = maxf(_best_speed, speed)
 	_best_damage = maxf(_best_damage, hit.get("damage", 0.0))
-	_lines.push_front("%5.1f m/s  arm %3d%%  %4.1f N·s  →  %5.1f dmg   %-6s %-11s (%s)%s" % [hit.speed, roundi(float(hit.get("power", 0.0)) * 100.0), float(hit.get("impulse", 0.0)), hit.get("damage", 0.0), String(hit.get("strike", "")).to_upper(), hit.get("part", "?"), hit.get("zone", "?"), "  COUNTER" if hit.get("counter", false) else ""])
+	_lines.push_front("%5.1f m/s  arm %3d%%  %4.1f N·s  →  %5.1f dmg   %-6s %-11s (%s)%s" % [speed, roundi(float(hit.get("power", 0.0)) * 100.0), float(hit.get("impulse", 0.0)), hit.get("damage", 0.0), String(hit.get("strike", "")).to_upper(), hit.get("part", "?"), hit.get("zone", "?"), "  COUNTER" if hit.get("counter", false) else ""])
 	if _lines.size() > MAX_LINES:
 		_lines.pop_back()
-	DamageNumber.spawn(get_tree().current_scene, hit.point, hit.get("damage", 0.0), hit.speed)
+	DamageNumber.spawn(get_tree().current_scene, hit.get("point", global_position), hit.get("damage", 0.0), speed)
 	_refresh()
 
 

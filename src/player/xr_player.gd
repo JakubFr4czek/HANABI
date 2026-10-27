@@ -2,9 +2,11 @@ class_name XRPlayer
 extends Node3D
 ## VR player rig: XR Tools origin, camera, hands, smooth locomotion (left stick),
 ## snap turn (right stick) and a [WeaponHolder] in each hand.
-## A/X: [signal reset_requested]. B/Y without grip: [signal toggle_attacks_requested]
+## A/X: [signal reset_requested]. B/Y tap without grip: [signal toggle_attacks_requested]
 ## (with grip, B/Y recalls a weapon, see WeaponHolder). Thumbstick click:
 ## cycle the element of the weapon in that hand.
+## View: hold B/Y for 0.6 s to recenter on the headset; hold B and push the
+## right stick up / down to raise or lower your eye height (saved).
 
 signal reset_requested
 signal toggle_attacks_requested
@@ -23,6 +25,17 @@ var run_element_mode := false
 
 var _was_pressed := {}
 
+const VIEW_SETTINGS_PATH := "user://hanabi_vr.cfg"
+const RECENTER_HOLD_SEC := 0.6
+const TAP_MAX_SEC := 0.35
+const HEIGHT_LIMIT := 0.45
+const HEIGHT_RATE := 0.3  # m/s while the stick is held
+## Extra eye height on top of the real tracked height (XR Tools'
+## player_height_offset: the body stands this far below the origin).
+var height_offset := 0.0
+var _by_time := {}
+var _by_used := {}
+
 
 func _ready() -> void:
 	GameEvents.parry.connect(_on_parry)
@@ -31,6 +44,14 @@ func _ready() -> void:
 	add_child(health)
 	hurt_feedback.setup(health, camera, [left_holder, right_holder])
 	add_child(hurt_feedback)
+	# XR Tools would rescale everyone to a 1.85 m player from whatever the
+	# headset reports on the body's first physics frame (often before tracking
+	# settles, or mid run-intro). Use the real height plus the saved offset.
+	var body := _body()
+	if body:
+		body.set("player_calibrate_height", false)
+	_load_view_settings()
+	_apply_height()
 
 
 ## The weapon hand(s) get the full parry pattern from the weapon; a free hand
@@ -46,14 +67,76 @@ func _process(_delta: float) -> void:
 		reset_requested.emit()
 	for c in [left_controller, right_controller]:
 		var gripping: bool = c.get_float("grip") > 0.6
-		if _pressed_once("by_" + c.name, c.is_button_pressed("by_button")) and not gripping:
-			toggle_attacks_requested.emit()
+		_step_view_button(c, gripping, _delta)
 		if _pressed_once("click_" + c.name, c.is_button_pressed("primary_click")):
 			var holder := left_holder if c == left_controller else right_holder
 			if run_element_mode:
 				element_ability_requested.emit(Vector3.ZERO)
 			elif holder.held:
 				holder.held.set_element(next_element(holder.held.element))
+
+
+## B/Y without grip: tap = toggle_attacks_requested, hold = recenter, hold B +
+## right stick up/down = eye height.
+func _step_view_button(c: XRController3D, gripping: bool, delta: float) -> void:
+	var key := String(c.name)
+	var down := c.is_button_pressed("by_button") and not gripping
+	if down:
+		var t: float = _by_time.get(key, 0.0) + delta
+		_by_time[key] = t
+		if c == right_controller:
+			var stick := c.get_vector2("primary").y
+			if absf(stick) > 0.55:
+				adjust_height(signf(stick) * HEIGHT_RATE * delta)
+				_by_used[key] = true
+		if t >= RECENTER_HOLD_SEC and not _by_used.get(key, false):
+			recenter_view()
+			_by_used[key] = true
+	elif _by_time.has(key):
+		var held: float = _by_time[key]
+		var used: bool = _by_used.get(key, false)
+		_by_time.erase(key)
+		_by_used.erase(key)
+		if used:
+			_save_view_settings()
+		elif held <= TAP_MAX_SEC:
+			toggle_attacks_requested.emit()
+
+
+## Puts the headset back on the rig origin facing forward, keeping its height.
+func recenter_view() -> void:
+	XRServer.center_on_hmd(XRServer.RESET_BUT_KEEP_TILT, true)
+	for h in [left_holder, right_holder]:
+		h.pulse_pattern([[0.0, 0.05], [0.12, 0.05]])
+	GameEvents.log_event("xr_recenter", {})
+
+
+func adjust_height(delta_m: float) -> void:
+	height_offset = clampf(height_offset + delta_m, -HEIGHT_LIMIT, HEIGHT_LIMIT)
+	_apply_height()
+
+
+func _apply_height() -> void:
+	var body := _body()
+	if body:
+		body.set("player_height_offset", height_offset)
+
+
+func _load_view_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(VIEW_SETTINGS_PATH) == OK:
+		height_offset = clampf(float(cfg.get_value("view", "height_offset", 0.0)), -HEIGHT_LIMIT, HEIGHT_LIMIT)
+
+
+func _save_view_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("view", "height_offset", height_offset)
+	cfg.save(VIEW_SETTINGS_PATH)
+	GameEvents.log_event("xr_height_offset", {"meters": snappedf(height_offset, 0.01)})
+
+
+func _body() -> Node3D:
+	return get_node_or_null("XROrigin3D/PlayerBody") as Node3D
 
 
 func _pressed_once(key: String, pressed: bool) -> bool:
@@ -69,13 +152,15 @@ func _pressed_once(key: String, pressed: bool) -> bool:
 ## places the player exactly.
 func set_rig_locked(locked: bool) -> void:
 	var origin := $XROrigin3D as XROrigin3D
-	origin.transform = Transform3D.IDENTITY
+	# The unlocked body stands height_offset below the origin; keep that while
+	# locked too so the eye height does not jump on touchdown.
+	origin.transform = Transform3D(Basis.IDENTITY, Vector3(0.0, height_offset, 0.0))
 	var body := origin.get_node_or_null("PlayerBody")
 	if body:
 		body.set("enabled", not locked)
 		if not locked:
 			body.set("velocity", Vector3.ZERO)
-			(body as Node3D).global_transform = origin.global_transform
+			(body as Node3D).global_transform = global_transform
 	for path in ["XROrigin3D/LeftHand/MovementDirect", "XROrigin3D/RightHand/MovementTurn"]:
 		var provider := get_node_or_null(path)
 		if provider:

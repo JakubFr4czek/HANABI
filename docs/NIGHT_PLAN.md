@@ -140,6 +140,24 @@ Pominięte: §8 Meta AI, §14 VR comfort, §15 kalorie, powrót sakury na arenie
 
 **§20.1 implementacja:** `RunStormRain` + blade drips + shader `droplets` w runie; hitodama z żywiołu elity/ostrza; test `gdd_loop_test`.
 
+## 23. Run forest pass from playtest feedback (2026-10-27)
+- Spawn in a glade of the forest, no dojo disc / seal circle / arena gates.
+- Claustrophobic sugi forest: 14–21 m cedars on a jittered ~3 m grid (no rows,
+  no holes), solid trunks, hills and hollows (walkable < 40°), CC0 ground
+  (needle soil, grass, stones), full-size torii now and then, moonlight shafts.
+- Night milk fog: pale depth fog full at 9 m, background fogged too; yōkai and
+  Oni eyes are fog-piercing points that grow as they come.
+- Waves ramp from 2 alive to 12 over ~3 min, elites from wave 3, Oni at 2 min.
+- VR: real eye height + recenter / height offset, audio routed to the headset
+  over Link, intro hover locked; ofuda arm after 0.8 s (no accidental picks).
+- Lightning flashes now keep the run's fog color (it reset to the dojo navy).
+- Yōkai steer around trunks (own collision layer + a 3 m push grid) instead of
+  ragdolling into them. A get-up used to fire because pelvis height was measured
+  against the spawn node left behind on a hill, and the anchor then dragged
+  them back; height is now above the ground under the pelvis. Standing swarm
+  bodies are held upright and do not collide with the terrain mesh, so a clipped
+  foot cannot pin or launch them. Eyes are one fog-piercing draw call per enemy.
+
 ## 22. Morning check of the night's work (2026-10-27)
 Played the night's features instead of trusting the tests:
 - **Unreachable:** `project.godot` booted the dojo and nothing loaded `run.tscn`;

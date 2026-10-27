@@ -33,12 +33,22 @@ func _run_all() -> void:
 	var nearest := forest.nearest_prop_distance()
 	_check("Shrine clearing stays free of forest props",
 		nearest >= ForestWorld.PROP_CLEARING_RADIUS - 0.05 or nearest == INF)
-	_check("Clearing sits flush with the stone platform (%.2f m)" % forest.height_at(2.0, 2.0),
+	_check("Spawn glade is level ground (%.2f m)" % forest.height_at(2.0, 2.0),
 		absf(forest.height_at(2.0, 2.0) - ForestWorld.CLEARING_HEIGHT) < 0.01)
 	var relief := 0.0
 	for k in 24:
 		relief = maxf(relief, absf(forest.height_at(20.0 + k * 3.0, 14.0 - k * 2.0) - ForestWorld.CLEARING_HEIGHT))
-	_check("Hills roll through the forest (relief %.2f m)" % relief, relief > 0.6)
+	_check("Hills and hollows roll through the forest (relief %.2f m)" % relief, relief > 1.2)
+	# Walkable everywhere: XR Tools and the desktop body climb up to 45°.
+	var steepest := 0.0
+	for gx in 60:
+		for gz in 60:
+			var x := -60.0 + gx * 2.0
+			var z := -60.0 + gz * 2.0
+			var dx := forest.height_at(x + 0.5, z) - forest.height_at(x - 0.5, z)
+			var dz := forest.height_at(x, z + 0.5) - forest.height_at(x, z - 0.5)
+			steepest = maxf(steepest, rad_to_deg(atan(Vector2(dx, dz).length())))
+	_check("Slopes stay walkable (steepest %.1f° < 40°)" % steepest, steepest < 40.0)
 
 	# Walk out into the forest: the terrain under the player is solid.
 	player.teleport(Vector3(31.0, 3.5, 9.0), 0.0)
