@@ -6,6 +6,7 @@ extends TrainingDummy
 signal boss_defeated(oni: RunOniBoss, hit: Dictionary)
 
 const ONI_MASK_GLB := preload("res://assets/models/enemies/oni_mask_run.glb")
+const ONI_MASK_NRM := preload("res://assets/models/enemies/oni_mask_run_normal.png")
 
 var is_dead := false
 static var _cached_mask_mesh: Mesh
@@ -39,11 +40,15 @@ func _ready() -> void:
 	_armor.set_shader_parameter("fog_rim", 1.1)
 	_armor.set_shader_parameter("emission_tint", Color(0.42, 0.05, 0.04))
 	_mask.shader = WET_SURFACE_SHADER
-	_mask.set_shader_parameter("base_color", Color(0.92, 0.86, 0.78))
-	_mask.set_shader_parameter("roughness_dry", 0.68)
-	_mask.set_shader_parameter("wetness", 0.35)
-	_mask.set_shader_parameter("fill", 2.35)
-	_mask.set_shader_parameter("fog_rim", 1.65)
+	_mask.set_shader_parameter("base_color", Color(0.94, 0.88, 0.80))
+	_mask.set_shader_parameter("roughness_dry", 0.58)
+	_mask.set_shader_parameter("roughness_wet", 0.22)
+	_mask.set_shader_parameter("wetness", 0.48)
+	_mask.set_shader_parameter("fill", 2.55)
+	_mask.set_shader_parameter("fog_rim", 1.85)
+	_mask.set_shader_parameter("normal_texture", ONI_MASK_NRM)
+	_mask.set_shader_parameter("normal_depth", 1.35)
+	_mask.set_shader_parameter("procedural_ao", 0.42)
 	_mask.set_shader_parameter("emission_tint", Color(0.35, 0.32, 0.28))
 	super._ready()
 	_apply_oni_visuals()
