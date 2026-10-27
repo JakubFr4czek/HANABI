@@ -85,6 +85,8 @@ static func orb_color(elem: String) -> Color:
 		Elements.STORM: return Color(0.34, 0.84, 1.0)
 		Elements.INK: return Color(0.54, 0.64, 0.95)
 		Elements.SHADOW: return Color(0.74, 0.30, 1.0)
+		Elements.BLACK_LIGHTNING: return Color(0.32, 0.76, 1.0)
+		Elements.PHANTOM_PETALS: return Color(0.96, 0.30, 0.94)
 	return Color(0.40, 0.90, 0.98)
 
 
