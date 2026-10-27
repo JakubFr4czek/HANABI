@@ -1,23 +1,24 @@
 class_name DiegeticHud
 extends Node3D
 ## Minimal diegetic HUD (docs/GDD.md §6, NIGHT_PLAN.md §1):
-## - XP ring inlaid around the katana tsuba (guard)
-## - Glowing HP charm + engraved time & score on the wrist kote (no screen-space UI).
-## - Wrist readout billboards toward the eyes; HP ring only when critically low.
+## - Glowing HP charm + engraved readout on the wrist kote (no screen-space UI,
+##   nothing bolted onto the katana).
+## - The wrist text only appears when the wrist is raised toward the face;
+##   the HP charm and critical ring stay as the always-on glanceable signals.
 
 const RING_SHADER := preload("res://src/shaders/hud_ring.gdshader")
 const WET_SURFACE_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const HP_RING_CRITICAL_RATIO := 0.30
+## Wrist-to-face distance (m) where the readout is fully shown / fully hidden.
+const LABEL_SHOW_DIST := 0.42
+const LABEL_HIDE_DIST := 0.62
 
-var tsuba_ring: MeshInstance3D
-var tsuba_ring_front: MeshInstance3D
 var wrist_unit: Node3D
 var wrist_face: Node3D
 var hp_charm_mesh: MeshInstance3D
 var wrist_hp_ring: MeshInstance3D
 var wrist_label: Label3D
 
-var _tsuba_mat := ShaderMaterial.new()
 var _wrist_hp_mat := ShaderMaterial.new()
 var _charm_mat := StandardMaterial3D.new()
 var _lacquer_mat := ShaderMaterial.new()
@@ -32,7 +33,6 @@ func setup(player: Node3D, katana: HeldWeapon) -> void:
 			(layer as CanvasLayer).visible = false
 	_view_camera = _resolve_view_camera(player)
 
-	_setup_tsuba_ring(katana)
 	_setup_wrist_unit(player)
 	update_hud(100.0, 100.0, 0, 30, 1, 1, 0, 0, 0.0, Elements.NONE)
 
@@ -45,43 +45,6 @@ func _resolve_view_camera(player: Node3D) -> Camera3D:
 		if xr.get_viewport() and xr.get_viewport().get_camera_3d():
 			return xr.get_viewport().get_camera_3d()
 	return get_viewport().get_camera_3d() if get_viewport() else null
-
-
-func _setup_tsuba_ring(katana: HeldWeapon) -> void:
-	if katana == null:
-		return
-	for n_name in ["TsubaXpRing", "TsubaXpRingFront"]:
-		var existing := katana.get_node_or_null(n_name)
-		if existing:
-			existing.queue_free()
-
-	var quad := QuadMesh.new()
-	quad.size = Vector2(0.126, 0.126)
-	_tsuba_mat.shader = RING_SHADER
-	_tsuba_mat.set_shader_parameter("inner_radius", 0.64)
-	_tsuba_mat.set_shader_parameter("outer_radius", 0.92)
-	_tsuba_mat.set_shader_parameter("segments", 10)
-	_tsuba_mat.set_shader_parameter("glow_boost", 2.35)
-	_tsuba_mat.set_shader_parameter("fill_color", Color(0.35, 0.88, 1.0))
-
-	tsuba_ring = MeshInstance3D.new()
-	tsuba_ring.name = "TsubaXpRing"
-	tsuba_ring.mesh = quad
-	tsuba_ring.material_override = _tsuba_mat
-	tsuba_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	tsuba_ring.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	tsuba_ring.position = Vector3(0.0, 0.004, katana.guard_z + 0.008)
-	tsuba_ring.rotation.x = deg_to_rad(-18.0)
-	katana.add_child(tsuba_ring)
-
-	tsuba_ring_front = MeshInstance3D.new()
-	tsuba_ring_front.name = "TsubaXpRingFront"
-	tsuba_ring_front.mesh = quad
-	tsuba_ring_front.material_override = _tsuba_mat
-	tsuba_ring_front.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	tsuba_ring_front.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	tsuba_ring_front.position = Vector3(0.0, 0.002, katana.guard_z - 0.008)
-	katana.add_child(tsuba_ring_front)
 
 
 func _setup_wrist_unit(player: Node3D) -> void:
@@ -203,8 +166,12 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_label.outline_modulate = Color(0.08, 0.04, 0.02, 0.95)
 	wrist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	wrist_label.modulate = Color(0.92, 0.90, 0.84, 0.98)
-	wrist_label.position = Vector3(0.006, 0.006, 0.0)
+	# Float clear of the bracer plate (top at 0.0045) so glyphs never sink
+	# into the lacquer or the hand mesh; depth test stays on, so the hand
+	# occludes the text naturally instead of it shining through.
+	wrist_label.position = Vector3(0.006, 0.012, 0.0)
 	wrist_label.rotation.x = -PI * 0.5
+	wrist_label.visible = false
 	wrist_face.add_child(wrist_label)
 
 	if player is XRPlayer:
@@ -227,7 +194,9 @@ func _setup_wrist_unit(player: Node3D) -> void:
 func _process(_delta: float) -> void:
 	if _parry_glow > 0.0:
 		_parry_glow = maxf(_parry_glow - _delta, 0.0)
+		_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2
 	_orient_wrist_face()
+	_update_label_visibility()
 
 
 func _orient_wrist_face() -> void:
@@ -261,18 +230,30 @@ func on_parry() -> void:
 	_parry_glow = 0.42
 
 
+var _charm_base_energy := 0.28
+
+
+## The readout fades in only when the wrist is raised toward the face.
+## (Desktop pins the wrist to the camera inside the show zone, so it reads
+## as permanently raised there.)
+func _update_label_visibility() -> void:
+	if wrist_label == null or wrist_unit == null:
+		return
+	var cam := _view_camera
+	if cam == null or not is_instance_valid(cam):
+		cam = get_viewport().get_camera_3d() if get_viewport() else null
+	if cam == null:
+		wrist_label.visible = false
+		return
+	var d := wrist_unit.global_position.distance_to(cam.global_position)
+	var a := clampf((LABEL_HIDE_DIST - d) / maxf(LABEL_HIDE_DIST - LABEL_SHOW_DIST, 0.01), 0.0, 1.0)
+	wrist_label.visible = a > 0.02
+	wrist_label.modulate.a = 0.98 * a
+
+
 func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, wave: int, score: int, kills: int, run_seconds: float, active_element: String) -> void:
-	var xp_ratio := clampf(float(xp) / float(maxi(xp_to_next, 1)), 0.0, 1.0)
 	var hp_ratio := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
 	var critical := hp_ratio <= HP_RING_CRITICAL_RATIO
-
-	var elem_col := Color(0.36, 0.88, 1.0)
-	if active_element != Elements.NONE:
-		elem_col = SoulOrb.orb_color(active_element)
-
-	_tsuba_mat.set_shader_parameter("fill_ratio", xp_ratio)
-	_tsuba_mat.set_shader_parameter("fill_color", elem_col)
-	_tsuba_mat.set_shader_parameter("glow_boost", 2.35 + _parry_glow * 6.0)
 
 	var hp_col := Color(0.38, 0.72, 0.68)
 	if critical:
@@ -288,9 +269,11 @@ func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, 
 
 	_charm_mat.albedo_color = hp_col * Color(0.55, 0.55, 0.55, 1.0)
 	_charm_mat.emission = hp_col
-	_charm_mat.emission_energy_multiplier = 0.28 + (1.0 - hp_ratio) * 0.55 + (0.65 if critical else 0.0)
+	_charm_base_energy = 0.28 + (1.0 - hp_ratio) * 0.55 + (0.65 if critical else 0.0)
+	_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2
 
 	if wrist_label:
-		var mins := int(run_seconds) / 60
-		var secs := int(run_seconds) % 60
-		wrist_label.text = "LV %d · 波 %d\n%02d:%02d · %d pt · 斬 %d" % [level, wave, mins, secs, score, kills]
+		# Engraved readout in the game's voice: rank, wave, score, life,
+		# kills, souls toward the next rank.
+		wrist_label.text = "位 %d · 波 %d · %d pt\n命 %d · 斬 %d · 魂 %d/%d" % [
+			level, wave, score, int(round(hp)), kills, xp, xp_to_next]

@@ -5,7 +5,7 @@ render_mode blend_add, depth_draw_never, cull_back, unshaded;
 // wisp, bright inner pearl core, and soft halo falloff.
 
 uniform vec3 soul_color : source_color = vec3(0.38, 0.86, 1.0);
-uniform float intensity : hint_range(0.2, 4.0) = 1.95;
+uniform float intensity : hint_range(0.2, 4.0) = 1.1;
 uniform float phase = 0.0;
 
 varying float v_height;

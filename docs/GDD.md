@@ -45,13 +45,12 @@ There are four elements. Each has an upgrade tree, applies to the blade (trail, 
 | **Ink** 墨 | glossy black | control | paint traps and walls with the blade or hand, slowing ink pools, ink tendrils |
 | **Shadow** 影 | dark violet | trickery | short teleport, invisibility, darkness that confuses enemies |
 
-- **Slot limit (like Survivor.io):** max 2 elements per run and about 6 upgrade slots total, so every run plays differently.
-- **Evolutions:** two maxed trees combine into a special ability (e.g. Storm + Ink = black lightning, Sakura + Shadow = phantom petals).
+- **One element per run:** the first element pick locks the build; its tree has 3 tiers. Every run commits to a single school, so runs play differently.
 
 ## 6. Progression and UI
 - **Drops:** enemies drop many glowing soul orbs (hitodama), colored by element. Orbs fly to the player when nearby.
 - **Level-up:** time slows and three **ofuda** (paper talismans) float in front of the player. The player chooses one by **slicing it with the sword**.
-- **HUD:** minimal and diegetic: XP on the sword guard or wrist, health as a glowing charm, score and time on the wrist.
+- **HUD:** minimal and diegetic: health as a glowing wrist charm, plus an engraved wrist readout (rank, wave, score, life, kills, souls) that only appears when the wrist is raised toward the face. Nothing is mounted on the katana.
 - **End screen:** score, time survived, kills, build used and high score.
 
 ## 7. Enemies
@@ -128,7 +127,7 @@ At the start of a run the player hovers about 0.5–1 m above the forest floor i
 ## 11. Roadmap
 1. **Sword physics:** XR rig, physics katana, test room with walls and a sword-wielding dummy for parries. Do not move on until it feels good.
 2. **Loop:** basic yōkai with ragdoll, wave spawner, soul drops, XP and high score.
-3. **Elements:** ofuda level-up, upgrade trees, slot limit and evolutions.
+3. **Elements:** ofuda level-up, one element tree per run (3 tiers).
 4. **World:** procedural torii, fog, VFX and the spawn symbol.
 5. **Meta AI:** `call_llm`, telemetry, awakened enemies, Oni brain and run memory. Reserve about 2 days before the deadline.
 6. **Demo:** VR comfort and accessibility, polish, record a 2–3 minute video, write the description and submit. Only after that, and first to cut: the calories estimate (cherry on top).
@@ -151,7 +150,7 @@ At the start of a run the player hovers about 0.5–1 m above the forest floor i
 - After a knockdown the dummy stands up where it fell instead of walking back; the duelist AI walks back home when not sparring, but obstacle-aware navigation (NavigationAgent3D) comes with the yōkai.
 - Godot docs recommend the Compatibility renderer for Android XR; the project uses Mobile on PC and Compatibility on Quest. Revisit if Mobile on Quest becomes recommended (needed for some VFX).
 - Number of upgrades per element for the hackathon version?
-- Exact element and evolution balance numbers?
+- Exact element balance numbers?
 - Does Meta offer TTS, or do we use Piper?
 - Which fields does the hackathon submission form require?
 

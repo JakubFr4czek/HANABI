@@ -67,7 +67,28 @@ func _run() -> void:
 	h.release()
 	h.queue_free()
 
-	# 5. VR rig: the weapon ignores the player's own bodies and the hand model
+	# 5. Grip orientation: a fist that comes in blade-down takes the reversed
+	# grip; a normal fist takes the normal one.
+	_place(katana, BASE_POSE)
+	var handle_world := BASE_POSE * Vector3(0.0, 0.0, 0.12)
+	var flip_grip := katana.compute_local_grip(Transform3D(Basis(Vector3.RIGHT, PI), handle_world))
+	var norm_grip := katana.compute_local_grip(Transform3D(Basis.IDENTITY, handle_world))
+	_check("grabbing blade-down takes the reversed grip",
+		flip_grip.basis.get_rotation_quaternion().angle_to(Basis(Vector3.RIGHT, PI).get_rotation_quaternion()) < 0.05)
+	_check("grabbing normally keeps the natural grip",
+		norm_grip.basis.get_rotation_quaternion().angle_to(Quaternion.IDENTITY) < 0.05)
+	# End to end: held reversed, the tip ends up on the other side of the fist.
+	var hr := _new_holder("right")
+	_place(katana, BASE_POSE)
+	hr.global_transform = Transform3D(Basis(Vector3.RIGHT, PI), BASE_POSE.origin)
+	hr.grab(katana)
+	await _wait(0.6)
+	var tip_side := (katana.get_tip_global() - hr.global_position).dot((hr.global_transform.basis * Vector3.FORWARD).normalized())
+	_check("held reversed, the blade points back along the fist (tip side %.2f)" % tip_side, tip_side < -0.3)
+	hr.release()
+	hr.queue_free()
+
+	# 6. VR rig: the weapon ignores the player's own bodies and the hand model
 	# never flies away from the controller.
 	await _xr_hand_stays_with_controller()
 

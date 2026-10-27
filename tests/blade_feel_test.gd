@@ -229,7 +229,7 @@ func _test_swing_power() -> void:
 	_check("...but has no arm behind it: power %.2f vs %.2f, damage %.1f vs %.1f, impulse %.1f vs %.1f N·s" % [
 		flick.get("power", 0.0), arm.get("power", 0.0), flick.get("damage", 0.0), arm.get("damage", 0.0), flick.get("impulse", 0.0), arm.get("impulse", 0.0)],
 		ok and flick.power < 0.2 and arm.power > 0.8 and flick.damage < arm.damage * 0.45 and flick.impulse < arm.impulse * 0.3)
-	_check("the 4 kg kanabō hits much harder than the 1.1 kg katana with the same swing (%.1f vs %.1f N·s)" % [club.get("impulse", 0.0), arm.get("impulse", 0.0)],
+	_check("the 4 kg kanabō hits much harder than the 1.45 kg katana with the same swing (%.1f vs %.1f N·s)" % [club.get("impulse", 0.0), arm.get("impulse", 0.0)],
 		ok and not club.is_empty() and club.impulse > arm.impulse * 1.5)
 
 
