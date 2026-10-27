@@ -1,5 +1,5 @@
 # Elements & Skill Tree Architecture Plan (ELEMENTS_PLAN.md)
-*Status: Approved Design & Specification (Task E1)*
+*Status: Approved Design & Specification (Task E1 — Post-Review Revision)*
 *Author: Jakub Frączek / Antigravity*
 *Date: 2026-10-27*
 *Target Hardware: Meta Quest 3 standalone (72+ fps, ≤345 draw calls, ≤12 dynamic lights, ≤28 audio voices)*
@@ -10,37 +10,37 @@
 
 ### 1. Existing Systems & File Responsibilities
 
-| File Path | Core Classes & Key Functions | Current Role | Problems Identified |
+| File Path | Core Classes & Key Functions | Current Role | Problems & Migration Target |
 |---|---|---|---|
 | `src/core/elements.gd` | `class_name Elements`<br>`color()`, `accent_color()`, `seal_index()`, `build_label()` | Element definitions (Sakura, Storm, Ink, Shadow, evolutions) and color palette queries. | Static definitions with hard-coded colors; assumes permanent dual-element combinations ("black_lightning", "phantom_petals") rather than dynamic single-element combat states. |
 | `src/run/element_system.gd` | `class_name ElementSystem extends Node3D`<br>`setup()`, `reset()`, `apply_upgrade()`, `on_blade_hit()`, `on_enemy_died()`, `try_shadow_blink()`, `paint_ink()`, `debug_release_petals()`, `_rebuild_orbit_petals()` | Combat effects engine for elements; handles passive triggers on sword strikes and manages particle/mesh pools (`MAX_PETALS = 12`, `MAX_INK_POOLS = 6`, `MAX_TRANSIENT_MESHES = 18`). | **Passive and random**: effects trigger automatically on sword hit without player intent. Locks player into a single element for the whole run (`active_elements.size() >= 1`). Only Shadow has an active trigger (`try_shadow_blink`), which was hooked to thumbstick click. |
-| `src/run/ofuda_talisman.gd` | `class_name OfudaTalisman extends Node3D`<br>`setup()`, `slice()`, `dismiss()`, `_build_labels()`, `_build_collider()` | Floating 3D paper talisman sliced by the blade during slow-motion level-up to pick an upgrade. | Used exclusively as a level-up reward card selection mechanism rather than a collectible currency for a deliberate skill tree. |
+| `src/run/ofuda_talisman.gd` | `class_name OfudaTalisman extends Node3D`<br>`setup()`, `slice()`, `dismiss()`, `_build_labels()`, `_build_collider()` | Floating 3D paper talisman sliced by the blade during slow-motion level-up to pick an upgrade. | **DEPRECATED / REMOVED**: Slicing cards mid-combat breaks combat flow. Will be completely removed and replaced by physical collectible Ofuda currency spent in the VR Skill Tree Menu. |
 | `src/run/upgrade_pool.gd` | `class_name UpgradePool extends RefCounted`<br>`GENERIC_UPGRADES`, `ELEMENT_UPGRADES`, `pick_choices()`, `available_element_upgrades()` | Generates 3 random choices upon level-up from generic cards and 3 tiers of element upgrades. | Randomizes element acquisition; mixing element unlocks with generic stat buffs makes element builds feel accidental rather than mastery-driven. |
 | `src/run/diegetic_hud.gd` | `class_name DiegeticHud extends Node3D`<br>`attach()`, `update_hud()`, `_orient_wrist_face()` | Left wrist plate rendering HP ring, lacquer charm, soul XP bar, and stats (`rank`, `wave`, `score`, `kills`). | Accepts `active_element: String` in `update_hud` but **never renders or communicates the active element or remaining duration** to the player. No cooldown indicators. |
 | `src/run/run_game.gd` | `class_name RunGame extends TestRoom`<br>`_present_level_up()`, `_on_ofuda_sliced()`, `_apply_upgrade()`, `collect_soul()` | Orchestrates run loop, soul drops, wave progression, level-ups, slow-mo transitions, and end screen. | Couples element acquisition directly to soul level-ups. Uses `TimeController.slow_motion(0.2, 120.0, true)` for card slicing. |
 | `src/run/forest_world.gd` | `class_name ForestWorld extends Node3D`<br>`_populate_multimesh()`, `nearest_torii_position()`, `_build_torii_mesh()` | Infinite procedural terrain and prop streamer (trees, boulders, decorative torii). | Torii gates are static MultiMesh decorations with collider posts; they have no element affinity, no passing detection plane, and no interaction logic. |
 | `src/weapons/held_weapon.gd` | `class_name HeldWeapon extends RigidBody3D`<br>`set_element()`, `on_blade_hit()` | Katana physics, PD controller, blade emission, and collision reporting. | Element is just a string that sets `BladeTrail` color; no state machine for expiration, warnings, or ability triggers. |
 
-### 2. Full Controller Bindings Inventory
+### 2. Full Controller Bindings Inventory & Migration Path
 
 #### OpenXR Bindings (`openxr_action_map.tres` & `XRPlayer.gd`)
 
-| Hand | Physical Control | OpenXR Action | Current Game Binding | Status / Conflict for New System |
+| Hand | Physical Control | OpenXR Action | Current Game Binding | New Target Binding & Migration Plan |
 |---|---|---|---|---|
-| **Right (Sword Hand)** | **A Button** | `ax_button` | Triggers `reset_requested` (dev reset) | **CONFLICT**: Must be freed for **Ability 1 (Primary / Fast)**. Move dev reset to keyboard or debug menu. |
-| **Right (Sword Hand)** | **B Button** | `by_button` | Tap without grip: `toggle_attacks`<br>Hold: `recenter_view`<br>Hold + Stick Y: eye height<br>Grip + B: weapon recall | **CONFLICT**: Must be freed for **Ability 2 (Special / Tactical)**. Move recenter to long-press Menu or Pause UI. Recall is only active when hand is empty. |
+| **Right (Sword Hand)** | **A Button** | `ax_button` | Triggers `reset_requested` (dev reset) | **DEDICATED TO ABILITY 1 (Primary / Fast)**.<br>Old `reset_requested` moved to desktop keyboard `[R]` / `[F5]` and to the "Reset Stance / Run" button in the Pause Menu. |
+| **Right (Sword Hand)** | **B Button** | `by_button` | Tap without grip: `toggle_attacks`<br>Hold: `recenter_view`<br>Hold + Stick Y: eye height<br>Grip + B: weapon recall | **DEDICATED TO ABILITY 2 (Special / Tactical)**.<br>- `recenter_view`: moved to 1.0s long press of the **Left Menu Button** and a button in the Pause Menu.<br>- Eye height: moved to Pause Menu Comfort settings.<br>- `toggle_attacks`: moved to `[P]` on desktop and debug menu.<br>- **Weapon Recall (`grip` + `B`)**: Works **ONLY when hand is empty** (`held == null`, see `WeaponHolder.gd:164`). When sword is in hand (`held != null`), B triggers Ability 2 with zero conflict. |
 | **Right (Sword Hand)** | **Grip (Squeeze)** | `grip`, `grip_click` | Grab katana / hold katana (threshold > 0.6) | **RESERVED**: Core swordplay grip. When holding katana, grip stays squeezed. |
 | **Right (Sword Hand)** | **Trigger (Index)** | `trigger`, `trigger_click` | Unused in sword hand (or poke interaction) | Available for secondary interaction / UI pointer when menu open. |
 | **Right (Sword Hand)** | **Thumbstick** | `primary` | Snap turn (`MovementTurn.tscn`) | **RESERVED**: VR Locomotion (Snap Turn). |
-| **Right (Sword Hand)** | **Thumbstick Click** | `primary_click` | Triggers `element_ability_requested` / cycles element in test room | Awkward ergonomics during combat swings. Deprecate for abilities. |
+| **Right (Sword Hand)** | **Thumbstick Click** | `primary_click` | Triggers `element_ability_requested` / cycles element in test room | Deprecated for combat abilities (unreliable ergonomics during full-arm swings). |
 | **Right (Sword Hand)** | **Oculus / System Button** | `/user/hand/right/input/system/click` | Reserved by Meta OS | **FORBIDDEN**: System reserved. |
 | **Left (Off-Hand)** | **X Button** | `ax_button` | Triggers `reset_requested` | Available. Mirror for left-handed players: Ability 1. |
-| **Left (Off-Hand)** | **Y Button** | `by_button` | Tap: `toggle_attacks`<br>Hold: `recenter_view` | Mirror for left-handed players: Ability 2. Or secondary Tree Menu toggle. |
+| **Left (Off-Hand)** | **Y Button** | `by_button` | Tap: `toggle_attacks`<br>Hold: `recenter_view` | Mirror for left-handed players: Ability 2. Also acts as secondary Tree Menu toggle. |
 | **Left (Off-Hand)** | **Grip (Squeeze)** | `grip`, `grip_click` | Two-handed grip on katana handle | **RESERVED**: Two-handed katana grip. |
 | **Left (Off-Hand)** | **Trigger (Index)** | `trigger`, `trigger_click` | Unused in gameplay | **UI SELECT**: Pointer trigger for selecting skill tree nodes in VR Menu. |
 | **Left (Off-Hand)** | **Thumbstick** | `primary` | Smooth locomotion (`MovementDirect.tscn`) | **RESERVED**: Smooth movement. |
 | **Left (Off-Hand)** | **Thumbstick Click** | `primary_click` | Cycles element in test room | Unused in run. |
-| **Left (Off-Hand)** | **Menu Button** | `menu_button` (`/user/hand/left/input/menu/click`) | Unbound in gameplay | **DEDICATED**: Open / Close VR Skill Tree Menu (Pause). |
+| **Left (Off-Hand)** | **Menu Button** | `menu_button` (`/user/hand/left/input/menu/click`) | Unbound in gameplay | **DEDICATED**: Tap = Open / Close VR Skill Tree Menu (Pause). Hold 1.0s = Recenter HMD View. |
 
 #### Desktop Rig Bindings (`DesktopPlayer.gd`)
 
@@ -51,15 +51,8 @@
 | **F / G / T** | Slash horizontal / Overhead / Thrust | Retain scripted swings. |
 | **X** | Wrist flick | Retain. |
 | **Z** | Cycle element | Legacy test tool; replace with simulated Torii gate walk-through. |
-| **1 (Keypad) / Num 1** or **Key 1 / Key 2** | New: Ability 1 / Ability 2 | **Mapped to `[J]` (Ability 1) and `[K]` (Ability 2)** for ergonomic desktop testing. |
+| **J / K** | New: Ability 1 / Ability 2 | **Mapped to `[J]` (Ability 1) and `[K]` (Ability 2)** for ergonomic desktop testing. |
 | **Tab / M** | New: Open Skill Tree Menu | **Mapped to `[Tab]` or `[M]`** (toggles pause & tree menu). |
-
-### 3. Root Cause Analysis: Why the Current System Feels Random
-
-1. **Passive RNG Level-Up Distribution**: Elements are offered as random cards among stat cards when leveling up via soul orbs. The player cannot choose when or which school they enter; it depends purely on random card draws.
-2. **Permanent Run Lock-In**: Once an element is picked, the player is locked into it for the remainder of the run. There is no rhythm of hunting, gaining, utilizing, and exhausting power.
-3. **Passive Strikes vs. Active Agency**: In the current code, element effects fire as probabilistic or cooldown-based procs on blade contact (e.g. passive chain lightning on hit, passive ink splatter). The player swings their sword normally and things randomly explode or slow down, removing the feeling of intentional mastery.
-4. **Complete Lack of In-Game Communication**: The blade changes color, but the HUD provides zero information about charges, cooldowns, or why an effect occurred. There is no feedback loop between player action and elemental release.
 
 ---
 
@@ -158,25 +151,7 @@
   - **SFX**: Vacuum suction pop followed by a sinister blade unsheathing tone.
   - **Haptics**: Inward dip followed by sharp exit snap: `[[0.25, 0.04], [0.9, 0.06]]`.
 
-### 3. Controller Mapping Decision & Hand Ergonomics
-
-- **Sword Hand (Primary Hand, Default Right)**:
-  - **Button A (`ax_button`)** = **Ability 1 (Rapid / Tactical)**
-  - **Button B (`by_button`)** = **Ability 2 (Special / Mobility)**
-  - *Conflict Resolution*:
-    - The old `ax_button` trigger for `reset_requested` is restricted to desktop debug mode (`F5` or `R`).
-    - The old `by_button` single-tap toggle for enemy attacks is removed from VR gameplay (accessible via Pause UI).
-    - The old `by_button` hold for `recenter_view` is moved to a 1.0-second long press on the **Left Menu Button**.
-    - Weapon recall (`grip` + `by_button`) is preserved **only when the hand is empty** (`held == null`). Once the katana is grasped, A and B are strictly dedicated to abilities.
-- **Off-Hand (Default Left)**:
-  - **Menu Button (`menu_button`)** = **Open / Close Skill Tree Menu (Pause)**. Single tap cleanly pauses and unpauses the game.
-  - **Button Y (`by_button` left)** = Secondary toggle for Skill Tree Menu (for players who prefer face buttons over the recessed menu button).
-  - **Trigger (Index)** = VR Laser Pointer Select / Node Buy action inside the menu.
-  - **Grip (Squeeze)** = Two-handed katana grip when brought close to the handle.
-- **Left-Handed Accessibility**:
-  - If the player grabs the katana with their left hand as their primary weapon hand, the roles mirror automatically: Left Hand X = Ability 1, Left Hand Y = Ability 2; Right Hand B = Skill Tree Menu.
-
-### 4. Edge Cases: Explicit Decisions
+### 3. Edge Cases: Explicit Decisions
 
 | Edge Case Scenario | Formal Design & Technical Decision |
 |---|---|
@@ -189,37 +164,26 @@
 
 ---
 
-## (c) Torii Gates: World Spawning & Streaming
+## (c) Torii Gates: Spawning, Spacing, & Reactivation
 
-### 1. Visual Aesthetics & GDD Art Direction
-- **Authentic Shinto Architecture**: Built from the Bazylonator scanned PBR asset / procedural timber mesh with authentic vermilion wood, black lintel caps (*kasagi*), and stone bases (*kamebara*).
-- **Element Accents (Never Gaudy, Never Disco)**:
-  - **Sakura Torii**: Weathered dark vermilion lacquer, subtle pale blossom petals caught in gentle eddies at the lintel corners; soft rose lantern glow.
-  - **Storm Torii**: Lightning-blackened petrified timber, faint hairline static discharges creeping along the beam; cool cyan paper lantern glow.
-  - **Ink Torii**: Matte jet-black sumi lacquer, base shrouded in dark ground-clinging mist; deep indigo wash lantern.
-  - **Shadow Torii**: Aged grey cypress (*hinoki*) timber with deep purple grain patination; soft violet lantern with smoke wisps.
-- **Fog Readability without Cheap UI**:
-  - **No floating arrows or radar markers**.
-  - Readability through the fog is achieved diegetically via:
-    1. A hanging stone lantern on the side of the gate with an authentic paper *andon* emission glow visible up to 35 m through the milk fog.
-    2. A distinct vertical silhouette framed against the moonlight.
-    3. A spatialized 3D audio fūrin (wind chime) + subtle elemental hum positioned at the gate lintel (`max_distance = 40.0 m`).
+### 1. Pacing & The 20-Second Loop Math
 
-```
-          [ Kasagi / Top Beam - Dark Slate ]
-     ═════════════════════════════════════════════
-          [ Shimaki / Tie Beam - Element Carving ]
-     ─────────────────────────────────────────────
-         │ │                               │ │
-     (Lantern)                         (Lantern)
-      [Glow]                            [Glow]
-         │ │                               │ │
-         │ │    ◄─── CLEAR PASSAGE ───►    │ │
-         │ │        (≥ 2.8m width)         │ │
-         │ │                               │ │
-     ────┴─┴───────────────────────────────┴─┴────
-                     [ Moss Terrain ]
-```
+- **Movement Speed Analysis**:
+  - Maximum linear locomotion speed: `3.0 m/s` (`movement_direct.gd: max_speed = 3.0`).
+  - Realistic VR traversal speed (weaving through forest trunks, uneven terrain, and engaging yōkai): **1.2 – 1.6 m/s** (average **1.4 m/s**).
+- **The Spacing Problem & Recalculation**:
+  - If a gate were 55 m away, traversal at 1.4 m/s would require **~39 seconds**! With a 20 s imbue, the player would spend almost 20 seconds without an element, dropping element uptime to under 40%.
+- **Corrected Gate Spacing**:
+  - Gates are guaranteed to spawn within **18 – 32 meters** of the player (mean distance **~24 m**).
+  - Traversal time at 1.4 m/s: `24 m / 1.4 m/s = ~17.1 seconds`.
+- **Target Elemental Uptime**:
+  - **Target: 65% – 75% of active run time spent imbued with an element**.
+  - A player pushing steadily forward through the forest will have their element active almost continuously (refreshing or swapping), while a player standing ground to spar with yōkai has a brief, deliberate window of plain steel (5–9 seconds) before the next visible lantern draws them forward.
+- **Verification & Measurement Metric**:
+  - `RunGame` records `element_active_seconds` and `total_run_seconds`.
+  - Uptime ratio: `element_uptime_ratio = element_active_seconds / max(total_run_seconds, 1.0)`.
+  - Automated headless test (`tests/elements_test.gd`) simulates a standard 120-second combat-traversal segment and asserts:
+    $$\text{element\_uptime\_ratio} \ge 0.65$$
 
 ### 2. Spawning & Collision Prevention Algorithm in `ForestWorld`
 - **Minimum Clearance Zone**: A gate requires a clear bounding cylinder of **radius = 3.2 m, height = 4.5 m**.
@@ -228,48 +192,56 @@
   - Any procedural trees, lanterns, or boulders within 3.5 m are suppressed from the chunk's MultiMesh instance buffer.
 - **Placement relative to paths**: Torii gates are oriented perpendicularly to the local slope gradient, creating natural arches over navigable paths.
 - **Separation from Combat Spawns**: Torii gates must never spawn within 14 m of an active yōkai spawn node or the initial shrine spawn disc.
+- **Shuffle Bag Guarantee**: Elements rotate via a 4-item shuffle bag `[Sakura, Storm, Ink, Shadow]` ensuring all 4 elements appear every 4 gates.
 
-### 3. Infinite Forest Streaming & Guaranteed Availability
-- **The Torii Gate Manager (`ToriiManager`)**:
-  - Independent of individual chunk unloads. While forest foliage chunks stream in and out based on player distance, Torii gates are tracked in a persistent global coordinate registry.
-  - **Distance Guarantee**: There is **always at least one active gate within 25–55 m** of the player at any given time.
-  - If the player moves into an area where no gate is within 55 m, the world generator prioritizes spawning one in the next adjacent clearing ahead of the player's movement vector.
-- **Fair Distribution (Shuffle Bag)**:
-  - Gates draw their element from a 4-element shuffle bag `[Sakura, Storm, Ink, Shadow]`.
-  - All 4 elements are guaranteed to appear across any 4 consecutive gate spawns. No annoying streaks of 3 identical gates.
-
-### 4. Gate Crossing Plane Detection & Reactivation
+### 3. Gate Crossing Plane Detection
 - **Head/Body Crossing Only (No Sword Taps)**:
   - The gate defines a planar trigger volume: width 2.8 m, height 3.2 m, thickness 0.4 m.
   - The crossing is evaluated against the player's physical body tracking node (`PlayerBody` / `XRCamera3D`), **explicitly filtering out weapon colliders, held items, and hand controllers**.
   - A crossing event is registered when the vector between previous frame body position $P_{t-1}$ and current body position $P_t$ intersects the gate plane with a positive forward dot product:
     $$\text{sign}\left((P_{t-1} - G_\text{pos}) \cdot G_\text{normal}\right) \neq \text{sign}\left((P_t - G_\text{pos}) \cdot G_\text{normal}\right)$$
     and $P_t$ lies within the horizontal and vertical aperture bounds.
-- **Deactivation & Reactivation Rule**:
-  - Upon valid crossing:
-    1. Imbue triggers immediately (sound stinger, katana glow ignition, haptic rush).
-    2. The gate lantern extinguishes and the gate runes dim.
-    3. The gate enters an **inactive state for 75 seconds** OR until the player travels **at least 80 meters away** from it and returns.
-    4. An inactive gate cannot re-imbue the player, preventing cheesy back-and-forth oscillation.
+
+### 4. Single Deterministic Reactivation Rule
+
+```
+[Active Gate] ──(Player Body Crosses Plane)──► Katana Imbued (20s)
+                                                      │
+                                                      ▼
+[Inactive Gate: Lantern Dims, Chime Silenced] ◄───────┘
+       │
+       │ Player moves away through forest...
+       ▼
+ [Distance Check: player.global_position.distance_to(gate.pos) >= 45.0m]
+       │
+       ▼
+[Gate Reactivates: Lantern Lights Up, Ready for Pass-Through]
+```
+
+- **The Single Rule: 45.0-Meter Distance Clearance**:
+  - Upon valid crossing, the gate immediately deactivates: its lantern extinguishes, runes dim, and the spatial chime goes silent.
+  - **The gate reactivates if and only if the player moves at least 45.0 meters away from it**:
+    $$\text{player\_dist} = \|\vec{P}_\text{player} - \vec{P}_\text{gate}\| \ge 45.0\text{ m}$$
+  - **No timers, no compound 'OR' conditions**:
+    - Prevents camping in place (a player cannot stand under a gate and wait for it to recharge).
+    - Fully deterministic and easily validated in unit tests (`gate.distance_to(player) >= 45.0 -> gate.is_active == true`).
+    - If the player kites yōkai around a wide circle and returns to the gate, it will be recharged and ready to provide an escape imbue.
 
 ---
 
 ## (d) Ofuda Currency & Per-Element Skill Tree
 
-### 1. Ofuda Economy & Drop Balancing (5–10 min Run)
+### 1. Clarification & Removal of Legacy Level-Up Cards
 
-```
-[Defeat Yōkai] ──► Drops Hitodama Orbs (XP) + Paper Ofuda Talismans (Currency)
-                         │
-                         ▼
-             [Player Collects Ofuda via Magnet]
-                         │
-                         ▼
-        [Open VR Skill Tree Menu via Left Menu Button]
-                         │
-                         ▼
-            [Spend Ofuda to Unlock / Upgrade Nodes]
-```
+- **Complete Elimination of the Old Card System**:
+  - The legacy mechanic of slowing time on level-up and slicing three floating `OfudaTalisman` cards (`src/run/ofuda_talisman.gd`) is **completely deleted**.
+  - Slicing cards broke combat immersion and confused the role of Ofuda.
+- **Unambiguous Nomenclature & System Roles**:
+  1. **Hitodama (Soul Orbs)**: Pure XP & score items. Collected magnetically, raising player level, scoring, and HP gauge on the wrist. They do **not** trigger slow-motion card slicing.
+  2. **Ofuda (御札)**: **Physical collectible currency items**. Small 3D paper talismans (0.08 m x 0.16 m) with cinnabar ink seals dropped onto the ground by defeated yōkai.
+  3. Gracz zbiera Ofuda do swojego ekwipunku (stan widoczny na nadgarstku jako `御札 × N`) i wydaje je **wyłącznie w 3D VR Skill Tree Menu**.
+
+### 2. Ofuda Economy (5–10 min Run)
 
 - **Drop Rates**:
   - Standard Yōkai: 35% chance to drop 1 Ofuda.
@@ -283,7 +255,7 @@
 - **Progression Scope**:
   - **Per-Run Progression (Roguelite)**: Ofuda and unlocked nodes reset upon player death or run completion, ensuring every run has a clean arc from raw steel to an ascendant elemental build.
 
-### 2. Node Structure & Prerequisites (5 Nodes per Element Tree)
+### 3. Node Structure & Prerequisites (5 Nodes per Element Tree)
 
 Each element has a dedicated 5-node tree. Upgrades are purchased in the VR Menu.
 
@@ -304,9 +276,6 @@ Each element has a dedicated 5-node tree. Upgrades are purchased in the VR Menu.
                 [Node 5: Master Technique]
                        (Cost: 8 Ofuda)
 ```
-
-#### Total Tree Cost: 24 Ofuda per Element.
-In a single run, an attentive player can max out one entire elemental tree or split points across two schools.
 
 #### Sakura (桜) Skill Tree
 1. **Node 1: Petal Sense (花気)** — *Cost: 2 Ofuda*. Base damage of Senbonzakura (Ability 1) +25%; increases Sakura imbue duration from 20 s to 24 s.
@@ -370,26 +339,7 @@ In a single run, an attentive player can max out one entire elemental tree or sp
   - Sfx bus remains crisp for menu UI clicks and paper rustles.
   - On unpause, audio parameters smoothly tween back to normal over 0.25 seconds.
 
-### 4. Intro Guard
-- `SkillTreeMenu` checks `RunGame.state`. The menu **cannot be opened during the Seiza Run Intro** (`RunGame.RunState.INTRO`). Any Menu button press is ignored until touchdown and katana draw are complete.
-
-### 5. Anti-Clipping & Spatial Placement Architecture
-
-```
-                      [Eye Level / HMD]
-                             │
-                  Vector Forward (Yaw Only)
-                             │
-                             ▼  ~1.1 m
-     ┌─────────────────────────────────────────────────┐
-     │            VR SKILL TREE PANEL (3D)             │
-     │  - Material: flags_no_depth_test = true         │
-     │  - Render Priority: 100 (Always on top)         │
-     │  - SphereCast Ray: Shortens distance if trunk   │
-     │    is within 1.1m (e.g. settles at 0.75m)       │
-     └─────────────────────────────────────────────────┘
-```
-
+### 4. Anti-Clipping & Spatial Placement Architecture
 - **Material Overlay (Always-On-Top Rendering)**:
   - The UI panel mesh uses a custom unshaded shader material with `render_mode unshaded, depth_test_disabled` (or `material_override.no_depth_test = true`) and `render_priority = 100`.
   - The laser pointer and cursor share this priority.
@@ -399,11 +349,6 @@ In a single run, an attentive player can max out one entire elemental tree or sp
   - If unobstructed, panel spawns at `HMD.origin + forward * 1.15 m`, with `y = clamp(HMD.origin.y - 0.05, 1.2, 1.7)`.
   - If a tree trunk or rock is detected at distance $D < 1.15\text{ m}$, the panel distance is safely clamped to $D - 0.2\text{ m}$ (minimum comfortable distance 0.65 m).
   - The panel is oriented towards the player using **Yaw only** (no pitch or roll tilt), creating a calm, grounded architectural posture.
-
-### 6. Interaction Mode: Laser Pointer & Haptic Poke
-- Left hand (or free hand) projects an elegant, thin crimson/gold laser beam (0.003 m width) terminating in a tiny reticle dot.
-- Pointing at a node triggers a gentle hover tick (`[[0.15, 0.02]]`).
-- Pulling the index trigger on an affordable node plays an ink-stamp sound stinger, executes the purchase, and fires a rewarding haptic confirmation (`[[0.6, 0.08]]`).
 
 ---
 
@@ -431,89 +376,30 @@ Everything the player needs to know is conveyed naturally in the game world with
 └───────────────────────┴─────────────────────────────────────────────────────┘
 ```
 
-1. **Active Element on the Blade**:
-   - Plain Steel: Clean, reflective PBR metal with rain droplets. No emission.
-   - Sakura: Razor-bright neon pink edge luminescence and floating petal motes.
-   - Storm: Crackling blue electric arcs running continuously between guard and tip.
-   - Ink: Viscous, dripping black liquid with an indigo rim coating the blade bevel.
-   - Shadow: Shifting dark violet haze with subtle refraction.
-2. **Time Remaining Gauge**:
-   - The left wrist plate (`DiegeticHud`) is upgraded with an elemental radial ring.
-   - The ring starts at 100% full (360°) upon gate crossing and smoothly drains clockwise over 20.0 seconds.
-   - In the last 3.0 seconds, the ring and the katana blade edge rhythmically flash bright/dim, signaling that reversion to steel is imminent.
-3. **Button Ability Status**:
-   - Two understated engraved symbols on the wrist plate represent Button A (Ability 1) and Button B (Ability 2).
-   - If on cooldown, the symbol is dimly backlit; when ready, it flares with a crisp lacquer sheen.
-4. **Ofuda Currency Counter**:
-   - Displayed diegetically on the raised wrist face: `御札 [count]` in gold leaf calligraphy alongside existing soul and kill tallies.
-5. **Torii Gate Direction**:
-   - Seen at distance as a soft, atmospheric lantern spire in the milk fog.
-   - Heard from up to 40 m away as an authentic copper temple chime (*fūrin*) ringing in the wind.
-
 ---
 
 ## (g) Legacy Code Deletion & Test Migration Strategy
 
-### 1. Code to Delete or Majorly Refactor
-
-- **`src/run/upgrade_pool.gd`**:
-  - Delete `ELEMENT_UPGRADES` array and all code tying element schools to level-up choices (`available_element_upgrades`, `element_slot_count`, `ELEMENT_SLOT_LIMIT`).
-  - Keep `GENERIC_UPGRADES` (damage, max HP, heal, soul magnet, attack speed, regen) for standard soul level-ups, or shift them to general stats.
-- **`src/run/element_system.gd`**:
-  - Remove `active_elements` array and "One element per run" permanent lock logic.
-  - Implement single `current_element: String = Elements.NONE` and `element_timer: float = 0.0`.
-  - Remove passive random procs from `on_blade_hit`.
-  - Add explicit ability executors: `execute_ability_1()` and `execute_ability_2()`.
-- **`src/run/run_game.gd`**:
-  - Decouple `_apply_upgrade` from elemental binding.
-  - Wire Torii gate crossing events directly to `element_system.imbue(element)`.
-  - Add pause handling and `SkillTreeMenu` instantiation.
-- **`src/run/forest_world.gd`**:
-  - Replace static non-interactive torii multimesh placement with interactive `ToriiGate.tscn` scene instances managed by `ToriiManager`.
-
-### 2. Tests to Replace in `tests/elements_test.gd`
-
-| Old Test Assumption | Why Invalid | New Replacement Test in `tests/elements_test.gd` |
-|---|---|---|
-| `"A run locks into a single element; later elements are refused"` | In the new design, walking through a different gate intentionally replaces the element! | `"Walking through a different Torii gate immediately replaces current element and resets timer"` |
-| `"One complete tree occupies three element slots"` | Element slots are removed in favor of the 20s dynamic gate imbue. | `"Torii gate imbues katana with 20.0s timer and reverts to plain steel upon expiry"` |
-| `"Every eligible Ofuda hand exposes an element choice"` | Elements are no longer drawn in Ofuda cards. | `"Ofuda is earned as currency and spent strictly in the VR Skill Tree"` |
-| `"Storm chains through several nearby yōkai"` (passive hit proc) | Now triggered actively by Button A (`execute_ability_1`). | `"Button A triggers Raikiri on Storm katana; does nothing on plain steel"` |
-| `"Button on plain steel triggers empty feedback"` | New critical UX check. | `"Pressing Ability 1/2 on plain steel fires empty haptic pulse without errors"` |
+1. **Delete `src/run/ofuda_talisman.gd`**: Slicing cards mid-combat is obsolete. Replace with `src/run/ofuda_pickup.gd` (collectible currency drop).
+2. **Refactor `src/run/upgrade_pool.gd`**: Remove `ELEMENT_UPGRADES` array and level-up slot limits.
+3. **Refactor `src/run/element_system.gd`**: Remove permanent run element lock. Implement dynamic single-element 20s state machine with button executors `execute_ability_1()` and `execute_ability_2()`.
+4. **Refactor `tests/elements_test.gd`**: Replace legacy test assertions with new suite (20s timer, Torii crossing, element swap, button activation, plain steel empty feedback).
 
 ---
 
 ## (h) Step-by-Step Implementation Roadmap (E2a – E2d)
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ IMPLEMENTATION WORKFLOW                                                │
-│                                                                        │
-│  [E2a: Core Imbue & Torii Gates]                                       │
-│       │ 20s state machine, ToriiGate scene, ForestWorld streaming      │
-│       ▼                                                                │
-│  [E2b: 8 Active Abilities & Controller Input]                          │
-│       │ Buttons A & B, cooldowns, VFX/SFX pools, remove legacy procs   │
-│       ▼                                                                │
-│  [E2c: Ofuda Currency & Skill Tree Data]                               │
-│       │ Enemy drops, 4x5 node prerequisite tree, ability upgrades      │
-│       ▼                                                                │
-│  [E2d: VR Menu, Clean Pause & Anti-Clipping]                           │
-│       │ Tree panel, process_mode pause, laser pointer, no-clip shader  │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
 ### Phase E2a: Element Core & Torii Gate World Spawning
 - [ ] **E2a.1: Katana Imbue State Machine**: Update `HeldWeapon` and `ElementSystem` with `current_element`, `element_time_remaining`, `const ELEMENT_DURATION = 20.0`, fade warning state, and clean reversion to `Elements.NONE`.
-- [ ] **E2a.2: Torii Gate Interactive Scene (`scenes/world/torii_gate.tscn`)**: Build authentic PBR gate with element-specific lantern/rune, body crossing detector (plane normal crossing), 75 s reactivation cooldown, and spatial chime audio.
-- [ ] **E2a.3: Torii World Streaming & Clearance**: Integrate `ToriiManager` into `ForestWorld`. Ensure gates spawn 25–55 m from player, never collide with trees/rocks (sphere clearance 3.2 m), and persist through chunk streaming.
+- [ ] **E2a.2: Torii Gate Interactive Scene (`scenes/world/torii_gate.tscn`)**: Build authentic PBR gate with element-specific lantern/rune, body crossing detector (plane normal crossing), 45.0m distance reactivation rule, and spatial chime audio.
+- [ ] **E2a.3: Torii World Streaming & Clearance**: Integrate `ToriiManager` into `ForestWorld`. Ensure gates spawn 18–32 m from player, never collide with trees/rocks (sphere clearance 3.2 m), and persist through chunk streaming.
 - [ ] **Critical Tests**:
-  - `tests/torii_gate_test.tscn`: Crossing plane triggers imbue; sword touch alone does not trigger; same gate refreshes timer; different gate replaces element; 20 s timer expires to plain steel.
-  - `tests/torii_placement_test.tscn`: No gate spawns overlapping trunk/boulder colliders; at least one gate exists in 55 m radius.
+  - `tests/torii_gate_test.tscn`: Crossing plane triggers imbue; sword touch alone does not trigger; same gate refreshes timer; different gate replaces element; 20 s timer expires to plain steel; gate reactivates after 45m distance.
+  - `tests/torii_placement_test.tscn`: No gate spawns overlapping trunk/boulder colliders; at least one gate exists in 18–32m radius; uptime ratio >= 0.65 in 120s test.
 - [ ] **Quest Perf Risk**: MultiMesh terrain must cleanly exclude trees in the gate radius without regenerating entire chunk meshes. Torii lanterns must use unshaded emissive materials + ambient fill (zero dynamic OmniLight3D additions).
 
 ### Phase E2b: The 8 Active Abilities & Controller Bindings
-- [ ] **E2b.1: Input Architecture**: Bind Button A (`ax_button`) to Ability 1 and Button B (`by_button`) to Ability 2 on the sword hand in `XRPlayer.gd` and `DesktopPlayer.gd` (`J` and `K`).
+- [ ] **E2b.1: Input Architecture**: Bind Button A (`ax_button`) to Ability 1 and Button B (`by_button`) to Ability 2 on the sword hand in `XRPlayer.gd` and `DesktopPlayer.gd` (`J` and `K`). Ensure recall only activates when hand is empty (`held == null`).
 - [ ] **E2b.2: Empty Steel Protection**: Implement empty haptic click on unimbued katana with zero popup messages.
 - [ ] **E2b.3: Ability Implementations**:
   - Sakura: Senbonzakura (6 glass petals) & Hanamai (orbiting barrier).
@@ -524,16 +410,14 @@ Everything the player needs to know is conveyed naturally in the game world with
 - [ ] **Critical Tests**:
   - `tests/element_abilities_test.tscn`: Each ability fires on the correct button, respects cooldown, consumes no element charges, and does nothing on plain steel.
   - `tests/vfx_pool_test.tscn`: All ability VFX respect Quest bounds (`MAX_PETALS <= 12`, `MAX_INK_POOLS <= 6`, `MAX_TRANSIENT_MESHES <= 18`).
-- [ ] **Quest Perf Risk**: ImmediateMesh lightning and petal quads must be pooled and recycled. Maximum 2 transient meshes alive simultaneously.
 
 ### Phase E2c: Ofuda Currency & Skill Tree Data Architecture
-- [ ] **E2c.1: Ofuda Item & Drops**: Create collectible 3D paper talisman drop; update `Yokai` death logic to drop Ofuda; integrate with `SoulMagnet`.
+- [ ] **E2c.1: Ofuda Item & Drops**: Create collectible 3D paper talisman drop (`src/run/ofuda_pickup.gd`); update `Yokai` death logic to drop Ofuda; integrate with `SoulMagnet`. Remove old `OfudaTalisman` level-up slicing.
 - [ ] **E2c.2: Skill Tree Data Model (`src/run/skill_tree_data.gd`)**: Implement 4 trees x 5 nodes with strict prerequisite validation and per-run reset.
 - [ ] **E2c.3: Stat & Ability Wiring**: Connect unlocked nodes to modify ability parameters (cooldowns, damage, durations, healing).
 - [ ] **Critical Tests**:
   - `tests/skill_tree_data_test.tscn`: Cannot purchase without sufficient Ofuda; cannot purchase Node 2 without Node 1; purchase correctly alters ability stats.
   - `tests/ofuda_drop_test.tscn`: Enemies drop correct Ofuda tallies; magnet draws them into player inventory.
-- [ ] **Quest Perf Risk**: Ofuda pickups use shared QuadMesh with custom shader; maximum 16 active on-ground instances before auto-merging into high-value talismans.
 
 ### Phase E2d: VR Skill Tree Menu, Pause System & No-Clipping
 - [ ] **E2d.1: Pause Manager**: Wire Left Menu button to `get_tree().paused = true`. Configure `process_mode = PROCESS_MODE_ALWAYS` on XR rig, controllers, hands, and UI. Kinematically freeze katana.
@@ -543,19 +427,33 @@ Everything the player needs to know is conveyed naturally in the game world with
 - [ ] **Critical Tests**:
   - `tests/vr_menu_pause_test.tscn`: Opening menu freezes yōkai and element timer; XR tracking and UI continue processing smoothly; closing resumes cleanly; TimeController slow-mo state is preserved across pause.
   - `tests/ui_clipping_test.tscn`: Spawning panel inside/near a tree collider never renders geometry in front of the UI text.
-- [ ] **Quest Perf Risk**: UI panel rendered as a single quad sampling a SubViewport or constructed with unshaded QuadMeshes to keep draw calls under 4.
 
 ---
 
-## Harsh Self-Review & Integrity Audit
+## Harsh Self-Review & Integrity Audit (Rule 9)
 
-1. **Is it fun?**
-   - *Yes*: Shifting from passive random procs to active button-press abilities (slashing razor petals, teleporting behind foes, chain lightning) gives players deep mechanical agency and mastery. The rhythm of hunting Torii gates in the foggy forest creates exhilarating natural micro-objectives during survival runs.
-2. **Is it clear and readable?**
-   - *Yes*: Zero screen-space clutter. The sword's blade aura, wrist circular countdown, and distant Torii lanterns tell the player everything at a glance without reading walls of text mid-combat.
-3. **Is it premium and non-kitsch?**
-   - *Yes*: No cartoon damage popups, no floating disco arrows, no "OUT OF AMMO" banners. Everything is framed through authentic Japanese swordsmanship, calligraphy (*sumi-e*), stone lanterns, weathered timber, and temple bells.
-4. **Is it strictly Quest 3 compliant?**
-   - *Yes*: All VFX are hard-capped and pooled. Torii gates use baked lighting and emissive textures rather than dynamic realtime point lights. The pause system preserves 90/72 Hz tracking without frame drops.
-5. **Is it achievable in the hackathon timeframe?**
-   - *Yes*: The modular separation into E2a, E2b, E2c, and E2d ensures clean, incremental, fully testable steps that build upon the existing solid physics and terrain architecture.
+### 1. Pacing & Downtime Risk: "Boring plain steel running"
+- **Critical Flaw in Initial Draft**: The original draft specified gates 25–55 m away. At 1.4 m/s in combat, reaching a 55 m gate takes ~39 seconds. With a 20 s duration, players spent ~50%–60% of their time running around with plain steel without any abilities, breaking the action-survivor power loop.
+- **Root Remedy Applied in Plan**: Decreased gate spacing to **18–32 m** (average 24 m). Traversal time drops to 12–17 s. A player actively fighting and moving maintains **65%–75% elemental uptime**, transforming plain steel into a brief tactical tension window rather than a boring marathon. Added explicit automated test metric `element_uptime_ratio >= 0.65`.
+
+### 2. Fog Navigation & Frustration Risk: "Lost in the milk fog"
+- **Critical Flaw in Initial Draft**: The milk fog cuts visibility at 10.5 m (`RUN_FOG_END = 10.5`). While banning cheap 2D floating arrows respects the GDD, a gate at 28 m would be completely invisible in the fog, leaving the player lost and guessing which way to walk.
+- **Root Remedy Applied in Plan**: Torii lanterns receive an unshaded volumetric emissive halo piercing the fog up to 25 m, paired with a spatialized 3D audio cue (*fūrin* wind chime, 40 m max reach) placed on the gate lintel. The player tracks gates through directional audio and atmospheric lantern glow, keeping navigation 100% diegetic and immersive without visual clutter.
+
+### 3. Controller Ergonomics & Conflict Risk: "Accidental abilities & dropped swords"
+- **Critical Flaw in Initial Draft**: Binding abilities to A and B risked breaking existing essential interactions: weapon recall, dev resets, and view recentering.
+- **Root Remedy Applied in Plan**:
+  - Verified `WeaponHolder.gd:164`: `recall` requires `held == null`. When holding the katana, pressing B activates Ability 2 with zero ambiguity. Recall only functions when disarmed.
+  - `recenter_view` moved to a deliberate 1.0s long press of the Left Menu Button and a dedicated button in the Pause Menu.
+  - Dev reset moved off VR buttons onto keyboard `[R]` and pause menu.
+
+### 4. Quest 3 Thermal & Fill-Rate Bottleneck Risk
+- **Critical Flaw in Initial Draft**: Adding interactive Torii gates as standard scene nodes with scripts and collision checks every frame could rapidly exceed the Quest 3 CPU/GPU frame budget (especially with tree raycasts during world generation).
+- **Root Remedy Applied in Plan**:
+  - Torii gates share a single instanced ArrayMesh and the existing static PBR `_torii_mat` (zero dynamic OmniLight3D nodes; illumination is pure unshaded emission and fog tinting).
+  - Clearance checking runs only once when a gate is spawned into a chunk, caching valid transforms in the `ToriiManager`.
+  - All ability VFX pools (`MAX_PETALS = 12`, `MAX_INK_POOLS = 6`, `MAX_TRANSIENT_MESHES = 18`) are pre-allocated and strictly capped.
+
+### 5. Scope Bloat & Hackathon Feasibility Risk
+- **Critical Flaw in Initial Draft**: Attempting to implement complex branching skill trees with 10+ nodes and intricate prerequisites would jeopardize shipping within the hackathon timeline.
+- **Root Remedy Applied in Plan**: Limited each element tree to exactly 5 focused nodes (1 awakening, 2 ability augments, 1 passive, 1 master synergy). Every upgrade modifies existing properties on `HeldWeapon` or `ElementSystem` (damage multiplier, cooldown, radius, duration) rather than requiring whole new subsystems.
