@@ -138,7 +138,10 @@ func slice(cut_point: Vector3 = Vector3.ZERO, cut_dir: Vector3 = Vector3.RIGHT) 
 	Sfx.play_at("cut", world_pt, 1.5)
 	Sfx.play_at("blade_ring", world_pt, -1.0)
 	if is_inside_tree() and get_tree().current_scene:
-		SparkBurst.spawn(get_tree().current_scene, world_pt, cut_dir, accent * 1.8, 32, 4.0)
+		SparkBurst.spawn(get_tree().current_scene, world_pt, cut_dir, accent * 1.45, 22, 3.4)
+		var elem := String(upgrade.get("element", Elements.NONE))
+		if elem != Elements.NONE:
+			ElementFirework.spawn(get_tree().current_scene, world_pt, elem, 0.75)
 
 	# Replace whole card mesh with two separating halves carrying their labels.
 	_card_root.visible = false
@@ -225,6 +228,7 @@ func _physics_process(_delta: float) -> void:
 	# Gentle floating hover in slow motion on the inner card root so global_position stays intact.
 	_card_root.position.y = sin(_clock * 2.4 + _phase) * 0.022
 	_card_root.rotation.z = sin(_clock * 1.7 + _phase) * 0.025
+	_mat.set_shader_parameter("glow_strength", 1.55 + sin(_clock * 2.8 + _phase) * 0.28)
 
 	_check_blade_slice(dt)
 

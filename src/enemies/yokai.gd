@@ -50,6 +50,7 @@ var _slow_scale := 1.0
 var _confusion_time := 0.0
 var _lod_far := false
 var _lod_tick := 0
+var _elite_halo: MeshInstance3D
 
 
 func prepare_for_spawn() -> void:
@@ -64,6 +65,7 @@ func prepare_for_spawn() -> void:
 		p.collision_layer = 2
 		p.collision_mask = 1 | 2 | 8
 	reset_body()
+	set_pose("stalk")
 	if brain:
 		brain.reset()
 
@@ -202,6 +204,35 @@ func _apply_kind_visuals() -> void:
 	_eyes.emission_energy_multiplier = 1.05
 	_sash.set_shader_parameter("base_color", accent.darkened(0.55))
 	_claw_mat.emission = accent * 1.2
+	_attach_elite_halo(accent)
+
+
+func _attach_elite_halo(accent: Color) -> void:
+	if _elite_halo and is_instance_valid(_elite_halo):
+		_elite_halo.queue_free()
+	var chest := parts.get("chest") as RagdollPart if parts.has("chest") else null
+	if chest == null:
+		return
+	_elite_halo = MeshInstance3D.new()
+	_elite_halo.name = "EliteHalo"
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.34
+	torus.outer_radius = 0.39
+	torus.rings = 10
+	torus.ring_segments = 24
+	_elite_halo.mesh = torus
+	_elite_halo.rotation.x = PI * 0.5
+	_elite_halo.position = Vector3(0, 0.42, 0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_color = accent * 1.25
+	mat.emission_enabled = true
+	mat.emission = accent * 0.85
+	_elite_halo.material_override = mat
+	_elite_halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	chest.add_child(_elite_halo)
 
 
 # --- 7-body lightweight ragdoll ------------------------------------------------
@@ -585,7 +616,7 @@ func die(hit: Dictionary = {}) -> void:
 	if last_kill_element == Elements.INK:
 		col = Color(0.55, 0.68, 1.2)
 	if is_inside_tree() and get_tree().current_scene:
-		SparkBurst.spawn(get_tree().current_scene, chest_pos, Vector3.UP, col, 24, 3.8)
+		ElementFirework.spawn(get_tree().current_scene, chest_pos, last_kill_element, 1.0 if kind == Kind.SWARM else 1.18)
 	GameEvents.log_event("enemy_defeated", {
 		"enemy": profile.display_name,
 		"element": last_kill_element,
