@@ -619,6 +619,7 @@ func die(hit: Dictionary = {}) -> void:
 	if last_kill_element == Elements.INK:
 		col = Color(0.55, 0.68, 1.2)
 	if is_inside_tree() and get_tree().current_scene:
+		Sfx.play_at("yokai_slice", chest_pos, -5.0, 3.5, 1.05)
 		ElementFirework.spawn(get_tree().current_scene, chest_pos, last_kill_element, 1.0 if kind == Kind.SWARM else 1.18)
 	GameEvents.log_event("enemy_defeated", {
 		"enemy": profile.display_name,

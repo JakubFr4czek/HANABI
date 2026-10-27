@@ -94,10 +94,10 @@ static func orb_color(elem: String) -> Color:
 static func spawn_cluster(parent: Node, origin: Vector3, count: int = 4, xp_each: int = 6, elem: String = Elements.NONE) -> Array[SoulOrb]:
 	var out: Array[SoulOrb] = []
 	for i in count:
-		var orb: SoulOrb
+		var orb: SoulOrb = null
 		if VfxPool:
 			orb = VfxPool.acquire_soul_orb(parent)
-		else:
+		if orb == null:
 			orb = SoulOrb.new()
 			parent.add_child(orb)
 		orb.xp_value = xp_each
@@ -170,7 +170,8 @@ func _collect() -> void:
 	if _collected:
 		return
 	_collected = true
-	Sfx.play_at("blade_ring", global_position, -12.0, 2.5)
+	Sfx.play_at("soul_collect", global_position, -8.0, 2.2, 1.05)
+	Sfx.play_at("blade_ring", global_position, -14.0, 2.5)
 	if is_inside_tree() and get_tree().current_scene:
 		SparkBurst.spawn(get_tree().current_scene, global_position, Vector3.UP, orb_color(element) * 1.6, 8, 1.8)
 	collected.emit(xp_value, element)
