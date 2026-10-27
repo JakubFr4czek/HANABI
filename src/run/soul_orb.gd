@@ -37,8 +37,8 @@ func _ready() -> void:
 	_phase = randf() * TAU
 	if _shared_mesh == null:
 		_shared_mesh = SphereMesh.new()
-		_shared_mesh.radius = 0.115
-		_shared_mesh.height = 0.26
+		_shared_mesh.radius = 0.066
+		_shared_mesh.height = 0.15
 		_shared_mesh.radial_segments = 14
 		_shared_mesh.rings = 8
 	var col := orb_color(element)
