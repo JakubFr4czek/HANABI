@@ -69,6 +69,19 @@ const BODY_MASK := 1 | 2 | 4
 ## wrist flick barely moves the body while a committed swing visibly throws it.
 @export var react_angle_per_impulse := 0.022
 @export var react_angle_max := 0.55
+## Safety net: no body part may ever travel faster than this (m/s) or spin
+## faster than this (rad/s). Hit impulses, spawn overlaps and joint snaps are
+## capped here every tick, so a limb can flail but never propeller into its own
+## torso and detonate the body. Attached weapons (held swords) are exempt —
+## a strike tip legitimately moves faster than this.
+@export var max_part_speed := 14.0
+@export var max_part_spin := 25.0
+## Caps on what one hit reaction may inject into the hit part: linear kick
+## (m/s) and spin about the contact (rad/s). An off-center blow on a light
+## limb converts almost all of its impulse into spin, so both are capped
+## together — the remainder pushes the whole body instead of detonating a joint.
+@export var max_react_dv := 5.0
+@export var max_react_spin := 12.0
 ## Seconds to fade procedural (IK) joint targets in or out.
 @export var ik_fade_time := 0.22
 
@@ -441,12 +454,19 @@ func apply_hit_reaction(part: RagdollPart, point: Vector3, direction: Vector3, i
 	if part == null or impulse <= 0.0 or direction.length_squared() < 1e-6:
 		return
 	var dir := direction.normalized()
-	# Most of the blow lands where the blade met the body, with a spin about
-	# the contact (a cut to the arm rotates that arm); the rest pushes the
-	# whole body along, weighted by mass, so the torso drifts with the cut.
-	var direct := dir * impulse * 0.6
-	part.apply_impulse(direct.limit_length(30.0), point - part.global_position)
-	part.apply_torque_impulse((point - part.global_position).cross(direct) * 0.35)
+	# Most of the blow lands where the blade met the body, but capped so the
+	# joint survives it (see _capped_point_impulse); whatever does not fit
+	# pushes the whole body along, weighted by mass, so the torso still drifts
+	# with the cut instead of a limb detonating.
+	var wanted := (dir * impulse * 0.6).limit_length(30.0)
+	var direct := _capped_point_impulse(part, point, wanted)
+	part.apply_impulse(direct, point - part.global_position)
+	if _total_mass > 0.0:
+		var rest := dir * maxf(impulse * 0.6 - direct.length(), 0.0) + dir * impulse * 0.4
+		var spread := rest / _total_mass
+		for body in _all_bodies:
+			if body != part:
+				body.apply_central_impulse(spread * body.mass)
 	if _total_mass > 0.0:
 		var spread := dir * (impulse * 0.4 / _total_mass)
 		for body in _all_bodies:
@@ -472,6 +492,38 @@ func apply_hit_reaction(part: RagdollPart, point: Vector3, direction: Vector3, i
 		_react_axis = Vector3.UP.cross(flat.normalized()).normalized()
 		_react_angle = peak
 	_react_part = part.name
+
+
+## Scale a point impulse so it kicks the part by at most [member max_react_dv]
+## m/s and spins it by at most [member max_react_spin] rad/s. A single
+## apply_impulse off the center of mass does both at once, and on a light limb
+## the spin term dominates — uncapped, one heavy cut injects ~200 rad/s and the
+## joint solver detonates the body on the next step.
+func _capped_point_impulse(part: RagdollPart, point: Vector3, wanted: Vector3) -> Vector3:
+	if wanted.length_squared() < 1e-8:
+		return Vector3.ZERO
+	var st := PhysicsServer3D.body_get_direct_state(part.get_rid())
+	if st == null:
+		return wanted
+	var scale := 1.0
+	var dv := wanted.length() / maxf(part.mass, 0.2)
+	if dv > max_react_dv:
+		scale = minf(scale, max_react_dv / dv)
+	var dw: Vector3 = st.inverse_inertia_tensor * (point - part.global_position).cross(wanted)
+	if dw.length() > max_react_spin:
+		scale = minf(scale, max_react_spin / dw.length())
+	return wanted * scale
+
+
+## Hard safety net, every tick: clamp every body part (not attached weapons)
+## so no physics event can ever turn a limb into a propeller or a projectile.
+func _clamp_part_velocities() -> void:
+	for p in parts.values():
+		var part := p as RagdollPart
+		if part.linear_velocity.length_squared() > max_part_speed * max_part_speed:
+			part.linear_velocity = part.linear_velocity.limit_length(max_part_speed)
+		if part.angular_velocity.length_squared() > max_part_spin * max_part_spin:
+			part.angular_velocity = part.angular_velocity.limit_length(max_part_spin)
 
 
 ## Teleport back to the rest pose at the anchor, at full strength.
@@ -512,6 +564,7 @@ func _set_state(new_state: State) -> void:
 
 func _physics_process(delta: float) -> void:
 	_react_time = maxf(_react_time - delta, 0.0)
+	_clamp_part_velocities()
 	if state == State.STANDING:
 		anchor_position += Vector3(move_velocity.x, 0.0, move_velocity.z) * delta
 		if max_anchor_lead > 0.0:
@@ -609,7 +662,13 @@ func _drive_joints(delta: float) -> void:
 		var omega_ff := q_parent * (_rotation_error(q_local, _final_prev.get(part_name, q_local)) / delta)
 		var omega_des := (omega_ff + _rotation_error(q_target, child.global_basis.get_rotation_quaternion()) * (joint_stiffness * k)).limit_length(max_speed)
 		var omega_rel := child.angular_velocity - parent.angular_velocity
-		var dw := (omega_des - omega_rel) * (joint_gain * muscle)
+		# The hit limb goes loose while the reaction decays (a dead arm): full
+		# muscle gain on a flung limb fights the joint solver every tick and
+		# propellers it. It re-engages as the reaction fades.
+		var gain := joint_gain * muscle
+		if part_name == _react_part and _react_time > 0.0 and _react_dur > 0.0:
+			gain *= 1.0 - 0.85 * clampf(_react_time / _react_dur, 0.0, 1.0)
+		var dw := (omega_des - omega_rel) * gain
 		var pivot := _joint_world(part_name)
 		var max_l: float = def.get("max_torque", 300.0) * k * delta
 		var reaction := _rotate_subtree(_subtree[part_name], pivot, dw, max_l)

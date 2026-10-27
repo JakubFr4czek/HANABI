@@ -98,20 +98,21 @@ func _test_hit_arm_flings_that_arm() -> void:
 	var arm: RagdollPart = dummy.parts["upper_arm_l"]
 	var other: RagdollPart = dummy.parts["upper_arm_r"]
 	# Muscles off: the stiff guard would yank the limb back within a tick, so
-	# the raw impulse is measured as displacement over a few ticks instead.
+	# the raw impulse is measured over a few ticks instead. The point impulse
+	# is joint-capped (no detonations), so locality reads in the spin: the hit
+	# arm rotates off the contact while the far arm stays still.
 	dummy.muscle = 0.0
 	var start := arm.global_position.x
-	var start_other := other.global_position.x
 	# Off-center contact (toward the hand), like a real cut to the forearm.
 	dummy.apply_hit_reaction(arm, arm.global_position + Vector3(0, -0.2, 0), Vector3.RIGHT, 12.0)
 	for i in 3:
 		await get_tree().physics_frame
 	var dx := arm.global_position.x - start
-	var dx_other := other.global_position.x - start_other
 	var spin := arm.angular_velocity.length()
+	var spin_other := other.angular_velocity.length()
 	dummy.reset_body()
-	_check("hit arm flies with the blade, far arm barely moves (%.3f vs %.3f m, spin %.2f rad/s)" % [dx, dx_other, spin],
-		dx > 0.04 and dx > dx_other * 2.0 and spin > 0.5)
+	_check("hit arm rotates off the contact, far arm stays still (spin %.2f vs %.2f rad/s, drift %+.3f m)" % [spin, spin_other, dx],
+		spin > 5.0 and spin > spin_other * 2.0 and dx > 0.0)
 
 
 ## Flesh resists the cut: the blade loses speed along it, blunts more than the edge.
