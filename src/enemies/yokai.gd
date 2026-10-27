@@ -607,8 +607,10 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	hit["hp_left"] = hp
 
 	var kb: Vector3 = hit.get("knockback", Vector3.ZERO)
-	if kb != Vector3.ZERO:
-		part.apply_impulse(kb.limit_length(28.0), hit.point - part.global_position)
+	if kb.length_squared() > 1e-6:
+		# Directional reaction: the hit limb (and torso) folds toward where
+		# the blade travelled, scaled by the blow's impulse.
+		apply_hit_reaction(part, hit.point, kb.normalized(), minf(kb.length(), 28.0))
 	var poise := float(hit.impulse) * profile.poise_per_impulse if hit.has("impulse") else dmg * profile.poise_damage_scale
 	weaken(dmg * profile.muscle_damage_scale, poise)
 	hit["balance_left"] = snappedf(balance, 0.01)
@@ -635,8 +637,8 @@ func receive_element_damage(amount: float, element: String, point: Vector3, dire
 	var damage := snappedf(amount * profile.damage_multiplier("torso", element), 0.1)
 	hp = maxf(hp - damage, 0.0)
 	var chest := parts.get("chest") as RagdollPart
-	if chest:
-		chest.apply_impulse(direction.normalized() * minf(damage * 0.045, 1.8), point - chest.global_position)
+	if chest and direction.length_squared() > 1e-6:
+		apply_hit_reaction(chest, point, direction.normalized(), minf(damage * 0.045, 1.8))
 	weaken(damage * profile.muscle_damage_scale * 0.45, damage * profile.poise_damage_scale * 0.35)
 	var hit := {
 		"attacker": "element_ability",
