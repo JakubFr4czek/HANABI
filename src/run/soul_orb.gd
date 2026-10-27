@@ -94,16 +94,44 @@ static func orb_color(elem: String) -> Color:
 static func spawn_cluster(parent: Node, origin: Vector3, count: int = 4, xp_each: int = 6, elem: String = Elements.NONE) -> Array[SoulOrb]:
 	var out: Array[SoulOrb] = []
 	for i in count:
-		var orb := SoulOrb.new()
+		var orb: SoulOrb
+		if VfxPool:
+			orb = VfxPool.acquire_soul_orb(parent)
+		else:
+			orb = SoulOrb.new()
+			parent.add_child(orb)
 		orb.xp_value = xp_each
 		orb.element = elem
-		parent.add_child(orb)
+		var col := orb_color(elem)
+		orb._mat.set_shader_parameter("soul_color", col)
+		if orb._wisp.material_override is StandardMaterial3D:
+			(orb._wisp.material_override as StandardMaterial3D).albedo_color = col * 1.35
 		var angle := (TAU * float(i) / float(maxi(count, 1))) + randf_range(-0.3, 0.3)
 		var speed := randf_range(1.4, 2.6)
 		orb.global_position = origin + Vector3(cos(angle) * 0.14, randf_range(0.05, 0.25), sin(angle) * 0.14)
 		orb.velocity = Vector3(cos(angle) * speed, randf_range(1.6, 2.8), sin(angle) * speed)
 		out.append(orb)
 	return out
+
+
+func activate_from_pool() -> void:
+	_collected = false
+	_age = 0.0
+	velocity = Vector3.ZERO
+	_phase = randf() * TAU
+	_mat.set_shader_parameter("phase", _phase)
+	visible = true
+	_wisp.emitting = true
+	show()
+
+
+func deactivate_for_pool() -> void:
+	_collected = true
+	velocity = Vector3.ZERO
+	_age = 0.0
+	_wisp.emitting = false
+	visible = false
+	hide()
 
 
 func step_orb(delta: float, target_pos: Vector3, magnet_radius: float) -> bool:
@@ -146,4 +174,7 @@ func _collect() -> void:
 	if is_inside_tree() and get_tree().current_scene:
 		SparkBurst.spawn(get_tree().current_scene, global_position, Vector3.UP, orb_color(element) * 1.6, 8, 1.8)
 	collected.emit(xp_value, element)
-	queue_free()
+	if VfxPool:
+		VfxPool.release_soul_orb(self)
+	else:
+		queue_free()

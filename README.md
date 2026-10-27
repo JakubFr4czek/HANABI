@@ -76,6 +76,8 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/enemy_variants_test.tscn -
 $GODOT --headless --path . --fixed-fps 90 res://tests/run_intro_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/quest_perf_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/vfx_polish_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/vfx_pool_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/quest_perf_overlay_test.tscn -- --desktop
 # Diagnostics: 40 s of sparring stats per difficulty, block traces
 $GODOT --headless --path . --fixed-fps 90 res://tests/diag/diag_spar.tscn -- --desktop normal
 ```
