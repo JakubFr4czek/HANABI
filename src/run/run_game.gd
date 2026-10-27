@@ -622,7 +622,7 @@ func _apply_upgrade(upgrade: Dictionary) -> void:
 		return
 	var element := UpgradePool.element_for_upgrade(id)
 	if element != Elements.NONE:
-		if not element_system.active_elements.has(element) and element_system.active_elements.size() >= 2:
+		if not element_system.active_elements.has(element) and element_system.active_elements.size() >= 1:
 			return
 		if int(upgrade_stacks.get(id, 0)) <= 0 and UpgradePool.element_slot_count(upgrade_stacks) >= UpgradePool.ELEMENT_SLOT_LIMIT:
 			return
@@ -675,12 +675,7 @@ func _on_element_ability_requested(direction: Vector3) -> void:
 
 
 func _update_element_seal() -> void:
-	var evolution_mask := 0
-	if element_system.has_evolution(Elements.BLACK_LIGHTNING):
-		evolution_mask |= 1
-	if element_system.has_evolution(Elements.PHANTOM_PETALS):
-		evolution_mask |= 2
-	set_seal_progress(element_system.active_elements, evolution_mask)
+	set_seal_progress(element_system.active_elements, 0)
 
 
 # --- Death, End Screen & High Score --------------------------------------------

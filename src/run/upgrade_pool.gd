@@ -148,13 +148,6 @@ static func element_slot_count(stacks: Dictionary) -> int:
 	return total
 
 
-static func tree_complete(element: String, stacks: Dictionary) -> bool:
-	for u: Dictionary in ELEMENT_UPGRADES:
-		if String(u.element) == element and int(stacks.get(String(u.id), 0)) <= 0:
-			return false
-	return true
-
-
 static func available_element_upgrades(stacks: Dictionary, active_elements: Array, slots_used: int = -1) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var occupied := element_slot_count(stacks) if slots_used < 0 else slots_used
@@ -167,7 +160,9 @@ static func available_element_upgrades(stacks: Dictionary, active_elements: Arra
 		var element := String(u.element)
 		var tier := int(u.tier)
 		if tier == 1:
-			if active_elements.has(element) or active_elements.size() >= 2:
+			# One element per run: the first pick locks the build, later hands
+			# only offer its remaining tiers (plus generics).
+			if active_elements.has(element) or active_elements.size() >= 1:
 				continue
 		else:
 			if not active_elements.has(element):

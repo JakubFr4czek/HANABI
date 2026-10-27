@@ -32,12 +32,13 @@ func _run_all() -> void:
 
 	run._apply_upgrade({"id": "storm_chain"})
 	run._update_element_seal()
-	_check("Seal lights Storm quadrant (雷) with two elements",
-		int(seal_mat.get_shader_parameter("active_elements_mask")) == 3)
+	_check("Second element is rejected (one element per run)",
+		run.element_system.active_elements == [Elements.SAKURA]
+		and int(seal_mat.get_shader_parameter("active_elements_mask")) == 1)
 
 	run._apply_upgrade({"id": "ink_pool"})
-	_check("Third element is rejected (max 2 elements per GDD §5)",
-		run.element_system.active_elements.size() == 2
+	_check("Third element is rejected (one element per run)",
+		run.element_system.active_elements.size() == 1
 		and not run.element_system.active_elements.has(Elements.INK))
 
 	run.start_run()
@@ -45,8 +46,9 @@ func _run_all() -> void:
 	for id in ["sakura_petals", "sakura_orbit", "sakura_heal", "storm_chain", "storm_charge", "storm_overload"]:
 		run._apply_upgrade({"id": id})
 	run._apply_upgrade({"id": "ink_pool"})
-	_check("Seventh element upgrade type is blocked at six slots (GDD §5)",
-		UpgradePool.element_slot_count(run.upgrade_stacks) == UpgradePool.ELEMENT_SLOT_LIMIT
+	_check("Foreign element stays blocked once a tree is complete",
+		UpgradePool.element_slot_count(run.upgrade_stacks) == 3
+		and not run.upgrade_stacks.has("storm_chain")
 		and not run.upgrade_stacks.has("ink_pool"))
 
 	run.diegetic_hud.on_parry()
