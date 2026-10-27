@@ -22,7 +22,9 @@ void fragment() {
 	float streak = pow(max(0.0, 1.0 - abs(sweep * 2.0 - 1.0) * 2.4), 3.0);
 	vec3 glass = mix(petal_color * 0.72, rim_color, edge * 0.78) + rim_color * vein * 0.14;
 	glass += glass_highlight * streak * 0.55 * (1.0 - edge * 0.45) * shape;
+	// Instance colour (MultiMesh petals): rgb tints, alpha fades the petal out.
+	glass *= COLOR.rgb;
 	ALBEDO = glass;
-	EMISSION = glass * (0.20 + edge * 0.34) + glass_highlight * streak * 0.30 * shape;
-	ALPHA = shape * 0.62;
+	EMISSION = glass * (0.20 + edge * 0.34) + glass_highlight * streak * 0.30 * shape * COLOR.a;
+	ALPHA = shape * 0.62 * COLOR.a;
 }
