@@ -970,10 +970,98 @@ func _build_meshes() -> void:
 	_tree_mesh = _merge_scene_meshes(TREE_SCENE, 1.0)
 	if _tree_mesh == null:
 		_tree_mesh = _build_tree_mesh()
+	else:
+		_tree_mesh = _rebuild_crown(_tree_mesh)
 	_tree_mesh = _append_root_flare(_tree_mesh)
 	_torii_mesh = _build_torii_mesh()
 	_lantern_mesh = _build_lantern_mesh()
 	_rock_mesh = _extract_rock_mesh()
+
+
+## The scanned crown was decimated leaf cards cut out of a blob atlas: after
+## the decimation the UV islands no longer matched the triangles, so seen from
+## below the canopy was a cloud of ragged, see-through shards. Keep the bark
+## (trunk and boughs, the atlas's bottom-left strip) and grow the crown again
+## as solid foliage clumps where the scan's leaf mass was (weighted k-means of
+## the scanned crown: centre, radius). ~1k triangles instead of ~5.3k.
+const CROWN_CLUMPS := [
+	[Vector3(0.08, 10.14, -3.36), 2.2], [Vector3(4.03, 9.42, -0.61), 2.1],
+	[Vector3(-0.14, 11.66, 0.19), 2.3], [Vector3(5.80, 10.63, -2.85), 2.0],
+	[Vector3(-6.12, 10.48, 2.53), 1.9], [Vector3(1.21, 9.88, 3.24), 2.1],
+	[Vector3(3.41, 11.44, 4.86), 2.0], [Vector3(-1.83, 11.55, -5.30), 1.9],
+	[Vector3(-4.06, 9.37, 0.38), 2.1],
+]
+
+
+func _rebuild_crown(scan: Mesh) -> ArrayMesh:
+	var arrays := scan.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	if idx.is_empty():
+		idx.resize(verts.size())
+		for i in verts.size():
+			idx[i] = i
+	for t in range(0, idx.size() - 2, 3):
+		var uv_c := (uvs[idx[t]] + uvs[idx[t + 1]] + uvs[idx[t + 2]]) / 3.0
+		var p_c := (verts[idx[t]] + verts[idx[t + 1]] + verts[idx[t + 2]]) / 3.0
+		# Boughs map to the atlas's bottom-left strips; the trunk itself to a
+		# small bark square, so it is kept by position (on the axis, below
+		# the crown) instead.
+		# Above the clumps' underside the boughs only poke out as shards.
+		var bough := uv_c.x < 0.34 and uv_c.y > 0.66 and p_c.y < 8.8
+		var trunk := Vector2(p_c.x, p_c.z).length() < 0.9 and p_c.y < 9.0
+		if not bough and not trunk:
+			continue  # leaf card
+		for k in 3:
+			st.set_normal(normals[idx[t + k]])
+			st.set_uv(uvs[idx[t + k]])
+			st.add_vertex(verts[idx[t + k]])
+	var noise := FastNoiseLite.new()
+	noise.seed = 0x4C454146
+	noise.frequency = 0.9
+	for c in CROWN_CLUMPS.size():
+		_add_foliage_clump(st, CROWN_CLUMPS[c][0], float(CROWN_CLUMPS[c][1]), noise, c)
+	# The bark is normal-mapped: without tangents its lighting turns to NaN
+	# and the trunks vanish.
+	st.generate_tangents()
+	return st.commit()
+
+
+## A lumpy, slightly flattened foliage mass with smooth normals. UV.y = 2
+## marks it for the foliage branch of the tree shader; UV.x carries a
+## per-vertex random shade.
+func _add_foliage_clump(st: SurfaceTool, center: Vector3, radius: float, noise: FastNoiseLite, seed_i: int) -> void:
+	var sphere := SphereMesh.new()
+	sphere.radius = 1.0
+	sphere.height = 2.0
+	sphere.radial_segments = 11
+	sphere.rings = 6
+	var a := sphere.get_mesh_arrays()
+	var sv: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var si: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+	var cst := SurfaceTool.new()
+	cst.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var offset := Vector3(seed_i * 7.3, seed_i * 3.1, seed_i * 5.7)
+	for i in sv.size():
+		var d := sv[i]
+		var bump := 1.0 + noise.get_noise_3dv(d * 1.6 + offset) * 0.38
+		# Flatter underside: a canopy mass hangs, it is not a ball.
+		var y := d.y * (0.62 if d.y < 0.0 else 0.8)
+		var p := Vector3(d.x, y, d.z) * radius * bump
+		cst.set_uv(Vector2(float(absi(hash(i * 31 + seed_i * 977)) % 1000) / 999.0, 2.0))
+		cst.add_vertex(center + p)
+	for i in si:
+		cst.add_index(i)
+	cst.generate_normals()
+	# Smooth normals are computed on the shared vertices; then flatten the
+	# index: appending an indexed surface to the non-indexed bark switches
+	# the tool to indices and silently drops every bark triangle.
+	cst.deindex()
+	st.append_from(cst.commit(), 0, Transform3D.IDENTITY)
 
 
 ## Roots and a flare welded onto the trunk mesh (same draw call). UV.x > 1
