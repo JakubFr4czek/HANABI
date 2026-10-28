@@ -59,10 +59,15 @@ func setup(p_forest: ForestWorld, p_follow: Node3D, p_torii: ToriiManager) -> vo
 ## Run start: forgets every shrine and candidate, then proposes the opening shrine
 ## in front of the spawn (the forest chunks around the spawn must already exist).
 func reset(p_start: Vector3, p_forward: Vector3) -> void:
+	# Freed now: a queued shrine keeps its colliders in the physics space, and
+	# the placement checks of the new run would see a shrine that is gone.
 	for slot in _shrines.keys():
 		var s := _shrines[slot] as HokoraShrine
 		if is_instance_valid(s):
-			s.queue_free()
+			var parent := s.get_parent()
+			if parent != null:
+				parent.remove_child(s)
+			s.free()
 	_shrines.clear()
 	_claimed.clear()
 	_candidates.clear()

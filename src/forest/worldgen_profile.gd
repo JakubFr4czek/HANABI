@@ -163,13 +163,17 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Lattice spacing of the path network, metres: a node per cell, joined to the start.
 @export_range(28.0, 140.0, 0.5) var path_node_spacing := 56.0
 ## Width of the trodden strip, metres (terrain colour and clearing of trees).
-@export_range(0.6, 4.0, 0.05) var path_width := 1.6
+@export_range(0.6, 4.0, 0.05) var path_width := 2.0
 ## Share of the lattice edges that also become loops (0 = a tree of paths).
 @export_range(0.0, 1.0, 0.01) var path_loop_chance := 0.25
 ## How much the routes meander around the terrain's bumps.
 @export_range(0.0, 2.0, 0.01) var path_curviness := 0.6
 ## Gap kept free of trunks beside a path, metres (on top of half the width).
-@export_range(0.0, 6.0, 0.05) var path_tree_clearance := 1.2
+@export_range(0.0, 6.0, 0.05) var path_tree_clearance := 2.0
+## Colour of the packed earth on the trail (multiplies its texture, lit by the night palette).
+@export var path_tint := Color(1.0, 0.9, 0.76)
+## Brightness of the trail against the duff beside it (1.0 = same as its texture).
+@export_range(1.0, 2.5, 0.01) var path_gain := 1.5
 ## Share of gates that stand beside a path instead of at a random site.
 @export_range(0.0, 1.0, 0.01) var torii_on_path := 0.6
 ## Share of lanterns that stand along a path instead of at a random site.

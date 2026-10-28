@@ -42,6 +42,7 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/models/environment/rocks/rock_face_01/` (glTF, textures 1K) | https://polyhaven.com/a/rock_face_01 | Dario Barresi (Poly Haven) | CC0 1.0 |
 | `assets/textures/forest_ground/leafy_grass/` (1K) | https://polyhaven.com/a/leafy_grass | Charlotte Baglioni (Poly Haven) | CC0 1.0 |
 | `assets/textures/forest_ground/forrest_ground_01/` (1K) | https://polyhaven.com/a/forrest_ground_01 | Rob Tuytel (Poly Haven) | CC0 1.0 |
+| `assets/textures/forest_path/ground067_*_1k.jpg` (colour and GL normal, 1K) | https://ambientcg.com/view?id=Ground067 | Lennart Demes (ambientCG) | CC0 1.0 |
 | `assets/textures/forest_ground/rocky_trail/` (1K) | https://polyhaven.com/a/rocky_trail | Amal Kumar (Poly Haven) | CC0 1.0 |
 | `assets/models/environment/rocks/rock_face_02/` (glTF, textures 1K) | https://polyhaven.com/a/rock_face_02 | Dario Barresi, Rico Cilliers (Poly Haven) | CC0 1.0 |
 | `assets/textures/japanese_stone_wall/` (diff, nor_gl, arm; 1K) | https://polyhaven.com/a/japanese_stone_wall | Rico Cilliers, Charlotte Baglioni, Dario Barresi (Poly Haven) | CC0 1.0 |
