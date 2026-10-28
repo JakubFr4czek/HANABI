@@ -121,10 +121,14 @@ The physics-test mannequin lives here. It is the dummy test level: its own scene
 ### Run intro
 At the start of a run the player hovers about 0.5–1 m above the forest floor in a meditative cross-legged pose (seiza / lotus-like), then descends into the glade.
 
-- **Descent:** slow and smooth, sakura petals swirl around the player.
-- **Touchdown:** a lightning flash lights the forest, and the katana materializes in the hand. The player lands at their real standing height (in VR: hold B/Y to recenter, hold B + right stick to adjust eye height).
+- **Descent:** slow and smooth (~3.1 s), sakura petals swirl around the player with glowing air steps rippling beneath the feet.
+- **Touchdown:** a lightning flash lights the forest, ground seal glows, and an expanding shockwave ripple washes outward. Locomotion is unlocked at touchdown so the player can look around and walk freely. The player lands at their real standing height (in VR: hold B/Y to recenter, hold B + right stick to adjust eye height).
+- **Spirit Gate offering vs. Materialize on touchdown (DECISION FOR JAKUB):**
+  - *Original GDD spec:* The katana instantly materializes in the player's hand on touchdown during the lightning flash.
+  - *Implemented ritual (`src/run/run_intro.gd`, `tests/intro_grab_test.tscn`):* An ethereal spirit portal gate (`spirit_portal.gdshader`) opens in front of the player. The katana emerges handle-first from the gate, bathed in soft emissive light, before the portal dissolves. The katana hangs floating in mid-air at chest height. Grabbing the hilt physically (`HeldWeapon.is_held()`) acts as the tangible "start button" that finishes the intro, fades the glow, and begins the survival run / yōkai spawns. Pressing A/X provides an instant skip directly into the player's hand.
+  - *Decision for Jakub:* Decide whether to keep the spirit gate offering with the physical grab-to-start ceremony as the permanent intro ritual, or revert to the original "instant materialize into hand on touchdown". The gate emergence adds ritual weight and tactile agency in VR, but adds ~4.3 s post-touchdown unless skipped.
 - **Body:** no visible legs. The pose shows only as a shadow, or as a reflection in the water.
-- **Comfort:** linear motion, no sudden deceleration, horizon stable. Nothing takes over the camera beyond the vertical offset. A few seconds at most, and skippable.
+- **Comfort:** linear motion, no sudden deceleration, horizon stable. Nothing takes over the camera beyond the vertical offset. A few seconds at most, and skippable (A/X).
 
 ## 10. Audio
 - Sword swings, clashes and slices; thunder; wind; temple bell (bonshō); night ambience.
@@ -145,6 +149,7 @@ At the start of a run the player hovers about 0.5–1 m above the forest floor i
 - **Stabbing / impaling (Blade & Sorcery style):** the blade tip enters a body when the hit velocity is along the blade axis; a slider joint locks it to that axis with friction; the blade is pulled out by retracting it past the entry point.
 
 ## 13. Open questions
+- **Intro ritual — Spirit Gate offering vs. Instant Materialize (DECISION FOR JAKUB):** Currently implemented in `src/run/run_intro.gd`: at touchdown a spirit portal gate opens, the katana emerges handle-first and hangs floating in mid-air, requiring the player to physically grab the hilt to start the run (skippable with A/X). Decision for Jakub: keep this physical ceremony or revert to GDD §9's original instant materialization directly into the hand on touchdown.
 - Locomotion: decided in VR Comfort & Accessibility; build it in the final phase. Current build: smooth move on the left stick, snap turn on the right stick.
 - Placeholders in the test room (2026-10-26): the training dummy and both bokken are built from Godot primitives; the Quaternius base character / katana models are not used yet. Skinning the Quaternius mesh onto the active ragdoll is planned with the yōkai (milestone 2).
 - Balance numbers for the dummy (first pass): damage = (relative speed − 1.5 m/s) × 9, cap 120, × strike multiplier; poise damage 0.01 per damage point, balance regen 0.5/s: one full edge cut (~10 m/s) staggers, two or three quick heavy cuts knock it down. Tune by feel in the headset.
