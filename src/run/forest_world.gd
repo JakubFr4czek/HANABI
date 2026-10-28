@@ -29,16 +29,13 @@ const TORII_MESH_SCALE := 0.42
 ## around them instead (trunk_push).
 const TRUNK_LAYER := 64
 const TRUNK_CELL := 3.0
-## Trees per chunk side on the jittered grid (28 m / 9 ≈ 3.1 m spacing).
-const TREE_GRID := 9
 ## Gate candidates keep this far from a live gameplay gate (ToriiManager).
 const GATE_CLEAR_OF_LIVE_GATE := 3.5
 ## Senbon rows: axis threshold and the spacing from the corridor noise.
 const SENBON_AXIS_THRESHOLD := 0.72
 const CORRIDOR_SCALE := 1.7
-## Kinds seed the per-chunk streams. Trees use 0, gates 1, lanterns 2,
-## undergrowth 3 + its index in the profile.
-const KIND_TREE := 0
+## Kinds seed the per-chunk streams: gates 1, lanterns 2, undergrowth
+## 3 + its index in the profile (trees use PoissonDisk, see _potential_trunks).
 const KIND_TORII := 1
 const KIND_LANTERN := 2
 const KIND_UNDERGROWTH := 3
@@ -75,6 +72,8 @@ var _trunk_cells: Dictionary = {}
 ## Chunk coord -> {spots, ids, clearing, cells}. Spots are world xz, scale, yaw
 ## (Vector4); ids are the profile tree-entry index of each spot.
 var _tree_spot_cache: Dictionary = {}
+## Chunk coord -> {points: Array[Vector4] (x, z, entry, spacing), clearing: int}.
+var _potential_cache: Dictionary = {}
 var _spots_ready := false
 ## Trees reveal as the player approaches, not only at chunk borders.
 var _last_tree_draw_pos := Vector3.INF
@@ -151,6 +150,7 @@ func reset() -> void:
 	_chunks.clear()
 	_trunk_cells.clear()
 	_tree_spot_cache.clear()
+	_potential_cache.clear()
 	_last_tree_draw_pos = Vector3.INF
 	center_chunk = Vector2i.ZERO
 	chunk_count = 0
@@ -165,6 +165,7 @@ func reset() -> void:
 func _apply_profile() -> void:
 	var seed_mix := profile.world_seed
 	_tree_spot_cache.clear()
+	_potential_cache.clear()
 	_spots_ready = false
 	_height_noise.seed = 0x464F52455354 ^ seed_mix
 	_height_noise.frequency = profile.hill_frequency
@@ -352,6 +353,10 @@ func _rebuild_active_chunks() -> void:
 		var c: Vector2i = key
 		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 1:
 			_tree_spot_cache.erase(key)
+	for key in _potential_cache.keys():
+		var c: Vector2i = key
+		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 2:
+			_potential_cache.erase(key)
 	if follow:
 		_last_tree_draw_pos = _anchor_position()
 		_refresh_tree_draw(_anchor_position())
@@ -458,7 +463,7 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 	# corridors), so torii check trees wide but each other narrow.
 	var tree_keep := _tree_trunk_points(coord)
 	var placed: Array = []
-	for p in _scatter_points(rng, kind, int(spec.max)):
+	for p in _prop_sites(rng, int(spec.max), float(spec.spacing)):
 		var lx: float = p.x
 		var lz: float = p.y
 		var wx := root.position.x + lx
@@ -526,7 +531,7 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 
 func _torii_spec() -> Dictionary:
 	return {
-		"max": profile.torii_max_per_chunk, "cluster": -1.0,
+		"max": profile.torii_max_per_chunk, "spacing": profile.torii_min_spacing, "cluster": -1.0,
 		"scale_min": 0.0, "scale_max": 0.0, "grow": 0.0,
 		"tree_clear": profile.torii_tree_clearance, "prop_clear": profile.torii_prop_clearance,
 		"bury": 0.0, "obstacle": true,
@@ -535,7 +540,8 @@ func _torii_spec() -> Dictionary:
 
 func _lantern_spec() -> Dictionary:
 	return {
-		"max": profile.lantern_max_per_chunk, "cluster": profile.lantern_cluster_threshold,
+		"max": profile.lantern_max_per_chunk, "spacing": profile.lantern_min_spacing,
+		"cluster": profile.lantern_cluster_threshold,
 		"scale_min": profile.lantern_scale_min, "scale_max": profile.lantern_scale_max, "grow": 0.0,
 		"tree_clear": profile.lantern_clearance, "prop_clear": profile.lantern_clearance,
 		"bury": 0.0, "obstacle": true,
@@ -544,7 +550,7 @@ func _lantern_spec() -> Dictionary:
 
 func _undergrowth_spec(entry: UndergrowthEntry) -> Dictionary:
 	return {
-		"max": entry.max_per_chunk, "cluster": entry.cluster_threshold,
+		"max": entry.max_per_chunk, "spacing": entry.min_spacing, "cluster": entry.cluster_threshold,
 		"scale_min": entry.scale_min, "scale_max": entry.scale_max, "grow": 0.5,
 		"tree_clear": entry.clearance, "prop_clear": entry.clearance,
 		"bury": entry.bury, "obstacle": entry.obstacle,
@@ -556,59 +562,71 @@ func _tree_trunk_points(coord: Vector2i) -> Array:
 	var out: Array = []
 	for ox in range(-1, 2):
 		for oz in range(-1, 2):
-			var packed: Dictionary = _tree_spots(coord) if ox == 0 and oz == 0 \
-				else _tree_spot_cache.get(coord + Vector2i(ox, oz), {})
+			var packed: Dictionary = _tree_spots(coord + Vector2i(ox, oz))
 			for s in packed.get("spots", []):
 				var spot: Vector4 = s
 				out.append(Vector3(spot.x, spot.y, 0.0))
 	return out
 
 
+## Poisson-disk trunk candidates of a chunk, per ordinary kind (PoissonDisk,
+## Bridson 2007). Each candidate survives the clearing and the density test
+## here, so it is a pure function of the chunk, the seed and the profile:
+## a neighbour can read it without knowing what else is loaded.
+func _potential_trunks(coord: Vector2i) -> Dictionary:
+	if _potential_cache.has(coord):
+		return _potential_cache[coord]
+	var points: Array[Vector4] = []
+	var clearing := 0
+	var size := profile.chunk_size
+	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
+	for e in _ordinary_entries():
+		var entry := profile.trees[e]
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash([coord.x, coord.y, e, 0x50495353]) ^ profile.world_seed
+		var sample := PoissonDisk.sample(rng, centre - Vector2(size, size) * 0.5, Vector2(size, size), entry.min_spacing)
+		for p in sample:
+			if _in_clearing(p.x, p.y):
+				clearing += 1
+				continue
+			var density := _scatter_noise.get_noise_2d(p.x * profile.density_frequency, p.y * profile.density_frequency) * 0.5 + 0.5
+			if _point_random(p.x, p.y, 1) > lerpf(profile.tree_keep_min, profile.tree_keep_max, density):
+				continue
+			points.append(Vector4(p.x, p.y, float(e), entry.min_spacing))
+	var result := {"points": points, "clearing": clearing}
+	_potential_cache[coord] = result
+	return result
+
+
 ## Tree spot set for a chunk, cached. Returns {spots, ids, clearing, cells}.
+## Spots are the candidates of this chunk that keep their distance from the
+## accepted trunks here and from every candidate of the eight neighbours (a
+## superset of what they accept, so the result never depends on load order).
 func _tree_spots(coord: Vector2i) -> Dictionary:
 	if _tree_spot_cache.has(coord):
 		return _tree_spot_cache[coord]
-	var spots: Array[Vector4] = []
-	var ids := PackedInt32Array()
-	var clearing := 0
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([coord.x, coord.y, 0, 0x464F52]) ^ profile.world_seed
-	var origin := Vector2(float(coord.x) * profile.chunk_size, float(coord.y) * profile.chunk_size)
-	var ordinary := _ordinary_entries()
-	# Crown spacing: no two trunks closer than their kind's spacing, inside the
-	# chunk and against the halo (already-built neighbours are in the cache; a
-	# neighbour built later avoids us the same way).
-	var halo: Array[Vector3] = []
+	var own: Dictionary = _potential_trunks(coord)
+	var halo: Array[Vector4] = []
 	for ox in range(-1, 2):
 		for oz in range(-1, 2):
 			if ox == 0 and oz == 0:
 				continue
-			var packed: Dictionary = _tree_spot_cache.get(Vector2i(coord.x + ox, coord.y + oz), {})
-			var n_spots: Array = packed.get("spots", [])
-			var n_ids: PackedInt32Array = packed.get("ids", PackedInt32Array())
-			for k in n_spots.size():
-				var spot: Vector4 = n_spots[k]
-				halo.append(Vector3(spot.x, spot.y, _spacing_of(n_ids[k])))
-	if not ordinary.is_empty():
-		for p in _scatter_points(rng, KIND_TREE, 0):
-			var wx := origin.x + p.x
-			var wz := origin.y + p.y
-			if _in_clearing(wx, wz):
-				clearing += 1
-				continue
-			if torii_manager and torii_manager.is_near_gate(wx, wz, GATE_CLEAR_OF_LIVE_GATE):
-				continue
-			var density := _scatter_noise.get_noise_2d(wx * profile.density_frequency, wz * profile.density_frequency) * 0.5 + 0.5
-			if rng.randf() > lerpf(profile.tree_keep_min, profile.tree_keep_max, density):
-				continue
-			var e := _pick_ordinary(rng, ordinary)
-			var entry := profile.trees[e]
-			if _too_close_to_trees(spots, ids, halo, wx, wz, entry.min_spacing):
-				continue
-			var scale := rng.randf_range(entry.scale_min, entry.scale_max)
-			var yaw := rng.randf() * TAU
-			spots.append(Vector4(wx, wz, scale, yaw if entry.random_yaw else 0.0))
-			ids.append(e)
+			halo.append_array(_potential_trunks(Vector2i(coord.x + ox, coord.y + oz)).points)
+	var spots: Array[Vector4] = []
+	var ids := PackedInt32Array()
+	for c in own.points:
+		var cand: Vector4 = c
+		var wx := cand.x
+		var wz := cand.y
+		if torii_manager and torii_manager.is_near_gate(wx, wz, GATE_CLEAR_OF_LIVE_GATE):
+			continue
+		if _too_close_to_trees(spots, ids, halo, wx, wz, cand.w):
+			continue
+		var entry := profile.trees[int(cand.z)]
+		var scale := lerpf(entry.scale_min, entry.scale_max, _point_random(wx, wz, 2))
+		var yaw := _point_random(wx, wz, 3) * TAU
+		spots.append(Vector4(wx, wz, scale, yaw if entry.random_yaw else 0.0))
+		ids.append(int(cand.z))
 	# Focal kinds (sakura): one tree per chunk now and then, on the highest
 	# spot near the chunk's middle. Chance per focal kind from its own hash.
 	var focal_rank := 0
@@ -626,16 +644,7 @@ func _tree_spots(coord: Vector2i) -> Dictionary:
 		var s: Vector4 = spots[idx]
 		spots[idx] = Vector4(s.x, s.y, s.z * entry.focal_scale_boost, s.w)
 		ids[idx] = e
-	# 4 m buckets so mound queries check a handful of trunks instead of the
-	# whole ±1-chunk neighbourhood on every height sample.
-	var cells := {}
-	for s in spots:
-		var spot: Vector4 = s
-		var key := Vector2i(int(floor(spot.x / MOUND_CELL)), int(floor(spot.y / MOUND_CELL)))
-		if not cells.has(key):
-			cells[key] = []
-		(cells[key] as Array).append(spot)
-	var packed := {"spots": spots, "ids": ids, "clearing": clearing, "cells": cells}
+	var packed := {"spots": spots, "ids": ids, "clearing": int(own.clearing), "cells": _cells_of(spots)}
 	_tree_spot_cache[coord] = packed
 	return packed
 
@@ -650,20 +659,11 @@ func _ordinary_entries() -> Array[int]:
 	return out
 
 
-## Weighted pick among the ordinary kinds. One kind draws nothing from the
-## stream, so the single-kind forest keeps the same numbers.
-func _pick_ordinary(rng: RandomNumberGenerator, ordinary: Array[int]) -> int:
-	if ordinary.size() == 1:
-		return ordinary[0]
-	var total := 0.0
-	for e in ordinary:
-		total += profile.trees[e].weight
-	var r := rng.randf() * total
-	for e in ordinary:
-		r -= profile.trees[e].weight
-		if r <= 0.0:
-			return e
-	return ordinary[ordinary.size() - 1]
+## Stateless random in [0, 1) for a world point: the same point always draws
+## the same value, whichever chunk asks, so the choices stay order-free.
+func _point_random(wx: float, wz: float, salt: int) -> float:
+	var h := hash([int(roundf(wx * 1000.0)), int(roundf(wz * 1000.0)), salt, profile.world_seed])
+	return float(h & 0x7fffffff) / 2147483647.0
 
 
 func _spacing_of(entry_index: int) -> float:
@@ -672,16 +672,17 @@ func _spacing_of(entry_index: int) -> float:
 	return profile.trees[entry_index].min_spacing
 
 
-## Minimum trunk-to-trunk distance, inside the chunk and against the halo.
-## A pair keeps the larger of the two kinds' spacing.
-func _too_close_to_trees(spots: Array[Vector4], ids: PackedInt32Array, halo: Array[Vector3],
+## True when a candidate at (wx, wz) would sit closer than its kind's spacing
+## to an accepted trunk or to a neighbour's candidate. A pair keeps the larger
+## of the two kinds' spacing.
+func _too_close_to_trees(spots: Array[Vector4], ids: PackedInt32Array, halo: Array[Vector4],
 		wx: float, wz: float, spacing: float) -> bool:
 	for i in spots.size():
 		var spot: Vector4 = spots[i]
 		if Vector2(wx - spot.x, wz - spot.y).length() < maxf(spacing, _spacing_of(ids[i])):
 			return true
 	for h in halo:
-		if Vector2(wx - h.x, wz - h.y).length() < maxf(spacing, h.z):
+		if Vector2(wx - h.x, wz - h.y).length() < maxf(spacing, h.w):
 			return true
 	return false
 
@@ -812,21 +813,21 @@ func _basis_up(up: Vector3, yaw: float, scale: float) -> Basis:
 	return b.scaled(Vector3.ONE * scale)
 
 
-## Local (x, z) candidates. Trees use a jittered grid (one per ~3 m cell):
-## even spacing reads as a natural stand, pure random leaves clumps and holes.
-func _scatter_points(rng: RandomNumberGenerator, kind: int, max_count: int) -> Array[Vector2]:
-	var pts: Array[Vector2] = []
+## Local (x, z) sites for gates, lanterns and boulders: Poisson-disk samples
+## (Bridson) at least [param spacing] apart, then [param count] of them picked
+## at random. Any subset of a Poisson set keeps the spacing between its picks.
+func _prop_sites(rng: RandomNumberGenerator, count: int, spacing: float) -> Array[Vector2]:
 	var half := profile.chunk_size * 0.5
-	if kind == KIND_TREE:
-		var cell := profile.chunk_size / float(TREE_GRID)
-		for cx in TREE_GRID:
-			for cz in TREE_GRID:
-				pts.append(Vector2(-half + (float(cx) + rng.randf_range(0.08, 0.92)) * cell,
-					-half + (float(cz) + rng.randf_range(0.08, 0.92)) * cell))
-		return pts
-	for _i in max_count:
-		pts.append(Vector2(rng.randf_range(-half, half), rng.randf_range(-half, half)))
-	return pts
+	var sample := PoissonDisk.sample(rng, Vector2(-half, -half), Vector2(profile.chunk_size, profile.chunk_size), spacing)
+	for i in range(sample.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp := sample[i]
+		sample[i] = sample[j]
+		sample[j] = tmp
+	var out: Array[Vector2] = []
+	for k in mini(count, sample.size()):
+		out.append(sample[k])
+	return out
 
 
 ## Shafts of moonlight through canopy gaps: a few per chunk, one always over
@@ -1091,8 +1092,7 @@ func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 		var blocked := false
 		for ox in range(-1, 2):
 			for oz in range(-1, 2):
-				var packed: Dictionary = _tree_spots(coord) if ox == 0 and oz == 0 \
-					else _tree_spot_cache.get(coord + Vector2i(ox, oz), {})
+				var packed: Dictionary = _tree_spots(coord + Vector2i(ox, oz))
 				for ts in packed.get("spots", []):
 					var tspot: Vector4 = ts
 					if Vector2(wx - tspot.x, wz - tspot.y).length() < profile.torii_tree_clearance:
