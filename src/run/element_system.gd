@@ -80,6 +80,13 @@ func _has_node(node_id: String) -> bool:
 	return skill_tree != null and skill_tree.is_unlocked(node_id)
 
 
+## Whether the blade's clean cuts split yōkai right now (D4): the school's
+## finisher is unlocked and its imbue is running. Plain steel never splits.
+func kirisute_ready() -> bool:
+	return current_element != Elements.NONE and element_time_remaining > 0.0 \
+		and skill_tree != null and skill_tree.has_effect(current_element, "kirisute")
+
+
 ## Potency of every direct ability hit: the Razor Edge multiplier of the blade
 ## times a small bonus per soul rank ([constant ElementBalance.POWER_PER_RANK]),
 ## so abilities keep pace with yōkai that grow tougher as the run goes on.
@@ -553,6 +560,8 @@ func _physics_process(delta: float) -> void:
 	# CRITICAL: Respect SceneTree pause cleanly (NEVER Engine.time_scale = 0)
 	if get_tree() and get_tree().paused:
 		return
+	if weapon:
+		weapon.kirisute_ready = kirisute_ready()
 
 	# Tick cooldowns
 	ability_1_cooldown = maxf(0.0, ability_1_cooldown - delta)

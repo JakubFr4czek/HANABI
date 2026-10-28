@@ -670,7 +670,19 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 			dmg *= 0.26
 		elif is_staggered():
 			dmg *= 1.35
-	if can_sever(part, hit):
+	# Kirisute (D4): a clean cut the blade offered splits the body along its plane.
+	# A swarm yōkai dies to it; an elite takes extra damage and splits only when
+	# that kills it (a non-lethal elite cut is a wound, see _kirisute_wound).
+	var cut := false
+	if bool(hit.get("kirisute_offer", false)):
+		if is_elite():
+			var extra := profile.max_hp * ElementBalance.KIRISUTE_ELITE_FRACTION
+			cut = dmg + extra >= hp and KirisuteCut.claim_cut()
+			dmg += extra
+		elif KirisuteCut.claim_cut():
+			cut = true
+			dmg = hp
+	if not cut and can_sever(part, hit):
 		var part_name := String(part.name)
 		# A leg or the head off ends it; an arm off takes a big bite of HP.
 		dmg = maxf(dmg, hp) if part_name == "head" or part_name.begins_with("leg") else dmg + profile.max_hp * sever_arm_damage
@@ -701,6 +713,11 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 
 	if hp <= 0.0 and not is_dead:
 		die(hit)
+	if cut:
+		# Only a body the plane really divides comes apart; otherwise it dies as usual.
+		hit["kirisute"] = _split_into_pieces(hit)
+	elif bool(hit.get("kirisute_offer", false)) and not is_dead:
+		_kirisute_wound(hit)
 	return hit
 
 
@@ -744,6 +761,47 @@ func _sever(part: RagdollPart, hit: Dictionary) -> void:
 	part.collision_layer = 0
 	part.collision_mask = 0
 	GameEvents.log_event("enemy_dismembered", {"enemy": profile.display_name, "part": part_name})
+
+
+## Kirisute (D4): the body is already dead; it comes apart along the blade's plane
+## where it was cut. Returns false when the plane misses it (no split, plain death).
+func _split_into_pieces(hit: Dictionary) -> bool:
+	var scene := get_tree().current_scene if is_inside_tree() else null
+	if scene == null:
+		return false
+	var point: Vector3 = hit.get("point", global_position)
+	var motion: Vector3 = hit.get("direction", Vector3.ZERO)
+	var element: String = hit.get("element", Elements.NONE)
+	var normal := KirisuteCut.plane_normal(motion, hit.get("blade_axis", Vector3.UP))
+	var pieces := KirisuteCut.split(self, parts, scene, point, normal, motion, element)
+	if pieces.size() < 2:
+		return false
+	for p: RagdollPart in parts.values():
+		p.visible = false
+		p.collision_layer = 0
+		p.collision_mask = 0
+	visible = false
+	_petal_burst_done = true
+	SparkBurst.spawn(scene, point, normal, KirisuteCut.glow_color(element), 22, 3.0)
+	Sfx.play_at("yokai_slice", point, -1.0, 3.0, 0.9)
+	GameEvents.log_event("enemy_split", {"enemy": profile.display_name, "element": element, "pieces": pieces.size()})
+	# The body goes back to its pool once this hit has finished unwinding.
+	_finish_split.call_deferred()
+	return true
+
+
+func _finish_split() -> void:
+	dissolve_finished.emit(self)
+
+
+## Kirisute (D4): an elite cut that does not kill leaves a glowing wound in the
+## school's colour, a spray of sparks along the blade and a sharp sound.
+func _kirisute_wound(hit: Dictionary) -> void:
+	var scene := get_tree().current_scene if is_inside_tree() else null
+	if scene == null:
+		return
+	KirisuteCut.wound(scene, hit.get("point", global_position), hit.get("direction", Vector3.UP),
+		hit.get("element", Elements.NONE))
 
 
 ## World position of the joint that holds [param part_name] to its parent,

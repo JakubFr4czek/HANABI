@@ -753,9 +753,9 @@ Cięcie **nie może szarpnąć katany ani wyrwać jej z ręki**:
 - [x] **D4.0 Plan** (ten commit).
 - [x] **D4.1 `MeshSlicer`:** płaszczyzna, sutherland-hodgman, pętle, cap, testy zamkniętości i objętości.
 - [x] **D4.2 Drzewko:** efekt `kirisute` na 4 węzłach tier 5 (nazwy, opisy, `ElementBalance`), testy drzewka. Przy okazji poprawka opisu Kageyoshi: opis mówi „120 dmg", a stała to 100 (`KAGEYOSHI_DAMAGE`). Ujednolicam do stałej.
-- [ ] **D4.3 Gating:** `HeldWeapon` oznacza trafienie flagą `kirisute` i wektorem `blade_axis`, gdy ostrze ma imbue z węzłem tier 5 i trafienie spełnia progi.
-- [ ] **D4.4 Yōkai:** podział (zabicie, elita, rana), limit kawałków, ukrycie ciała, odroczony zwrot do puli.
-- [ ] **D4.5 Oni:** rana (szczelina w kolorze żywiołu, ~2 s).
+- [x] **D4.3 Gating:** `HeldWeapon` oznacza trafienie flagą `kirisute` i wektorem `blade_axis`, gdy ostrze ma imbue z węzłem tier 5 i trafienie spełnia progi.
+- [x] **D4.4 Yōkai:** podział (zabicie, elita, rana), limit kawałków, ukrycie ciała, odroczony zwrot do puli.
+- [x] **D4.5 Oni:** rana (szczelina w kolorze żywiołu, ~2 s).
 - [ ] **D4.6 Materiały:** cap per żywioł, żarzenie, ślad iskier.
 - [ ] **D4.7 Testy i perf:** `dismember_test`, `skill_tree_data_test`, `quest_perf_test` rozszerzone; pełny zestaw headless przechodzi.
 - [ ] **D4.8 Screenshoty i ocena:** rozcięty wróg ×4 żywioły, kawałki, moment cięcia; surowa ocena i poprawki.

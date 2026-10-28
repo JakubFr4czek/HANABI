@@ -112,7 +112,178 @@ func _run_all() -> void:
 				break
 			await get_tree().physics_frame
 		_check("the petals are gone after a few seconds", not is_instance_valid(scatter))
+	await _test_kirisute()
 	run.queue_free()
+
+
+## D4 (Kirisute): with a school's finisher unlocked and its imbue running, a
+## clean fast edge cut splits the body along the blade's plane. Plain steel,
+## weak, flat or thrust contacts do not. Pieces are bounded, glow in the school's
+## colour, touch only the terrain and are gone in time, and the katana keeps
+## most of its speed through the cut (hand priority).
+func _test_kirisute() -> void:
+	var katana: HeldWeapon = run.katana
+	var elem: ElementSystem = run.element_system
+	var a := katana.get_blade_axis()
+	var m := (katana.global_basis * -katana.spine_direction).normalized()
+	var n := KirisuteCut.plane_normal(m, a)
+	_check("the cut plane is normal to both the motion and the blade (n·m %.4f, n·a %.4f)" % [n.dot(m), n.dot(a)],
+		absf(n.dot(m)) < 1e-4 and absf(n.dot(a)) < 1e-4 and absf(n.length() - 1.0) < 1e-4)
+	_check("right × up gives the plane normal +Z (the upper half is +n)",
+		KirisuteCut.plane_normal(Vector3.RIGHT, Vector3.UP).is_equal_approx(Vector3(0.0, 0.0, 1.0)))
+
+	# Plain steel: nothing splits, however clean the cut.
+	elem.reset()
+	var plain := await _spawn(Vector3(0.0, 0.0, 5.0), 900.0)
+	_cut(katana, plain.parts["chest"], 12.0)
+	await _frames(2)
+	_check("plain steel: a clean fast cut splits nothing (%d pieces)" % _chunk_count(), _chunk_count() == 0 and not plain.is_dead)
+
+	# Imbued, but the school's finisher is still locked: still no split.
+	elem.imbue(Elements.SAKURA)
+	await _frames(2)
+	var locked := await _spawn(Vector3(1.6, 0.0, 5.0), 900.0)
+	_cut(katana, locked.parts["chest"], 12.0)
+	await _frames(2)
+	_check("imbued without the tier-5 finisher: no split (%d pieces)" % _chunk_count(), _chunk_count() == 0 and not katana.kirisute_ready)
+
+	# Unlock the Sakura tree (Hanadachi sits on tier 5).
+	run.ofuda_count = 1000
+	for node: Dictionary in SkillTreeData.nodes_for_element(Elements.SAKURA):
+		run.unlock_skill(String(node.id))
+	elem.imbue(Elements.SAKURA)
+	await _frames(2)
+	_check("the imbued finisher is ready on the blade (Hanadachi)", katana.kirisute_ready)
+
+	# Weak, flat and thrust contacts never split.
+	var weak := await _spawn(Vector3(3.2, 0.0, 5.0), 900.0)
+	_cut(katana, weak.parts["chest"], 3.0)
+	var flat := await _spawn(Vector3(4.8, 0.0, 5.0), 900.0)
+	_cut(katana, flat.parts["chest"], 12.0, katana.get_blade_axis())
+	await _frames(2)
+	_check("a slow cut (3 m/s), a flat or thrust contact split nothing (%d pieces)" % _chunk_count(),
+		_chunk_count() == 0 and not weak.is_dead and not flat.is_dead)
+
+	# A clean, fast cut splits the yōkai in two and kills it.
+	var cut := await _spawn(Vector3(-1.6, 0.0, 5.0), 900.0)
+	_cut(katana, cut.parts["chest"], 12.0)
+	await _frames(2)
+	var pieces := _chunks()
+	_check("a clean fast cut kills and splits the yōkai into two pieces (%d pieces, dead %s)" % [pieces.size(), cut.is_dead],
+		cut.is_dead and pieces.size() == 2)
+	if pieces.size() == 2:
+		var lower: KirisuteChunk = pieces[0]
+		var upper: KirisuteChunk = pieces[1]
+		_check("the pieces touch only the terrain (layer %d, mask %d)" % [lower.collision_layer, lower.collision_mask],
+			lower.collision_layer == 0 and lower.collision_mask == 1 and upper.collision_mask == 1)
+		var glow := KirisuteCut.glow_color(Elements.SAKURA)
+		_check("the cut glows in the school's colour (emission %s)" % [lower.cap_material.emission],
+			lower.cap_material.emission.is_equal_approx(glow) and lower.cap_material.emission_enabled)
+
+	# Budget: ten rounds of cuts, two per physics frame; the third in a frame stays a plain hit.
+	elem.imbue(Elements.SAKURA)
+	var crowd: Array[Yokai] = []
+	var deaths := [0]
+	for i in 30:
+		var at := Vector3(-6.0 + 0.5 * i, 0.0, 12.0)
+		at.y = float(director.ground_height.call(at.x, at.z))
+		var y := director.spawn_enemy_at(at, Vector3.ZERO)
+		y.configure_kind(Yokai.Kind.SWARM, Elements.NONE, 900.0)
+		y.brain.set_physics_process(false) if y.brain else null
+		y.died.connect(func(_y: Yokai, _hit: Dictionary) -> void: deaths[0] += 1)
+		crowd.append(y)
+	await _frames(30)
+	var worst := 0
+	var third_plain := true
+	var first_piece: KirisuteChunk = null
+	for round_i in 10:
+		var base := round_i * 3
+		_cut(katana, crowd[base].parts["chest"], 12.0)
+		_cut(katana, crowd[base + 1].parts["chest"], 12.0)
+		_cut(katana, crowd[base + 2].parts["chest"], 12.0)
+		third_plain = third_plain and not crowd[base + 2].is_dead
+		if first_piece == null and _chunk_count() > 0:
+			first_piece = _chunks()[0]
+		worst = maxi(worst, _chunk_count())
+		# Each kill starts a hit-stop; wait for it to end so the rounds do not stack one long freeze.
+		await _frames(1)
+		while TimeController.is_active("hit_stop"):
+			await _frames(1)
+	# Counted from the died signal: a pooled yōkai beyond the pool cap is freed, so
+	# its is_dead can no longer be read.
+	var dead: int = deaths[0]
+	_check("two cuts a frame split, the third is a plain hit (third plain %s)" % third_plain, third_plain)
+	_check("twenty split cuts kill twenty yōkai (%d dead of 30)" % dead, dead == 20)
+	_check("the pieces never exceed the Quest budget (worst %d of %d)" % [worst, ElementBalance.KIRISUTE_MAX_PIECES],
+		worst <= ElementBalance.KIRISUTE_MAX_PIECES and worst > 0)
+	_check("the oldest pieces are freed first (first piece gone: %s)" % (first_piece == null or not is_instance_valid(first_piece)),
+		first_piece == null or not is_instance_valid(first_piece))
+
+	# The katana keeps most of its speed through a Kirisute cut.
+	elem.imbue(Elements.SAKURA)
+	await _frames(2)
+	var bite_plain := await _bite(katana, false)
+	var bite_cut := await _bite(katana, true)
+	_check("the katana keeps its speed through a cut (lost %.2f m/s, plain %.2f m/s)" % [bite_cut, bite_plain],
+		bite_plain > 0.01 and bite_cut <= bite_plain * 0.35)
+
+	# The Oni is wounded, not cut in two: a clean cut opens a glowing wound and costs it HP.
+	var oni := director.spawn_oni_boss(Vector3(0.0, 0.0, -2.0))
+	await _frames(20)
+	var oni_hp := oni.hp
+	var pieces_before := _chunk_count()
+	_cut(katana, oni.parts["chest"], 12.0)
+	await _frames(2)
+	var open_wounds := 0
+	for w in oni._wounds:
+		open_wounds += int(is_instance_valid(w))
+	_check("the Oni takes a wound, not a split (hp %.0f -> %.0f, open wounds %d, new pieces %d)" % [oni_hp, oni.hp, open_wounds, _chunk_count() - pieces_before],
+		not oni.is_dead and oni.hp < oni_hp and open_wounds == 1 and _chunk_count() == pieces_before)
+	await _frames(int(ElementBalance.KIRISUTE_WOUND_SECONDS * 90.0) + 20)
+	open_wounds = 0
+	for w in oni._wounds:
+		open_wounds += int(is_instance_valid(w))
+	_check("the wound closes after %.1f s (%d open)" % [ElementBalance.KIRISUTE_WOUND_SECONDS, open_wounds], open_wounds == 0)
+
+	# Pieces dissolve into petals and are gone in time.
+	await _frames(int((ElementBalance.KIRISUTE_PIECE_SECONDS + ElementBalance.KIRISUTE_DISSOLVE_SECONDS) * 90.0) + 30)
+	_check("every piece is gone after its lifetime (%d left)" % _chunk_count(), _chunk_count() == 0)
+
+
+## A contact with the torso of a yōkai: the blade meets [param part] at [param speed]
+## moving across its edge, or along [param direction] when given.
+func _cut(weapon: HeldWeapon, part: RagdollPart, speed: float, direction := Vector3.ZERO) -> void:
+	# A real contact is on the blade: hang the katana mid-blade, edge toward the body.
+	weapon.global_transform = Transform3D(Basis.IDENTITY, part.global_position + Vector3(0.0, 0.0, 0.5))
+	var dir := direction
+	if dir == Vector3.ZERO:
+		dir = (weapon.global_basis * -weapon.spine_direction).normalized()
+	weapon._handle_hit({"collider": part, "point": part.global_position, "speed": speed,
+		"direction": dir, "normal": -dir})
+
+
+## How much speed a contact costs the katana: a plain cut or a Kirisute cut on a fresh yōkai.
+func _bite(katana: HeldWeapon, kirisute: bool) -> float:
+	var target := await _spawn(Vector3(-5.5, 0.0, 6.0), 900.0)
+	katana.linear_velocity = Vector3(0.0, 0.0, -6.0)
+	var before := katana.linear_velocity
+	katana.kirisute_ready = kirisute
+	_cut(katana, target.parts["chest"], 12.0)
+	var lost := (before - katana.linear_velocity).length()
+	katana.kirisute_ready = false
+	return lost
+
+
+func _chunks() -> Array[KirisuteChunk]:
+	var out: Array[KirisuteChunk] = []
+	for c: KirisuteChunk in KirisuteChunk._alive:
+		if is_instance_valid(c):
+			out.append(c)
+	return out
+
+
+func _chunk_count() -> int:
+	return _chunks().size()
 
 
 func _spawn(at: Vector3, hp: float) -> Yokai:
