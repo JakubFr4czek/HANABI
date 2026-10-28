@@ -2,15 +2,17 @@ class_name XRPlayer
 extends Node3D
 ## VR player rig: XR Tools origin, camera, hands, smooth locomotion (left stick),
 ## snap turn (right stick) and a [WeaponHolder] in each hand.
-## A/X: [signal reset_requested]. B/Y tap without grip: [signal toggle_attacks_requested]
-## (with grip, B/Y recalls a weapon, see WeaponHolder). Thumbstick click:
-## cycle the element of the weapon in that hand.
-## View: hold B/Y for 0.6 s to recenter on the headset; hold B and push the
-## right stick up / down to raise or lower your eye height (saved).
+## A/X: [signal ability_1_requested] (or reset in dev). B/Y: [signal ability_2_requested]
+## when holding katana (with grip when disarmed, B/Y recalls weapon).
+## Left Menu button: tap = [signal menu_requested], hold 1.0s = [method recenter_view].
+## Thumbstick click: cycle element in test room.
 
 signal reset_requested
 signal toggle_attacks_requested
 signal element_ability_requested(direction: Vector3)
+signal ability_1_requested(direction: Vector3)
+signal ability_2_requested(direction: Vector3)
+signal menu_requested
 
 ## Standard collision layer for player body (layer 20, 1 << 19). Shared across
 ## XR Tools PlayerBody, DesktopPlayer, HeldWeapon, and Torii gates.
@@ -39,6 +41,8 @@ const HEIGHT_RATE := 0.3  # m/s while the stick is held
 var height_offset := 0.0
 var _by_time := {}
 var _by_used := {}
+var _menu_hold_time := 0.0
+var _menu_used := false
 
 
 func _ready() -> void:
@@ -67,17 +71,63 @@ func _on_parry(_info: Dictionary) -> void:
 
 
 func _process(_delta: float) -> void:
-	if _pressed_once("ax", left_controller.is_button_pressed("ax_button") or right_controller.is_button_pressed("ax_button")):
-		reset_requested.emit()
+	# Menu button handling (Left Menu button)
+	if left_controller:
+		var menu_down: bool = left_controller.is_button_pressed("menu_button")
+		if menu_down:
+			_menu_hold_time += _delta
+			if _menu_hold_time >= 1.0 and not _menu_used:
+				recenter_view()
+				_menu_used = true
+		elif _menu_hold_time > 0.0:
+			if not _menu_used and _menu_hold_time <= TAP_MAX_SEC:
+				menu_requested.emit()
+			_menu_hold_time = 0.0
+			_menu_used = false
+
+	# Ability 1 (Button A / X)
+	var ax_pressed := _pressed_once("ax_r", right_controller.is_button_pressed("ax_button")) \
+		or _pressed_once("ax_l", left_controller.is_button_pressed("ax_button"))
+	if ax_pressed:
+		if run_element_mode or right_holder.held != null or left_holder.held != null:
+			ability_1_requested.emit(_ability_direction(right_controller))
+		else:
+			reset_requested.emit()
+
+	# Ability 2 (Button B / Y when sword is held)
+	var by_r := _pressed_once("by_r", right_controller.is_button_pressed("by_button"))
+	var by_l := _pressed_once("by_l", left_controller.is_button_pressed("by_button"))
+	if by_r and right_holder.held != null:
+		ability_2_requested.emit(_ability_direction(right_controller))
+		element_ability_requested.emit(_ability_direction(right_controller))
+	elif by_l and left_holder.held != null:
+		ability_2_requested.emit(_ability_direction(left_controller))
+		element_ability_requested.emit(_ability_direction(left_controller))
+	elif run_element_mode and (by_r or by_l) and (right_holder.held != null or left_holder.held != null):
+		ability_2_requested.emit(_ability_direction(right_controller))
+		element_ability_requested.emit(_ability_direction(right_controller))
+
 	for c in [left_controller, right_controller]:
+		var holder := left_holder if c == left_controller else right_holder
 		var gripping: bool = c.get_float("grip") > 0.6
-		_step_view_button(c, gripping, _delta)
+		# Only route B/Y to dev/view actions when not holding a weapon
+		if holder.held == null:
+			_step_view_button(c, gripping, _delta)
 		if _pressed_once("click_" + c.name, c.is_button_pressed("primary_click")):
-			var holder := left_holder if c == left_controller else right_holder
 			if run_element_mode:
 				element_ability_requested.emit(Vector3.ZERO)
 			elif holder.held:
 				holder.held.set_element(next_element(holder.held.element))
+
+
+func _ability_direction(_controller: XRController3D) -> Vector3:
+	var camera := $XROrigin3D/XRCamera3D as Camera3D
+	if camera:
+		var f := -camera.global_basis.z
+		f.y = 0.0
+		if f.length_squared() > 0.01:
+			return f.normalized()
+	return Vector3.FORWARD
 
 
 ## B/Y without grip: tap = toggle_attacks_requested, hold = recenter, hold B +
@@ -139,25 +189,22 @@ func _save_view_settings() -> void:
 	GameEvents.log_event("xr_height_offset", {"meters": snappedf(height_offset, 0.01)})
 
 
-func _body() -> Node3D:
-	return get_node_or_null("XROrigin3D/PlayerBody") as Node3D
-
-
-func _pressed_once(key: String, pressed: bool) -> bool:
+func _pressed_once(key: String, down: bool) -> bool:
 	var was: bool = _was_pressed.get(key, false)
-	_was_pressed[key] = pressed
-	return pressed and not was
+	_was_pressed[key] = down
+	return down and not was
+
+
+static func next_element(current: String) -> String:
+	var i := Elements.ALL.find(current)
+	return Elements.ALL[(i + 1) % Elements.ALL.size()]
 
 
 ## Scripted rig moves (run intro hover, respawn on the seal): XR Tools'
 ## PlayerBody applies gravity to the origin every physics frame, so it
 ## would pull a hover back down. Locking only freezes the body and the
 ## locomotion providers. It deliberately does NOT touch the origin
-## transform or teleport the body: resetting the origin to identity threw
-## away the body's seating under the headset (a camera snap at lock and
-## again at unlock, and the eye ending up wherever the body re-seated),
-## and teleporting the body to the rig root made it yank the origin —
-## and the camera — sideways on the next physics frame.
+## transform or teleport the body.
 func set_rig_locked(locked: bool) -> void:
 	var body := _body()
 	if body:
@@ -189,6 +236,5 @@ func teleport_feet(pos: Vector3) -> void:
 		($XROrigin3D as Node3D).global_position = pos
 
 
-static func next_element(current: String) -> String:
-	var i := Elements.ALL.find(current)
-	return Elements.ALL[(i + 1) % Elements.ALL.size()]
+func _body() -> Node3D:
+	return get_node_or_null("XROrigin3D/PlayerBody") as Node3D

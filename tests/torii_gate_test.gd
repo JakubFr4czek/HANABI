@@ -150,11 +150,10 @@ func _run_all() -> void:
 	await _frames(4)
 	_check("Gate reactivates when player moves >= 45.0 m away", storm_gate.is_active)
 
-	# 9. Sakura card without gate = 0 orbit petals; after Sakura gate = 3 petals; after 20s expiry = 0 petals
+	# 9. Sakura Ability 2 (Hanamai) barrier and ongoing completion across 20s gate expiry
 	elem_sys.reset()
 	katana.set_element(Elements.NONE)
-	elem_sys.apply_upgrade("sakura_orbit", {"sakura_orbit": 1})
-	_check("Sakura card without gate spawns 0 orbit petals", elem_sys._orbit_petals.size() == 0)
+	_check("Plain steel without gate spawns 0 orbit petals", elem_sys._orbit_petals.size() == 0)
 
 	# Cross gate with Sakura element
 	gate.element = Elements.SAKURA
@@ -163,13 +162,43 @@ func _run_all() -> void:
 	await _frames(2)
 	fake_body.position = Vector3(0.0, 1.5, -1.0)
 	await _frames(4)
-	_check("After Sakura gate crossed, orbit petals spawn (count=3)", elem_sys._orbit_petals.size() == 3)
+	_check("After Sakura gate crossed, element is SAKURA", elem_sys.current_element == Elements.SAKURA)
 
-	# Expire after 20s
-	for _i in 210:
+	# Trigger Hanamai (Ability 2)
+	var hanamai_ok := elem_sys.execute_ability_2(Vector3.FORWARD)
+	_check("Sakura Ability 2 (Hanamai) triggers barrier petals (count=4)", hanamai_ok and elem_sys._orbit_petals.size() == 4)
+
+	# Step 5 seconds: Hanamai still active (6s total duration, 1s remaining)
+	for _i in 50:
 		elem_sys._physics_process(0.1)
 		katana._physics_process(0.1)
-	_check("After 20s expiry, orbit petals are cleared (count=0)", elem_sys._orbit_petals.size() == 0)
+	_check("Hanamai barrier active at 5s", elem_sys._orbit_petals.size() == 4 and elem_sys.hanamai_time_remaining > 0.0)
+
+	# Step another 2 seconds: Hanamai finishes at 6.0s
+	for _i in 20:
+		elem_sys._physics_process(0.1)
+		katana._physics_process(0.1)
+	_check("Hanamai barrier finishes when its 6s duration ends (count=0)", elem_sys._orbit_petals.size() == 0)
+
+	# Test ongoing ability completion across gate expiry:
+	# Trigger Hanamai when gate imbue has only 2s remaining
+	elem_sys.element_time_remaining = 2.0
+	elem_sys.ability_2_cooldown = 0.0
+	elem_sys.execute_ability_2(Vector3.FORWARD)
+	_check("Hanamai triggered with 2s gate time remaining", elem_sys._orbit_petals.size() == 4)
+
+	# Step 3.0s: gate element expires at 2.0s (blade plain steel), but Hanamai finishes full duration!
+	for _i in 30:
+		elem_sys._physics_process(0.1)
+		katana._physics_process(0.1)
+	_check("Gate element expired to plain steel", elem_sys.current_element == Elements.NONE and katana.element == Elements.NONE)
+	_check("Ongoing Hanamai still active after gate expiry (count=4)", elem_sys._orbit_petals.size() == 4 and elem_sys.hanamai_time_remaining > 0.0)
+
+	# Step another 3.5s: Hanamai finishes full 6s duration
+	for _i in 35:
+		elem_sys._physics_process(0.1)
+		katana._physics_process(0.1)
+	_check("Hanamai cleanly clears after completing full duration (count=0)", elem_sys._orbit_petals.size() == 0)
 
 	katana.queue_free()
 	elem_sys.queue_free()
