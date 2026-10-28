@@ -20,12 +20,6 @@ signal run_started
 signal ofuda_changed(count: int)
 signal skill_unlocked(node_id: String)
 
-## Milk fog is solid here. The old 9 m bubble read as a small arena with a
-## few trees; opened up as far as the Quest triangle budget allows (the tree
-## ring past it is thinned, not cut, so trunks still dissolve into the fog).
-const RUN_FOG_END := 10.5
-## Night "milk" fog (sRGB): pale moonlit haze that swallows the forest.
-const RUN_FOG_COLOR := Color(0.5, 0.53, 0.6)
 ## Health restored by each level-up (D1: the rank is the reward, the heal is the rest).
 const LEVEL_UP_HEAL_HP := 10.0
 
@@ -190,6 +184,9 @@ const DOJO_ONLY_NODES := [
 
 
 func _configure_run_forest() -> void:
+	# The forest's look (fog, palette, light) comes from the World Gen profile.
+	var world := forest_world.profile if forest_world != null and forest_world.profile != null \
+		else WorldGenProfile.load_active()
 	for path in DOJO_ONLY_NODES:
 		var n := get_node_or_null(path) as Node3D
 		if n == null:
@@ -215,23 +212,24 @@ func _configure_run_forest() -> void:
 	var arena_lm := get_node_or_null("Arena/LightmapGI") as LightmapGI
 	if we and we.environment:
 		# Endless-forest illusion (GDD §9): depth fog reaches full strength at
-		# RUN_FOG_END, where everything takes the exact sky-horizon color
+		# the profile's fog_end, where everything takes the exact sky-horizon color
 		# (storm_fog_color), so the forest dissolves before the edge of the
 		# loaded chunks wherever the player walks. Exponential + height fog left
 		# hills and gates 30 m away as hard dark silhouettes.
 		we.environment.fog_enabled = true
 		we.environment.fog_mode = Environment.FOG_MODE_DEPTH
-		we.environment.fog_light_color = RUN_FOG_COLOR
+		we.environment.fog_light_color = world.fog_color()
 		we.environment.fog_light_energy = 1.0
-		we.environment.fog_depth_begin = 0.4
-		we.environment.fog_depth_end = RUN_FOG_END
-		we.environment.fog_depth_curve = 1.0
+		we.environment.fog_depth_begin = world.fog_start
+		we.environment.fog_depth_end = world.fog_end
+		we.environment.fog_depth_curve = world.fog_curve
+		we.environment.volumetric_fog_enabled = world.volumetric_fog
 		# Inside milk fog there is no sky: the background is the fog itself,
 		# so nothing ever outlines the forest edge.
 		we.environment.background_mode = Environment.BG_COLOR
-		we.environment.background_color = RUN_FOG_COLOR
+		we.environment.background_color = world.fog_color()
 		if lightning:
-			lightning.base_fog_light_color = RUN_FOG_COLOR
+			lightning.base_fog_light_color = world.fog_color()
 		we.environment.fog_density = 1.0
 		we.environment.fog_height_density = 0.0
 		# The background is fogged too, so it is the fog color by construction.
@@ -251,12 +249,13 @@ func _configure_run_forest() -> void:
 	if forest_world == null:
 		forest_world = ForestWorld.new()
 		forest_world.name = "ForestWorld"
+		forest_world.profile = world
 		add_child(forest_world)
 		move_child(forest_world, 0)
 	var moon := get_node_or_null("Moon") as DirectionalLight3D
 	if moon:
 		forest_world.moon_direction = moon.global_basis.z.normalized()
-	_configure_run_light(we, moon)
+	_configure_run_light(we, moon, world)
 	forest_world.setup(player, arena_lm)
 	if hokora_manager == null:
 		hokora_manager = HokoraManager.new()
@@ -282,19 +281,19 @@ func _configure_run_forest() -> void:
 
 ## Run-only. The dojo keeps its own moon. Here the light is the fog: no sky
 ## reflection, no specular moon, ambient the same grey as the air.
-func _configure_run_light(we: WorldEnvironment, moon: DirectionalLight3D) -> void:
+func _configure_run_light(we: WorldEnvironment, moon: DirectionalLight3D, world: WorldGenProfile) -> void:
 	if we and we.environment:
 		var env := we.environment
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.ambient_light_color = RUN_FOG_COLOR
-		env.ambient_light_energy = 0.55
+		env.ambient_light_color = world.fog_color()
+		env.ambient_light_energy = world.ambient_energy
 		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
-		env.tonemap_exposure = 0.92
-		env.glow_intensity = 0.16
+		env.tonemap_exposure = world.exposure
+		env.glow_intensity = world.glow_intensity
 		env.glow_hdr_threshold = 1.7
 	if moon:
-		moon.light_color = Color(0.64, 0.66, 0.68)
-		moon.light_energy = 0.5
+		moon.light_color = world.moon_color()
+		moon.light_energy = world.moon_energy
 		moon.light_specular = 0.0
 
 

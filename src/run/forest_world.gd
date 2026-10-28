@@ -1423,6 +1423,8 @@ func _build_materials() -> void:
 	_torii_mat.set_shader_parameter("specular_scale", 0.0)
 	_torii_mat.set_shader_parameter("fog_fill", 0.22)
 	_torii_mat.set_shader_parameter("procedural_ao", 0.55)
+	# Cyan glow of the gates (profile torii_glow_*): the emission tint of the gate.
+	_torii_mat.set_shader_parameter("emission_tint", profile.torii_glow_color * profile.torii_glow_strength)
 
 	_lantern_mat = ShaderMaterial.new()
 	_lantern_mat.shader = WET_SHADER
