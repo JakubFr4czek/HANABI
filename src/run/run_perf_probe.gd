@@ -19,8 +19,10 @@ static func estimate_scene_cost(root: Node) -> Dictionary:
 	for mi in root.find_children("*", "MeshInstance3D", true, false):
 		if not (mi as MeshInstance3D).is_visible_in_tree():
 			continue
-		draws += 1
-		prims += _mesh_primitives((mi as MeshInstance3D).mesh)
+		# One draw per surface: a Kirisute piece carries its skin, cap and decorations as surfaces.
+		var mesh := (mi as MeshInstance3D).mesh
+		draws += maxi(1, mesh.get_surface_count()) if mesh else 0
+		prims += _mesh_primitives(mesh)
 		# A material's next_pass draws the mesh again (the blade's rim light).
 		var pass_mat: Material = (mi as MeshInstance3D).get_active_material(0)
 		while pass_mat and pass_mat.next_pass:

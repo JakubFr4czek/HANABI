@@ -757,7 +757,7 @@ Cięcie **nie może szarpnąć katany ani wyrwać jej z ręki**:
 - [x] **D4.4 Yōkai:** podział (zabicie, elita, rana), limit kawałków, ukrycie ciała, odroczony zwrot do puli.
 - [x] **D4.5 Oni:** rana (szczelina w kolorze żywiołu, ~2 s).
 - [ ] **D4.6 Materiały:** cap per żywioł, żarzenie, ślad iskier.
-- [ ] **D4.7 Testy i perf:** `dismember_test`, `skill_tree_data_test`, `quest_perf_test` rozszerzone; pełny zestaw headless przechodzi.
+- [x] **D4.7 Testy i perf:** `dismember_test`, `skill_tree_data_test`, `quest_perf_test` rozszerzone; pełny zestaw headless przechodzi.
 - [ ] **D4.8 Screenshoty i ocena:** rozcięty wróg ×4 żywioły, kawałki, moment cięcia; surowa ocena i poprawki.
 - [ ] **D4.9 Docs:** GDD §5 (jedno zdanie o tachi), QUEST_TEST checklist, README.
 

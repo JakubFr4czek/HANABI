@@ -557,6 +557,9 @@ func _decorate_part(part_name: String, part: RagdollPart, def: Dictionary) -> vo
 			mask_mi.mesh = mask_mesh
 			mask_mi.position = Vector3(0, -0.005, 0.095)
 			mask_mi.material_override = _mask_mat
+			# Kept on a Kirisute piece (the mask and horns read as the yōkai's head); the
+			# eyes, war paint and claws go with their glow, as a dying body loses them.
+			mask_mi.set_meta("keep_on_piece", true)
 			part.add_child(mask_mi)
 
 			# Crimson war-paint brow mark.
@@ -580,6 +583,7 @@ func _decorate_part(part_name: String, part: RagdollPart, def: Dictionary) -> vo
 				horn.position = Vector3(0.056 * sx, 0.125, 0.082)
 				horn.rotation = Vector3(deg_to_rad(-30.0), 0.0, deg_to_rad(-18.0 * sx))
 				horn.material_override = _horn_mat
+				horn.set_meta("keep_on_piece", true)
 				part.add_child(horn)
 
 				# Piercing crimson eye slits.

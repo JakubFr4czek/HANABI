@@ -89,8 +89,11 @@ static func split(body: Node3D, parts: Dictionary, parent: Node, point: Vector3,
 				0, cap_from, xf, point)
 			_group(side, "cap", cap, half.verts, half.normals, half.uvs, cap_from, verts.size(), xf, point)
 			side.hulls.append(MeshSlicer.decimate_points(_to_chunk(verts, xf, point), HULL_POINTS))
+		# Only decorations marked keep_on_piece travel with a piece: each one is a
+		# surface, i.e. a draw call, and a piece has to cost less than the living body.
 		for child in part.get_children():
-			if child is MeshInstance3D and child != primary and child.mesh and child.is_visible_in_tree():
+			if child is MeshInstance3D and child != primary and child.has_meta("keep_on_piece") \
+					and child.mesh and child.is_visible_in_tree():
 				var mi := child as MeshInstance3D
 				var side_name := "above" if normal.dot(mi.global_transform * mi.get_aabb().get_center() - point) >= 0.0 else "below"
 				_group_mesh(sides[side_name], mi, point)
