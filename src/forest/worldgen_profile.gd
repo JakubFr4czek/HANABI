@@ -35,10 +35,13 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(1, 5, 1) var hill_octaves := 3
 ## Gentle roll on top of the hills, metres.
 @export_range(0.0, 1.5, 0.01) var bump_amplitude := 0.18
+## Feature size of the small roll on top of the hills: higher = finer ripples.
 @export_range(0.01, 0.3, 0.001) var bump_frequency := 0.05
 ## Little roots and pockets on the flats (never on steep slopes).
 @export_range(0.0, 0.6, 0.01) var pocket_amount := 0.15
+## Strength of the root bumps on the flats.
 @export_range(0.0, 0.5, 0.01) var root_amount := 0.10
+## Feature size of the flat-ground pockets and roots.
 @export_range(0.05, 1.5, 0.01) var floor_frequency := 0.38
 ## Distance over which the glade blends into the hills, metres.
 @export_range(2.0, 40.0, 0.5) var hill_blend_distance := 9.0
@@ -52,6 +55,7 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(0.01, 0.5, 0.001) var density_frequency := 0.09
 ## Keep chance on the calmest and the densest spots of the density noise.
 @export_range(0.0, 1.0, 0.01) var tree_keep_min := 0.5
+## Keep chance where the density noise is highest (denser clumps).
 @export_range(0.0, 1.0, 0.01) var tree_keep_max := 0.97
 
 @export_group("Undergrowth")
@@ -63,6 +67,7 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export var torii_scene: PackedScene = preload("res://assets/models/environment/forest_quaternius/torii_gate_polyfork.glb")
 ## Share of chunks that hold gates at all (rarity).
 @export_range(0.0, 1.0, 0.01) var torii_chunk_chance := 0.34
+## Most gates a chunk can hold.
 @export_range(0, 6, 1) var torii_max_per_chunk := 3
 ## Smallest distance between two gates of a chunk, metres (Poisson-disk spacing).
 @export_range(2.0, 30.0, 0.5) var torii_min_spacing := 8.0
@@ -70,6 +75,7 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(0.1, 1.0, 0.01) var torii_group_keep := 0.75
 ## Gate height range, metres.
 @export_range(2.0, 12.0, 0.1) var torii_height_min := 4.2
+## Tallest gate height, metres.
 @export_range(2.0, 12.0, 0.1) var torii_height_max := 6.2
 ## Clearance from trunks, metres: gates stand well clear of the trees.
 @export_range(0.0, 6.0, 0.05) var torii_tree_clearance := 2.5
@@ -77,7 +83,9 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(0.0, 6.0, 0.05) var torii_prop_clearance := 1.5
 ## Share of the row noise above which a chunk holds a senbon row (a short line of gates).
 @export_range(0.4, 1.0, 0.01) var torii_row_threshold := 0.64
+## Fewest gates in a senbon row.
 @export_range(2, 12, 1) var torii_row_min := 4
+## Most gates in a senbon row.
 @export_range(2, 12, 1) var torii_row_max := 7
 ## Distance between gates of a row, metres.
 @export_range(2.0, 12.0, 0.1) var torii_row_spacing := 4.2
@@ -85,10 +93,13 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_group("Lanterns")
 ## Stone lantern used along the forest path. Empty uses the procedural lantern.
 @export var lantern_scene: PackedScene
+## Most lanterns a chunk can hold.
 @export_range(0, 12, 1) var lantern_max_per_chunk := 5
 ## Smallest distance between two lanterns of a chunk, metres (Poisson-disk spacing).
 @export_range(1.0, 30.0, 0.5) var lantern_min_spacing := 5.0
+## Smallest lantern size (multiplier on its mesh).
 @export_range(0.2, 3.0, 0.01) var lantern_scale_min := 0.6
+## Largest lantern size (multiplier on its mesh).
 @export_range(0.2, 3.0, 0.01) var lantern_scale_max := 1.33
 ## Scatter-noise threshold: higher = lanterns cluster in fewer spots.
 @export_range(0.0, 1.0, 0.01) var lantern_cluster_threshold := 0.5
@@ -104,32 +115,46 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_group("Lights and sky")
 ## Moonlight through canopy gaps: shafts per chunk.
 @export_range(0, 8, 1) var shafts_max_per_chunk := 5
+## Length of a moonlight shaft through the canopy, metres.
 @export_range(4.0, 40.0, 0.5) var shaft_length := 15.0
 ## Depth fog: where the milk starts and how fast it thickens. Fog reaches full
 ## strength at fog_end, which must stay inside the loaded chunks (VIEW_RANGE_END).
 ## A later start thins the mist near the player; the far edge stays opaque.
 @export_range(0.0, 20.0, 0.1) var fog_start := 3.5
+## Distance where the fog is full strength, metres. Must stay inside the loaded ring (14 m at most).
 @export_range(4.0, 14.0, 0.1) var fog_end := 11.0
+## How the fog thickens between fog_start and fog_end: 1 is linear, higher is later.
 @export_range(0.2, 4.0, 0.05) var fog_curve := 1.0
 ## Dusk palette: rose and blue, mixed by dusk_mix (0 = night blue, 1 = dusk rose).
 ## fog, ambient and moon colours all follow the mix (see fog_color()).
 @export var dusk_pink := Color(0.42, 0.24, 0.38)
+## Night colour of the palette (fog, ambient and moon at dusk_mix 0).
 @export var night_blue := Color(0.2, 0.25, 0.38)
+## 0 = night blue, 1 = dusk rose. Fog, ambient and moon follow it.
 @export_range(0.0, 1.0, 0.01) var dusk_mix := 0.3
+## Light the fog gives the forest floor and trunks.
 @export_range(0.0, 2.0, 0.01) var ambient_energy := 0.55
+## Brightness of the moon light.
 @export_range(0.0, 3.0, 0.01) var moon_energy := 0.5
+## Tonemap exposure: overall brightness of the scene.
 @export_range(0.5, 1.5, 0.01) var exposure := 0.92
+## Bloom strength on the brightest parts (lights, gate glow).
 @export_range(0.0, 1.0, 0.01) var glow_intensity := 0.16
 ## Volumetric fog is a PC-only recording setting (GDD §9): it is slow on Quest.
 @export var volumetric_fog := false
 ## Cyan glow of the forest gates: the emission tint of the gate material.
 @export var torii_glow_color := Color(0.3, 0.9, 1.0)
+## Strength of the gate glow in torii_glow_color (0 = no glow).
 @export_range(0.0, 2.0, 0.01) var torii_glow_strength := 0.12
 
 @export_group("Ground")
+## How damp the ground looks (0 dry, 1 wet).
 @export_range(0.0, 1.0, 0.01) var ground_wetness := 0.3
+## Darkening in the crevices of the ground scan.
 @export_range(0.0, 1.0, 0.01) var ground_cavity_ao := 0.85
+## Strength of the ground normal map (bumps).
 @export_range(0.0, 3.0, 0.01) var ground_normal_strength := 1.2
+## Roughness of the wet ground.
 @export_range(0.0, 1.0, 0.01) var ground_roughness_wet := 0.72
 
 @export_group("Paths")
@@ -157,9 +182,11 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(4.0, 80.0, 0.5) var focal_draw_radius := 14.0
 ## Beyond this distance every second tree is skipped (stable per tree, no shimmer).
 @export_range(0.0, 60.0, 0.5) var tree_far_start := 9.5
+## Share of trees kept beyond tree_far_start (every other one at 0.5).
 @export_range(0.0, 1.0, 0.01) var tree_far_keep := 0.5
 ## Ground fade from the camera: start and full fade, metres.
 @export_range(5.0, 200.0, 0.5) var ground_fade_start := 60.0
+## Distance where the ground fades out fully, metres.
 @export_range(5.0, 200.0, 0.5) var ground_fade_end := 70.0
 
 ## Set in the editor (a fresh seed each click) or by randomize_seed().

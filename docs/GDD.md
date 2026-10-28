@@ -89,6 +89,7 @@ Do not implement during prototyping. Prepare the architecture: swappable enemy b
 
 ## 9. World and art direction
 - **Setting:** an endless night in a mythical Japan. Fog, darkness, cold light.
+- **World Gen (D8, decided 2026-10-28):** every forest number lives in one `WorldGenProfile` (`data/worldgen/*.tres`), edited in the `World Gen` dock and the preview scene; the game reads the profile named in `project.godot`. Paths, Poisson-disk placement and the dusk palette are part of it. Guide, budgets and the honest review: [`docs/WORLDGEN_TOOL.md`](WORLDGEN_TOOL.md).
 - **Procedural world:** an endless dark forest under fog, generated with `FastNoiseLite` (rolling hills, dense trees, stone lanterns, rocks) and walkable in every direction. Every so often the forest holds a full-size red torii (now and then a short Senbon-style row of them), met unexpectedly in the fog; they are part of the generated world and stay where they are (decided 2026-10-27).
 - **Palette:** near-black and deep blue-grey, red torii, with emissive neon accents: pink sakura, electric blue lightning, glossy black ink.
 - **Spawn point:** a small glade in the forest itself, with no platform or circle on the ground (decided 2026-10-27). The four-part 桜 雷 墨 影 seal stays in the Dojo of the Storm; in a run the build shows on the blade trail and wrist HUD.
