@@ -105,8 +105,14 @@ rozłożenia na klatki (zob. „Ograniczenia”).
   każdy węzeł łączy się ze startem z konstrukcji; ułamek krawędzi daje pętle.
   Trasa: **A*** (Hart, Nilsson, Raphael 1968) po siatce 2,5 m z kosztem
   nachylenia i szumu, wygładzanie **Chaikin** (1974) i próbkowanie co 1 m.
-  Kolor terenu: waga ścieżki w `COLOR.r` wierzchołka; shader gruntu kładzie
-  warstwę kamienia z zaszumioną krawędzią (zero dodatkowych wywołań rysowania).
+  Kolor terenu: waga ścieżki w `COLOR.r` wierzchołka. Shader gruntu kładzie na
+  pasie **własny materiał** (ubita ziemia Ground067, ambientCG, CC0; osobny
+  albedo, normal i ciepły tint z `path_tint` × `path_gain`). Na pasie nie
+  mieszają się kamień, trawa ani gleba; krawędź jest miękka i zaszumiona.
+  Zero dodatkowych wywołań rysowania.
+- **Korytarz:** szerokość `path_width` = 2,0 m, prześwit od pni `path_tree_clearance`
+  = 2,0 m (pnie i głazy stoją poza pasem plus prześwit). Odnoga kapliczki
+  jest trasowana tym samym A* i próbkowana co metr, więc leży na zboczu.
 - **Determinizm:** losowania per punkt to `hash([x, z, sól, seed])`, per chunk
   to `hash([coord, rodzaj, seed])`. Brak zależności od kolejności ładowania.
 
@@ -140,6 +146,24 @@ inne bramy, więc testy porównują lasy zbudowane osobno (zob. `_isolated_diges
 
 Zrzuty do oceny: `tools/worldgen/worldgen_screenshots.tscn` (okno, nie headless):
 `godot --path . --fixed-fps 90 res://tools/worldgen/worldgen_screenshots.tscn -- --desktop --shots /tmp/hanabi_d8`.
+
+## Ścieżka w grze (poprawka po testach Jakuba)
+
+Zrzuty z gry (`run.tscn`, nie z podglądu), mgła i domyślna paleta:
+`docs/worldgen/shots/game_path_from_spawn.png` (ze spawnu wzdłuż ścieżki) i
+`docs/worldgen/shots/game_path_20m_along.png` (20 m dalej). Zrzuty robi
+`tools/worldgen/game_path_screenshots.tscn` (okno, nie headless).
+
+Pomiar kontrastu z materiału żywego shadera: pas ścieżki jest o **ok. 41% jaśniejszy**
+niż ziemia obok (liniowa luminancja, te same mnożniki co w shaderze). Na poprzednim
+buildzie (`f186512`) ta sama asercja daje **−15%** i test pada
+(`tests/worldgen_path_game_test.tscn`).
+
+**Czy gracz od razu widzi ścieżkę?** Na zrzutach z pulpitu: ścieżka jest czytelna
+jako jaśniejszy, ciepły pas prowadzący przed spawn, ale nie jest oczywista od
+pierwszego spojrzenia. Pod deszczem i w mgle różnica jest umiarkowana, a pas nie
+ma koncepcyjnej czytelności (kamienne kontury, światło). Nie oceniałem w VR (brak
+gogli w tej sesji), więc ostateczne słowo należy do Jakuba na goglach.
 
 ## Samoocena (surowo)
 
