@@ -32,7 +32,7 @@ func _run_all() -> void:
 
 	var nearest := forest.nearest_prop_distance()
 	_check("Shrine clearing stays free of forest props",
-		nearest >= ForestWorld.PROP_CLEARING_RADIUS - 0.05 or nearest == INF)
+		nearest >= forest.profile.prop_clearing_radius - 0.05 or nearest == INF)
 	_check("Spawn glade is level ground (%.2f m)" % forest.height_at(2.0, 2.0),
 		absf(forest.height_at(2.0, 2.0) - ForestWorld.CLEARING_HEIGHT) < 0.01)
 	# Big, sparse swells: a long transect must cross metres of relief, while the
@@ -71,17 +71,17 @@ func _run_all() -> void:
 	var props := forest.total_prop_instances()
 	_check("Shared MultiMesh props stay within a Quest-friendly budget", props > 24 and props < 980)
 
-	# Chunks are centered on coord * CHUNK_SIZE, so the mapping must round.
+	# Chunks are centered on coord * chunk_size, so the mapping must round.
 	_check("Chunk mapping matches centered chunks",
-		ForestWorld._world_to_chunk(Vector3(13.9, 0.0, 0.0)) == Vector2i(0, 0)
-		and ForestWorld._world_to_chunk(Vector3(14.1, 0.0, 0.0)) == Vector2i(1, 0)
-		and ForestWorld._world_to_chunk(Vector3(-14.1, 0.0, 0.0)) == Vector2i(-1, 0))
+		forest._world_to_chunk(Vector3(13.9, 0.0, 0.0)) == Vector2i(0, 0)
+		and forest._world_to_chunk(Vector3(14.1, 0.0, 0.0)) == Vector2i(1, 0)
+		and forest._world_to_chunk(Vector3(-14.1, 0.0, 0.0)) == Vector2i(-1, 0))
 	_check("Fog bubble opened past the 9 m closet (end %.1f m)" % RunGame.RUN_FOG_END,
 		RunGame.RUN_FOG_END > 9.0 and RunGame.RUN_FOG_END <= ForestWorld.VIEW_RANGE_END)
-	_check("Trees draw out to the fog (radius %.1f m)" % ForestWorld.TREE_DRAW_RADIUS,
-		ForestWorld.TREE_DRAW_RADIUS >= RunGame.RUN_FOG_END)
-	_check("Chunks hold up to %d torii gates" % ForestWorld.MAX_TORII_PER_CHUNK,
-		ForestWorld.MAX_TORII_PER_CHUNK >= 2)
+	_check("Trees draw out to the fog (radius %.1f m)" % forest.profile.tree_draw_radius,
+		forest.profile.tree_draw_radius >= RunGame.RUN_FOG_END)
+	_check("Chunks hold up to %d torii gates" % forest.profile.torii_max_per_chunk,
+		forest.profile.torii_max_per_chunk >= 2)
 	# Gate positions come from chunk meta (MultiMesh buffers read back empty
 	# under the headless renderer, so nearest_torii_position is device-only).
 	var gate_positions: Array = []
@@ -96,7 +96,7 @@ func _run_all() -> void:
 	var space := run.get_world_3d().direct_space_state
 	var blocked := false
 	for key in forest._chunks:
-		var inst := (forest._chunks[key] as Node3D).get_node_or_null("Trees") as MultiMeshInstance3D
+		var inst := (forest._chunks[key] as Node3D).get_node_or_null("Trees0") as MultiMeshInstance3D
 		if inst == null or inst.multimesh == null or inst.multimesh.instance_count == 0:
 			continue
 		var local: Vector3 = inst.multimesh.get_instance_transform(0).origin
@@ -119,8 +119,8 @@ func _run_all() -> void:
 	for i in tree_xy.size():
 		for j in range(i + 1, tree_xy.size()):
 			min_gap = minf(min_gap, tree_xy[i].distance_to(tree_xy[j]))
-	_check("Tree trunks keep %dm spacing (min %.2f m)" % [ForestWorld.TREE_MIN_DIST, min_gap],
-		min_gap >= ForestWorld.TREE_MIN_DIST - 0.01)
+	_check("Tree trunks keep %dm spacing (min %.2f m)" % [forest.profile.trees[0].min_spacing, min_gap],
+		min_gap >= forest.profile.trees[0].min_spacing - 0.01)
 	var gate_clear := INF
 	for g in gate_positions:
 		var gv: Vector3 = g
@@ -157,7 +157,7 @@ func _run_all() -> void:
 			sakura_count += 1
 			var local: Vector3 = (xf as Transform3D).origin
 			var w := chunk.global_transform * local
-			var mesh_floor := forest._mesh_min_height(w.x, w.z, 2.1 * ForestWorld.SAKURA_SCALE_BOOST)
+			var mesh_floor := forest._mesh_min_height(w.x, w.z, 2.1 * forest.profile.trees[1].focal_scale_boost)
 			if w.y > mesh_floor + 0.02:
 				sakura_floating += 1
 	_check("Rare sakura trees spawn as focal points (%d in 3x3 ring)" % sakura_count,
@@ -167,14 +167,14 @@ func _run_all() -> void:
 
 	var nearest_sakura := forest.nearest_sakura_position(Vector3.ZERO)
 	_check("Nearest sakura focal tree is positioned in the forest (%s)" % str(nearest_sakura),
-		nearest_sakura != Vector3.INF and nearest_sakura.length() > ForestWorld.CLEARING_RADIUS)
+		nearest_sakura != Vector3.INF and nearest_sakura.length() > forest.profile.clearing_radius)
 
-	# Verify SakuraTrees MultiMesh uses the dedicated sakura shader with emission parameters
+	# Verify Focal1 MultiMesh uses the dedicated sakura shader with emission parameters
 	var has_sakura_mm := false
 	var valid_sakura_shader := false
 	for key in forest._chunks:
 		var chunk := forest._chunks[key] as Node3D
-		var s_inst := chunk.get_node_or_null("SakuraTrees") as MultiMeshInstance3D
+		var s_inst := chunk.get_node_or_null("Focal1") as MultiMeshInstance3D
 		if s_inst != null and s_inst.material_override is ShaderMaterial:
 			has_sakura_mm = true
 			var sm: ShaderMaterial = s_inst.material_override
@@ -216,7 +216,7 @@ func _frames(count: int) -> void:
 func _drawn_trees(forest: ForestWorld) -> int:
 	var total := 0
 	for key in forest._chunks:
-		var inst := (forest._chunks[key] as Node3D).get_node_or_null("Trees") as MultiMeshInstance3D
+		var inst := (forest._chunks[key] as Node3D).get_node_or_null("Trees0") as MultiMeshInstance3D
 		if inst and inst.multimesh:
 			total += inst.multimesh.instance_count
 	return total

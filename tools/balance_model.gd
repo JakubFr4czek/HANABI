@@ -17,7 +17,7 @@ extends RefCounted
 ##  - the blade does not grow with level (D1: level-up cards are gone, so power
 ##    comes from the Ofuda tree only);
 ##  - Ofuda come ONLY from hokora shrines (D1): a shrine is passed every
-##    ElementBalance.HOKORA_SLOT spacing metres of walking, the first one
+##    WorldGenProfile shrine slot spacing metres of walking, the first one
 ##    HOKORA_OPENING_DISTANCE metres out, and each gives OFUDA_PER_HOKORA.
 ##    Yōkai, elites and the Oni give nothing.
 
@@ -37,9 +37,10 @@ const PROFILES := {
 ## and meets a slot's shrine only inside the spawn band (2 × spawn radius wide),
 ## with probability chance × valid share: spacing = S² / (band × chance × valid).
 static func hokora_spacing() -> float:
-	var side := float(ElementBalance.HOKORA_SLOT_CHUNKS) * ForestWorld.CHUNK_SIZE
+	var world := WorldGenProfile.load_active()
+	var side := float(world.shrine_slot_chunks) * world.chunk_size
 	var band := 2.0 * ElementBalance.HOKORA_SPAWN_RADIUS
-	return side * side / (band * ElementBalance.HOKORA_SLOT_CHANCE * ElementBalance.HOKORA_VALID_SHARE)
+	return side * side / (band * world.shrine_slot_chance * ElementBalance.HOKORA_VALID_SHARE)
 
 
 ## One run simulated with the real wave formulas. Kills and the rank come from

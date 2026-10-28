@@ -2,8 +2,9 @@ class_name HokoraManager
 extends Node3D
 ## Places hokora shrines in the endless forest (docs/ELEMENTS_PLAN.md, D1).
 ##
-## The forest is cut into square slots of ElementBalance.HOKORA_SLOT_CHUNKS chunks.
-## A slot holds at most one shrine (ElementBalance.HOKORA_SLOT_CHANCE). Its
+## The forest is cut into square slots of profile.shrine_slot_chunks chunks
+## (WorldGenProfile, docs/WORLDGEN_TOOL.md). A slot holds at most one shrine
+## (profile.shrine_slot_chance). Its
 ## candidate points come from a seed that depends only on the slot, so the same
 ## slot always proposes the same place in every run and the world stays fixed.
 ## The first candidate that passes the placement rules is cached for the run.
@@ -17,7 +18,6 @@ extends Node3D
 signal shrine_claimed(shrine: HokoraShrine, ofuda: int)
 
 const SHRINE_SCENE := preload("res://scenes/world/hokora_shrine.tscn")
-const SLOT_SIZE := ElementBalance.HOKORA_SLOT_CHUNKS * 28.0
 ## Keep the footprint half a chunk away from the slot edge.
 const SLOT_MARGIN := 14.0
 ## Alternates tried when the main pick is blocked. The forest is dense: torii use
@@ -31,6 +31,8 @@ const WORLD_SEED := 0x484F4B4F  # "HOKO"
 const OPENING_DISTANCE := ElementBalance.HOKORA_OPENING_DISTANCE
 
 var forest_world: ForestWorld
+## Edge of one slot, metres (profile.shrine_slot_chunks × chunk_size, set in setup).
+var slot_size := 112.0
 var follow: Node3D
 var torii_manager: ToriiManager
 var start_position := Vector3.ZERO
@@ -49,6 +51,7 @@ var _clearance_shape: CylinderShape3D = null
 
 func setup(p_forest: ForestWorld, p_follow: Node3D, p_torii: ToriiManager) -> void:
 	forest_world = p_forest
+	slot_size = p_forest.profile.shrine_slot_chunks * p_forest.profile.chunk_size
 	follow = p_follow
 	torii_manager = p_torii
 
@@ -88,7 +91,7 @@ func claimed_count() -> int:
 
 
 func slot_of(p: Vector3) -> Vector2i:
-	return Vector2i(roundi(p.x / SLOT_SIZE), roundi(p.z / SLOT_SIZE))
+	return Vector2i(roundi(p.x / slot_size), roundi(p.z / slot_size))
 
 
 func _physics_process(delta: float) -> void:
@@ -160,10 +163,10 @@ func _spot_for(slot: Vector2i, p: Vector3) -> Vector3:
 func _candidate_points(slot: Vector2i) -> Array[Vector3]:
 	var rng := _slot_rng(slot, 0)
 	var out: Array[Vector3] = []
-	if rng.randf() > ElementBalance.HOKORA_SLOT_CHANCE:
+	if rng.randf() > forest_world.profile.shrine_slot_chance:
 		return out
-	var center := Vector2(slot.x, slot.y) * SLOT_SIZE
-	var half := SLOT_SIZE * 0.5 - SLOT_MARGIN
+	var center := Vector2(slot.x, slot.y) * slot_size
+	var half := slot_size * 0.5 - SLOT_MARGIN
 	for i in 1 + MAX_ALTERNATES:
 		var x := center.x + rng.randf_range(-half, half)
 		var z := center.y + rng.randf_range(-half, half)

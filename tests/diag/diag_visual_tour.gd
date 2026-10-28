@@ -17,7 +17,7 @@ func _ready() -> void:
 	dp = run.player as DesktopPlayer
 	run.xp_to_next = 999999
 	# 1. Props up close: find the nearest tree, gate, lantern, rock.
-	for label in ["Trees", "Torii", "Lanterns", "Rocks"]:
+	for label in ["Trees0", "Torii", "Lanterns", "Undergrowth0"]:
 		var p := _nearest_prop(label)
 		if p != Vector3.INF:
 			var dir := (dp.global_position - p)

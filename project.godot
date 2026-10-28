@@ -39,6 +39,11 @@ window/size/viewport_height=900
 
 enabled=PackedStringArray("res://addons/godot-xr-tools/plugin.cfg")
 
+[hanabi]
+
+; The forest the run generates: one World Gen profile (docs/WORLDGEN_TOOL.md).
+worldgen/profile="res://data/worldgen/default_profile.tres"
+
 [layer_names]
 
 3d_physics/layer_1="static_world"

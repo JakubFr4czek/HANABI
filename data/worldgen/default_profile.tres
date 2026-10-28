@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="WorldGenProfile" format=3]
+
+[ext_resource type="Script" path="res://src/forest/worldgen_profile.gd" id="1_00oye"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/forest_quaternius/torii_gate_polyfork.glb" id="2_ueymx"]
+[ext_resource type="Script" path="res://src/forest/tree_entry.gd" id="3_0trhh"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/forest_trees/cherry_forest.gltf" id="4_q7a5t"]
+[ext_resource type="Script" path="res://src/forest/undergrowth_entry.gd" id="5_pi1ht"]
+
+[sub_resource type="Resource" id="Resource_sclpf"]
+script = ExtResource("3_0trhh")
+label = "Cedar (sugi)"
+
+[sub_resource type="Resource" id="Resource_7iial"]
+script = ExtResource("3_0trhh")
+label = "Sakura (neon focal)"
+crown = 1
+weight = 0.0
+focal_chance = 0.18
+
+[sub_resource type="Resource" id="Resource_8gio6"]
+script = ExtResource("5_pi1ht")
+label = "Boulder (moss)"
+scale_min = 0.85
+scale_max = 3.2
+
+[resource]
+script = ExtResource("1_00oye")
+trees = Array[ExtResource("3_0trhh")]([SubResource("Resource_sclpf"), SubResource("Resource_7iial")])
+undergrowth = Array[ExtResource("5_pi1ht")]([SubResource("Resource_8gio6")])
