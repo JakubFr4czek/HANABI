@@ -201,6 +201,9 @@ var _grip_zones := {}   # holder -> String (ZONE_HANDLE / ZONE_TSUBA / ZONE_MUNE
 var _prev_contacts := {}  # collider instance id -> true, contacts in previous tick
 ## True while the blade physically rests against an enemy body this tick.
 var _touching_enemy := false
+## Set by ElementSystem each tick: the imbued school's finisher (D4) is active,
+## so a clean edge cut is offered to its receiver as a Kirisute cut.
+var kirisute_ready := false
 var _receiver_cooldown := {}  # receiver instance id -> time left
 var _wedged := {}  # body instance id -> {"body": PhysicsBody3D, "time": float}
 var _stuck_timer := 0.0
@@ -928,6 +931,12 @@ func _handle_hit(c: Dictionary) -> void:
 	var mom := strike_momentum(c.point, c.direction, c.speed)
 	var base_damage := clampf((c.speed - min_hit_speed) * damage_per_speed, 0.0, max_damage) \
 		* lerpf(flick_damage, 1.0, mom.power) * float(strike.multiplier) * damage_multiplier
+	# Kirisute (D4): a clean, fast edge cut under an active finisher is offered to the
+	# receiver, which decides whether it splits. The blade's plane is the contact
+	# point with the motion and the blade's own axis (see KirisuteCut.plane_normal).
+	var offer_kirisute: bool = kirisute_ready and strike.kind == "edge" \
+		and float(strike.alignment) >= ElementBalance.KIRISUTE_MIN_ALIGNMENT \
+		and c.speed >= ElementBalance.KIRISUTE_MIN_SPEED
 	var hit := {
 		"attacker": weapon_name,
 		"element": element,
@@ -943,12 +952,15 @@ func _handle_hit(c: Dictionary) -> void:
 		"impulse": snappedf(mom.impulse, 0.01),
 		"knockback": c.direction * float(mom.impulse),
 	}
+	if offer_kirisute:
+		hit["kirisute_offer"] = true
+		hit["blade_axis"] = get_blade_axis()
 	if receiver.has_method("receive_hit"):
 		hit = receiver.receive_hit(part, hit)
 	var dmg: float = hit.get("damage", base_damage)
-	# A limb taken off offers almost nothing: the blade follows through
-	# clean instead of biting in.
-	_apply_cut_resistance(c, mom, strike.kind, 0.25 if hit.has("severed") else 1.0)
+	# A limb taken off, or a body cut in two, offers almost nothing: the blade
+	# follows through clean instead of biting in.
+	_apply_cut_resistance(c, mom, strike.kind, 0.25 if hit.has("severed") or hit.get("kirisute", false) else 1.0)
 	var loud := linear_to_db(clampf(0.4 + c.speed / 12.0, 0.4, 1.2))
 	match strike.kind:
 		"edge", "thrust":

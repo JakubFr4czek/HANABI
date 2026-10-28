@@ -11,6 +11,9 @@ const ONI_BODY_GLB := preload("res://assets/models/enemies/oni_body_run.glb")
 const ONI_KANABO_GLB := preload("res://assets/models/enemies/oni_kanabo_run.glb")
 
 var is_dead := false
+## Open Kirisute wounds (D4 §8): most this many glow at once (Quest budget).
+const MAX_WOUNDS := 2
+var _wounds: Array[MeshInstance3D] = []
 static var _cached_mask_mesh: Mesh
 var _last_hit := {}
 var _flesh := ShaderMaterial.new()
@@ -269,7 +272,52 @@ func _allow_revive_after_knockout() -> bool:
 
 func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	_last_hit = hit
-	return super.receive_hit(part, hit)
+	var result := super.receive_hit(part, hit)
+	if bool(hit.get("kirisute_offer", false)) and not is_dead:
+		_open_wound(part, hit)
+	return result
+
+
+## Kirisute (D4 §8): the Oni does not come apart from one cut. A clean cut leaves a
+## glowing wound in the school's colour, along the blade's line on the body, which
+## closes over ~2 s. At most [constant MAX_WOUNDS] stay open; the oldest closes first.
+func _open_wound(part: RagdollPart, hit: Dictionary) -> void:
+	var scene := get_tree().current_scene if is_inside_tree() else null
+	if scene == null:
+		return
+	var element: String = hit.get("element", Elements.NONE)
+	var point: Vector3 = hit.get("point", part.global_position)
+	KirisuteCut.wound(scene, point, hit.get("direction", Vector3.UP), element)
+	var radial := point - part.global_position
+	radial = radial.normalized() if radial.length_squared() > 1e-8 else Vector3.FORWARD
+	var axis: Vector3 = hit.get("blade_axis", Vector3.RIGHT)
+	var along := axis - radial * axis.dot(radial)
+	if along.length_squared() < 1e-6:
+		return
+	along = along.normalized()
+	var slit := MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.26, 0.016)
+	slit.mesh = quad
+	var glow := StandardMaterial3D.new()
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow.albedo_color = KirisuteCut.glow_color(element)
+	glow.emission_enabled = true
+	glow.emission = KirisuteCut.glow_color(element)
+	glow.emission_energy_multiplier = 2.0
+	slit.material_override = glow
+	part.add_child(slit)
+	# The quad lies flat on the skin: its width runs along the blade, its normal points out.
+	slit.global_transform = Transform3D(Basis(along, radial.cross(along), radial), point + radial * 0.005)
+	_wounds.append(slit)
+	while _wounds.size() > MAX_WOUNDS:
+		var closing: MeshInstance3D = _wounds.pop_front()
+		if is_instance_valid(closing):
+			closing.queue_free()
+	var closes := slit.create_tween()
+	closes.tween_property(glow, "albedo_color:a", 0.0, ElementBalance.KIRISUTE_WOUND_SECONDS)
+	closes.tween_callback(slit.queue_free)
 
 
 func _on_permanent_defeat() -> void:
