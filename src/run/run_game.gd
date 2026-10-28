@@ -27,8 +27,6 @@ const LEVEL_UP_HEAL_HP := 10.0
 
 @export var high_score_path := "user://high_score.cfg"
 @export var base_magnet_radius := 3.8
-@export var orbs_per_kill := 4
-@export var xp_per_orb := 6
 @export var skip_run_intro := false
 ## Plays the HANABI + NANJO boot splash once, before the first intro (D7). Only
 ## the launch scene (scenes/main.tscn) sets it, so tests and tools skip it.
@@ -76,7 +74,6 @@ var _base_max_force := 260.0
 var _base_max_torque := 40.0
 var _base_follow_freq := 9.0
 var _base_angular_freq := 9.0
-var _rng := RandomNumberGenerator.new()
 ## Desktop stand-in for a hand on the offering table: set by E for one physics frame.
 var _desktop_reach := false
 ## Linear storm_fog_color the run sets for the sky horizon (see _configure_run_forest).
@@ -85,7 +82,6 @@ var horizon_fog_color := Color.BLACK
 
 func _ready() -> void:
 	add_to_group("run_game")
-	_rng.randomize()
 	super._ready()
 	QuestPerfOverlay.attach_if_needed(self)
 	GameEvents.log_event("session_start", {"scene": "run", "xr": is_xr_available() and not OS.get_cmdline_user_args().has("--desktop")})

@@ -29,7 +29,7 @@ static func entries() -> Array[Dictionary]:
 	return [
 		_entry(RunBuffs.Kind.SPEED, "速", "SWIFT STEP", "+20 % speed · 60 s"),
 		_entry(RunBuffs.Kind.DAMAGE, "攻", "STRIKE FORCE", "+20 % damage · 60 s"),
-		_entry(RunBuffs.Kind.HEAL, "癒", "HEALING", "+35 % HP now · +15 % over 10 s"),
+		_entry(RunBuffs.Kind.HEAL, "癒", "HEALING", "+35 % HP now\n+15 % over 10 s"),
 	]
 
 
