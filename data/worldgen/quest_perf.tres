@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="WorldGenProfile" format=3]
+
+[ext_resource type="Script" path="res://src/forest/worldgen_profile.gd" id="1_yy6m6"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/forest_quaternius/torii_gate_polyfork.glb" id="2_5813c"]
+[ext_resource type="Script" path="res://src/forest/tree_entry.gd" id="3_0w6m2"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/forest_trees/cherry_forest.gltf" id="4_t0gfo"]
+[ext_resource type="Script" path="res://src/forest/undergrowth_entry.gd" id="5_ylg8h"]
+
+[sub_resource type="Resource" id="Resource_ytvt8"]
+script = ExtResource("3_0w6m2")
+label = "Cedar (sugi)"
+
+[sub_resource type="Resource" id="Resource_ja4jy"]
+script = ExtResource("3_0w6m2")
+label = "Sakura (neon focal)"
+crown = 1
+weight = 0.0
+focal_chance = 0.18
+
+[sub_resource type="Resource" id="Resource_igdl3"]
+script = ExtResource("5_ylg8h")
+label = "Boulder (moss)"
+max_per_chunk = 2
+scale_min = 0.85
+scale_max = 3.2
+
+[resource]
+script = ExtResource("1_yy6m6")
+terrain_resolution = 33
+trees = Array[ExtResource("3_0w6m2")]([SubResource("Resource_ytvt8"), SubResource("Resource_ja4jy")])
+tree_keep_min = 0.35
+tree_keep_max = 0.8
+undergrowth = Array[ExtResource("5_ylg8h")]([SubResource("Resource_igdl3")])
+torii_chunk_chance = 0.25
+lantern_max_per_chunk = 3
+shafts_max_per_chunk = 2
+tree_draw_radius = 8.0
+focal_draw_radius = 10.0

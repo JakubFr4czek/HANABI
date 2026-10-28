@@ -137,14 +137,13 @@ const KIRISUTE_WOUND_SECONDS := 2.0
 ## Ofuda come from hokora shrines in the forest and from nothing else: yōkai,
 ## elites and the Oni drop none (docs/ELEMENTS_PLAN.md, D1).
 const OFUDA_PER_HOKORA := 6
-## The forest is cut into square slots of HOKORA_SLOT_CHUNKS × HOKORA_SLOT_CHUNKS
-## forest chunks (28 m each). A slot holds one shrine with HOKORA_SLOT_CHANCE, and
-## the player only meets it inside the spawn radius, a 68 m band across the walk.
+## The forest is cut into square slots of profile.shrine_slot_chunks chunks on a
+## side, and a slot holds one shrine with profile.shrine_slot_chance (both in the
+## WorldGenProfile: placement is world generation, not balance). The player only
+## meets a shrine inside the spawn radius, a 68 m band across the walk.
 ## So a shrine is met about every S² / (68 × chance × valid share) metres (see
 ## tools/balance_model.gd hokora_spacing): ~215 m, about 80 s of walking at an
 ## average pace, roughly 8× rarer than the 18–32 m torii spacing.
-const HOKORA_SLOT_CHUNKS := 4
-const HOKORA_SLOT_CHANCE := 0.9
 ## Share of slots whose candidates include a spot that passes the placement rules
 ## (measured headless: tests/hokora_test.gd walks 1.5 km and meets 7 shrines, ~214 m
 ## apart, which this share reproduces).

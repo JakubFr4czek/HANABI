@@ -73,7 +73,7 @@ func _run_all() -> void:
 		var chunk: Node3D = run.forest_world._chunks[key]
 		if chunk == null or not is_instance_valid(chunk):
 			continue
-		for m_name in ["Trees", "Rocks", "Lanterns"]:
+		for m_name in ["Trees0", "Undergrowth0", "Lanterns"]:
 			var mm_node := chunk.get_node_or_null(m_name) as MultiMeshInstance3D
 			if mm_node and mm_node.multimesh:
 				var mm := mm_node.multimesh
