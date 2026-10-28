@@ -50,28 +50,34 @@ const TAB_SIZE := Vector2(280.0, 84.0)
 const TAB_GAP := 17.0
 const TAB_ORIGIN := Vector2(66.0, 120.0)
 
-# --- Settings tab (安 SETTINGS): four pages behind one sub-tab row. ---------------
+# --- Settings tab (安 SETTINGS): five pages behind one sub-tab row. ---------------
 const SETTINGS_ACCENT := Color(0.82, 0.76, 0.60)
 const PAGE_AUDIO := 0
 const PAGE_MOVE := 1
 const PAGE_ACCESS := 2
 const PAGE_CONTROLS := 3
-const PAGE_NAMES := ["AUDIO", "MOVEMENT", "ACCESS", "CONTROLS"]
-const PAGE_KANJI := ["音", "移", "補", "操"]
+const PAGE_AI := 4
+const PAGE_NAMES := ["AUDIO", "MOVEMENT", "ACCESS", "CONTROLS", "AI BOSS"]
+const PAGE_KANJI := ["音", "移", "補", "操", "知"]
 const PAGE_SUBTITLE := [
 	"Four buses in 10 % steps. SFX plays a cue as you change it.",
 	"Vignette, turning, walking pace and seated height.",
 	"Photosensitive comfort: lightning flash and haptic strength.",
 	"Both Quest 3 controllers. The katana follows your dominant hand.",
+	"Meta Muse Spark / Llama model configuration, API key and AI combat.",
 ]
 const SUBNAV_RECTS := {
-	"page_audio": Rect2(66.0, 218.0, 355.0, 44.0),
-	"page_move": Rect2(437.0, 218.0, 355.0, 44.0),
-	"page_access": Rect2(808.0, 218.0, 355.0, 44.0),
-	"page_controls": Rect2(1179.0, 218.0, 355.0, 44.0),
+	"page_audio": Rect2(66.0, 218.0, 280.0, 44.0),
+	"page_move": Rect2(363.0, 218.0, 280.0, 44.0),
+	"page_access": Rect2(660.0, 218.0, 280.0, 44.0),
+	"page_controls": Rect2(957.0, 218.0, 280.0, 44.0),
+	"page_ai": Rect2(1254.0, 218.0, 280.0, 44.0),
 }
-const SUBNAV_PAGE := {"page_audio": PAGE_AUDIO, "page_move": PAGE_MOVE,
-		"page_access": PAGE_ACCESS, "page_controls": PAGE_CONTROLS}
+const SUBNAV_PAGE := {
+	"page_audio": PAGE_AUDIO, "page_move": PAGE_MOVE,
+	"page_access": PAGE_ACCESS, "page_controls": PAGE_CONTROLS,
+	"page_ai": PAGE_AI
+}
 const SETTINGS_RECTS := {
 	PAGE_AUDIO: {
 		"vol_master_dn": Rect2(884.0, 308.0, 84.0, 64.0),
@@ -126,6 +132,13 @@ const SETTINGS_RECTS := {
 	PAGE_CONTROLS: {
 		"hand_right": Rect2(300.0, 270.0, 270.0, 50.0),
 		"hand_left": Rect2(584.0, 270.0, 270.0, 50.0),
+	},
+	PAGE_AI: {
+		"ai_toggle": Rect2(100.0, 370.0, 320.0, 56.0),
+		"ai_key_paste": Rect2(440.0, 370.0, 320.0, 56.0),
+		"ai_key_clear": Rect2(780.0, 370.0, 220.0, 56.0),
+		"ai_lang_pl": Rect2(1020.0, 370.0, 160.0, 56.0),
+		"ai_lang_en": Rect2(1200.0, 370.0, 160.0, 56.0),
 	},
 }
 const NODE_SIZE := Vector2(340.0, 120.0)
@@ -694,6 +707,10 @@ func _draw_settings() -> void:
 			_draw_move()
 		PAGE_ACCESS:
 			_draw_access()
+		PAGE_CONTROLS:
+			_draw_controls()
+		PAGE_AI:
+			_draw_ai()
 		_:
 			_draw_controls()
 
@@ -999,3 +1016,51 @@ func _note_drawn(item: Dictionary) -> void:
 			drawn_actions.append(String(a))
 	if item.has("slot"):
 		drawn_callouts.append({"side": item.side, "slot": item.slot, "title": item.title, "body": item.body})
+
+
+func _draw_ai() -> void:
+	_box(Rect2(66.0, 268.0, 1468.0, 600.0), LACQUER_RAISED, GILT_DIM, 2, 16)
+	_text("META AI COMBAT INTELLIGENCE", Vector2(100.0, 296.0), 30, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 600)
+	_wrapped("Oni Warlord dynamic tactical brain powered by Meta Model API (Muse Spark / Llama).", Vector2(100.0, 336.0), 22, DIM, 1400.0, 1)
+
+	var active := VrComfortSettings.ai_boss_enabled if VrComfortSettings else true
+	var key := VrComfortSettings.get_effective_meta_api_key() if VrComfortSettings else ""
+	var masked := VrComfortSettings.get_masked_api_key() if VrComfortSettings else ""
+	var lang := VrComfortSettings.ai_language if VrComfortSettings else "pl"
+
+	_settings_button("ai_toggle", "AI BOSS: " + ("WŁĄCZONY" if active else "WYŁĄCZONY"), active)
+	_settings_button("ai_key_paste", "WKLEJ KLUCZ (SCHOWEK)", false)
+	_settings_button("ai_key_clear", "USUŃ KLUCZ", false)
+	_settings_button("ai_lang_pl", "JĘZYK: PL", lang == "pl")
+	_settings_button("ai_lang_en", "LANG: EN", lang == "en")
+
+	var card_rect := Rect2(100.0, 460.0, 1400.0, 370.0)
+	_box(card_rect, LACQUER_SUNK, GILT_DIM, 1, 12)
+
+	_text("STATUS I KONFIGURACJA MODELU", Vector2(130.0, 485.0), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 600)
+
+	var status_text := ""
+	var status_col := GILT
+	if not active:
+		status_text = "STATUS: WYŁĄCZONY (Boss używa wyłącznie lokalnej sztucznej inteligencji)"
+		status_col = DIM
+	elif key != "":
+		status_text = "STATUS: AKTYWNY (Połączono z Meta Model API: muse-spark-1.3)"
+		status_col = Color(0.35, 0.95, 0.45)
+	else:
+		status_text = "STATUS: BRAK KLUCZA (Automatyczny lokalny fallback - walka rule-based działa w 100%)"
+		status_col = Color(0.95, 0.65, 0.25)
+
+	_text(status_text, Vector2(130.0, 528.0), 22, status_col, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 600)
+
+	var key_display := ("KLUCZ API META: " + masked) if key != "" else "KLUCZ API META: [NIE SKONFIGUROWANO]"
+	_text(key_display, Vector2(130.0, 568.0), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 500)
+
+	_text("DOSTAWCA: Meta Model API | MODEL: muse-spark-1.3 | ENDPOINT: https://api.meta.ai/v1", Vector2(130.0, 608.0), 20, DIM, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 500)
+
+	var help1 := "Kolejność odczytu: 1. Ustawienia gry (user://), 2. Plik secrets/meta_api_key.txt, 3. Lokalny fallback."
+	var help2 := "Brak sieci, błąd lub timeout (>3s) NIGDY nie zawiesza gry - boss natychmiast walczy lokalnym FSM."
+	var help3 := "Klucz jest bezpiecznie maskowany i nigdy nie trafia do repozytorium ani logów zdarzeń."
+	_wrapped(help1, Vector2(130.0, 655.0), 20, DIM, 1340.0, 1)
+	_wrapped(help2, Vector2(130.0, 690.0), 20, DIM, 1340.0, 1)
+	_wrapped(help3, Vector2(130.0, 725.0), 20, DIM, 1340.0, 1)

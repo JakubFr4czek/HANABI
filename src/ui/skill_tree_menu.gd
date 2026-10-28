@@ -528,6 +528,19 @@ func _handle_settings_action(key: String, pointer_id: String) -> void:
 				# Hears and feels the setting: one pulse on the katana hand.
 				if player is XRPlayer:
 					(player as XRPlayer).get_dominant_holder().pulse(0.6, 0.12)
+			"ai_toggle":
+				VrComfortSettings.set_ai_boss_enabled(not VrComfortSettings.ai_boss_enabled)
+			"ai_key_paste":
+				if DisplayServer.clipboard_has():
+					var text := DisplayServer.clipboard_get().strip_edges()
+					if text != "":
+						VrComfortSettings.set_meta_api_key(text)
+			"ai_key_clear":
+				VrComfortSettings.set_meta_api_key("")
+			"ai_lang_pl":
+				VrComfortSettings.set_ai_language("pl")
+			"ai_lang_en":
+				VrComfortSettings.set_ai_language("en")
 	Sfx.play_at("ofuda_slice", global_position, -16.0, 4.0, 1.1)
 	_buzz(pointer_id, 0.35, 0.04)
 	_redraw_now()
