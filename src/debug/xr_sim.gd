@@ -20,6 +20,8 @@ var _prev := {}
 
 
 func _ready() -> void:
+	# The runtime pushes tracking even while a menu pauses the game.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group("xr_sim")
 	process_physics_priority = -100  # poses land before anything reads them
 	_head.type = XRServer.TRACKER_HEAD

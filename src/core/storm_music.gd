@@ -18,6 +18,8 @@ var _duck_tween: Tween
 
 
 func _ready() -> void:
+	# Keeps playing while a menu pauses the game (ducked by Sfx.set_pause_ducking).
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	var stream := _music_stream()
 	_track_length = stream.get_length()
 	for i in 2:

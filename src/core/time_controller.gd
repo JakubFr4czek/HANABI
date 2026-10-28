@@ -20,6 +20,11 @@ var player_compensated := false
 
 var _effects: Array[Dictionary] = []
 var _clock := 0.0  # unscaled seconds since start
+## While a menu pauses the tree the effects are parked: their clock stops (so
+## a parry slow-mo resumes with the exact time it had left) and
+## Engine.time_scale reads 1.0, so the ALWAYS-processing rig and UI are not
+## slowed down by a world that is standing still anyway.
+var _suspended := false
 
 
 ## Freeze the world briefly on a strong hit (50–80 ms, GDD section 4).
@@ -75,6 +80,26 @@ func clear() -> void:
 	_apply()
 
 
+func is_suspended() -> bool:
+	return _suspended
+
+
+## Parks the active effects for a pause menu (see [member _suspended]).
+## Remaining durations and the time scale are kept and come back on [method resume].
+func suspend() -> void:
+	if _suspended:
+		return
+	_suspended = true
+	_apply()
+
+
+func resume() -> void:
+	if not _suspended:
+		return
+	_suspended = false
+	_apply()
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	process_physics_priority = -1000  # expire effects before gameplay runs this tick
@@ -87,6 +112,8 @@ func _add(kind: String, scale: float, duration: float, compensate: bool) -> void
 
 
 func _physics_process(_delta: float) -> void:
+	if _suspended:
+		return
 	# Physics ticks run at a fixed rate of real time whatever the time scale
 	# (only their simulated delta shrinks), so counting ticks gives real time.
 	_clock += 1.0 / Engine.physics_ticks_per_second
@@ -112,6 +139,10 @@ func _apply() -> void:
 		compensate = slowest.compensate
 	time_scale = scale
 	player_compensated = compensate
+	if _suspended:
+		Engine.time_scale = 1.0
+		AudioServer.playback_speed_scale = 1.0
+		return
 	Engine.time_scale = scale
 	# Audio: a gentle pitch drop in slow-mo; hit-stop keeps normal audio so the impact sound plays.
 	AudioServer.playback_speed_scale = lerpf(1.0, scale, 0.5) if compensate else 1.0

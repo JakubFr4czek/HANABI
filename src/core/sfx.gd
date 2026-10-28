@@ -37,9 +37,22 @@ var _next := 0
 var _ambience_lowpass_idx := -1
 var _ambience_base_db := 0.0
 var _music_base_db := 0.0
+## Slow-mo duck currently applied on the Music / Ambience buses (dB).
+var _slow_duck_db := 0.0
+## Pause menu ducking (docs/ELEMENTS_PLAN.md (e)(3)): 0 = normal, 1 = fully ducked.
+const PAUSE_LOWPASS_HZ := 750.0
+const PAUSE_MUSIC_DUCK_DB := -8.0
+const PAUSE_AMBIENCE_DUCK_DB := -6.0
+const PAUSE_FADE_SEC := 0.25
+var _pause_amount := 0.0
+var _pause_tween: Tween
+var _music_lowpass_idx := -1
 
 
 func _ready() -> void:
+	# Cues played from a pause menu (and sounds still ringing out when it opens)
+	# must keep running while the tree is paused.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_buses()
 	for category in CATEGORIES:
 		_load_category(category)
@@ -154,13 +167,52 @@ func _update_slow_mo_audio(_force: bool = false) -> void:
 	var lp_fx := AudioServer.get_bus_effect(bus, _ambience_lowpass_idx) as AudioEffectLowPassFilter
 	if lp_fx:
 		lp_fx.cutoff_hz = 900.0 if slow else 20500.0
-	var duck := -10.0 if slow else 0.0
+	_slow_duck_db = -10.0 if slow else 0.0
+	_apply_bus_levels()
+
+
+## Composes the slow-mo duck and the pause duck on the Music / Ambience buses.
+func _apply_bus_levels() -> void:
 	var amb := AudioServer.get_bus_index(AMBIENCE_BUS)
 	if amb >= 0:
-		AudioServer.set_bus_volume_db(amb, _ambience_base_db + duck)
+		AudioServer.set_bus_volume_db(amb, _ambience_base_db + _slow_duck_db + PAUSE_AMBIENCE_DUCK_DB * _pause_amount)
 	var mus := AudioServer.get_bus_index(MUSIC_BUS)
 	if mus >= 0:
-		AudioServer.set_bus_volume_db(mus, _music_base_db + duck)
+		AudioServer.set_bus_volume_db(mus, _music_base_db + _slow_duck_db + PAUSE_MUSIC_DUCK_DB * _pause_amount)
+		if _music_lowpass_idx < 0:
+			var lp := AudioEffectLowPassFilter.new()
+			lp.cutoff_hz = 20500.0
+			lp.resonance = 1.0
+			AudioServer.add_bus_effect(mus, lp)
+			_music_lowpass_idx = AudioServer.get_bus_effect_count(mus) - 1
+		var lp_fx := AudioServer.get_bus_effect(mus, _music_lowpass_idx) as AudioEffectLowPassFilter
+		if lp_fx:
+			# Log-space blend so the sweep sounds even.
+			lp_fx.cutoff_hz = exp(lerpf(log(20500.0), log(PAUSE_LOWPASS_HZ), _pause_amount))
+
+
+## Pause menu atmosphere: Music through a 750 Hz low-pass at -8 dB, Ambience
+## -6 dB, the Sfx/World bus untouched so UI clicks stay crisp. Fades over
+## [constant PAUSE_FADE_SEC] in real time. Instant when [param fade] is 0.
+func set_pause_ducking(on: bool, fade: float = PAUSE_FADE_SEC) -> void:
+	if _pause_tween and _pause_tween.is_valid():
+		_pause_tween.kill()
+	var target := 1.0 if on else 0.0
+	if fade <= 0.0 or not is_inside_tree():
+		_set_pause_amount(target)
+		return
+	_pause_tween = create_tween()
+	_pause_tween.set_ignore_time_scale(true)
+	_pause_tween.tween_method(_set_pause_amount, _pause_amount, target, fade)
+
+
+func pause_amount() -> float:
+	return _pause_amount
+
+
+func _set_pause_amount(v: float) -> void:
+	_pause_amount = v
+	_apply_bus_levels()
 
 
 func _setup_buses() -> void:

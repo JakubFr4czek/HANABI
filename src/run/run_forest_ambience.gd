@@ -8,6 +8,8 @@ var _player: AudioStreamPlayer
 
 
 func _ready() -> void:
+	# Keeps playing while a menu pauses the game (ducked by Sfx.set_pause_ducking).
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_player = AudioStreamPlayer.new()
 	_player.name = "ForestWind"
 	var stream := WIND
