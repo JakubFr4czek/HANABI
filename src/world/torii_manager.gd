@@ -141,6 +141,15 @@ func _ensure_gates_ahead() -> void:
 
 
 func _attempt_spawn_gate_in_range(p_pos: Vector3) -> ToriiGate:
+	var spot := find_gate_spot(p_pos)
+	if spot == Vector2.INF:
+		return null
+	return spawn_gate_at(spot.x, spot.y)
+
+
+## The first valid place for a gate around the player, or Vector2.INF. Only
+## searches: it spawns nothing, so it can be timed on its own.
+func find_gate_spot(p_pos: Vector3) -> Vector2:
 	var fwd := _player_forward()
 	var base_angle := atan2(fwd.x, fwd.z)
 
@@ -157,8 +166,8 @@ func _attempt_spawn_gate_in_range(p_pos: Vector3) -> ToriiGate:
 			var cand_z := p_pos.z + cos(ang) * dist
 
 			if _is_valid_location(cand_x, cand_z, p_pos):
-				return spawn_gate_at(cand_x, cand_z)
-	return null
+				return Vector2(cand_x, cand_z)
+	return Vector2.INF
 
 
 func _is_valid_location(wx: float, wz: float, p_pos: Vector3) -> bool:
