@@ -29,6 +29,7 @@ enum Crown {
 @export_range(0.0, 1.0, 0.01) var focal_chance := 0.0
 ## Trunk scale range (metres of tree per metre of mesh). Focal trees get focal_scale_boost on top.
 @export_range(0.2, 3.0, 0.01) var scale_min := 0.85
+## Largest trunk scale.
 @export_range(0.2, 3.0, 0.01) var scale_max := 1.4
 ## Extra scale a focal tree gets over an ordinary one.
 @export_range(1.0, 2.0, 0.01) var focal_scale_boost := 1.2
@@ -42,9 +43,13 @@ enum Crown {
 @export var obstacle := true
 ## Neon sakura look (only for crown SAKURA): accent glow, petals, rim light, emission and sparsity.
 @export var neon_color := Color(1.0, 0.30, 0.68)
+## Petal colour of the neon crown (sakura only).
 @export var petal_color := Color(0.76, 0.28, 0.48)
+## Rim light on the sakura crown (sakura only).
 @export var rim_color := Color(0.96, 0.65, 0.98)
+## Neon emission strength of the sakura crown.
 @export_range(0.0, 4.0, 0.01) var emission := 1.35
+## How sparse the neon blossoms are: higher means fewer lit petals.
 @export_range(0.0, 1.0, 0.01) var neon_sparsity := 0.70
 
 

@@ -26,7 +26,7 @@ func _run_all() -> void:
 	run.wave_director.stop_director()
 	var forest := run.forest_world
 	var xf := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 1.2), Vector3(400.0, 50.0, 400.0))
-	await _compare("tree trunk", forest._tree_mesh, forest._build_trunk_colliders([xf], 0, Node3D.new()), xf, [0.6, 1.2, 1.8, 2.6])
+	await _compare("tree trunk", forest._tree_meshes[0], forest._build_trunk_colliders([xf], 0, Node3D.new()), xf, [0.6, 1.2, 1.8, 2.6])
 	var gate_xf := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 3.5), Vector3(420.0, 50.0, 400.0))
 	# Right pillar centre, measured on the mesh just above the footing.
 	var xs := PackedFloat32Array()
@@ -39,7 +39,7 @@ func _run_all() -> void:
 	var lantern_xf := Transform3D(Basis.IDENTITY, Vector3(440.0, 50.0, 400.0))
 	await _compare("lantern", forest._lantern_mesh, forest._build_trunk_colliders([lantern_xf], 2, Node3D.new()), lantern_xf, [0.2, 0.55])
 	var rock_xf := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 1.6), Vector3(460.0, 50.0, 400.0))
-	await _compare("boulder", forest._rock_mesh, forest._build_trunk_colliders([rock_xf], 3, Node3D.new()), rock_xf, [0.1, 0.2])
+	await _compare("boulder", forest._under_meshes[0], forest._build_trunk_colliders([rock_xf], 3, Node3D.new()), rock_xf, [0.1, 0.2])
 	_check("the katana collides with trunks, gates, lanterns and boulders",
 		(run.katana.collision_mask & ForestWorld.TRUNK_LAYER) != 0)
 
