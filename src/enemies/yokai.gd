@@ -285,6 +285,11 @@ func is_staggered() -> bool:
 	return brain != null and brain.state == YokaiBrain.State.STAGGER
 
 
+func apply_stagger(duration: float = 1.4) -> void:
+	if brain and brain.has_method("stagger"):
+		brain.stagger(duration)
+
+
 ## Swarm base look (matches _ready): also the cleanup for a pooled elite
 ## reused as a swarm — normal size, no halo, no elite group or tint.
 func _reset_spawn_look() -> void:
@@ -1023,15 +1028,20 @@ func _perceive() -> Dictionary:
 		"can_act": state == State.STANDING and not is_dead,
 		"move_blocked": _move_blocked,
 	}
-	var head := get_tree().get_first_node_in_group("player_head") as Node3D
-	if head:
-		ctx["player_position"] = head.global_position
-		ctx["player_forward"] = -head.global_basis.z
-		if _confusion_time > 0.0:
-			var real_to_player := head.global_position - self_pos
-			var false_angle := sin(_confusion_time * 4.2 + float(get_instance_id() % 17)) * 1.25
-			ctx["player_position"] = self_pos + real_to_player.rotated(Vector3.UP, false_angle)
-			ctx["player_forward"] = (-head.global_basis.z).rotated(Vector3.UP, -false_angle * 0.6)
+	var decoy := get_tree().get_first_node_in_group("shadow_decoy") as Node3D if get_tree() else null
+	if decoy and is_instance_valid(decoy) and self_pos.distance_to(decoy.global_position) <= 9.0:
+		ctx["player_position"] = decoy.global_position
+		ctx["player_forward"] = -decoy.global_basis.z
+	else:
+		var head := get_tree().get_first_node_in_group("player_head") as Node3D if get_tree() else null
+		if head:
+			ctx["player_position"] = head.global_position
+			ctx["player_forward"] = -head.global_basis.z
+			if _confusion_time > 0.0:
+				var real_to_player := head.global_position - self_pos
+				var false_angle := sin(_confusion_time * 4.2 + float(get_instance_id() % 17)) * 1.25
+				ctx["player_position"] = self_pos + real_to_player.rotated(Vector3.UP, false_angle)
+				ctx["player_forward"] = (-head.global_basis.z).rotated(Vector3.UP, -false_angle * 0.6)
 	var health := get_tree().get_first_node_in_group("player_health") as PlayerHealth
 	ctx["player_alive"] = health == null or health.is_alive()
 
@@ -1120,6 +1130,14 @@ func _blocked_toward(dir: Vector3) -> bool:
 func _try_claw_player(damage: float, attack: String) -> void:
 	if _hit_player_this_strike or is_dead:
 		return
+	var decoy := get_tree().get_first_node_in_group("shadow_decoy") as Node3D if get_tree() else null
+	if decoy and is_instance_valid(decoy):
+		var decoy_pos := decoy.global_position
+		if root_part().global_position.distance_to(decoy_pos) < 1.6:
+			_hit_player_this_strike = true
+			if decoy.has_method("on_hit"):
+				decoy.on_hit()
+			return
 	var health := get_tree().get_first_node_in_group("player_health") as PlayerHealth
 	if health == null or not health.is_alive():
 		return

@@ -54,6 +54,12 @@ func force_attack(kind: String = "right") -> void:
 	_enter(State.WINDUP)
 
 
+func stagger(duration: float = -1.0) -> void:
+	if duration > 0.0:
+		stagger_time = duration
+	_enter(State.STAGGER)
+
+
 func on_hit(hit: Dictionary) -> void:
 	var dmg := float(hit.get("damage", 0.0))
 	var power := float(hit.get("power", 0.5))

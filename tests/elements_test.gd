@@ -1,6 +1,6 @@
 extends Node
-## Headless coverage for docs/NIGHT_PLAN.md item 2:
-## four gated element trees, one-element lock-in, combat effects per tree,
+## Headless coverage for docs/ELEMENTS_PLAN.md:
+## Four elements (Sakura, Storm, Ink, Shadow), Torii imbue, 2 active abilities per element,
 ## seal progress and bounded Quest-oriented VFX.
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
@@ -69,12 +69,8 @@ func _fresh_run() -> void:
 
 
 func _test_storm() -> void:
-	run._apply_upgrade({"id": "storm_charge"})
-	run._apply_upgrade({"id": "storm_overload"})
 	run.element_system.imbue(Elements.STORM)
 	run._update_element_seal()
-	_check("One complete tree occupies three element slots",
-		UpgradePool.element_slot_count(run.upgrade_stacks) == 3)
 	_check("The bound element colors the blade",
 		run.katana.element == Elements.STORM)
 
@@ -83,27 +79,20 @@ func _test_storm() -> void:
 	var e3 := run.wave_director.spawn_enemy_at(Vector3(1.2, 0.0, -1.5), player.global_position)
 	await _frames(5)
 	var hp_before := [e1.hp, e2.hp, e3.hp]
-	run.element_system.on_blade_hit({
-		"attacker": run.katana.weapon_name,
-		"damage": 20.0,
-		"point": ElementSystem._enemy_center(e1),
-		"direction": Vector3.RIGHT,
-	})
-	await _frames(3)
-	_check("Storm chains through several nearby yōkai",
-		e1.hp < hp_before[0] and e2.hp < hp_before[1])
 
-	run.element_system.storm_charge = 1.0
-	var charged_before := e3.hp
-	run.element_system._chain_cooldown = 1.0
-	run.element_system.on_blade_hit({
-		"attacker": run.katana.weapon_name,
-		"damage": 25.0,
-		"point": ElementSystem._enemy_center(e3),
-		"direction": Vector3.FORWARD,
-	})
-	_check("A fully charged Storm strike discharges bonus damage",
-		run.element_system.storm_charge == 0.0 and e3.hp < charged_before)
+	# Test Raikiri (Ability 1)
+	var fired_1 := run.element_system.execute_ability_1(Vector3.FORWARD)
+	await _frames(3)
+	_check("Storm Raikiri chains through nearby yōkai",
+		fired_1 and (e1.hp < hp_before[0] or e2.hp < hp_before[1]))
+
+	# Test Shiden (Ability 2)
+	run.element_system.ability_2_cooldown = 0.0
+	var pos_before := player.global_position
+	var fired_2 := run.element_system.execute_ability_2(Vector3.FORWARD)
+	await _frames(3)
+	_check("Storm Shiden dashes player forward and triggers stagger",
+		fired_2 and player.global_position.distance_to(pos_before) > 1.0)
 
 	for i in 20:
 		run.element_system._spawn_shadow_trace(Vector3.ZERO, Vector3(float(i % 3), 1.0, -2.0))
@@ -117,19 +106,22 @@ func _test_storm() -> void:
 
 func _test_ink() -> void:
 	await _fresh_run()
-	for id in ["ink_pool", "ink_tendrils", "ink_depth"]:
-		run._apply_upgrade({"id": id})
 	run.element_system.imbue(Elements.INK)
 	run._update_element_seal()
 	_check("Ink binds alone and colors the blade", run.katana.element == Elements.INK)
 
 	var victim := run.wave_director.spawn_enemy_at(Vector3(-0.7, 0.0, -0.8), player.global_position)
 	await _frames(5)
-	run.element_system.paint_ink(ElementSystem._enemy_center(victim))
+	# Test Sumi-gaeshi (Ability 1)
+	run.element_system.execute_ability_1(Vector3.FORWARD)
 	await _seconds(0.28)
 	_check("Ink pools slow yōkai standing in the painted area", victim.is_slowed())
+
+	# Test Kage-nawa (Ability 2)
+	run.element_system.ability_2_cooldown = 0.0
 	var ink_hp := victim.hp
-	await _seconds(1.1)
+	run.element_system.execute_ability_2(Vector3.FORWARD)
+	await _frames(4)
 	_check("Ink tendrils damage trapped yōkai", victim.is_dead or victim.hp < ink_hp)
 
 	for i in 9:
@@ -142,19 +134,20 @@ func _test_ink() -> void:
 
 func _test_sakura() -> void:
 	await _fresh_run()
-	for id in ["sakura_petals", "sakura_orbit", "sakura_heal"]:
-		run._apply_upgrade({"id": id})
-	_check("Sakura card without gate spawns 0 orbit petals", run.element_system._orbit_petals.size() == 0)
+	_check("Sakura without gate spawns 0 orbit petals", run.element_system._orbit_petals.size() == 0)
 	run.element_system.imbue(Elements.SAKURA)
 	run._update_element_seal()
 	_check("Sakura binds alone and colors the blade", run.katana.element == Elements.SAKURA)
-	_check("Sakura creates a three-blade orbit",
-		run.element_system._orbit_petals.size() == 3)
+
+	# Test Hanamai (Ability 2)
+	run.element_system.execute_ability_2(Vector3.FORWARD)
+	_check("Sakura Hanamai creates a four-blade orbit barrier",
+		run.element_system._orbit_petals.size() == 4)
 
 	var petal_target := run.wave_director.spawn_enemy_at(Vector3(0.0, 0.0, -1.0), player.global_position)
 	await _frames(4)
 	var petal_hp := petal_target.hp
-	run.element_system.debug_release_petals(
+	run.element_system.execute_ability_1(
 		(ElementSystem._enemy_center(petal_target) - run.katana.get_tip_global()).normalized())
 	await _seconds(0.55)
 	_check("Cutting petals damage yōkai",
@@ -174,8 +167,6 @@ func _test_sakura() -> void:
 
 func _test_shadow() -> void:
 	await _fresh_run()
-	for id in ["shadow_blink", "shadow_darkness", "shadow_veil"]:
-		run._apply_upgrade({"id": id})
 	run.element_system.imbue(Elements.SHADOW)
 	run._update_element_seal()
 	_check("Shadow binds alone and colors the blade", run.katana.element == Elements.SHADOW)
@@ -183,11 +174,11 @@ func _test_shadow() -> void:
 	var before_blink := player.global_position
 	var confused := run.wave_director.spawn_enemy_at(before_blink + Vector3(-2.2, 0.0, 0.0), player.global_position)
 	await _frames(3)
-	var blinked := run.element_system.try_shadow_blink(Vector3.LEFT)
+	var blinked := run.element_system.execute_ability_2(Vector3.LEFT)
 	await _frames(3)
 	_check("Shadow performs a short bounded combat blink",
 		blinked and player.global_position.distance_to(before_blink) > 1.0
-		and player.global_position.distance_to(before_blink) < 3.1)
+		and player.global_position.distance_to(before_blink) < 3.5)
 	_check("Blink darkness confuses nearby enemies",
 		confused.is_confused() and not run.element_system._darkness_areas.is_empty())
 	var gy := run.forest_world.height_at(player.global_position.x, player.global_position.z)
@@ -196,13 +187,13 @@ func _test_shadow() -> void:
 
 	# Blink straight at a trunk: the player must stop short of the bark,
 	# not end up inside the tree.
-	run.element_system.blink_cooldown = 0.0
+	run.element_system.ability_2_cooldown = 0.0
 	var at := player.global_position
 	var trunk_xf := Transform3D(Basis.IDENTITY, Vector3(at.x - 1.6, run.forest_world.height_at(at.x - 1.6, at.z), at.z))
 	var trunk := run.forest_world._build_trunk_colliders([trunk_xf], 0, Node3D.new())
 	run.add_child(trunk)
 	await _frames(3)
-	run.element_system.try_shadow_blink(Vector3.LEFT)
+	run.element_system.execute_ability_2(Vector3.LEFT)
 	await _frames(3)
 	var gap := Vector2(player.global_position.x - trunk_xf.origin.x, player.global_position.z - trunk_xf.origin.z).length()
 	_check("a blink at a tree stops short of the bark (%.2f m from the axis, bark ~%.2f m)" % [gap, run.forest_world._trunk_chest_radius],

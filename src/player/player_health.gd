@@ -52,13 +52,17 @@ func hurt_capsule() -> Array:
 func take_hit(amount: float, source: Vector3, info: Dictionary = {}) -> bool:
 	if not is_alive() or _invulnerable > 0.0 or amount <= 0.0:
 		return false
-	hp = maxf(hp - amount, 0.0)
+	var final_amount := amount
+	var es := get_tree().get_first_node_in_group("element_system") if get_tree() else null
+	if es and es.has_method("get_incoming_damage_multiplier"):
+		final_amount *= es.get_incoming_damage_multiplier()
+	hp = maxf(hp - final_amount, 0.0)
 	_invulnerable = invulnerable_time
 	var event := info.duplicate()
-	event["damage"] = snappedf(amount, 0.1)
+	event["damage"] = snappedf(final_amount, 0.1)
 	event["hp_left"] = snappedf(hp, 0.1)
 	GameEvents.log_event("player_hit", event)
-	damaged.emit(amount, hp, source)
+	damaged.emit(final_amount, hp, source)
 	if hp <= 0.0:
 		_down_time = revive_time
 		GameEvents.log_event("player_defeated", {"attacker": info.get("attacker", "")})

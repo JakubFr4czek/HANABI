@@ -25,21 +25,29 @@ func _run_all() -> void:
 	_check("Spawn seal starts dark (no elements lit)",
 		int(seal_mat.get_shader_parameter("active_elements_mask")) == 0)
 
+	# New system (ELEMENTS_PLAN): blade element comes only from Torii gates.
+	# Level-up cards never imbue the blade.
 	run._apply_upgrade({"id": "sakura_petals"})
 	run._update_element_seal()
-	_check("Seal lights Sakura quadrant (桜) after first element pick",
+	_check("Level-up card does NOT imbue the blade (Torii gates only)",
+		run.element_system.current_element == Elements.NONE
+		and int(seal_mat.get_shader_parameter("active_elements_mask")) == 0)
+
+	run.element_system.imbue(Elements.SAKURA)
+	run._update_element_seal()
+	_check("Seal lights Sakura quadrant (桜) after Sakura gate imbue",
 		int(seal_mat.get_shader_parameter("active_elements_mask")) == 1)
 
-	run._apply_upgrade({"id": "storm_chain"})
+	run.element_system.imbue(Elements.STORM)
 	run._update_element_seal()
-	_check("Second element is rejected (one element per run)",
-		run.element_system.active_elements == [Elements.SAKURA]
-		and int(seal_mat.get_shader_parameter("active_elements_mask")) == 1)
+	_check("Different gate replaces the element (one element at a time)",
+		run.element_system.active_elements == [Elements.STORM]
+		and run.element_system.current_element == Elements.STORM)
 
-	run._apply_upgrade({"id": "ink_pool"})
-	_check("Third element is rejected (one element per run)",
+	run.element_system.imbue(Elements.INK)
+	_check("Blade still holds exactly one element after another gate",
 		run.element_system.active_elements.size() == 1
-		and not run.element_system.active_elements.has(Elements.INK))
+		and run.element_system.current_element == Elements.INK)
 
 	run.start_run()
 	await _frames(8)
