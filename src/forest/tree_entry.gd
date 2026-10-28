@@ -37,7 +37,7 @@ enum Crown {
 ## How far the trunk leans with the hill: 0 stands straight, 1 follows the slope fully.
 @export_range(0.0, 1.0, 0.01) var hill_lean := 0.72
 ## Smallest trunk-to-trunk distance for this kind (Poisson-disk radius, metres).
-@export_range(0.8, 10.0, 0.05) var min_spacing := 2.4
+@export_range(0.8, 10.0, 0.05) var min_spacing := 2.7
 ## Solid trunk: the player and the blade stop on it (yōkai steer around it).
 @export var obstacle := true
 ## Neon sakura look (only for crown SAKURA): accent glow, petals, rim light, emission and sparsity.

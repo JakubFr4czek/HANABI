@@ -64,6 +64,8 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Share of chunks that hold gates at all (rarity).
 @export_range(0.0, 1.0, 0.01) var torii_chunk_chance := 0.34
 @export_range(0, 6, 1) var torii_max_per_chunk := 3
+## Smallest distance between two gates of a chunk, metres (Poisson-disk spacing).
+@export_range(2.0, 30.0, 0.5) var torii_min_spacing := 8.0
 ## Share of candidates kept inside a chosen chunk: gates come in small groups.
 @export_range(0.1, 1.0, 0.01) var torii_group_keep := 0.75
 ## Gate height range, metres.
@@ -84,6 +86,8 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Stone lantern used along the forest path. Empty uses the procedural lantern.
 @export var lantern_scene: PackedScene
 @export_range(0, 12, 1) var lantern_max_per_chunk := 5
+## Smallest distance between two lanterns of a chunk, metres (Poisson-disk spacing).
+@export_range(1.0, 30.0, 0.5) var lantern_min_spacing := 5.0
 @export_range(0.2, 3.0, 0.01) var lantern_scale_min := 0.6
 @export_range(0.2, 3.0, 0.01) var lantern_scale_max := 1.33
 ## Scatter-noise threshold: higher = lanterns cluster in fewer spots.
