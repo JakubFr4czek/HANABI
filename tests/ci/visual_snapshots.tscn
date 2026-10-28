@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/ci/visual_snapshots.gd" id="1_snap"]
+
+[node name="VisualSnapshots" type="Node"]
+script = ExtResource("1_snap")

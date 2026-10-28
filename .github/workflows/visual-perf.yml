@@ -1,0 +1,182 @@
+# Wygląd i wydajność: zrzuty z gry z kilku stałych miejsc run.tscn porównane z poprzednim
+# przebiegiem, budżet wydajności (draw calle, prymitywy, czas klatki) oraz wizualny fuzzing
+# losowych legalnych miejsc w świecie. Renderer programowy: Xvfb + Mesa llvmpipe,
+# Godot gl_compatibility / opengl3 (jak na Queście). Co 2 h i ręcznie, nie blokuje merge'a.
+# Self-hosted runner eepy-box; zawsze leci w całości. Baseline zrzutów trzymany na boxie
+# ($HANABI_CI_CACHE/visual-baseline), aktualizowany tylko z runów na main.
+name: visual-perf
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      vfuzz_seed:
+        description: "Visual fuzz seed (empty = run number)"
+        required: false
+        default: ""
+      vfuzz_locations:
+        description: "Visual fuzz locations"
+        required: false
+        default: "12"
+
+permissions:
+  contents: read
+
+# One run at a time; a new 2-hourly run waits for the previous one instead of killing it.
+concurrency:
+  group: hanabi-visual-perf
+  cancel-in-progress: false
+
+env:
+  GODOT_VERSION: "4.7.2"
+  LIBGL_ALWAYS_SOFTWARE: "1"
+  GALLIUM_DRIVER: llvmpipe
+  RENDER_ARGS: --rendering-method gl_compatibility --rendering-driver opengl3 --resolution 960x540
+
+jobs:
+  snapshots-perf:
+    name: Fixed screenshots + perf budget
+    runs-on: [self-hosted, hanabi]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner tools
+        run: bash ci/box_tools_check.sh xvfb-run timeout python3 py:PIL py:numpy
+      - name: Godot (box copy in $GODOT_DIR, downloads only if missing)
+        run: bash ci/setup_godot.sh
+      - name: Restore .godot import cache (box)
+        run: bash ci/box_cache.sh restore visual-import .godot
+      - name: Import project
+        run: mkdir -p ci_out && bash ci/import_project.sh
+      - name: Save .godot import cache (box)
+        run: bash ci/box_cache.sh save visual-import .godot
+
+      - name: Previous run's baseline (box, last successful run on main)
+        continue-on-error: true
+        run: bash ci/box_cache.sh restore visual-baseline prev
+
+      - name: Render fixed shots + perf sample
+        id: shots
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          # shellcheck disable=SC2086
+          timeout 1200 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . $RENDER_ARGS \
+            res://tests/ci/visual_snapshots.tscn -- --desktop --out="$PWD/ci_out/baseline" 2>&1 | tee ci_out/snapshots.log
+          grep -m1 -E 'OpenGL API|Using Device' ci_out/snapshots.log || true
+
+      - name: Pixel diff vs previous run
+        id: diff
+        continue-on-error: true
+        run: python3 ci/image_diff.py --current ci_out/baseline/shots --previous prev/shots --out ci_out/diff --md ci_out/diff.md --json ci_out/diff.json
+
+      - name: Perf vs previous run (>20% jump)
+        id: perf
+        continue-on-error: true
+        run: |
+          [ -f ci_out/baseline/perf.json ] || { echo "no perf.json"; exit 1; }
+          python3 ci/perf_compare.py --current ci_out/baseline/perf.json --previous prev/perf.json --md ci_out/perf.md
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            [ -f ci_out/diff.md ] && cat ci_out/diff.md
+            echo
+            [ -f ci_out/perf.md ] && cat ci_out/perf.md
+            echo
+            echo "_render: ${{ steps.shots.outcome }}, diff: ${{ steps.diff.outcome }}, perf: ${{ steps.perf.outcome }}_"
+            gl=$(grep -m1 -E 'OpenGL API' ci_out/snapshots.log 2>/dev/null || true)
+            # shellcheck disable=SC2016
+            if [ -n "$gl" ]; then printf '\nRenderer: `%s`\n' "$gl"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep baseline on the box for the next run (main only)
+        if: always() && steps.shots.outcome == 'success' && github.ref == 'refs/heads/main'
+        run: bash ci/box_cache.sh save visual-baseline ci_out/baseline
+      - name: Upload baseline artifact
+        if: always() && steps.shots.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-baseline
+          path: ci_out/baseline/
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-diff
+          path: |
+            ci_out/diff/
+            ci_out/*.md
+            ci_out/*.json
+            ci_out/snapshots.log
+          retention-days: 14
+
+  visual-fuzz:
+    name: Visual fuzz (random legal spots)
+    runs-on: [self-hosted, hanabi]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner tools
+        run: bash ci/box_tools_check.sh xvfb-run timeout python3 py:PIL
+      - name: Godot (box copy in $GODOT_DIR, downloads only if missing)
+        run: bash ci/setup_godot.sh
+      - name: Restore .godot import cache (box)
+        run: bash ci/box_cache.sh restore visual-import .godot
+      - name: Import project
+        run: mkdir -p ci_out && bash ci/import_project.sh
+      - name: Save .godot import cache (box)
+        run: bash ci/box_cache.sh save visual-import .godot
+      - name: Visual fuzz
+        id: vfuzz
+        continue-on-error: true
+        env:
+          SEED: ${{ github.event.inputs.vfuzz_seed }}
+          LOCATIONS: ${{ github.event.inputs.vfuzz_locations || '12' }}
+        run: |
+          set -o pipefail
+          seed="${SEED:-$GITHUB_RUN_NUMBER}"
+          echo "seed=$seed" >> "$GITHUB_OUTPUT"
+          # shellcheck disable=SC2086
+          timeout 1800 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . $RENDER_ARGS \
+            res://tests/ci/visual_fuzz.tscn -- --desktop --seed="$seed" --locations="$LOCATIONS" --dirs=4 \
+            --out="$PWD/ci_out/vfuzz" 2>&1 | tee ci_out/vfuzz.log
+      - name: Contact sheets
+        if: always()
+        run: |
+          python3 ci/contact_sheet.py --dir ci_out/vfuzz/failed --out ci_out/vfuzz/failed_contact_sheet.png --cols 3 --thumb 420 || true
+          python3 ci/contact_sheet.py --dir ci_out/vfuzz/frames --out ci_out/vfuzz/all_contact_sheet.png --cols 6 --thumb 240 --max 96 || true
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Wizualny fuzzing (seed ${{ steps.vfuzz.outputs.seed }})"
+            echo
+            grep -E '^VFUZZ RESULT' ci_out/vfuzz.log 2>/dev/null || echo "brak wyniku (timeout albo crash, patrz log)"
+            if grep -q 'VFUZZ FAIL' ci_out/vfuzz.log 2>/dev/null; then
+              echo
+              echo "### Błędy (seed, miejsce, pozycja)"
+              echo '```'
+              grep -E 'VFUZZ FAIL|repro:' ci_out/vfuzz.log | head -60
+              echo '```'
+              echo "Klatki z błędami i contact sheet są w artefakcie \`visual-fuzz-frames\`."
+            fi
+            if grep -qE 'SCRIPT ERROR' ci_out/vfuzz.log 2>/dev/null; then
+              echo "### SCRIPT ERROR w logu"
+              echo '```'
+              grep -E -A2 'SCRIPT ERROR' ci_out/vfuzz.log | head -30
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-fuzz-frames
+          path: |
+            ci_out/vfuzz/failed/
+            ci_out/vfuzz/*.png
+            ci_out/vfuzz/visual_fuzz.json
+            ci_out/vfuzz.log
+          retention-days: 14

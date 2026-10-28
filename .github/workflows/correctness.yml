@@ -1,0 +1,230 @@
+# Poprawność: (a) istniejące testy headless (tools/run_tests.sh), (b) fuzzing legalnych
+# ruchów gracza na prawdziwej scenie run.tscn (tests/ci/fuzz_runner.gd), (c) pokrycie
+# kodu Nano Coverage. Co 2 h i ręcznie, nie blokuje merge'a. Zawsze leci w całości
+# (self-hosted runner eepy-box, minuty są darmowe).
+name: correctness
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      fuzz_seeds:
+        description: "Fuzz seeds, space separated (empty = 1 + two from the run number)"
+        required: false
+        default: ""
+      fuzz_steps:
+        description: "Fuzz steps per seed"
+        required: false
+        default: "250"
+
+permissions:
+  contents: read
+  actions: read
+
+# One run at a time; a new 2-hourly run waits for the previous one instead of killing it.
+concurrency:
+  group: hanabi-correctness
+  cancel-in-progress: false
+
+env:
+  GODOT_VERSION: "4.7.2"
+  # Prebuilt on the box (renamed .so); built from source into the cache dir only if missing.
+  NANO_COVERAGE_ADDON: /home/box/ci-tools/nano-coverage/nano_coverage_godot
+  NANO_COVERAGE_REPO: https://github.com/IgorBayerl/nano-coverage-godot
+  NANO_COVERAGE_SHA: fce7a0ae9281533456023275504bbd81d74d95be
+  LIBGL_ALWAYS_SOFTWARE: "1"
+
+jobs:
+  tests:
+    name: Headless test suite
+    runs-on: [self-hosted, hanabi]
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner tools
+        run: bash ci/box_tools_check.sh zsh xvfb-run timeout python3
+      - name: Godot (box copy in $GODOT_DIR, downloads only if missing)
+        run: bash ci/setup_godot.sh
+      - name: Restore .godot import cache (box)
+        run: bash ci/box_cache.sh restore correctness-import .godot
+      - name: Import project
+        run: mkdir -p ci_out && bash ci/import_project.sh
+      - name: Save .godot import cache (box)
+        run: bash ci/box_cache.sh save correctness-import .godot
+      - name: Run tools/run_tests.sh (2 at a time, 600 s each)
+        id: suite
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          touch "$RUNNER_TEMP/suite_start"
+          # The windowed render test (worldgen_path_visible_test) needs a display: Xvfb + llvmpipe.
+          xvfb-run -a -s "-screen 0 1600x900x24" zsh tools/run_tests.sh 2 2>&1 | tee ci_out/tests.txt
+          line=$(grep -E '^testy: [0-9]+/[0-9]+' ci_out/tests.txt | tail -1)
+          pass=$(echo "$line" | sed -E 's/testy: ([0-9]+)\/([0-9]+).*/\1/')
+          total=$(echo "$line" | sed -E 's/testy: ([0-9]+)\/([0-9]+).*/\2/')
+          echo "pass=$pass" >> "$GITHUB_OUTPUT"; echo "total=$total" >> "$GITHUB_OUTPUT"
+          [ -n "$pass" ] && [ "$pass" = "$total" ]
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Testy headless (tools/run_tests.sh)"
+            echo
+            echo "**${{ steps.suite.outputs.pass }}/${{ steps.suite.outputs.total }}** przechodzi"
+            echo
+            if grep -q '^FAIL:' ci_out/tests.txt 2>/dev/null; then
+              echo "### Nieprzechodzące"
+              echo '```'
+              grep -A5 '^FAIL:' ci_out/tests.txt | head -80
+              echo '```'
+            fi
+            echo "### Najwolniejsze testy"
+            echo '```'
+            # /tmp persists on the box: only this run's results.
+            find /tmp/hanabi_tests -maxdepth 1 -name '*.result' -newer "$RUNNER_TEMP/suite_start" -exec cat {} + 2>/dev/null | sed -E 's/.* ([0-9]+)s$/\1 &/' | sort -rn | head -8 | cut -d' ' -f2-
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-logs
+          path: |
+            ci_out/
+            /tmp/hanabi_tests/
+          retention-days: 14
+
+  fuzz:
+    name: Fuzz (random legal player actions)
+    runs-on: [self-hosted, hanabi]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Godot (box copy in $GODOT_DIR, downloads only if missing)
+        run: bash ci/setup_godot.sh
+      - name: Restore .godot import cache (box)
+        run: bash ci/box_cache.sh restore correctness-import .godot
+      - name: Import project
+        run: mkdir -p ci_out && bash ci/import_project.sh
+      - name: Save .godot import cache (box)
+        run: bash ci/box_cache.sh save correctness-import .godot
+      - name: Fuzz seeds
+        id: fuzz
+        continue-on-error: true
+        env:
+          SEEDS: ${{ github.event.inputs.fuzz_seeds }}
+          STEPS: ${{ github.event.inputs.fuzz_steps || '250' }}
+        run: |
+          seeds="${SEEDS:-1 $(( GITHUB_RUN_NUMBER * 1000 + 1 )) $(( GITHUB_RUN_NUMBER * 1000 + 2 ))}"
+          echo "seeds=$seeds" >> "$GITHUB_OUTPUT"
+          bad=0
+          : > ci_out/fuzz_summary.txt
+          for s in $seeds; do
+            log="ci_out/fuzz_seed_${s}.log"
+            timeout 600 "$GODOT" --headless --path . --fixed-fps 90 res://tests/ci/fuzz_runner.tscn -- --xr-sim --seed="$s" --steps="$STEPS" > "$log" 2>&1
+            code=$?
+            errs=$(grep -cE 'SCRIPT ERROR|^ERROR:' "$log" || true)
+            res=$(grep -E '^FUZZ RESULT' "$log" | tail -1)
+            [ $code -eq 124 ] && res="TIMEOUT after 600 s"
+            echo "seed=$s exit=$code script_errors=$errs :: $res" | tee -a ci_out/fuzz_summary.txt
+            if [ $code -ne 0 ] || [ "$errs" -gt 0 ]; then bad=$((bad+1)); fi
+          done
+          [ $bad -eq 0 ]
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Fuzzing (seedy: ${{ steps.fuzz.outputs.seeds }})"
+            echo
+            echo '```'
+            cat ci_out/fuzz_summary.txt 2>/dev/null
+            echo '```'
+            if grep -hq 'FUZZ FAIL' ci_out/fuzz_seed_*.log 2>/dev/null; then
+              echo "### Naruszone niezmienniki"
+              echo '```'
+              grep -h -A1 'FUZZ FAIL' ci_out/fuzz_seed_*.log | head -60
+              echo '```'
+              echo "Odtworzenie: \`godot --headless --path . --fixed-fps 90 res://tests/ci/fuzz_runner.tscn -- --xr-sim --seed=<seed> --steps=<n>\`"
+            fi
+            if grep -hqE 'SCRIPT ERROR|^ERROR:' ci_out/fuzz_seed_*.log 2>/dev/null; then
+              echo "### Błędy w logu"
+              echo '```'
+              grep -hE -A2 'SCRIPT ERROR|^ERROR:' ci_out/fuzz_seed_*.log | head -40
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fuzz-logs
+          path: ci_out/
+          retention-days: 14
+
+  coverage:
+    name: Code coverage (Nano Coverage)
+    runs-on: [self-hosted, hanabi]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner tools
+        run: bash ci/box_tools_check.sh zsh xvfb-run timeout python3
+      - name: Godot (box copy in $GODOT_DIR, downloads only if missing)
+        run: bash ci/setup_godot.sh
+
+      - name: Nano Coverage addon (box prebuilt; build from source only if missing)
+        run: |
+          if [ ! -f "$NANO_COVERAGE_ADDON/bin/nano_coverage_godot.linux.editor.x86_64.so" ]; then
+            bash ci/box_tools_check.sh scons g++ git
+            src="$RUNNER_TEMP/nano"
+            git clone --recursive "$NANO_COVERAGE_REPO" "$src"
+            cd "$src"
+            git checkout "$NANO_COVERAGE_SHA"
+            git submodule update --init --recursive
+            scons -j"$(nproc)" target=editor build_tests=no
+            addon=demo/addons/nano_coverage_godot
+            # The build names the library lib*.so but the .gdextension expects it without the prefix.
+            so=$(find "$addon/bin" bin -name "libnano_coverage_godot.linux.editor.x86_64.so" 2>/dev/null | head -1)
+            mkdir -p "$addon/bin"
+            cp "$so" "$addon/bin/nano_coverage_godot.linux.editor.x86_64.so"
+            rm -f "$addon/bin/libnano_coverage_godot.linux.editor.x86_64.so"
+            mkdir -p "$(dirname "$NANO_COVERAGE_ADDON")"
+            rm -rf "$NANO_COVERAGE_ADDON.tmp" && cp -r "$addon" "$NANO_COVERAGE_ADDON.tmp" && mv "$NANO_COVERAGE_ADDON.tmp" "$NANO_COVERAGE_ADDON"
+          fi
+          ls -la "$NANO_COVERAGE_ADDON/bin"
+
+      - name: Add the addon to the project (CI only, never committed)
+        run: |
+          rm -rf addons/nano_coverage_godot && cp -r "$NANO_COVERAGE_ADDON" addons/nano_coverage_godot
+          # Measure the game, not the tests, tools or CI scripts (addons are ignored by default).
+          printf '\n[nano_coverage]\n\ngeneral/ignore_paths=PackedStringArray("res://tests/**", "res://tools/**", "res://ci/**", "**/*_test.gd")\n' >> project.godot
+      - name: Restore .godot import cache (box)
+        run: bash ci/box_cache.sh restore correctness-import-cov .godot
+      - name: Import project
+        run: mkdir -p ci_out && bash ci/import_project.sh
+      - name: Save .godot import cache (box)
+        run: bash ci/box_cache.sh save correctness-import-cov .godot
+      - name: Instrument scripts on disk
+        id: instrument
+        run: timeout 300 "$GODOT" --headless --path . --script res://ci/coverage_instrument.gd 2>&1 | tee ci_out/instrument.txt
+      - name: Run the suite + one fuzz seed instrumented
+        continue-on-error: true
+        run: |
+          xvfb-run -a -s "-screen 0 1600x900x24" zsh tools/run_tests.sh 2 > ci_out/tests_instrumented.txt 2>&1 || true
+          timeout 600 "$GODOT" --headless --path . --fixed-fps 90 res://tests/ci/fuzz_runner.tscn -- --xr-sim --seed=1 --steps=150 > ci_out/fuzz_instrumented.log 2>&1 || true
+          grep -E '^testy:' ci_out/tests_instrumented.txt || true
+      - name: Report + restore scripts
+        if: always() && steps.instrument.outcome != 'skipped'
+        run: |
+          timeout 300 "$GODOT" --headless --path . --script res://ci/coverage_report.gd 2>&1 | tee ci_out/report.txt || true
+          python3 ci/lcov_summary.py coverage-report/lcov.info --md ci_out/coverage.md --html coverage-report/index.html || true
+          cat ci_out/coverage.md >> "$GITHUB_STEP_SUMMARY" || true
+          # Belt and braces: the checkout must be clean again apart from CI files.
+          git status --short -- src scenes | head -20
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            coverage-report/
+            ci_out/
+          retention-days: 14

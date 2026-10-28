@@ -1,0 +1,95 @@
+# Bezpieczeństwo i assety: skan sekretów (gitleaks), licencje assetów (CC0 / CC BY),
+# rozmiar repo i assetów. Co 2 h i ręcznie, nie blokuje merge'a.
+name: security-assets
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run at a time; a new 2-hourly run waits for the previous one instead of killing it.
+concurrency:
+  group: hanabi-security-assets
+  cancel-in-progress: false
+
+env:
+  GITLEAKS_VERSION: "8.30.1" # fallback download only; the box has it in /home/box/ci-tools/bin
+
+jobs:
+  checks:
+    name: Secrets, licences, size
+    runs-on: [self-hosted, hanabi]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks scans the whole history; the licence check marks assets added in the last 24 h
+
+      - name: Prepare
+        run: |
+          mkdir -p ci_out
+          bash ci/box_tools_check.sh python3 git
+
+      # --- Sekrety ---------------------------------------------------------------
+      - name: gitleaks (whole history, secrets redacted)
+        id: gitleaks
+        continue-on-error: true
+        run: |
+          # Preinstalled on the box runner; download into the job temp dir only if missing.
+          gl=$(command -v gitleaks || true)
+          if [ -z "$gl" ]; then
+            curl -fsSL -o "$RUNNER_TEMP/gl.tgz" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+            tar -xzf "$RUNNER_TEMP/gl.tgz" -C "$RUNNER_TEMP" gitleaks
+            gl="$RUNNER_TEMP/gitleaks"
+          fi
+          "$gl" version
+          "$gl" detect --source . --redact --no-banner -f json -r ci_out/gitleaks.json --exit-code 1
+
+      - name: gitleaks summary
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          p = "ci_out/gitleaks.json"
+          leaks = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) else []
+          print("## Sekrety (gitleaks)\n")
+          print(f"Znalezione: **{len(leaks)}** (wartości zredagowane)\n")
+          if leaks:
+              print("| Reguła | Plik | Linia | Commit |\n|---|---|---|---|")
+              for l in leaks[:50]:
+                  print(f"| {l.get('RuleID')} | `{l.get('File')}` | {l.get('StartLine')} | {str(l.get('Commit'))[:8]} |")
+          print()
+          PY
+
+      # --- Licencje --------------------------------------------------------------
+      - name: Asset licences (LICENSES.md / CREDITS.md)
+        id: licences
+        continue-on-error: true
+        run: python3 ci/check_licenses.py --root . --md ci_out/licences.md --json ci_out/licences.json
+
+      # --- Rozmiar ---------------------------------------------------------------
+      - name: Repo / asset size
+        id: size
+        continue-on-error: true
+        run: python3 ci/size_report.py --root . --limit-mb 10 --top 25 --md ci_out/size.md --json ci_out/size.json
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            [ -f ci_out/licences.md ] && cat ci_out/licences.md
+            echo
+            [ -f ci_out/size.md ] && cat ci_out/size.md
+            echo
+            echo "_gitleaks: ${{ steps.gitleaks.outcome }}, licencje: ${{ steps.licences.outcome }}, rozmiar: ${{ steps.size.outcome }}_"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-assets-report
+          path: ci_out/
+          retention-days: 14
