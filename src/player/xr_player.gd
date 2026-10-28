@@ -143,7 +143,7 @@ func _step_view_button(c: XRController3D, gripping: bool, delta: float) -> void:
 	if down:
 		var t: float = _by_time.get(key, 0.0) + delta
 		_by_time[key] = t
-		var turn_c := get_offhand_controller() if dominant_hand == "left" else right_controller
+		var turn_c := _get_turn_controller()
 		if c == turn_c:
 			var stick := c.get_vector2("primary").y
 			if absf(stick) > 0.55:
@@ -238,6 +238,13 @@ func _get_movement_direct() -> Node:
 
 func _get_movement_turn() -> Node:
 	return find_child("*MovementTurn*", true, false)
+
+
+func _get_turn_controller() -> XRController3D:
+	var turn := _get_movement_turn()
+	if turn and turn.get_parent() is XRController3D:
+		return turn.get_parent() as XRController3D
+	return right_controller
 
 
 func _get_vignette() -> Node:

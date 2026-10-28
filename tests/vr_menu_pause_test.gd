@@ -288,6 +288,15 @@ func _test_pointers_buy_only_through_run_game() -> void:
 # --- 4b. VR Comfort settings ------------------------------------------------------------
 
 func _test_comfort_settings_tab() -> void:
+	# Backup existing hanabi_vr.cfg if it exists
+	var original_cfg_content := ""
+	var had_original_cfg := FileAccess.file_exists(VrComfortSettings.SETTINGS_PATH)
+	if had_original_cfg:
+		var fa := FileAccess.open(VrComfortSettings.SETTINGS_PATH, FileAccess.READ)
+		if fa:
+			original_cfg_content = fa.get_as_text()
+			fa.close()
+
 	VrComfortSettings.reset_to_defaults(xr)
 	await _tap_menu_button()
 	_check("the menu opens for comfort checks", ctl.is_open)
@@ -301,11 +310,14 @@ func _test_comfort_settings_tab() -> void:
 	await _click("left", c.comfort_rect("vignette_off").get_center())
 	_check("clicking DISABLED turns vignette off", not VrComfortSettings.vignette_enabled)
 	var vig: Node = xr._get_vignette()
+	var vig_mesh: Node = vig.get_node_or_null("Mesh") if vig else null
 	_check("vignette node disabled auto_adjust", vig != null and not bool(vig.get("auto_adjust")))
+	_check("vignette mesh hidden when disabled", vig_mesh != null and not bool(vig_mesh.get("visible")))
 
 	await _click("left", c.comfort_rect("vignette_on").get_center())
 	_check("clicking ENABLED turns vignette on", VrComfortSettings.vignette_enabled)
 	_check("vignette node enabled auto_adjust", vig != null and bool(vig.get("auto_adjust")))
+	_check("vignette mesh shown when enabled", vig_mesh != null and bool(vig_mesh.get("visible")))
 
 	await _click("left", c.comfort_rect("vignette_75").get_center())
 	_check("clicking 75% sets strength to 0.75", absf(VrComfortSettings.vignette_strength - 0.75) < 0.01)
@@ -330,6 +342,7 @@ func _test_comfort_settings_tab() -> void:
 	_check("left holder is now dominant weapon hand", xr.get_dominant_holder() == xr.left_holder)
 	_check("movement direct reparented to right controller", xr._get_movement_direct().get_parent() == xr.right_controller)
 	_check("movement turn reparented to left controller", xr._get_movement_turn().get_parent() == xr.left_controller)
+	_check("turn controller for height adjust is left controller when southpaw", xr._get_turn_controller() == xr.left_controller)
 	if run.diegetic_hud and run.diegetic_hud.wrist_unit:
 		_check("wrist HUD plate moved to off-hand (right controller)", run.diegetic_hud.wrist_unit.get_parent() == xr.right_controller)
 
@@ -338,6 +351,7 @@ func _test_comfort_settings_tab() -> void:
 	_check("right holder is dominant weapon hand", xr.get_dominant_holder() == xr.right_holder)
 	_check("movement direct back on left controller", xr._get_movement_direct().get_parent() == xr.left_controller)
 	_check("movement turn back on right controller", xr._get_movement_turn().get_parent() == xr.right_controller)
+	_check("turn controller for height adjust is right controller when right-dominant", xr._get_turn_controller() == xr.right_controller)
 	if run.diegetic_hud and run.diegetic_hud.wrist_unit:
 		_check("wrist HUD plate back on left controller", run.diegetic_hud.wrist_unit.get_parent() == xr.left_controller)
 
@@ -374,6 +388,17 @@ func _test_comfort_settings_tab() -> void:
 	await _release_triggers()
 	await _tap_menu_button()
 	_check("the menu closes cleanly after comfort checks", not ctl.is_open)
+
+	# Restore original config file and settings
+	if had_original_cfg:
+		var fw := FileAccess.open(VrComfortSettings.SETTINGS_PATH, FileAccess.WRITE)
+		if fw:
+			fw.store_string(original_cfg_content)
+			fw.close()
+	else:
+		DirAccess.remove_absolute(VrComfortSettings.SETTINGS_PATH)
+	VrComfortSettings.load_settings()
+	VrComfortSettings.apply_to_player(xr)
 
 
 # --- 5. Slow-mo state survives ---------------------------------------------------------
