@@ -59,7 +59,7 @@ jobs:
           set -o pipefail
           touch "$RUNNER_TEMP/suite_start"
           # The windowed render test (worldgen_path_visible_test) needs a display: Xvfb + llvmpipe.
-          xvfb-run -a -s "-screen 0 1600x900x24" zsh tools/run_tests.sh 2 2>&1 | tee ci_out/tests.txt
+          xvfb-run -a -s "-screen 0 1600x900x24" zsh tools/run_tests.sh 2 2>&1 | tee ci_out/tests.txt || true  # verdict = the pass/total check below
           line=$(grep -E '^testy: [0-9]+/[0-9]+' ci_out/tests.txt | tail -1)
           pass=$(echo "$line" | sed -E 's/testy: ([0-9]+)\/([0-9]+).*/\1/')
           total=$(echo "$line" | sed -E 's/testy: ([0-9]+)\/([0-9]+).*/\2/')
@@ -93,6 +93,10 @@ jobs:
             ci_out/
             /tmp/hanabi_tests/
           retention-days: 14
+      # Job result = result of its checks (red run + ❌ in the summary); not a required check, so merges are never blocked.
+      - name: Verdict
+        if: always()
+        run: bash ci/verdict.sh "testy (run_tests.sh)=${{ steps.suite.outcome }}"
 
   fuzz:
     name: Fuzz (random legal player actions)
@@ -121,12 +125,13 @@ jobs:
           : > ci_out/fuzz_summary.txt
           for s in $seeds; do
             log="ci_out/fuzz_seed_${s}.log"
-            timeout 600 "$GODOT" --headless --path . --fixed-fps 90 res://tests/ci/fuzz_runner.tscn -- --xr-sim --seed="$s" --steps="$STEPS" > "$log" 2>&1
-            code=$?
-            errs=$(grep -cE 'SCRIPT ERROR|^ERROR:' "$log" || true)
+            timeout 600 "$GODOT" --headless --path . --fixed-fps 90 res://tests/ci/fuzz_runner.tscn -- --xr-sim --seed="$s" --steps="$STEPS" > "$log" 2>&1 && code=0 || code=$?  # bash -e would abort the loop on the first failing seed
+            # Engine shutdown leaks ("... at exit") and OpenXR-missing-runtime errors (no headset on the box) are not gameplay errors; leaks counted separately.
+            errs=$(grep -E 'SCRIPT ERROR|^ERROR:' "$log" | grep -cvE 'at exit|OpenXR' || true)
+            leaks=$(grep -cE '^(ERROR|WARNING):.*at exit' "$log" || true)
             res=$(grep -E '^FUZZ RESULT' "$log" | tail -1)
             [ $code -eq 124 ] && res="TIMEOUT after 600 s"
-            echo "seed=$s exit=$code script_errors=$errs :: $res" | tee -a ci_out/fuzz_summary.txt
+            echo "seed=$s exit=$code script_errors=$errs exit_leaks=$leaks :: $res" | tee -a ci_out/fuzz_summary.txt
             if [ $code -ne 0 ] || [ "$errs" -gt 0 ]; then bad=$((bad+1)); fi
           done
           [ $bad -eq 0 ]
@@ -149,7 +154,7 @@ jobs:
             if grep -hqE 'SCRIPT ERROR|^ERROR:' ci_out/fuzz_seed_*.log 2>/dev/null; then
               echo "### Błędy w logu"
               echo '```'
-              grep -hE -A2 'SCRIPT ERROR|^ERROR:' ci_out/fuzz_seed_*.log | head -40
+              grep -hE -A2 'SCRIPT ERROR|^ERROR:' ci_out/fuzz_seed_*.log | grep -vE 'at exit|OpenXR' | head -40
               echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
@@ -159,6 +164,10 @@ jobs:
           name: fuzz-logs
           path: ci_out/
           retention-days: 14
+      # Job result = result of its checks (red run + ❌ in the summary); not a required check, so merges are never blocked.
+      - name: Verdict
+        if: always()
+        run: bash ci/verdict.sh "fuzz (seedy ${{ steps.fuzz.outputs.seeds }})=${{ steps.fuzz.outcome }}"
 
   coverage:
     name: Code coverage (Nano Coverage)
