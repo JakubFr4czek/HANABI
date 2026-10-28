@@ -791,3 +791,117 @@ Zrzuty (`element_abilities_screenshots`, sekcja Kirisute). Ocena surowa:
 - Kirisute dodane do tier 5, a nie zamieniające istniejące efekty (koszt testów i balansu).
 - Elita: rozcięcie tylko przy zabiciu, bo „zabija każdy kawałek" z elitą (ok. 2.35× HP) byłoby zbyt tanie.
 - Własny slicer, nie addon: prymitywy są wypukłe, a addon dodałby licencję i zależność.
+
+## D12 – ekonomia: XP z wrogów, punkty z poziomów, ofuda z kapliczki
+
+> Jakub, 28 X 13:46: „ja mialem inna wizje, ze z przeciwnikow wypadaja punkty ktore leveluja gracza i za to on dostaje punkty do wydania w menu. A jak pojdziesz do kapliczki to ci sie pojawia np zolta ofuda … i masz do wyboru np 20% speed boost na 30s, heal 50% hp i np 20% dmg boost na 30s".
+> Wartości startowe (Eepy, 13:48): Szybkość +20 % na 60 s; Siła +20 % na 60 s; Leczenie 35 % max HP + 15 % przez 10 s. Bez zwiększania max HP. Ten sam typ odświeża czas, nie stackuje się.
+
+### 1. Diagnoza po D1
+
+- **Waluta:** ofuda tylko z kapliczki, 6 na kapliczkę, auto-claim przy 1.4 m. Drzewko kosztuje 3/5/5/8/12 (33 na szkołę). Przy 1 kapliczce na ~216 m to za mało, żeby drzewko rosło w tempie D1.
+- **XP:** hitodama (`SoulOrb`, istniejące kule z kill dropów) już są XP. Yōkai: 4 kule × 6 = 24 XP; elita i yōkai dostają to samo (elita nie ma własnej wartości); Oni: 8 × 8 = 64 XP. Próg: `24 · 1.35^(L−1)`.
+- **Poziom:** rank + 10 HP, bez wyboru, bez punktu. Czyli XP jest, ale nic z niego nie wynika dla drzewka. To jest dziura, którą zamyka ten plan.
+- **Martwy kod do usunięcia:** `OfudaPickup` (6 fizycznych kart na kapliczkę, `fly_to` do licznika), `ofuda_count`, `add_ofuda`, `ofuda_changed`, `OFUDA_PER_HOKORA`, `HokoraShrine.try_claim` (auto-claim), tekst „札 / OFUDA" w drzewku i na HUD.
+- **Wygląd:** w historii nie ma żółtej ofudy. Dawna karta z cięcia była ciemnym papierem z czerwonym akcentem (`OfudaTalisman`, usunięta w D1). Żółty papier to nowa decyzja z tego zadania (sam mechanizm cięcia wraca z dawnego talizmanu).
+
+### 2. Zasady (jedna rola na system)
+
+| System | Rola | Co gracz widzi |
+|---|---|---|
+| **Wróg** | daje **XP** (kule dusz) | kule lecą do gracza, licznik XP na nadgarstku |
+| **Poziom** | daje **1 punkt drzewka** | diegetyczny błysk, haptyka, dźwięk, „位 LV n · +1 点" |
+| **Punkty (点)** | waluta **tylko** drzewka | `点 N` na nadgarstku i w drzewku (zamiast „札") |
+| **Kapliczka** | rzadka, gest dłonią → **3 żółte ofudy** → wybór **1 buffa** | pauza jak w menu, buff z timerem na nadgarstku |
+
+- **Punkty:** `RunGame.skill_points` (niewydane). Każdy poziom +1. Wydanie: `SkillTreeData.try_unlock(id, points)` – to samo miejsce co dotąd, tylko waluta się zmienia.
+- **Koszty węzłów:** **1 / 1 / 1 / 2 / 3** (węzeł 1, 2, 3, 4, 5). Ścieżka do finału (1 → 2 lub 3 → 4 → 5) kosztuje **7 punktów**. Dotychczas 3/5/5/8/12.
+- **Level-up:** +1 punkt, leczenie 10 HP (bez zmian), dźwięk `level_up` (bez zmian), **haptyka** obu dłoni (0.5 / 0.12 s), **krótki błysk** na nadgarstku (charm rozjaśnia się i gaśnie w 0.6 s), tekst „位 LV n · +1 点" przez 1.5 s. Bez slow-mo, bez `Engine.time_scale`.
+
+### 3. Krzywa XP
+
+- **Wartości na kill** (zapisane w `ElementBalance`): yōkai **24 XP** (bez zmian: 4 kule × 6), elita **48 XP** (4 kule × 12, „elita daje 2× yōkai"), Oni **64 XP** (bez zmian: 8 × 8).
+- **Próg poziomu** (XP do przejścia z L na L+1): **`150 + 45·(L−1)`** — liniowo rosnący (150, 195, 240, 285, …). Sumaryczny koszt p punktów: `150p + 22.5·p·(p−1)` XP.
+- **Dlaczego liniowo, a nie geometrycznie:** `24·1.35^(L−1)` (D1) dawało średniemu graczowi **L11 w 12 min** (sym. `tools/balance_model`), czyli ~11 punktów, które przy kosztach 1–3 zalały drzewko. Liniowy próg daje stałe, przewidywalne tempo punktów na starcie (pierwszy punkt po ~1 min), a suma progów i tak rośnie kwadratowo, więc run endless nie „kończy" punktów.
+- **Cel (średni gracz, 8 min):** ~5 punktów (5 węzłów, cel D1: 5–7). **Cel (dobry run, skilled):** finał (7 pkt) w **8–10 min**. Liczby z symulacji: sekcja 6 (uzupełniona w ETAP 3).
+- Moc rośnie dalej z rangi (`POWER_PER_RANK`, +4 % za poziom). Bez zmian.
+
+### 4. Kapliczka (hokora): gest i wybór
+
+**Gest (nie auto):** kapliczka **nie** aktywuje się przy podejściu. Gracz kładzie **dłoń bez katany** w promieniu **0.35 m** od ołtarza, a sam stoi w **2.2 m** od niego. Dzwonek suzu brzmi przy dotyku. Desktop: klawisz **E** w tym samym zasięgu. Jeden gest = jedno otwarcie wyboru.
+
+**Odmowa (bez kary, bez pauzy):** gest jest ignorowany, jeśli:
+- żywy wróg jest w **3.5 m** od gracza (brak przypadkowej aktywacji w walce), albo
+- nie ma wolnego miejsca na 3 karty (patrz niżej). Suzu gra cicho, a kapliczka dalej świeci.
+
+**Trwałość:** nieużyta kapliczka zostaje **zapalona** i wraca po streamingu chunków w tym samym stanie (`HokoraManager._used` per slot). Po wyborze buffa gaśnie na stałe w tym runie.
+
+**Wybór (stan „OFFERING"):**
+- **Trzy żółte ofudy** (`OfudaTalisman`, nowa klasa dziedzicząca mechanikę cięcia `VotiveTablet`): papier kiwa-żółty, tusz sumi-czarny, akcent cynobrowy; napisy ciemne na żółtym (nie białe jak na ema).
+- **Układ:** łuk przed graczem, odległość **0.9–1.2 m** od głowy, rozstaw ±20°, wysokość na poziomie klatki (głowa − 0.35 m), kolejność kart: Szybkość, Siła, Leczenie.
+- **Wolna przestrzeń:** kandydaty z listy deterministycznej. Każda karta sprawdzona zapytaniem fizycznym (box karty + 0.2 m marginesu) na warstwach **enemy_body (4), static_world (1), dynamic_props (2), trunk (64)**. Kolizja → następny kandydat. Brak 3 wolnych miejsc → odmowa gestu.
+- **Świat stoi jak w menu** (ta sama architektura co E2d, `PauseController`): `get_tree().paused`, `TimeController.suspend`, katana zamrożona i przyklejona do dłoni, cząsteczki zamrożone, muzyka w low-pass, **lokomocja i obrót zablokowane** (D3_fix1). Brak `Engine.time_scale`.
+- **Ręce i katana** `process_mode = ALWAYS` (śledzą, jak w menu). Gracz tnie kartę: cięcie geometryczne (`_check_blade_slice`, jak ema).
+- **Katana nie krzywdzi wrogów:** w stanie wyboru `HeldWeapon` odrzuca każde trafienie, które nie jest kartą (`combat_blocked`). Żywioł nie aktywuje się (`state != PLAYING`), więc Sakura, Storm, Ink i Shadow nic nie robią.
+- **Wybór:** cięcie karty → buff aktywny, dwie pozostałe karty zanikają, pauza kończy się płynnie, kapliczka gaśnie.
+
+### 5. Buffy (`RunBuffs`)
+
+| Buff | Efekt | Czas | Mnożenie |
+|---|---|---|---|
+| **Szybkość (速)** | +20 % prędkości ruchu | 60 s | mnoży się z Ink ×1.2 i tempem chodu D3 (×0.7 / ×1.3) |
+| **Siła (攻)** | +20 % wszystkich obrażeń (katana i zdolności żywiołu) | 60 s | `HeldWeapon.outgoing_scale` i `ElementSystem.ability_power` |
+| **Leczenie (癒)** | +35 % max HP od razu, potem +15 % max HP regeneracji | 10 s (regen) | bez zwiększania max HP; `heal()` nie przekracza max |
+
+- **Stacking:** ten sam typ **odświeża** czas do pełnej wartości (nie sumuje się). Różne typy działają razem i mnożą się.
+- **Pełne HP:** leczenie nic nie daje, ale karta zostaje wybieralna (przygaszony podpis „przy pełnym HP nic nie daje").
+- **Timery:** `RunBuffs.step` działa tylko w `PLAYING` (stoją w pauzie wyboru i menu drzewka).
+- **HUD:** linia buffów na nadgarstku z timerem (np. „速 41 s · 攻 12 s · 癒 6 s").
+
+### 6. Balans: symulacja (ETAP 3, uzupełniona po implementacji)
+
+Model `tools/balance_model.gd` liczy XP z kills (wszystkie trzy typy), poziomy i punkty, plus uptime buffów z odwiedzin kapliczek. Wynik: `tools/balance_sim.tscn`.
+
+_(tabela wyników: wpisana po ETAP 3, patrz sekcja „Realizacja")_
+
+### 7. Interakcje
+
+- **Sandbox (dojo / training arena):** poza runem. Brak kapliczek, XP i punktów. Ekonomia dotyczy tylko `RunGame`.
+- **Fale (`WaveDirector`):** pausable. W pauzie wyboru nie spawnują się nowe, a stojące nie ruszają. Po wyborze wracają z tym samym czasem.
+- **Oni (boss):** pausable, stoi w pauzie.
+- **Śmierć:** punkty, buffy i wybór wyczyszczone (jak dotąd: `skill_tree.reset()`).
+
+### 8. Wrist HUD
+
+- Linia 1: `位 LV n · 波 w · 斬 k`
+- Linia 2: `XP a/b · 点 N`
+- Linia buffów: aktywne buffy z timerem (ukryta, gdy pusta).
+- Usunięte: `札×N`, „pt" przy wyniku (wynik zostaje na ekranie końcowym).
+
+### 9. Zmiana GDD
+
+- §3 (core loop) i §6 (progression): ofuda to wybór buffa z kapliczki, punkty drzewka to waluta z poziomów. Zmiana zapisana w GDD w tym samym kroku co plan.
+
+### 10. Plan kroków (odhaczane)
+
+- [x] **D12.1 Diagnoza i plan (ten dokument), GDD §3/§6.**
+- [ ] **D12.2 Punkty z poziomów:** `skill_points`, koszty 1/1/1/2/3, `REASON_POINTS`, teksty drzewka, HUD linia 2, haptyka + błysk level-up.
+- [ ] **D12.3 XP per typ wroga:** `ElementBalance.XP_*`, elita 48, Oni 64, nowa krzywa progu `150 + 45(L−1)`.
+- [ ] **D12.4 Usunięcie ofudy-waluty:** `OfudaPickup`, `ofuda_count`, `add_ofuda`, auto-claim, `OFUDA_PER_HOKORA`.
+- [ ] **D12.5 Gest kapliczki:** `HokoraShrine.touch`, `_used` per slot, odmowa w walce i bez miejsca, E na desktopie.
+- [ ] **D12.6 Pauza wyboru:** `PauseController` z `hold_world/release_world` (wspólne z menu), `combat_blocked` w `HeldWeapon`.
+- [ ] **D12.7 Karty:** `OfudaTalisman` (żółty papier, ciemne napisy), układ i walidacja wolnego miejsca.
+- [ ] **D12.8 Buffy:** `RunBuffs`, mnożniki w `apply_locomotion_speed`, `outgoing_scale`, leczenie i regen, HUD buffów.
+- [ ] **D12.9 Testy:** rozszerzenie `hokora_test`, `skill_tree_data_test`, `vr_menu_pause_test`, `run_loop_test`, `element_abilities_test`; nowy test wizualny na `run.tscn`.
+- [ ] **D12.10 Balans:** `tools/balance_model.gd` (XP, poziomy, punkty, buffy), `balance_sim`, wynik w sekcji 6.
+- [ ] **D12.11 Screenshoty i ocena surowa:** HUD XP/poziom, level-up, kapliczka z żółtymi ofudami i wyborem, aktywny buff.
+
+### 11. Decyzje podjęte bez pytania (do przeglądu)
+
+- **Gest = dłoń bez katany w 0.35 m od ołtarza**, nie przycisk. Przycisk dawałby przypadkowe otwarcia przy każdym naciśnięciu, a dotyk ręką jest tym, co Jakub opisał („dotknięcie ręką"). Desktop ma E, żeby test i gra działały bez VR.
+- **Cięcie kartą, nie dotyk**, bo Jakub napisał „tnie/przebija wybraną ofudę mieczem". Ręka nie ma kolizji z kartą.
+- **Trzy stałe buffy** w każdym wyborze (nie losowe z puli): wybór jest czytelny, a balans łatwy do sprawdzenia. Puli rozszerzać nie trzeba przy 3 typach.
+- **Krzywa liniowa** (patrz sekcja 3), nie geometryczna.
+- **Koszty 1/1/1/2/3** (finał = 7 pkt), zamiast skalowania kosztów 3/5/5/8/12 o ~2×, żeby zachować tempo D1 przy nowym źródle punktów.
+- **Elita 48 XP** (2× yōkai): tyle, żeby elita była warta odwrócenia uwagi, ale nie zastępowała tłumu.
+- **Odmowa gestu przy wrogu w 3.5 m**, a nie tylko przy braku miejsca, bo wróg tuż obok to też ryzyko przypadkowego otwarcia w walce.
