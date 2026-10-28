@@ -10,7 +10,8 @@ extends Node
 ## - [TimeController] parks its effects (a parry slow-mo resumes with exactly
 ##   the time it had left) and Engine.time_scale reads 1.0 meanwhile;
 ## - the held katana is frozen kinematic and glued to the hand;
-## - XR locomotion and snap turn are off, desktop walking too;
+## - XR locomotion and snap turn are off, and the XR body is parked with its
+##   momentum zeroed (no slide through the pause); desktop walking too;
 ## - particle emitters stop (speed_scale 0); music gets the 750 Hz low-pass;
 ## - the panel is placed with [UiPlacement] so it never intersects geometry.
 ##

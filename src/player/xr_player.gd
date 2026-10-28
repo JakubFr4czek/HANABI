@@ -296,7 +296,11 @@ func set_rig_locked(locked: bool) -> void:
 
 
 ## Smooth-locomotion and snap-turn providers on/off (the pause menu turns them
-## off so a paused player cannot walk or turn away from the panel).
+## off so a paused player cannot walk or turn away from the panel). The physics
+## body goes with them: it keeps integrating its last velocity while the tree is
+## paused (the rig is PROCESS_MODE_ALWAYS), so a menu opened mid-stride used to slide
+## the origin about half a metre. Disabling zeroes that velocity and parks the body,
+## so the rig stands still through the pause and comes back to rest on close.
 func set_locomotion_enabled(enabled: bool) -> void:
 	var direct := _get_movement_direct()
 	if direct:
@@ -304,6 +308,10 @@ func set_locomotion_enabled(enabled: bool) -> void:
 	var turn := _get_movement_turn()
 	if turn:
 		turn.set("enabled", enabled)
+	var body := _body()
+	if body:
+		body.set("velocity", Vector3.ZERO)
+		body.set("enabled", enabled)
 
 
 ## Scales the smooth-locomotion top speed (1.0 = XR Tools default); used by
