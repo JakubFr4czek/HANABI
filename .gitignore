@@ -18,6 +18,8 @@ export_presets.cfg.bak
 # Local secrets / config (LLM keys etc. come later from env or this file)
 /config/local.cfg
 .env
+/secrets/*
+!/secrets/*.example
 
 # OS / editor
 .DS_Store
