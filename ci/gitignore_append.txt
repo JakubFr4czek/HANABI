@@ -1,0 +1,9 @@
+
+# CI (GitHub Actions): outputs and the coverage addon copied in only during CI
+/ci_out/
+/coverage-report/
+/coverage-data/
+/.nano_coverage/
+/addons/nano_coverage_godot/
+/prev/
+/gdlintrc

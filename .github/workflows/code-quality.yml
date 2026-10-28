@@ -1,0 +1,82 @@
+# Jakość kodu: gdlint + gdformat --check na GDScript (bez addons/).
+# Co 2 h i ręcznie, na self-hosted runnerze na boxie (eepy-box). Nie blokuje merge'a: to nie jest wymagany check, a kroki mają continue-on-error.
+name: code-quality
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run at a time; a new 2-hourly run waits for the previous one instead of killing it.
+concurrency:
+  group: hanabi-code-quality
+  cancel-in-progress: false
+
+jobs:
+  gdscript:
+    name: GDScript lint + format
+    runs-on: [self-hosted, hanabi]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # gdtoolkit 4.x is preinstalled on the box runner (/home/box/ci-tools).
+      - name: Runner tools
+        run: bash ci/box_tools_check.sh gdlint gdformat git
+
+      - name: Collect GDScript files
+        id: files
+        run: |
+          mkdir -p ci_out
+          git ls-files '*.gd' | grep -vE '^(addons|\.godot)/' > ci_out/gd_files.txt
+          echo "count=$(wc -l < ci_out/gd_files.txt)" >> "$GITHUB_OUTPUT"
+          cp ci/gdlintrc ./gdlintrc
+
+      - name: gdlint
+        id: lint
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xargs -a ci_out/gd_files.txt -d '\n' gdlint 2>&1 | tee ci_out/gdlint.txt
+
+      - name: gdformat --check
+        id: format
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xargs -a ci_out/gd_files.txt -d '\n' gdformat --check --line-length 120 2>&1 | tee ci_out/gdformat.txt
+
+      - name: Summary
+        if: always()
+        run: |
+          lint_n=$(grep -cE ': Error: ' ci_out/gdlint.txt || true)
+          fmt_n=$(grep -c '^would reformat' ci_out/gdformat.txt || true)
+          {
+            echo "## Jakość kodu (GDScript)"
+            echo
+            echo "- plików .gd (bez addons/): **${{ steps.files.outputs.count }}**"
+            echo "- gdlint: **${lint_n}** problemów (${{ steps.lint.outcome }})"
+            echo "- gdformat: **${fmt_n}** plików do przeformatowania (${{ steps.format.outcome }})"
+            echo
+            echo "### Najczęstsze reguły gdlint"
+            echo
+            echo '```'
+            grep -oE '\(([a-z-]+)\)$' ci_out/gdlint.txt | sort | uniq -c | sort -rn | head -10 || true
+            echo '```'
+            echo
+            echo "### Pliki z największą liczbą problemów"
+            echo
+            echo '```'
+            grep -E ': Error: ' ci_out/gdlint.txt | cut -d: -f1 | sort | uniq -c | sort -rn | head -10 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: code-quality-report
+          path: ci_out/
+          retention-days: 14
