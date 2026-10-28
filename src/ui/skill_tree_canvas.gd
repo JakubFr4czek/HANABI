@@ -90,8 +90,8 @@ const SETTINGS_RECTS := {
 		"vignette_50": Rect2(352.0, 420.0, 110.0, 46.0),
 		"vignette_75": Rect2(474.0, 420.0, 110.0, 46.0),
 		"vignette_100": Rect2(596.0, 420.0, 110.0, 46.0),
-		"turn_snap": Rect2(230.0, 612.0, 160.0, 50.0),
-		"turn_smooth": Rect2(410.0, 612.0, 160.0, 50.0),
+		"turn_snap": Rect2(230.0, 612.0, 186.0, 50.0),
+		"turn_smooth": Rect2(424.0, 612.0, 186.0, 50.0),
 		"snap_15": Rect2(230.0, 684.0, 85.0, 46.0),
 		"snap_30": Rect2(325.0, 684.0, 85.0, 46.0),
 		"snap_45": Rect2(420.0, 684.0, 85.0, 46.0),
@@ -665,7 +665,7 @@ func _draw_unlock_button(id: String, accent: Color) -> void:
 
 func _draw_footer() -> void:
 	draw_line(Vector2(66, 918), Vector2(SIZE.x - 66, 918), GILT_DIM, 1.5, true)
-	_text(hint_text, Vector2(70, 936), 25, DIM, HORIZONTAL_ALIGNMENT_LEFT, 880.0)
+	_text(hint_text, Vector2(70, 924), 24, DIM, HORIZONTAL_ALIGNMENT_LEFT, 1080.0)
 	var blade := "BLADE  ·  PLAIN STEEL"
 	var col := DIM
 	if blade_element != Elements.NONE:
@@ -680,7 +680,7 @@ func _draw_footer() -> void:
 			var a: Dictionary = abilities[i]
 			var state := "ready" if float(a.ratio) >= 0.999 else "%d s" % ceili(float(a.seconds))
 			parts.append("%s  %s %s  %s" % ["A" if i == 0 else "B", a.glyph, String(a.name).to_upper(), state])
-		_text("   ·   ".join(parts), Vector2(SIZE.x - 96 - 900, 954), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 900)
+		_text("   ·   ".join(parts), Vector2(70, 952), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 1100.0)
 
 
 func _draw_settings() -> void:
@@ -708,7 +708,7 @@ func _draw_subnav() -> void:
 		_box(r, bg, border, 2 if active else 1, 12)
 		var col := PAPER if (active or hot) else DIM
 		var label := "%s  %s" % [PAGE_KANJI[page], PAGE_NAMES[page]]
-		_text(label, r.position + Vector2(0, (r.size.y - 24.0) * 0.5 - 2), 24, col, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 600 if active else 500)
+		_text(label, r.position + Vector2(0, (r.size.y - 24.0) * 0.5 - 8.0), 24, col, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 600 if active else 500)
 		if active:
 			draw_line(r.position + Vector2(16, r.size.y - 1), r.position + Vector2(r.size.x - 16, r.size.y - 1), SETTINGS_ACCENT, 3.0, true)
 
@@ -724,9 +724,21 @@ func _settings_button(key: String, label: String, is_active: bool, accent := SET
 	var border := Color(accent, 0.95) if is_active else (Color(GILT, 0.85) if hot else GILT_DIM)
 	var text_col := PAPER if is_active else (Color(PAPER, 0.95) if hot else DIM)
 	_box(r, bg, border, 2 if (is_active or hot) else 1, 10)
-	var fsize := font_size if r.size.x >= 100.0 else 20
-	_text(label, r.position + Vector2(0, (r.size.y - float(fsize)) * 0.5 - 2), fsize, text_col,
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 600 if is_active else 500)
+	var weight := 600 if is_active else 500
+	# Long labels shrink to fit the button instead of being cut.
+	var fsize := mini(font_size, _fit_line(label, r.size.x - 16.0, font_size, weight, 16)) if r.size.x >= 100.0 else 20
+	_text(label, r.position + Vector2(0, (r.size.y - float(fsize)) * 0.5 - 8.0), fsize, text_col,
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, weight)
+
+
+## The +/- of a volume row, drawn as strokes (the font has no reliable minus sign).
+func _stepper_glyphs(key: String) -> void:
+	for dir in [["dn", -1.0], ["up", 1.0]]:
+		var r := settings_rect("vol_%s_%s" % [key, dir[0]])
+		var c := r.get_center()
+		draw_line(c + Vector2(-13.0, 0.0), c + Vector2(13.0, 0.0), PAPER, 3.0, true)
+		if dir[1] > 0.0:
+			draw_line(c + Vector2(0.0, -13.0), c + Vector2(0.0, 13.0), PAPER, 3.0, true)
 
 
 func _draw_audio() -> void:
@@ -735,7 +747,7 @@ func _draw_audio() -> void:
 	var rows := [
 		["master", "MASTER", "Everything you hear in the headset."],
 		["music", "MUSIC", "Shakuhachi, koto and taiko under the run."],
-		["sfx", "SFX", "Blades, bells, thunder and impacts. Plays a cue as you change it."],
+		["sfx", "SFX", "Blades, bells, thunder. A cue plays when you change it."],
 		["ambience", "AMBIENCE", "Rain, wind and the forest bed."],
 	]
 	for i in rows.size():
@@ -744,8 +756,9 @@ func _draw_audio() -> void:
 		var pct := int(VrComfortSettings.audio_percent[key]) if VrComfortSettings else 100
 		_text(String(rows[i][1]), Vector2(96.0, y0 + 8.0), 30, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 600)
 		_wrapped(String(rows[i][2]), Vector2(96.0, y0 + 50.0), 22, DIM, 740.0, 1)
-		_settings_button("vol_%s_dn" % key, "−", false, SETTINGS_ACCENT, 36)
-		_settings_button("vol_%s_up" % key, "+", false, SETTINGS_ACCENT, 36)
+		_settings_button("vol_%s_dn" % key, "", false)
+		_settings_button("vol_%s_up" % key, "", false)
+		_stepper_glyphs(key)
 		var track := Rect2(988.0, y0 + 47.0, 236.0, 14.0)
 		_box(track, LACQUER_SUNK, GILT_DIM, 1, 7)
 		if pct > 0:
@@ -769,7 +782,7 @@ func _draw_move() -> void:
 	# Left column: vignette, then turning.
 	_box(Rect2(66.0, 268.0, 714.0, 270.0), LACQUER_RAISED, GILT_DIM, 2, 16)
 	_text("動的視野制限   VIGNETTE", Vector2(90.0, 284.0), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 666.0, 600)
-	_text("Darkens the edges while you walk or turn, against nausea.", Vector2(90.0, 318.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 666.0)
+	_text("Darkens the edges while walking or turning.", Vector2(90.0, 318.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 666.0)
 	_text("VIGNETTE", Vector2(90.0, 369.0), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130.0, 600)
 	_settings_button("vignette_on", "ENABLED", vig_en)
 	_settings_button("vignette_off", "DISABLED", not vig_en)
@@ -788,13 +801,13 @@ func _draw_move() -> void:
 	_text("MODE", Vector2(90.0, 625.0), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130.0, 600)
 	_settings_button("turn_snap", "SNAP TURN", snap_en)
 	_settings_button("turn_smooth", "SMOOTH TURN", not snap_en)
-	_text("SNAP ANGLE", Vector2(90.0, 696.0), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130.0, 600)
+	_text("ANGLE", Vector2(90.0, 696.0), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130.0, 600)
 	for deg in [15, 30, 45, 60, 90]:
 		_settings_button("snap_%d" % deg, "%d°" % deg, snap_en and absf(snap_deg - deg) < 1.0)
-	_text("SMOOTH SPD", Vector2(90.0, 760.0), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130.0, 600)
+	_text("SPEED", Vector2(90.0, 760.0), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130.0, 600)
 	for spd in [10, 15, 20, 30, 40]:
 		_settings_button("smooth_%d" % spd, "%.1f" % (spd / 10.0), not snap_en and absf(smooth_spd - spd / 10.0) < 0.2)
-	_text("Snap turning is recommended for comfortable VR orientation.", Vector2(90.0, 826.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 666.0)
+	_text("Snap turning is recommended for comfort.", Vector2(90.0, 826.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 666.0)
 
 	# Right column: walking pace, then seated mode and eye height.
 	_box(Rect2(820.0, 268.0, 714.0, 270.0), LACQUER_RAISED, GILT_DIM, 2, 16)
@@ -812,12 +825,12 @@ func _draw_move() -> void:
 	_settings_button("seated_off", "STANDING", not seated)
 	_settings_button("seated_on", "SEATED MODE", seated)
 	_text("EYE HEIGHT", Vector2(844.0, 693.0), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 150.0, 600)
-	_settings_button("height_minus", "− 5 cm", false)
+	_settings_button("height_minus", "-5 cm", false)
 	var r_box := Rect2(1132.0, 680.0, 120.0, 50.0)
 	_box(r_box, LACQUER_SUNK, GILT, 2, 10)
 	var sign_str := "+" if h_offset >= 0.0 else ""
 	_text("%s%.2f m" % [sign_str, h_offset], r_box.position + Vector2(0, 11), 24, PAPER, HORIZONTAL_ALIGNMENT_CENTER, r_box.size.x, 600)
-	_settings_button("height_plus", "+ 5 cm", false)
+	_settings_button("height_plus", "+5 cm", false)
 	_settings_button("height_reset", "RESET", false)
 	_settings_button("recenter", "◎ RECENTER HEADSET VIEW", false, Color(0.86, 0.45, 0.35))
 	_text("Also hold B/Y for 0.6 s with an empty hand.", Vector2(844.0, 818.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 666.0)
@@ -869,7 +882,7 @@ func _draw_controls() -> void:
 		var cx := 600.0 if side == "left" else 1000.0
 		var sign_x := -1.0 if side == "left" else 1.0
 		var tag := "KATANA HAND" if side == roles.katana else ("WRIST HUD" if side == roles.hud else "")
-		_text("%s CONTROLLER" % side.to_upper(), Vector2(cx - 150.0, 326.0), 22, DIM, HORIZONTAL_ALIGNMENT_CENTER, 300.0, 600)
+		_text("%s CONTROLLER" % side.to_upper(), Vector2(cx - 120.0, 332.0), 22, DIM, HORIZONTAL_ALIGNMENT_CENTER, 240.0, 600)
 		_draw_controller(Vector2(cx, 585.0), sign_x, tag, side == roles.katana)
 		for i in (layout.hands[side] as Array).size():
 			_draw_callout(layout.hands[side][i], Vector2(cx, 585.0), i, side == "left")
@@ -884,17 +897,29 @@ func _draw_controls() -> void:
 	_text("Also in the map:  " + "  ·  ".join(labels), Vector2(66.0, 886.0), 22, FAINT, HORIZONTAL_ALIGNMENT_LEFT, 1468.0)
 
 
-## One controller in front view, in icon units from [member ControlsMap.ANCHORS]
-## (mirrored for the left hand by [param sign_x]).
+## One controller in front view (icon units; the left hand mirrors x). The
+## tracking ring sits on the body, the face holds the controls, the handle
+## tapers to a rounded grip and the trigger hangs at its front.
 func _draw_controller(c: Vector2, sign_x: float, tag: String, is_katana: bool) -> void:
 	var metal := Color(0.10, 0.095, 0.125, 1.0)
-	draw_arc(c + Vector2(0.0, -165.0), 42.0, 0.0, TAU, 56, Color(GILT, 0.45), 7.0, true)
-	var handle := PackedVector2Array([c + Vector2(-62.0, 25.0), c + Vector2(62.0, 25.0),
-			c + Vector2(50.0, 185.0), c + Vector2(-50.0, 185.0)])
-	draw_colored_polygon(handle, Color(0.07, 0.066, 0.09, 1.0))
-	draw_polyline(PackedVector2Array([handle[0], handle[1], handle[2], handle[3], handle[0]]), GILT_DIM, 1.5, true)
-	_box(Rect2(c.x - 54.0, c.y + 121.0, 108.0, 18.0), Color(0, 0, 0, 0), Color(GILT, 0.35), 1, 9)
-	_box(Rect2(c.x - 115.0, c.y - 115.0, 230.0, 150.0), metal, GILT_DIM, 2, 30)
+	var grip_fill := Color(0.075, 0.07, 0.095, 1.0)
+	var edge := Color(GILT, 0.42)
+	draw_arc(c + Vector2(0.0, -150.0), 34.0, 0.0, TAU, 56, Color(GILT, 0.30), 5.0, true)
+
+	var handle := PackedVector2Array([c + Vector2(-58.0, 22.0), c + Vector2(58.0, 22.0)])
+	for i in 9:  # right foot, from the side down to the bottom
+		var a := PI * 0.5 * float(i) / 8.0
+		handle.append(c + Vector2(30.0 + 20.0 * cos(a), 156.0 + 20.0 * sin(a)))
+	for i in 9:  # left foot, from the bottom to the side
+		var a := PI * 0.5 + PI * 0.5 * float(i) / 8.0
+		handle.append(c + Vector2(-30.0 + 20.0 * cos(a), 156.0 + 20.0 * sin(a)))
+	draw_colored_polygon(handle, grip_fill)
+	draw_polyline(handle + PackedVector2Array([handle[0]]), edge, 1.5, true)
+
+	var face := _rounded_points(Rect2(c.x - 112.0, c.y - 115.0, 224.0, 145.0), 34.0)
+	draw_colored_polygon(face, metal)
+	draw_polyline(face + PackedVector2Array([face[0]]), Color(GILT, 0.5), 2.0, true)
+	_box(Rect2(c.x - 54.0, c.y + 121.0, 108.0, 18.0), Color(0, 0, 0, 0), Color(GILT, 0.30), 1, 9)
 
 	var at := func(slot: String) -> Vector2:
 		var a: Vector2 = ControlsMap.ANCHORS[slot]
@@ -913,10 +938,26 @@ func _draw_controller(c: Vector2, sign_x: float, tag: String, is_katana: bool) -
 	draw_arc(top, 10.0, 0.0, TAU, 24, Color(GILT, 0.7), 2.0, true)
 
 	if tag != "":
-		var pill := Rect2(c.x - 74.0, 352.0, 148.0, 26.0)
+		var pill := Rect2(c.x - 88.0, c.y - 217.0, 176.0, 26.0)
 		var pill_col := SETTINGS_ACCENT if is_katana else DIM
 		_box(pill, LACQUER_SUNK, Color(pill_col, 0.8), 1, 13)
-		_text(tag, pill.position + Vector2(0, 2), 18, Color(pill_col, 0.95) if is_katana else DIM, HORIZONTAL_ALIGNMENT_CENTER, pill.size.x, 600)
+		_text(tag, pill.position + Vector2(0, 1), 20, Color(pill_col, 0.95) if is_katana else DIM, HORIZONTAL_ALIGNMENT_CENTER, pill.size.x, 600)
+
+
+## Corner-rounded outline of [param rect] as a closed polygon (clockwise on screen).
+static func _rounded_points(rect: Rect2, radius: float, steps := 6) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var corners := [
+		[rect.end - Vector2(radius, radius), 0.0],
+		[Vector2(rect.position.x + radius, rect.end.y - radius), PI * 0.5],
+		[rect.position + Vector2(radius, radius), PI],
+		[Vector2(rect.end.x - radius, rect.position.y + radius), PI * 1.5],
+	]
+	for corner in corners:
+		for i in steps + 1:
+			var a: float = corner[1] + PI * 0.5 * float(i) / float(steps)
+			out.append((corner[0] as Vector2) + Vector2(cos(a), sin(a)) * radius)
+	return out
 
 
 ## A callout: title and body beside the controller, with a leader to its control.
@@ -932,11 +973,11 @@ func _draw_callout(c: Dictionary, origin: Vector2, index: int, is_left: bool) ->
 	draw_line(Vector2(leader_x, leader_y), point, Color(GILT, 0.45), 1.5, true)
 	draw_circle(point, 4.5, col)
 	if is_left:
-		_text(String(c.title), Vector2(52.0, y), 24, title_col, HORIZONTAL_ALIGNMENT_RIGHT, 356.0, 600)
-		_wrapped(String(c.body), Vector2(52.0, y + 28.0), 21, DIM, 356.0, 2, HORIZONTAL_ALIGNMENT_RIGHT)
+		_text(String(c.title), Vector2(52.0, y), 26, title_col, HORIZONTAL_ALIGNMENT_RIGHT, 356.0, 600)
+		_wrapped(String(c.body), Vector2(52.0, y + 30.0), 23, DIM, 356.0, 2, HORIZONTAL_ALIGNMENT_RIGHT)
 	else:
-		_text(String(c.title), Vector2(1126.0, y), 24, title_col, HORIZONTAL_ALIGNMENT_LEFT, 408.0, 600)
-		_wrapped(String(c.body), Vector2(1126.0, y + 28.0), 21, DIM, 408.0, 2, HORIZONTAL_ALIGNMENT_LEFT)
+		_text(String(c.title), Vector2(1126.0, y), 26, title_col, HORIZONTAL_ALIGNMENT_LEFT, 408.0, 600)
+		_wrapped(String(c.body), Vector2(1126.0, y + 30.0), 23, DIM, 408.0, 2, HORIZONTAL_ALIGNMENT_LEFT)
 
 
 func _note_drawn(item: Dictionary) -> void:
