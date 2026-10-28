@@ -546,22 +546,22 @@ var target_element_system: ElementSystem = null
 
 func _imbue_target(_body: Node) -> void:
 	if target_element_system and is_instance_valid(target_element_system):
-		target_element_system.imbue(element, ElementSystem.ELEMENT_DURATION)
+		target_element_system.imbue(element)
 		return
 	var run := _find_run_game()
 	if run and run.element_system and is_instance_valid(run.element_system):
-		run.element_system.imbue(element, ElementSystem.ELEMENT_DURATION)
+		run.element_system.imbue(element)
 		return
 	if get_tree():
 		var es := get_tree().get_first_node_in_group("element_system") as ElementSystem
 		if es and is_instance_valid(es):
-			es.imbue(element, ElementSystem.ELEMENT_DURATION)
+			es.imbue(element)
 			return
 		var scene := get_tree().current_scene
 		if scene:
 			for child in scene.get_children():
 				if child is ElementSystem:
-					child.imbue(element, ElementSystem.ELEMENT_DURATION)
+					child.imbue(element)
 					return
 	push_warning("ToriiGate: No ElementSystem found to imbue element '%s'. Imbue skipped to prevent untimed element state." % element)
 

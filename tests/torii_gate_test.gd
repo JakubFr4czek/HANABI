@@ -5,6 +5,8 @@ extends Node
 
 const TORII_SCENE := preload("res://scenes/world/torii_gate.tscn")
 const KATANA_SCENE := preload("res://scenes/weapons/katana.tscn")
+const RUN_SCENE := preload("res://scenes/run.tscn")
+const TEST_SAVE_PATH := "user://test_torii_gate_high_score.cfg"
 
 var failures := 0
 
@@ -107,13 +109,34 @@ func _run_all() -> void:
 	_check("Same gate refreshes timer back to 20.0 s", elem_sys.element_time_remaining >= 19.5 and elem_sys.element_time_remaining <= 20.0)
 	_check("Katana element remains Sakura", katana.element == Elements.SAKURA)
 
-	# 5. Level-up cards / upgrades do NOT grant element to katana
+	# 5. A real level-up card chosen through the RunGame path does NOT grant
+	# an element: the blade element comes only from a Torii gate crossing.
 	elem_sys.reset()
 	katana.set_element(Elements.NONE)
-	# (Element cards retired in E2b: ElementSystem has no upgrade/imbue API left;
-	# the only imbue path is a Torii gate crossing, covered above and below.)
+	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
+	run.high_score_path = TEST_SAVE_PATH
+	add_child(run)
+	await _frames(12)
+	run.wave_director.stop_director()
+	run.wave_director.clear_enemies()
+	await _frames(4)
+	_check("Run starts on plain steel", run.katana.element == Elements.NONE)
+	run.add_xp(run.xp_to_next)
+	await _frames(3)
+	_check("Level-up presents 3 real Ofuda choices", run.state == RunGame.RunState.LEVEL_UP and run.active_ofuda.size() == 3)
+	var card_id := String(run.active_ofuda[0].upgrade.get("id", ""))
+	run.slice_ofuda_choice(0)
+	await _frames(3)
+	_check("Chosen level-up card '%s' applied via RunGame" % card_id,
+		int(run.upgrade_stacks.get(card_id, 0)) >= 1 and card_id != "")
 	_check("Level-up upgrade does not grant element to katana (remains NONE)",
-		katana.element == Elements.NONE and elem_sys.current_element == Elements.NONE and elem_sys.element_time_remaining == 0.0)
+		run.katana.element == Elements.NONE and run.element_system.current_element == Elements.NONE
+		and run.element_system.element_time_remaining == 0.0)
+	run.queue_free()
+	await _frames(3)
+	if FileAccess.file_exists(TEST_SAVE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_SAVE_PATH))
 
 	# 6. Different gate replaces element
 	var storm_gate: ToriiGate = TORII_SCENE.instantiate()

@@ -27,7 +27,7 @@ func _run_all() -> void:
 
 	# New system (ELEMENTS_PLAN): blade element comes only from Torii gates.
 	# Level-up cards never imbue the blade.
-	run._apply_upgrade({"id": "sakura_petals"})
+	run._apply_upgrade({"id": "damage"})
 	run._update_element_seal()
 	_check("Level-up card does NOT imbue the blade (Torii gates only)",
 		run.element_system.current_element == Elements.NONE
@@ -49,13 +49,17 @@ func _run_all() -> void:
 
 	run.start_run()
 	await _frames(8)
-	for id in ["sakura_petals", "sakura_orbit", "sakura_heal", "storm_chain", "storm_charge", "storm_overload"]:
-		run._apply_upgrade({"id": id})
-	run._apply_upgrade({"id": "ink_pool"})
-	_check("Foreign element stays blocked once a tree is complete",
-		UpgradePool.element_slot_count(run.upgrade_stacks) == 3
-		and not run.upgrade_stacks.has("storm_chain")
-		and not run.upgrade_stacks.has("ink_pool"))
+	# E2c: progression lives in the per-element Ofuda skill trees. Unlocking
+	# Sakura nodes must not unlock another element's nodes, and a master
+	# node stays locked until its whole prerequisite chain is bought.
+	run.add_ofuda(24)
+	var s1: Dictionary = run.unlock_skill("petal_sense")
+	var s2: Dictionary = run.unlock_skill("razor_petals")
+	_check("Skill tree unlocks the Sakura chain with Ofuda",
+		s1.get("ok", false) and s2.get("ok", false) and run.skill_tree.is_unlocked("razor_petals"))
+	var locked: Dictionary = run.unlock_skill("ikazuchi_avatar")
+	_check("Another element's master node stays locked without its prerequisites",
+		not locked.get("ok", true) and not run.skill_tree.is_unlocked("ikazuchi_avatar"))
 
 	run.diegetic_hud.on_parry()
 	_check("Parry triggers the wrist charm glow (not screen-space UI)",
