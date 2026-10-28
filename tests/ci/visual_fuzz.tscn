@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/ci/visual_fuzz.gd" id="1_vfuzz"]
+
+[node name="VisualFuzz" type="Node"]
+script = ExtResource("1_vfuzz")
