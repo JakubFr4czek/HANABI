@@ -25,6 +25,19 @@ var current_element: String:
 var element_time_remaining: float = 0.0
 var is_fade_warning: bool = false
 var _blade_mat: ShaderMaterial = null
+## Second pass (blade_rim.gdshader): light on the edge when the blade is seen
+## from behind or edge-on. Attached to the steel material only while imbued
+## (one extra draw call, none on plain steel).
+const RIM_SHADER := preload("res://src/shaders/blade_rim.gdshader")
+## Rim strength and colour per school. Storm is a saturated electric blue
+## here (the UI accent cyan reads pastel on a blade).
+const RIM := {
+	Elements.SAKURA: {"strength": 1.0, "color": Color(1.0, 0.30, 0.68)},
+	Elements.STORM: {"strength": 1.5, "color": Color(0.16, 0.48, 1.0)},
+	Elements.INK: {"strength": 0.85, "color": Color(0.05, 0.06, 0.20)},   # a dark coat: the rim is mixed, so dark reads against fog
+	Elements.SHADOW: {"strength": 1.0, "color": Color(0.56, 0.18, 0.95)},
+}
+var _rim_mat: ShaderMaterial = null
 
 ## Blade imbue animation (real time, driven by [method _update_blade_material]):
 ## the school runs guard-to-tip, flashes once, and fades out when it lapses.
@@ -159,8 +172,9 @@ func _update_blade_material() -> void:
 		warn = 1.0 if is_fade_warning else 0.0
 	if shown == Elements.NONE:
 		_set_shader(mat, "element_glow", 0.0)
+		_update_rim(mat, shown, 0.0, sweep, warn)
 		return
-	var c := Elements.accent_color(shown)
+	var c := glow_color(shown)
 	_set_shader(mat, "element_color", Vector3(c.r, c.g, c.b))
 	_set_shader(mat, "element_kind", int(KIND.get(shown, 1)))
 	_set_shader(mat, "element_sweep", sweep)
@@ -168,6 +182,32 @@ func _update_blade_material() -> void:
 	_set_shader(mat, "element_warn", warn)
 	_set_shader(mat, "element_left", element_time_remaining)
 	_set_shader(mat, "element_glow", level)
+	_update_rim(mat, shown, level, sweep, warn)
+
+
+## Light colour of [param school] on the blade: the UI accent, except Storm, which
+## is a saturated electric blue (the accent cyan reads pastel on steel in fog).
+static func glow_color(school: String) -> Color:
+	return RIM[school].color if school == Elements.STORM else Elements.accent_color(school)
+
+
+## Keeps the rim pass in step with the steel pass (same sweep, drain and warning).
+func _update_rim(mat: ShaderMaterial, shown: String, level: float, sweep: float, warn: float) -> void:
+	if shown == Elements.NONE or level <= 0.001 or not RIM.has(shown):
+		if mat.next_pass == _rim_mat and _rim_mat != null:
+			mat.next_pass = null
+		return
+	if _rim_mat == null:
+		_rim_mat = ShaderMaterial.new()
+		_rim_mat.shader = RIM_SHADER
+	if mat.next_pass != _rim_mat:
+		mat.next_pass = _rim_mat
+	var spec: Dictionary = RIM[shown]
+	_rim_mat.set_shader_parameter("rim_color", Vector3(spec.color.r, spec.color.g, spec.color.b))
+	_rim_mat.set_shader_parameter("rim_strength", float(spec.strength) * level)
+	_rim_mat.set_shader_parameter("rim_sweep", sweep)
+	_rim_mat.set_shader_parameter("rim_warn", warn)
+	_rim_mat.set_shader_parameter("rim_left", element_time_remaining)
 
 
 ## Only touches the material when a value actually changed.

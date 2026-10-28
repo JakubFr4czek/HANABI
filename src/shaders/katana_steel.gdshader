@@ -123,9 +123,11 @@ void fragment() {
 			float tick = floor(TIME * 22.0);
 			float spark = step(0.93, hash21(vec2(floor(v_local.y * 140.0), tick)));
 			float spark2 = step(0.965, hash21(vec2(floor(v_local.y * 61.0) + 11.0, tick + 3.0)));
-			vec3 hot = mix(ec, vec3(0.9, 0.97, 1.0), 0.55);
-			glow = ec * (0.55 + 0.7 * fres) + hot * 1.8 * edge_m * (0.75 + 1.9 * spark + 0.8 * spark2);
-			dark = 0.25;
+			// Saturated electric blue between the arcs; an arc turns white-hot only at
+			// its peak, so the edge reads as discharge, not as pastel cyan paint.
+			vec3 hot = mix(ec, vec3(0.85, 0.93, 1.0), 0.3 + 0.55 * spark);
+			glow = ec * (0.40 + 1.0 * fres) + hot * 2.0 * edge_m * (0.40 + 2.8 * spark + 1.1 * spark2);
+			dark = 0.5;
 		} else if (element_kind == 3) {
 			float flow = 0.5 + 0.5 * sin(bt * 9.0 - TIME * 1.4);
 			glow = ec * (0.06 + 0.45 * fres) + ec * 1.1 * edge_m * (0.55 + 0.45 * flow);
