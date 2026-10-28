@@ -43,30 +43,23 @@ func _run_all() -> void:
 	_check("the katana collides with trunks, gates, lanterns and boulders",
 		(run.katana.collision_mask & ForestWorld.TRUNK_LAYER) != 0)
 
-	# Talismans and the stele never spawn inside a tree: plant one right
-	# where the middle card would go and level up.
+	# The run-over plaque and the stele never spawn inside a tree (D1: the restart
+	# plaque replaced the level-up cards): plant a tree where the plaque would hang.
 	var frame := run._player_view_frame()
 	var spot := frame.origin + Vector3(-frame.basis.z.x, 0.0, -frame.basis.z.z).normalized() * 1.16
 	spot.y = forest.height_at(spot.x, spot.z)
 	var blocker := forest._build_trunk_colliders([Transform3D(Basis.IDENTITY, spot)], 0, Node3D.new())
 	run.add_child(blocker)
-	run.xp_to_next = 1
-	run.add_xp(5)
-	await _frames(5)
-	var worst := INF
-	for card in run.active_ofuda:
-		worst = minf(worst, Vector2(card.global_position.x - spot.x, card.global_position.z - spot.z).length())
-	_check("level-up talismans steer clear of a tree in the way (closest %.2f m from its axis)" % worst,
-		not run.active_ofuda.is_empty() and worst > forest._trunk_chest_radius + 0.3)
-	run.slice_ofuda_choice(1)
-	await _frames(30)
 	var dp := run.player as DesktopPlayer
 	dp.health._invulnerable = 0.0
 	dp.health.take_hit(10000.0, dp.global_position + Vector3.FORWARD)
 	await _frames(10)
-	var rp := run.restart_ofuda.global_position
-	_check("the restart talisman steers clear of it too (%.2f m)" % Vector2(rp.x - spot.x, rp.z - spot.z).length(),
-		Vector2(rp.x - spot.x, rp.z - spot.z).length() > forest._trunk_chest_radius + 0.3)
+	var worst := INF
+	if is_instance_valid(run.restart_ema):
+		var rp := run.restart_ema.global_position
+		worst = Vector2(rp.x - spot.x, rp.z - spot.z).length()
+	_check("the run-over restart plaque steers clear of a tree in the way (closest %.2f m from its axis)" % worst,
+		worst > forest._trunk_chest_radius + 0.3)
 	run.queue_free()
 
 

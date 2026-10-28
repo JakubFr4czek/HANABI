@@ -1,6 +1,6 @@
 extends Node
 ## A whole cycle as played: intro, the grab, a fight with level-ups, death,
-## the restart talisman, the intro again and a second fight. Nothing from
+## the restart ema, the intro again and a second fight. Nothing from
 ## the first run may leak into the second. Run with:
 ##   godot --headless --path . --fixed-fps 90 res://tests/run_cycle_test.tscn -- --desktop
 ## Exit code 0 when everything passed.
@@ -45,21 +45,18 @@ func _run_all() -> void:
 		_check("%s: no live enemy or boss stays on the field (%d alive, oni %s)" % [label, run.wave_director.alive_count(), run.wave_director.has_active_oni()],
 			run.wave_director.alive_count() == 0 and not run.wave_director.has_active_oni())
 		_check("%s: time runs at full speed on the end screen (%.2f)" % [label, Engine.time_scale], is_equal_approx(Engine.time_scale, 1.0))
-		await _until(func(): return run.restart_ofuda != null and is_instance_valid(run.restart_ofuda) and run.restart_ofuda.is_armed(), 600)
+		await _until(func(): return run.restart_ema != null and is_instance_valid(run.restart_ema) and run.restart_ema.is_armed(), 600)
 		var head := get_tree().get_first_node_in_group("player_head") as Node3D
 		var ground := run.forest_world.height_at(head.global_position.x, head.global_position.z)
-		var above := run.restart_ofuda.global_position.y - ground
-		_check("%s: the restart talisman hangs at hand height over the player's ground (%.2f m)" % [label, above], above > 1.0 and above < 1.5)
-		run.restart_ofuda.slice(run.restart_ofuda.global_position, Vector3.RIGHT)
+		var above := run.restart_ema.global_position.y - ground
+		_check("%s: the restart ema hangs at hand height over the player's ground (%.2f m)" % [label, above], above > 1.0 and above < 1.5)
+		run.restart_ema.slice(run.restart_ema.global_position, Vector3.RIGHT)
 		await _frames(10)
-		_check("%s: the restart talisman starts a new intro" % label, run.state == RunGame.RunState.INTRO and run.run_intro.is_active())
+		_check("%s: the restart ema starts a new intro" % label, run.state == RunGame.RunState.INTRO and run.run_intro.is_active())
 		_check("%s: the katana is out of the hand and locked for the gate" % label, not run.katana.is_held() and run.katana.grab_locked)
 		var souls := run._souls_root.get_children().filter(func(c): return c is SoulOrb).size()
 		_check("%s: no soul orbs carried over (%d)" % [label, souls], souls == 0)
 		_check("%s: no slow motion carried over" % label, not TimeController.is_active())
-	var bad_cards := card_heights.filter(func(h): return h < 1.0 or h > 1.7)
-	_check("upgrade talismans hang at hand height over the ground (%s)" % [card_heights.map(func(h): return snappedf(h, 0.01))],
-		not card_heights.is_empty() and bad_cards.is_empty())
 	var music := run.get_node_or_null("StormMusic") as StormMusic
 	var playing := music != null and music._players.any(func(p): return p.playing)
 	_check("the music still plays after two runs", playing)
@@ -68,10 +65,7 @@ func _run_all() -> void:
 	run.queue_free()
 
 
-## An auto-swordsman cuts whatever comes close and picks upgrades.
-var card_heights: Array[float] = []
-
-
+## An auto-swordsman cuts whatever comes close (D1: a level-up asks for nothing).
 func _fight(seconds: float) -> void:
 	var dp := run.player as DesktopPlayer
 	var cd := 0.0
@@ -79,11 +73,6 @@ func _fight(seconds: float) -> void:
 	for f in int(seconds * 90.0):
 		await get_tree().physics_frame
 		dp.health.heal(5.0)
-		if run.state == RunGame.RunState.LEVEL_UP and not run.active_ofuda.is_empty():
-			var card: OfudaTalisman = run.active_ofuda[0]
-			var g := run.forest_world.height_at(dp.global_position.x, dp.global_position.z)
-			card_heights.append(card.global_position.y - g)
-			run.slice_ofuda_choice(randi() % run.active_ofuda.size())
 		cd -= 1.0 / 90.0
 		var best := 2.4
 		var target: Yokai = null

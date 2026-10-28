@@ -57,13 +57,12 @@ func _ready() -> void:
 	await _shot("fight_after_cut")
 	await _frames(60)
 	await _shot("fight_petals")
-	# 3. Level-up talismans.
+	# 3. Level-up: a rank and a heal, no card choice (D1).
 	run.xp_to_next = 1
 	run.add_xp(5)
 	await _frames(40)
-	await _shot("levelup_cards")
-	run.slice_ofuda_choice(1)
-	await _frames(60)
+	await _shot("levelup_rank")
+	await _frames(20)
 	# 4. Look down at the feet / ground and up into the canopy.
 	dp.camera.rotation.x = deg_to_rad(-70.0)
 	await _frames(10)

@@ -14,25 +14,38 @@ extends RefCounted
 ##  - the player is a serial fighter: one yōkai at a time, `gap` seconds to reach
 ##    the next one, a fraction of the time lost to walking between gates;
 ##  - a solid sword cut is 85 HP, `hits_per_second` of them connect on average;
-##  - level-ups hand out one of six cards at random, one of which (Razor Edge,
-##    +25%) raises blade damage, so blade power = 1 + 0.25 × level-ups / 6;
-##  - 90% of dropped Ofuda are picked up (they are magnetised, a few are missed).
+##  - the blade does not grow with level (D1: level-up cards are gone, so power
+##    comes from the Ofuda tree only);
+##  - Ofuda come ONLY from hokora shrines (D1): a shrine is passed every
+##    ElementBalance.HOKORA_SLOT spacing metres of walking, the first one
+##    HOKORA_OPENING_DISTANCE metres out, and each gives OFUDA_PER_HOKORA.
+##    Yōkai, elites and the Oni give nothing.
 
 const SWORD_HIT := 85.0
 
-## Player skill profiles: effective sword hits per second and seconds lost
-## between two kills. "average" is the design target.
+## Player skill profiles: effective sword hits per second, seconds lost between
+## two kills, the share of the run spent walking and the walking speed (m/s).
+## "average" is the design target; "skilled" is the good run the demo is tuned for.
 const PROFILES := {
-	"careful": {"hits_per_second": 0.55, "gap": 2.2, "idle": 0.30},
-	"average": {"hits_per_second": 0.80, "gap": 1.4, "idle": 0.25},
-	"skilled": {"hits_per_second": 1.10, "gap": 0.9, "idle": 0.20},
+	"careful": {"hits_per_second": 0.55, "gap": 2.2, "idle": 0.30, "walk_share": 0.45, "walk_speed": 2.2},
+	"average": {"hits_per_second": 0.80, "gap": 1.4, "idle": 0.25, "walk_share": 0.60, "walk_speed": 2.6},
+	"skilled": {"hits_per_second": 1.10, "gap": 0.9, "idle": 0.20, "walk_share": 0.75, "walk_speed": 3.0},
 }
-const COLLECT_RATE := 0.9
 
 
-## One run simulated with the real wave formulas. Returns
-## {"timeline": [{t, kills, ofuda, level}], "total": int, "kills": int, ...}
-## with one sample every 10 s up to [param seconds].
+## Mean walking distance between two shrines (m). A walk crosses slots of side S
+## and meets a slot's shrine only inside the spawn band (2 × spawn radius wide),
+## with probability chance × valid share: spacing = S² / (band × chance × valid).
+static func hokora_spacing() -> float:
+	var side := float(ElementBalance.HOKORA_SLOT_CHUNKS) * ForestWorld.CHUNK_SIZE
+	var band := 2.0 * ElementBalance.HOKORA_SPAWN_RADIUS
+	return side * side / (band * ElementBalance.HOKORA_SLOT_CHANCE * ElementBalance.HOKORA_VALID_SHARE)
+
+
+## One run simulated with the real wave formulas. Kills and the rank come from
+## the fight; Ofuda come from the distance walked past hokora shrines (D1).
+## Returns {"timeline": [{t, kills, ofuda, level, shrines, wave}], "total": int,
+## "kills": int, "shrines": int, ...} with one sample every 10 s up to [param seconds].
 static func economy(profile_name: String, seconds: float = 600.0, seed_value: int = 7) -> Dictionary:
 	var prof: Dictionary = PROFILES[profile_name]
 	var wd := WaveDirector.new()
@@ -54,16 +67,25 @@ static func economy(profile_name: String, seconds: float = 600.0, seed_value: in
 	var elites := 0
 	var xp := 0.0
 	var level := 1
-	var ofuda := 0.0
+	var walked := 0.0
+	var shrines := 0
+	var next_shrine_at := ElementBalance.HOKORA_OPENING_DISTANCE
+	var ofuda := 0
 	var timeline: Array[Dictionary] = []
 	var next_sample := 0.0
 
 	while t <= seconds:
 		if t >= next_sample:
-			timeline.append({"t": t, "kills": kills, "ofuda": ofuda, "level": level, "wave": wave})
+			timeline.append({"t": t, "kills": kills, "ofuda": ofuda, "level": level,
+				"wave": wave, "shrines": shrines, "walked": walked})
 			next_sample += 10.0
 		t += dt
 		wave_timer += dt
+		walked += float(prof.walk_speed) * float(prof.walk_share) * dt
+		while walked >= next_shrine_at:
+			shrines += 1
+			ofuda += ElementBalance.OFUDA_PER_HOKORA
+			next_shrine_at += hokora_spacing()
 		var ramp := clampf(t / wd.ramp_seconds, 0.0, 1.0)
 		var cap := clampi(wd.start_concurrent_enemies + int(t / wd.seconds_per_extra_enemy),
 			wd.start_concurrent_enemies, wd.max_concurrent_enemies)
@@ -105,28 +127,53 @@ static func economy(profile_name: String, seconds: float = 600.0, seed_value: in
 				if float(target.hp) <= 0.0:
 					alive.erase(target)
 					kills += 1
+					if target.kind == "elite":
+						elites += 1
+					elif target.kind == "oni":
+						oni_kills += 1
 					xp += 24.0
-					match String(target.kind):
-						"elite":
-							elites += 1
-							ofuda += rng.randi_range(ElementBalance.OFUDA_ELITE_MIN, ElementBalance.OFUDA_ELITE_MAX) * COLLECT_RATE
-						"oni":
-							oni_kills += 1
-							ofuda += rng.randi_range(ElementBalance.OFUDA_ONI_MIN, ElementBalance.OFUDA_ONI_MAX) * COLLECT_RATE
-						_:
-							if rng.randf() < ElementBalance.OFUDA_SWARM_CHANCE:
-								ofuda += COLLECT_RATE
 					while xp >= RunGame.xp_for_level(level):
 						xp -= RunGame.xp_for_level(level)
 						level += 1
 					target = {}
 	wd.free()
 	return {"timeline": timeline, "kills": kills, "oni_kills": oni_kills, "elites": elites,
-		"level": level, "total": int(floor(ofuda)), "wave": wave}
+		"level": level, "total": ofuda, "shrines": shrines, "wave": wave}
 
 
-static func blade_power(level: int) -> float:
-	return 1.0 + 0.25 * float(level - 1) / 6.0
+## Most nodes a player can own with [param budget] Ofuda when they always buy the
+## cheapest node whose prerequisites are met (what an average player can afford).
+static func nodes_for_budget(budget: int) -> int:
+	var unlocked := {}
+	var spent := 0
+	var bought := 0
+	while true:
+		var best := ""
+		var best_cost := 1 << 30
+		for n: Dictionary in SkillTreeData.NODES:
+			var id := String(n.id)
+			if unlocked.has(id):
+				continue
+			var verdict := SkillTreeData.new()
+			verdict.unlocked = unlocked.duplicate()
+			if not verdict.prerequisites_met(id):
+				continue
+			var cost := int(n.cost)
+			if cost < best_cost:
+				best_cost = cost
+				best = id
+		if best.is_empty() or spent + best_cost > budget:
+			break
+		unlocked[best] = true
+		spent += best_cost
+		bought += 1
+	return bought
+
+
+## D1: the Razor Edge card is gone and nothing else raises the sword, so the
+## blade is the same at every level (the Ofuda tree and the rank do the growing).
+static func blade_power(_level: int) -> float:
+	return 1.0
 
 
 static func _has_kind(list: Array[Dictionary], kind: String) -> bool:
