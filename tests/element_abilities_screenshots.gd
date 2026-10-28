@@ -54,8 +54,51 @@ func _ready() -> void:
 			await _frames(2)
 		await _shot(String(entry[2]))
 		await _frames(10)
+	await _kirisute_shots(run, player)
 	run.queue_free()
 	get_tree().quit(0)
+
+
+## D4: each school's finisher. A clean cut splits the yōkai along the blade's plane:
+## one frame at the moment of the cut (the hit-stop freezes the world there), and one
+## about a second later with the pieces on the ground.
+func _kirisute_shots(run: RunGame, player: DesktopPlayer) -> void:
+	for element in Elements.COMBAT_ELEMENTS:
+		run.ofuda_count = 1000
+		for node: Dictionary in SkillTreeData.nodes_for_element(element):
+			run.unlock_skill(String(node.id))
+		# One yōkai alone in the frame: the earlier shots' enemies would hide the cut.
+		run.wave_director.stop_director()
+		run.wave_director.clear_enemies()
+		player.teleport(Vector3(0.0, 0.0, 2.2), 0.0)
+		await _frames(4)
+		run.element_system.imbue(element, 20.0)
+		var y := run.wave_director.spawn_enemy_at(player.global_position + Vector3(0.0, 0.0, -1.6), player.global_position)
+		y.configure_kind(Yokai.Kind.SWARM, Elements.NONE, 900.0)
+		await _frames(30)
+		var katana: HeldWeapon = run.katana
+		var chest: RagdollPart = y.parts["chest"]
+		# A level sweep to the right at chest height: the edge leads toward +X, the blade
+		# points away from the camera, so the plane is horizontal and the pieces fly
+		# sideways out of frame's centre instead of into the lens.
+		var pose := Basis(Vector3(0.0, 1.0, 0.0), Vector3(-1.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0))
+		katana.global_transform = Transform3D(pose, chest.global_position + Vector3(0.0, 0.0, 0.5))
+		var across := (katana.global_basis * -katana.spine_direction).normalized()
+		katana._handle_hit({"collider": chest, "point": chest.global_position, "speed": 12.0,
+			"direction": across, "normal": -across})
+		await _frames(2)
+		await _shot("kirisute_%s_cut" % element)
+		# From the side and above, the held katana out of the frame, so both halves read as
+		# cut pieces on the ground.
+		player.teleport(Vector3(-1.3, 0.0, 1.4), -0.9)
+		player.camera.rotation.x = deg_to_rad(-30.0)
+		katana.visible = false
+		await _frames(90)
+		await _shot("kirisute_%s_pieces" % element)
+		katana.visible = true
+		player.camera.rotation.x = deg_to_rad(-16.0)
+		# Let the pieces dissolve before the next school, so each shot shows one cut.
+		await _frames(int((ElementBalance.KIRISUTE_PIECE_SECONDS + ElementBalance.KIRISUTE_DISSOLVE_SECONDS) * 90.0) + 30)
 
 
 func _frames(n: int) -> void:

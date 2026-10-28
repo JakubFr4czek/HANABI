@@ -11,6 +11,8 @@ static var _alive: Array[KirisuteChunk] = []
 var visual: MeshInstance3D
 ## The cut's glowing material, shared with the other half of the same cut.
 var cap_material: StandardMaterial3D
+## Glow the cut starts at; it cools from here (see KirisuteCut.hot_energy).
+var hot_energy := KirisuteCut.CAP_HOT
 var _age := 0.0
 var _dissolving := false
 
@@ -28,7 +30,7 @@ static func make_cap_material(element: String) -> StandardMaterial3D:
 		m.roughness = 0.12
 	m.emission_enabled = true
 	m.emission = KirisuteCut.glow_color(element)
-	m.emission_energy_multiplier = KirisuteCut.CAP_HOT
+	m.emission_energy_multiplier = KirisuteCut.hot_energy(element)
 	return m
 
 
@@ -53,7 +55,7 @@ func _physics_process(delta: float) -> void:
 	_age += delta
 	if cap_material:
 		var t := clampf(_age / ElementBalance.KIRISUTE_CAP_FADE_SECONDS, 0.0, 1.0)
-		cap_material.emission_energy_multiplier = lerpf(KirisuteCut.CAP_HOT, KirisuteCut.CAP_COOL, t)
+		cap_material.emission_energy_multiplier = lerpf(hot_energy, KirisuteCut.CAP_COOL, t)
 	var lie := ElementBalance.KIRISUTE_PIECE_SECONDS
 	var dissolve := ElementBalance.KIRISUTE_DISSOLVE_SECONDS
 	if not _dissolving and _age >= lie:
