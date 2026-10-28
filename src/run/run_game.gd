@@ -845,6 +845,7 @@ func _on_player_died() -> void:
 		"wave": wave_director.wave,
 		"shrines": shrines_claimed,
 		"build": element_system.build_summary() if element_system else "Unbound",
+		"kcal": floori(calorie_meter.kcal) if calorie_meter else 0,
 	}
 	GameEvents.log_event("run_ended", summary)
 	_build_end_screen(summary)
@@ -912,8 +913,11 @@ func _build_end_screen(summary: Dictionary) -> void:
 	]
 	if summary.get("new_record", false):
 		rows.append(["★ NEW RECORD", 28, 0.00112, Color(1.1, 0.78, 0.42), 0.058])
-	rows.append(["%02d:%02d  ·  斬 %d  ·  LV %d  ·  波 %d" % [mins, secs, int(summary.kills), int(summary.level), int(summary.wave)],
-		32, 0.00118, Color(0.9, 0.92, 0.98), 0.005])
+	var kcal_burned := int(summary.get("kcal", 0))
+	var stat_text := "%02d:%02d  ·  斬 %d  ·  LV %d  ·  波 %d" % [mins, secs, int(summary.kills), int(summary.level), int(summary.wave)]
+	if kcal_burned > 0:
+		stat_text += "  ·  %d kcal" % kcal_burned
+	rows.append([stat_text, 32, 0.00118, Color(0.9, 0.92, 0.98), 0.005])
 	rows.append(["BEST  %d" % int(summary.high_score), 30, 0.00112, Color(0.8, 0.84, 0.94), -0.055])
 	rows.append(["BUILD  %s" % String(summary.get("build", "Unbound")), 32, 0.00118, Color(0.9, 0.76, 1.0), -0.115])
 	for row in rows:

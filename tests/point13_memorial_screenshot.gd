@@ -23,6 +23,7 @@ func _ready() -> void:
 	run.kills = 12
 	run.level = 4
 	run.run_time = 98.0
+	run.calorie_meter.kcal = 54.0
 	player.teleport(Vector3(0.0, 0.0, 2.2), 0.0)
 	player.camera.rotation.x = deg_to_rad(-5.0)
 	player.health.take_hit(999.0, Vector3.ZERO, {"attacker": "Yokai"})
