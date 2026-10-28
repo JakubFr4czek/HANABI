@@ -50,6 +50,7 @@ func _run_all() -> void:
 	_check("sparks survive the scene they burst in (%d of %d)" % [alive_sparks, sparks_before], alive_sparks == sparks_before)
 	_check("a freed scene's soul orbs are written off, not counted against the cap",
 		lent.size() == 8 and lent.all(func(o): return not is_instance_valid(o)))
+	await _test_ability_pool_caps()
 	VfxPool._heal_soul_count()
 	var room := VfxPool.MAX_SOUL - int(VfxPool.pool_stats().souls_allocated) + VfxPool._soul_free.size()
 	_check("the soul pool still has room after the scene died (%d)" % room, room >= 8)
@@ -64,3 +65,27 @@ func _check(label: String, ok: bool) -> void:
 func _frames(n: int) -> void:
 	for _k in n:
 		await get_tree().physics_frame
+
+
+## E2b (ELEMENTS_PLAN Critical Tests): spam all 8 abilities for ~10 s of
+## stepped physics; pools must stay capped and add zero OmniLight3D nodes.
+func _test_ability_pool_caps() -> void:
+	var es := ElementSystem.new()
+	add_child(es)
+	es.setup(null, null)
+	var elems := [Elements.SAKURA, Elements.STORM, Elements.INK, Elements.SHADOW]
+	for step in 100:  # 100 x 0.1 s = 10 s
+		es.imbue(elems[step % 4], 20.0)
+		es.ability_1_cooldown = 0.0
+		es.ability_2_cooldown = 0.0
+		es.execute_ability_1(Vector3.BACK)
+		es.execute_ability_2(Vector3.BACK)
+		es._physics_process(0.1)
+	_check("Ability spam: petals capped at MAX_PETALS (12)", es._petals.size() <= ElementSystem.MAX_PETALS)
+	_check("Ability spam: ink pools capped at MAX_INK_POOLS (6)", es._ink_pools.size() <= ElementSystem.MAX_INK_POOLS)
+	_check("Ability spam: transients capped at MAX_TRANSIENT_MESHES (18)", es._transients.size() <= ElementSystem.MAX_TRANSIENT_MESHES)
+	var omni := 0
+	for n in es.find_children("*", "OmniLight3D", true, false):
+		omni += 1
+	_check("Ability spam: zero OmniLight3D nodes", omni == 0)
+	es.queue_free()

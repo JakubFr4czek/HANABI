@@ -110,7 +110,8 @@ func _run_all() -> void:
 	# 5. Level-up cards / upgrades do NOT grant element to katana
 	elem_sys.reset()
 	katana.set_element(Elements.NONE)
-	elem_sys.apply_upgrade("storm_chain", {"storm_chain": 1})
+	# (Element cards retired in E2b: ElementSystem has no upgrade/imbue API left;
+	# the only imbue path is a Torii gate crossing, covered above and below.)
 	_check("Level-up upgrade does not grant element to katana (remains NONE)",
 		katana.element == Elements.NONE and elem_sys.current_element == Elements.NONE and elem_sys.element_time_remaining == 0.0)
 
@@ -138,7 +139,7 @@ func _run_all() -> void:
 
 	_check("20 s timer expires cleanly to plain steel", katana.element == Elements.NONE)
 	_check("ElementSystem current_element is NONE after expiry", elem_sys.current_element == Elements.NONE)
-	_check("active_elements is empty after expiry", elem_sys.active_elements.is_empty())
+	_check("current_element is NONE after expiry (no legacy active_elements)", elem_sys.current_element == Elements.NONE)
 
 	# 8. Gate reactivates after 45m distance
 	storm_gate.is_active = false

@@ -145,7 +145,7 @@
 
 - **Ability 2 (Button B): Yami-watari (闇渡り / Shadow Step & Cleave)**
   - **Effect**: Disappears into the floor shadows and instantly re-emerges behind the nearest target (or 4.0 m forward if no target), priming a guaranteed critical strike (+60% damage) on the next sword hit within 1.8 seconds.
-  - **Numbers**: Target teleport distance up to 4.5 m (placed 1.1 m behind enemy back facing enemy). +60% damage buff on next hit within 1.8 s.
+  - **Numbers**: Target search radius 4.5 m (placed 1.1 m behind enemy back facing enemy); **designed blink displacement is clamped to ≤ 2.8 m** (bounded combat blink, never a long teleport). +60% damage buff on next hit within 1.8 s.
   - **Cooldown**: 7.5 seconds.
   - **VFX**: Violet shadow sinkhole at departure; quick flash of dark violet mist at arrival.
   - **SFX**: Vacuum suction pop followed by a sinister blade unsheathing tone.
@@ -423,7 +423,7 @@ Everything the player needs to know is conveyed naturally in the game world with
 - [x] **E2b.4: Remove Old Procs & Ensure Ongoing Expiry Completion**: Clean out legacy probabilistic hit procs from `element_system.gd`. Ensure ongoing abilities (Hanamai, ink pools, decoy) finish their full duration upon element expiration.
 - [ ] **Critical Tests**:
   - [x] `tests/element_abilities_test.tscn`: Each ability fires on the correct button, respects cooldown, consumes no element charges, does nothing on plain steel, and finishes execution if element expires mid-ability.
-  - `tests/vfx_pool_test.tscn`: All ability VFX respect Quest bounds (`MAX_PETALS <= 12`, `MAX_INK_POOLS <= 6`, `MAX_TRANSIENT_MESHES <= 18`).
+  - [x] `tests/vfx_pool_test.tscn`: All ability VFX respect Quest bounds (`MAX_PETALS <= 12`, `MAX_INK_POOLS <= 6`, `MAX_TRANSIENT_MESHES <= 18`).
 
 ### Phase E2c: Ofuda Currency & Skill Tree Data Architecture
 - [ ] **E2c.1: Ofuda Item & Drops**: Create collectible 3D paper talisman drop (`src/run/ofuda_pickup.gd`); update `Yokai` death logic to drop Ofuda; integrate with `SoulMagnet`. Remove old `OfudaTalisman` level-up slicing.

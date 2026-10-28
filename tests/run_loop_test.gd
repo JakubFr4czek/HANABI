@@ -218,9 +218,9 @@ func _run_all() -> void:
 		and run.restart_ofuda != null)
 	# The stele must list the element the blade carries (imbued via Torii gate).
 	var stele_text := _stele_label_text(run)
-	var lists_build := stele_text.contains("BUILD") and not run.element_system.active_elements.is_empty()
-	for elem in run.element_system.active_elements:
-		lists_build = lists_build and stele_text.contains(Elements.build_label(elem))
+	var lists_build := stele_text.contains("BUILD") and run.element_system.current_element != Elements.NONE
+	if run.element_system.current_element != Elements.NONE:
+		lists_build = lists_build and stele_text.contains(Elements.build_label(run.element_system.current_element))
 	_check("Memorial stele lists element BUILD (GDD §6 end screen): %s" % stele_text.replace("\n", " | "),
 		lists_build)
 

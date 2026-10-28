@@ -41,13 +41,11 @@ func _run_all() -> void:
 	run.element_system.imbue(Elements.STORM)
 	run._update_element_seal()
 	_check("Different gate replaces the element (one element at a time)",
-		run.element_system.active_elements == [Elements.STORM]
-		and run.element_system.current_element == Elements.STORM)
+		run.element_system.current_element == Elements.STORM)
 
 	run.element_system.imbue(Elements.INK)
 	_check("Blade still holds exactly one element after another gate",
-		run.element_system.active_elements.size() == 1
-		and run.element_system.current_element == Elements.INK)
+		run.element_system.current_element == Elements.INK)
 
 	run.start_run()
 	await _frames(8)

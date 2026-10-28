@@ -352,7 +352,6 @@ func _setup_run_nodes() -> void:
 	if player is XRPlayer:
 		var xr := player as XRPlayer
 		xr.run_element_mode = true
-		xr.element_ability_requested.connect(_on_element_ability_requested)
 		# The dojo maps A/X to "reset the dummy" and B/Y to its attack toggle;
 		# in a run the dummy is parked under the floor, so A/X skips the intro
 		# and B/Y does nothing.
@@ -517,12 +516,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			start_run()
 		get_viewport().set_input_as_handled()
-	elif key == KEY_J and state == RunState.PLAYING:
-		_on_ability_1_requested(_player_forward_direction())
-		get_viewport().set_input_as_handled()
-	elif key == KEY_K and state == RunState.PLAYING:
-		_on_ability_2_requested(_player_forward_direction())
-		get_viewport().set_input_as_handled()
 
 
 # --- Kills, Souls & XP ---------------------------------------------------------
@@ -598,7 +591,7 @@ func _present_level_up() -> void:
 	var hp_ratio := (health.hp / maxf(health.max_hp, 1.0)) if health else 1.0
 	var choices := UpgradePool.pick_choices(
 		3, upgrade_stacks, hp_ratio, _rng,
-		element_system.active_elements, UpgradePool.element_slot_count(upgrade_stacks))
+		_seal_elements(), UpgradePool.element_slot_count(upgrade_stacks))
 
 	frame = _clear_frame(frame, [Vector3(-0.38, 0.0, -1.16), Vector3(0.0, 0.0, -1.16), Vector3(0.38, 0.0, -1.16), Vector3(0.0, 0.0, -0.6)])
 	var center := frame.origin + (-frame.basis.z) * 1.16
@@ -658,7 +651,7 @@ func _apply_upgrade(upgrade: Dictionary) -> void:
 		return
 	var element := UpgradePool.element_for_upgrade(id)
 	if element != Elements.NONE:
-		if not element_system.active_elements.has(element) and element_system.active_elements.size() >= 1:
+		if not _seal_elements().has(element) and _seal_elements().size() >= 1:
 			return
 		if int(upgrade_stacks.get(id, 0)) <= 0 and UpgradePool.element_slot_count(upgrade_stacks) >= UpgradePool.ELEMENT_SLOT_LIMIT:
 			return
@@ -690,8 +683,9 @@ func _apply_upgrade(upgrade: Dictionary) -> void:
 				health.regen_per_sec = 2.5 * float(stacks)
 		_:
 			if element != Elements.NONE:
-				element_system.apply_upgrade(id, upgrade_stacks)
-				_update_element_seal()
+				# Element cards retired: the blade element comes only from
+				# Torii gates; the Ofuda skill tree arrives in E2c. No-op here.
+				pass
 
 	GameEvents.log_event("upgrade_picked", {
 		"id": id,
@@ -715,10 +709,6 @@ func _on_ability_2_requested(direction: Vector3) -> void:
 		element_system.execute_ability_2(direction)
 
 
-func _on_element_ability_requested(direction: Vector3) -> void:
-	_on_ability_2_requested(direction)
-
-
 func _player_forward_direction() -> Vector3:
 	var frame := _player_view_frame()
 	var f := -frame.basis.z
@@ -726,8 +716,15 @@ func _player_forward_direction() -> Vector3:
 	return f.normalized() if f.length_squared() > 0.01 else Vector3.FORWARD
 
 
+func _seal_elements() -> Array[String]:
+	var result: Array[String] = []
+	if element_system and element_system.current_element != Elements.NONE:
+		result.append(element_system.current_element)
+	return result
+
+
 func _update_element_seal() -> void:
-	set_seal_progress(element_system.active_elements, 0)
+	set_seal_progress(_seal_elements(), 0)
 
 
 # --- Death, End Screen & High Score --------------------------------------------

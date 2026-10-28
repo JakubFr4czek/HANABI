@@ -9,7 +9,6 @@ extends Node3D
 
 signal reset_requested
 signal toggle_attacks_requested
-signal element_ability_requested(direction: Vector3)
 signal ability_1_requested(direction: Vector3)
 signal ability_2_requested(direction: Vector3)
 signal menu_requested
@@ -94,18 +93,15 @@ func _process(_delta: float) -> void:
 		else:
 			reset_requested.emit()
 
-	# Ability 2 (Button B / Y when sword is held)
+	# Ability 2 (Button B / Y when sword is held): exactly one signal per press.
 	var by_r := _pressed_once("by_r", right_controller.is_button_pressed("by_button"))
 	var by_l := _pressed_once("by_l", left_controller.is_button_pressed("by_button"))
 	if by_r and right_holder.held != null:
 		ability_2_requested.emit(_ability_direction(right_controller))
-		element_ability_requested.emit(_ability_direction(right_controller))
 	elif by_l and left_holder.held != null:
 		ability_2_requested.emit(_ability_direction(left_controller))
-		element_ability_requested.emit(_ability_direction(left_controller))
 	elif run_element_mode and (by_r or by_l) and (right_holder.held != null or left_holder.held != null):
 		ability_2_requested.emit(_ability_direction(right_controller))
-		element_ability_requested.emit(_ability_direction(right_controller))
 
 	for c in [left_controller, right_controller]:
 		var holder := left_holder if c == left_controller else right_holder
@@ -114,9 +110,9 @@ func _process(_delta: float) -> void:
 		if holder.held == null:
 			_step_view_button(c, gripping, _delta)
 		if _pressed_once("click_" + c.name, c.is_button_pressed("primary_click")):
-			if run_element_mode:
-				element_ability_requested.emit(Vector3.ZERO)
-			elif holder.held:
+			# Thumbstick click NEVER fires combat abilities (ELEMENTS_PLAN);
+			# in the training room only, it cycles the held weapon's element.
+			if not run_element_mode and holder.held:
 				holder.held.set_element(next_element(holder.held.element))
 
 
