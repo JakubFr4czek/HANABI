@@ -195,7 +195,9 @@ func _run_all() -> void:
 
 	# 6. Death ends the run, saves high score locally, shows End Screen & Restart Ofuda;
 	#    slicing the Restart Ofuda with the katana starts a new run.
-	run._apply_upgrade({"id": "storm_chain"})
+	# New system (ELEMENTS_PLAN): the blade element comes only from a Torii gate,
+	# never from level-up cards. Imbue Storm directly as a gate crossing would.
+	run.element_system.imbue(Elements.STORM)
 	run.kills = 7
 	run.score = run.compute_score()
 	run._refresh_hud()
@@ -214,8 +216,7 @@ func _run_all() -> void:
 		and run.load_high_score() == run.high_score
 		and run.get_node_or_null("EndScreen/MemorialStele") != null
 		and run.restart_ofuda != null)
-	# storm_chain binds Storm unless the random level-up ofuda already filled
-	# both element slots; either way the stele must list what the blade carries.
+	# The stele must list the element the blade carries (imbued via Torii gate).
 	var stele_text := _stele_label_text(run)
 	var lists_build := stele_text.contains("BUILD") and not run.element_system.active_elements.is_empty()
 	for elem in run.element_system.active_elements:

@@ -13,6 +13,10 @@ extends CharacterBody3D
 ## V toggles two-handed grip, Z cycles the element, P toggles the dummy's attacks.
 
 signal toggle_attacks_requested
+signal reset_requested
+signal ability_1_requested(direction: Vector3)
+signal ability_2_requested(direction: Vector3)
+signal menu_requested
 
 const EYE_HEIGHT := 1.65
 const HAND_REST := Vector3(0.22, -0.28, -0.42)
@@ -161,6 +165,28 @@ func _unhandled_input(event: InputEvent) -> void:
 					holder.held.set_element(XRPlayer.next_element(holder.held.element))
 			KEY_P:
 				toggle_attacks_requested.emit()
+			KEY_J:
+				trigger_ability_1()
+			KEY_K:
+				trigger_ability_2()
+			KEY_TAB, KEY_M:
+				menu_requested.emit()
+			KEY_R:
+				reset_requested.emit()
+
+
+func get_look_direction() -> Vector3:
+	var dir := -camera.global_basis.z
+	dir.y = 0.0
+	return dir.normalized() if dir.length_squared() > 0.01 else Vector3.FORWARD
+
+
+func trigger_ability_1() -> void:
+	ability_1_requested.emit(get_look_direction())
+
+
+func trigger_ability_2() -> void:
+	ability_2_requested.emit(get_look_direction())
 
 
 ## Move the player instantly; the held weapon comes along instead of flying

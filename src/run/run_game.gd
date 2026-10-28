@@ -345,6 +345,10 @@ func _setup_run_nodes() -> void:
 	add_child(element_system)
 	element_system.setup(self, katana)
 	GameEvents.hit_landed.connect(_on_game_hit)
+	if player.has_signal("ability_1_requested") and not player.ability_1_requested.is_connected(_on_ability_1_requested):
+		player.ability_1_requested.connect(_on_ability_1_requested)
+	if player.has_signal("ability_2_requested") and not player.ability_2_requested.is_connected(_on_ability_2_requested):
+		player.ability_2_requested.connect(_on_ability_2_requested)
 	if player is XRPlayer:
 		var xr := player as XRPlayer
 		xr.run_element_mode = true
@@ -513,8 +517,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			start_run()
 		get_viewport().set_input_as_handled()
-	elif key == KEY_B and state == RunState.PLAYING:
-		element_system.try_shadow_blink()
+	elif key == KEY_J and state == RunState.PLAYING:
+		_on_ability_1_requested(_player_forward_direction())
+		get_viewport().set_input_as_handled()
+	elif key == KEY_K and state == RunState.PLAYING:
+		_on_ability_2_requested(_player_forward_direction())
 		get_viewport().set_input_as_handled()
 
 
@@ -698,9 +705,25 @@ func _on_game_hit(hit: Dictionary) -> void:
 		element_system.on_blade_hit(hit)
 
 
-func _on_element_ability_requested(direction: Vector3) -> void:
+func _on_ability_1_requested(direction: Vector3) -> void:
 	if state == RunState.PLAYING and element_system:
-		element_system.try_shadow_blink(direction)
+		element_system.execute_ability_1(direction)
+
+
+func _on_ability_2_requested(direction: Vector3) -> void:
+	if state == RunState.PLAYING and element_system:
+		element_system.execute_ability_2(direction)
+
+
+func _on_element_ability_requested(direction: Vector3) -> void:
+	_on_ability_2_requested(direction)
+
+
+func _player_forward_direction() -> Vector3:
+	var frame := _player_view_frame()
+	var f := -frame.basis.z
+	f.y = 0.0
+	return f.normalized() if f.length_squared() > 0.01 else Vector3.FORWARD
 
 
 func _update_element_seal() -> void:

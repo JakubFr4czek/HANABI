@@ -34,13 +34,13 @@
 | **Right (Sword Hand)** | **Thumbstick** | `primary` | Snap turn (`MovementTurn.tscn`) | **RESERVED**: VR Locomotion (Snap Turn). |
 | **Right (Sword Hand)** | **Thumbstick Click** | `primary_click` | Triggers `element_ability_requested` / cycles element in test room | Deprecated for combat abilities (unreliable ergonomics during full-arm swings). |
 | **Right (Sword Hand)** | **Oculus / System Button** | `/user/hand/right/input/system/click` | Reserved by Meta OS | **FORBIDDEN**: System reserved. |
-| **Left (Off-Hand)** | **X Button** | `ax_button` | Triggers `reset_requested` | Available. Mirror for left-handed players: Ability 1. |
-| **Left (Off-Hand)** | **Y Button** | `by_button` | Tap: `toggle_attacks`<br>Hold: `recenter_view` | Mirror for left-handed players: Ability 2. Also acts as secondary Tree Menu toggle. |
+| **Left (Off-Hand)** | **X Button** | `ax_button` | Triggers `reset_requested` | Mirror for left-handed players: Ability 1. |
+| **Left (Off-Hand)** | **Y Button** | `by_button` | Tap: `toggle_attacks`<br>Hold: `recenter_view` | Mirror for left-handed players: Ability 2. (Strictly ability only; Tree Menu toggle is EXCLUSIVELY the Left Menu Button). |
 | **Left (Off-Hand)** | **Grip (Squeeze)** | `grip`, `grip_click` | Two-handed grip on katana handle | **RESERVED**: Two-handed katana grip. |
 | **Left (Off-Hand)** | **Trigger (Index)** | `trigger`, `trigger_click` | Unused in gameplay | **UI SELECT**: Pointer trigger for selecting skill tree nodes in VR Menu. |
 | **Left (Off-Hand)** | **Thumbstick** | `primary` | Smooth locomotion (`MovementDirect.tscn`) | **RESERVED**: Smooth movement. |
 | **Left (Off-Hand)** | **Thumbstick Click** | `primary_click` | Cycles element in test room | Unused in run. |
-| **Left (Off-Hand)** | **Menu Button** | `menu_button` (`/user/hand/left/input/menu/click`) | Unbound in gameplay | **DEDICATED**: Tap = Open / Close VR Skill Tree Menu (Pause). Hold 1.0s = Recenter HMD View. |
+| **Left (Off-Hand)** | **Menu Button** | `menu_button` (`/user/hand/left/input/menu/click`) | Unbound in gameplay | **DEDICATED MENU TOGGLE**: Tap = Open / Close VR Skill Tree Menu (Pause). Hold 1.0s = Recenter HMD View. NEVER triggers abilities. |
 
 #### Desktop Rig Bindings (`DesktopPlayer.gd`)
 
@@ -413,16 +413,16 @@ Everything the player needs to know is conveyed naturally in the game world with
 - [x] **Quest Perf Risk**: MultiMesh terrain must cleanly exclude trees in the gate radius without regenerating entire chunk meshes. Torii lanterns must use unshaded emissive materials + ambient fill (zero dynamic OmniLight3D additions).
 
 ### Phase E2b: The 8 Active Abilities & Controller Bindings
-- [ ] **E2b.1: Input Architecture**: Bind Button A (`ax_button`) to Ability 1 and Button B (`by_button`) to Ability 2 on the sword hand in `XRPlayer.gd` and `DesktopPlayer.gd` (`J` and `K`). Ensure recall only activates when hand is empty (`held == null`).
-- [ ] **E2b.2: Empty Steel Protection**: Implement empty haptic click on unimbued katana with zero popup messages.
-- [ ] **E2b.3: Ability Implementations**:
+- [x] **E2b.1: Input Architecture**: Bind Button A (`ax_button`) to Ability 1 and Button B (`by_button`) to Ability 2 on the sword hand in `XRPlayer.gd` and `DesktopPlayer.gd` (`J` and `K`). Ensure recall only activates when hand is empty (`held == null`). Left Y is strictly Ability 2 mirror; tree menu toggle is exclusively the Left Menu button (`menu_button`).
+- [x] **E2b.2: Empty Steel Protection**: Implement empty haptic click (`[[0.12, 0.04]]`) on unimbued katana with zero popup messages.
+- [x] **E2b.3: Ability Implementations**:
   - Sakura: Senbonzakura (6 glass petals) & Hanamai (orbiting barrier).
   - Storm: Raikiri (chain arc) & Shiden (dash & stagger).
   - Ink: Sumi-gaeshi (ground ink cone) & Kage-nawa (root tendrils).
   - Shadow: Kagemusha (decoy clone) & Yami-watari (blink & cleave).
-- [ ] **E2b.4: Remove Old Procs**: Clean out legacy probabilistic hit procs from `element_system.gd`.
+- [x] **E2b.4: Remove Old Procs & Ensure Ongoing Expiry Completion**: Clean out legacy probabilistic hit procs from `element_system.gd`. Ensure ongoing abilities (Hanamai, ink pools, decoy) finish their full duration upon element expiration.
 - [ ] **Critical Tests**:
-  - `tests/element_abilities_test.tscn`: Each ability fires on the correct button, respects cooldown, consumes no element charges, and does nothing on plain steel.
+  - [x] `tests/element_abilities_test.tscn`: Each ability fires on the correct button, respects cooldown, consumes no element charges, does nothing on plain steel, and finishes execution if element expires mid-ability.
   - `tests/vfx_pool_test.tscn`: All ability VFX respect Quest bounds (`MAX_PETALS <= 12`, `MAX_INK_POOLS <= 6`, `MAX_TRANSIENT_MESHES <= 18`).
 
 ### Phase E2c: Ofuda Currency & Skill Tree Data Architecture
