@@ -427,7 +427,7 @@ func start_run() -> void:
 	element_system.reset()
 	if forest_world:
 		forest_world.reset()
-	set_seal_progress([], 0)
+	set_seal_progress([])
 
 	var health := _player_health()
 	if health:
@@ -581,8 +581,8 @@ func _on_oni_defeated(oni: RunOniBoss, hit: Dictionary) -> void:
 		# Pooled orbs come back still connected from their last life.
 		if not orb.collected.is_connected(_on_soul_collected):
 			orb.collected.connect(_on_soul_collected)
-	# The Oni's fall scatters a hoard of Ofuda (plan: 8–10).
-	_spawn_ofuda_drops(origin, _rng.randi_range(8, 10))
+	# The Oni's fall scatters a hoard of Ofuda (ElementBalance.OFUDA_ONI_*).
+	_spawn_ofuda_drops(origin, _rng.randi_range(ElementBalance.OFUDA_ONI_MIN, ElementBalance.OFUDA_ONI_MAX))
 	GameEvents.log_event("oni_boss_kill", {"kills": kills, "element": hit.get("element", Elements.NONE)})
 
 
@@ -598,19 +598,20 @@ func _on_enemy_died(yokai: Yokai, _hit: Dictionary) -> void:
 	for orb in orbs:
 		if not orb.collected.is_connected(_on_soul_collected):
 			orb.collected.connect(_on_soul_collected)
-	# Ofuda currency drop (E2c): swarm 35% ×1, elite guaranteed 3–4.
+	# Ofuda currency drop (ElementBalance.OFUDA_*): swarm chance ×1, elite guaranteed.
 	_spawn_ofuda_drops(origin, ofuda_drop_count_for(yokai, _rng))
 
 
 # --- Ofuda currency & skill tree (E2c) -----------------------------------------
 
 ## How many Ofuda [param yokai] drops on death, rolled with [param rng]:
-## standard yōkai 35% for 1; elites always drop 3–4. (The Oni drops 8–10,
-## see _on_oni_defeated.) Expected yield: 20–30 in a 5–7 minute run.
+## standard yōkai 25% for 1; elites always drop 1–2. (The Oni drops 5–6,
+## see _on_oni_defeated.) Expected yield: ~30 in the first 5 minutes and ~55
+## in 10 (tools/balance_sim.gd, docs/ELEMENTS_PLAN.md Phase E4).
 func ofuda_drop_count_for(yokai: Yokai, rng: RandomNumberGenerator) -> int:
 	if yokai.is_elite():
-		return rng.randi_range(3, 4)
-	return 1 if rng.randf() < 0.35 else 0
+		return rng.randi_range(ElementBalance.OFUDA_ELITE_MIN, ElementBalance.OFUDA_ELITE_MAX)
+	return 1 if rng.randf() < ElementBalance.OFUDA_SWARM_CHANCE else 0
 
 
 func _spawn_ofuda_drops(origin: Vector3, count: int) -> void:
@@ -818,7 +819,7 @@ func _seal_elements() -> Array[String]:
 
 
 func _update_element_seal() -> void:
-	set_seal_progress(_seal_elements(), 0)
+	set_seal_progress(_seal_elements())
 
 
 # --- Death, End Screen & High Score --------------------------------------------

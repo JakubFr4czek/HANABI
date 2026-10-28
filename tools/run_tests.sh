@@ -13,6 +13,7 @@ pass=0; total=0
 for n in $names; do
 	total=$((total+1))
 	r=$(cat $OUT/$n.result 2>/dev/null)
-	if [[ $r == *"exit=0 "* ]] && grep -q "ALL PASSED" $OUT/$n.log; then pass=$((pass+1)); else echo "FAIL: $r"; grep -E "FAIL|SCRIPT ERROR|TIMEOUT" $OUT/$n.log | head -5; fi
+	# A GDScript runtime error in a sync check aborts that check silently, so it counts as a failure too.
+	if [[ $r == *"exit=0 "* ]] && grep -q "ALL PASSED" $OUT/$n.log && ! grep -q "SCRIPT ERROR" $OUT/$n.log; then pass=$((pass+1)); else echo "FAIL: $r"; grep -E "FAIL|SCRIPT ERROR|TIMEOUT" $OUT/$n.log | head -5; fi
 done
 echo "testy: $pass/$total pass"

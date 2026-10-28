@@ -25,9 +25,6 @@ func _run_all() -> void:
 		run.wave_director.spawn_enemy_at(
 			Vector3(sin(i * 0.9) * 7.5, 0.0, cos(i * 0.9) * 7.5),
 			player.global_position)
-	run.upgrade_stacks["storm_chain"] = 1
-	run.upgrade_stacks["sakura_petals"] = 1
-	run.upgrade_stacks["ink_pool"] = 1
 	# Element cards retired (E2b): imbue via the Torii-gate path for VFX load.
 	run.element_system.imbue(Elements.STORM)
 	run.element_system.debug_release_petals(Vector3.FORWARD)

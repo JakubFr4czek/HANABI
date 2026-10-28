@@ -5,8 +5,12 @@ extends RefCounted
 ## Four trees (Sakura, Storm, Ink, Shadow) of five nodes each. Node 1 is the
 ## school awakening, Nodes 2/3 augment Ability 1/2, Node 4 is a passive that
 ## needs Node 2 OR Node 3, and Node 5 is the master technique needing Node 4.
-## Costs are 2/4/4/6/8 Ofuda — 24 for a full tree, calibrated so a single
-## 5–10 minute demo run (20–30 Ofuda expected yield) can finish one tree.
+## Costs are 3/5/5/8/12 Ofuda — 33 for a full tree. Phase E4 calibration
+## (tools/balance_sim.gd): an average player earns ~13 Ofuda by minute 3, ~30
+## by minute 5 and ~55 by minute 10, so Node 1 lands inside the first minute,
+## three nodes by ~2:30, the passive by ~4:00, the master technique around
+## 6:30 and a second school is started in the 8–10 minute window.
+## All numeric effects come from [ElementBalance].
 ##
 ## This class is pure data + unlock state: it never touches the scene tree.
 ## [RunGame] owns the Ofuda wallet and spends through [method try_unlock];
@@ -14,6 +18,9 @@ extends RefCounted
 ## [method effect_value], so an unlock changes the ability it names.
 ## Unlock state is per-run: [method reset] clears it (called on run start
 ## and on player death).
+
+## Seconds a school imbue lasts once its Node 1 is bought (20 s + the node bonus).
+const IMBUE_T1 := ElementBalance.IMBUE_SECONDS + ElementBalance.IMBUE_NODE_BONUS_SECONDS
 
 const REASON_OK := "ok"
 const REASON_UNKNOWN_NODE := "unknown_node"
@@ -30,144 +37,144 @@ const NODES: Array[Dictionary] = [
 		"id": "petal_sense", "element": Elements.SAKURA, "tier": 1,
 		"kanji": "花気", "title": "PETAL SENSE",
 		"subtitle": "Senbonzakura +25% damage · imbue 24 s",
-		"cost": 2, "requires_all": [], "requires_any": [],
-		"effects": {"senbonzakura_damage": 20.0, "imbue_duration": 24.0},
+		"cost": 3, "requires_all": [], "requires_any": [],
+		"effects": {"senbonzakura_damage": ElementBalance.SENBONZAKURA_DAMAGE_T1, "imbue_duration": IMBUE_T1},
 	},
 	{
 		"id": "razor_petals", "element": Elements.SAKURA, "tier": 2,
 		"kanji": "刃花", "title": "RAZOR PETALS",
-		"subtitle": "Senbonzakura: 8 petals, pierces all",
-		"cost": 4, "requires_all": ["petal_sense"], "requires_any": [],
-		"effects": {"senbonzakura_petal_count": 8, "senbonzakura_pierce": 99},
+		"subtitle": "Senbonzakura: 7 petals, pierces all",
+		"cost": 5, "requires_all": ["petal_sense"], "requires_any": [],
+		"effects": {"senbonzakura_petal_count": ElementBalance.SENBONZAKURA_PETALS_T2, "senbonzakura_pierce": ElementBalance.SENBONZAKURA_PIERCE_T2},
 	},
 	{
 		"id": "hanami_storm", "element": Elements.SAKURA, "tier": 3,
 		"kanji": "花宴", "title": "STORM OF HANAMI",
 		"subtitle": "Hanamai 8.5 s · damage taken −45%",
-		"cost": 4, "requires_all": ["petal_sense"], "requires_any": [],
-		"effects": {"hanamai_duration": 8.5, "incoming_damage_multiplier": 0.55},
+		"cost": 5, "requires_all": ["petal_sense"], "requires_any": [],
+		"effects": {"hanamai_duration": ElementBalance.HANAMAI_DURATION_T3, "incoming_damage_multiplier": ElementBalance.HANAMAI_DAMAGE_TAKEN_T3},
 	},
 	{
 		"id": "life_bloom", "element": Elements.SAKURA, "tier": 4,
 		"kanji": "命咲", "title": "LIFE BLOOM",
 		"subtitle": "Sakura cuts heal 4 HP · kills heal 12 HP",
-		"cost": 6, "requires_all": [], "requires_any": ["razor_petals", "hanami_storm"],
-		"effects": {"heal_on_hit": 4.0, "heal_on_kill": 12.0},
+		"cost": 8, "requires_all": [], "requires_any": ["razor_petals", "hanami_storm"],
+		"effects": {"heal_on_hit": ElementBalance.LIFE_BLOOM_HEAL_HIT, "heal_on_kill": ElementBalance.LIFE_BLOOM_HEAL_KILL},
 	},
 	{
 		"id": "senbonzakura_kageyoshi", "element": Elements.SAKURA, "tier": 5,
 		"kanji": "景厳", "title": "SENBONZAKURA KAGEYOSHI",
-		"subtitle": "Senbonzakura during Hanamai detonates the orbit (80 dmg)",
-		"cost": 8, "requires_all": ["life_bloom"], "requires_any": [],
-		"effects": {"kageyoshi_burst_damage": 80.0},
+		"subtitle": "Senbonzakura during Hanamai detonates the orbit (120 dmg)",
+		"cost": 12, "requires_all": ["life_bloom"], "requires_any": [],
+		"effects": {"kageyoshi_burst_damage": ElementBalance.KAGEYOSHI_DAMAGE},
 	},
 	# --- Storm (雷) ----------------------------------------------------------
 	{
 		"id": "static_conduit", "element": Elements.STORM, "tier": 1,
 		"kanji": "導電", "title": "STATIC CONDUIT",
 		"subtitle": "Raikiri chains to 5 · imbue 24 s",
-		"cost": 2, "requires_all": [], "requires_any": [],
-		"effects": {"raikiri_chain_targets": 5, "imbue_duration": 24.0},
+		"cost": 3, "requires_all": [], "requires_any": [],
+		"effects": {"raikiri_chain_targets": ElementBalance.RAIKIRI_CHAIN_TARGETS_T1, "imbue_duration": IMBUE_T1},
 	},
 	{
 		"id": "thunder_splitter", "element": Elements.STORM, "tier": 2,
 		"kanji": "雷破", "title": "THUNDER SPLITTER",
 		"subtitle": "Raikiri cooldown 2.5 s · primary target stunned",
-		"cost": 4, "requires_all": ["static_conduit"], "requires_any": [],
-		"effects": {"cooldown_ability_1": 2.5, "raikiri_stun_duration": 1.0},
+		"cost": 5, "requires_all": ["static_conduit"], "requires_any": [],
+		"effects": {"cooldown_ability_1": ElementBalance.RAIKIRI_COOLDOWN_T2, "raikiri_stun_duration": ElementBalance.RAIKIRI_STUN_T2},
 	},
 	{
 		"id": "flash_stride", "element": Elements.STORM, "tier": 3,
 		"kanji": "瞬歩", "title": "FLASH STRIDE",
 		"subtitle": "Shiden dash 6.0 m · stagger 2.2 s",
-		"cost": 4, "requires_all": ["static_conduit"], "requires_any": [],
-		"effects": {"shiden_distance": 6.0, "shiden_stagger": 2.2},
+		"cost": 5, "requires_all": ["static_conduit"], "requires_any": [],
+		"effects": {"shiden_distance": ElementBalance.SHIDEN_DISTANCE_T3, "shiden_stagger": ElementBalance.SHIDEN_STAGGER_T3},
 	},
 	{
 		"id": "overcharge", "element": Elements.STORM, "tier": 4,
 		"kanji": "過負荷", "title": "OVERCHARGE",
-		"subtitle": "Storm cuts arc 12 dmg to a nearby yōkai",
-		"cost": 6, "requires_all": [], "requires_any": ["thunder_splitter", "flash_stride"],
-		"effects": {"overcharge_damage": 12.0},
+		"subtitle": "Storm cuts arc 14 dmg to a nearby yōkai",
+		"cost": 8, "requires_all": [], "requires_any": ["thunder_splitter", "flash_stride"],
+		"effects": {"overcharge_damage": ElementBalance.OVERCHARGE_DAMAGE},
 	},
 	{
 		"id": "ikazuchi_avatar", "element": Elements.STORM, "tier": 5,
 		"kanji": "雷神", "title": "IKAZUCHI AVATAR",
 		"subtitle": "Shiden leaves a 4 s lightning barrier",
-		"cost": 8, "requires_all": ["overcharge"], "requires_any": [],
-		"effects": {"shiden_barrier_duration": 4.0, "shiden_barrier_damage": 20.0},
+		"cost": 12, "requires_all": ["overcharge"], "requires_any": [],
+		"effects": {"shiden_barrier_duration": ElementBalance.IKAZUCHI_DURATION, "shiden_barrier_damage": ElementBalance.IKAZUCHI_DAMAGE},
 	},
 	# --- Ink (墨) ------------------------------------------------------------
 	{
 		"id": "sumi_mastery", "element": Elements.INK, "tier": 1,
 		"kanji": "墨法", "title": "SUMI MASTERY",
 		"subtitle": "Ink slow 75% · imbue 24 s",
-		"cost": 2, "requires_all": [], "requires_any": [],
-		"effects": {"ink_slow_scale": 0.25, "imbue_duration": 24.0},
+		"cost": 3, "requires_all": [], "requires_any": [],
+		"effects": {"ink_slow_scale": ElementBalance.SUMI_SLOW_SCALE_T1, "imbue_duration": IMBUE_T1},
 	},
 	{
 		"id": "splatter_tide", "element": Elements.INK, "tier": 2,
 		"kanji": "墨浪", "title": "SPLATTER TIDE",
 		"subtitle": "Sumi-gaeshi 90° cone · ink damage ×2",
-		"cost": 4, "requires_all": ["sumi_mastery"], "requires_any": [],
-		"effects": {"sumi_cone_half_deg": 45.0, "ink_dps": 14.0},
+		"cost": 5, "requires_all": ["sumi_mastery"], "requires_any": [],
+		"effects": {"sumi_cone_half_deg": ElementBalance.SUMI_HALF_DEGREES_T2, "ink_dps": ElementBalance.SUMI_POOL_DPS_T2},
 	},
 	{
 		"id": "black_bind", "element": Elements.INK, "tier": 3,
 		"kanji": "黒縛", "title": "BLACK BIND",
 		"subtitle": "Kage-nawa snares 5 · pulls into melee",
-		"cost": 4, "requires_all": ["sumi_mastery"], "requires_any": [],
-		"effects": {"kage_nawa_targets": 5},
+		"cost": 5, "requires_all": ["sumi_mastery"], "requires_any": [],
+		"effects": {"kage_nawa_targets": ElementBalance.KAGE_NAWA_TARGETS_T3},
 	},
 	{
 		"id": "dragon_calligraphy", "element": Elements.INK, "tier": 4,
 		"kanji": "墨龍", "title": "DRAGON CALLIGRAPHY",
 		"subtitle": "Yōkai standing in ink take +35% sword damage",
-		"cost": 6, "requires_all": [], "requires_any": ["splatter_tide", "black_bind"],
-		"effects": {"dragon_damage_multiplier": 1.35},
+		"cost": 8, "requires_all": [], "requires_any": ["splatter_tide", "black_bind"],
+		"effects": {"dragon_damage_multiplier": ElementBalance.DRAGON_DAMAGE_MULTIPLIER},
 	},
 	{
 		"id": "abyssal_sea", "element": Elements.INK, "tier": 5,
 		"kanji": "墨海", "title": "ABYSSAL SEA",
 		"subtitle": "Your ink grants +20% speed and a damage ward",
-		"cost": 8, "requires_all": ["dragon_calligraphy"], "requires_any": [],
-		"effects": {"abyssal_speed_multiplier": 1.2},
+		"cost": 12, "requires_all": ["dragon_calligraphy"], "requires_any": [],
+		"effects": {"abyssal_speed_multiplier": ElementBalance.ABYSSAL_SPEED_MULTIPLIER},
 	},
 	# --- Shadow (影) ----------------------------------------------------------
 	{
 		"id": "night_veil", "element": Elements.SHADOW, "tier": 1,
 		"kanji": "夜帳", "title": "NIGHT VEIL",
-		"subtitle": "Kagemusha decoy 5.0 s · imbue 24 s",
-		"cost": 2, "requires_all": [], "requires_any": [],
-		"effects": {"kagemusha_duration": 5.0, "imbue_duration": 24.0},
+		"subtitle": "Kagemusha decoy 6.0 s · imbue 24 s",
+		"cost": 3, "requires_all": [], "requires_any": [],
+		"effects": {"kagemusha_duration": ElementBalance.KAGEMUSHA_SECONDS_T1, "imbue_duration": IMBUE_T1},
 	},
 	{
 		"id": "phantom_retaliation", "element": Elements.SHADOW, "tier": 2,
 		"kanji": "幻影", "title": "PHANTOM RETALIATION",
-		"subtitle": "Decoy expiry explodes for 45 dmg",
-		"cost": 4, "requires_all": ["night_veil"], "requires_any": [],
-		"effects": {"decoy_explosion_damage": 45.0},
+		"subtitle": "Decoy expiry explodes for 60 dmg",
+		"cost": 5, "requires_all": ["night_veil"], "requires_any": [],
+		"effects": {"decoy_explosion_damage": ElementBalance.DECOY_EXPLOSION_DAMAGE},
 	},
 	{
 		"id": "umbral_reach", "element": Elements.SHADOW, "tier": 3,
 		"kanji": "影界", "title": "UMBRAL REACH",
-		"subtitle": "Yami-watari range 6.5 m · cooldown 5.5 s",
-		"cost": 4, "requires_all": ["night_veil"], "requires_any": [],
-		"effects": {"yami_range": 6.5, "cooldown_ability_2": 5.5},
+		"subtitle": "Yami-watari range 6.5 m · cooldown 5.0 s",
+		"cost": 5, "requires_all": ["night_veil"], "requires_any": [],
+		"effects": {"yami_range": ElementBalance.YAMI_RANGE_T3, "cooldown_ability_2": ElementBalance.YAMI_COOLDOWN_T3},
 	},
 	{
 		"id": "backstab_execution", "element": Elements.SHADOW, "tier": 4,
 		"kanji": "暗殺", "title": "BACKSTAB EXECUTION",
 		"subtitle": "Rear strikes ×2.5 and yield 1 bonus Ofuda",
-		"cost": 6, "requires_all": [], "requires_any": ["phantom_retaliation", "umbral_reach"],
-		"effects": {"backstab_multiplier": 2.5, "backstab_ofuda": 1},
+		"cost": 8, "requires_all": [], "requires_any": ["phantom_retaliation", "umbral_reach"],
+		"effects": {"backstab_multiplier": ElementBalance.BACKSTAB_MULTIPLIER, "backstab_ofuda": ElementBalance.BACKSTAB_OFUDA},
 	},
 	{
 		"id": "shadow_clones", "element": Elements.SHADOW, "tier": 5,
 		"kanji": "影分身", "title": "SHADOW CLONES",
 		"subtitle": "Yami-watari: next cut is mirrored on 2 nearby yōkai",
-		"cost": 8, "requires_all": ["backstab_execution"], "requires_any": [],
-		"effects": {"shadow_clone_count": 2},
+		"cost": 12, "requires_all": ["backstab_execution"], "requires_any": [],
+		"effects": {"shadow_clone_count": ElementBalance.SHADOW_CLONES},
 	},
 ]
 
@@ -236,7 +243,7 @@ func prerequisites_met(id: String) -> bool:
 func can_unlock(id: String, ofuda_available: int) -> Dictionary:
 	var node := node_by_id(id)
 	if node.is_empty():
-		return {"ok": false, "reason": REASON_UNKNOWN_NODE, "cost": 0}
+		return {"ok": false, "reason": REASON_UNKNOWN_NODE, "cost": 12}
 	if is_unlocked(id):
 		return {"ok": false, "reason": REASON_ALREADY_UNLOCKED, "cost": int(node.cost)}
 	if not prerequisites_met(id):

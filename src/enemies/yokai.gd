@@ -1135,8 +1135,7 @@ func _try_claw_player(damage: float, attack: String) -> void:
 		var decoy_pos := decoy.global_position
 		if root_part().global_position.distance_to(decoy_pos) < 1.6:
 			_hit_player_this_strike = true
-			if decoy.has_method("on_hit"):
-				decoy.on_hit()
+			get_tree().call_group("element_system", "on_decoy_struck")
 			return
 	var health := get_tree().get_first_node_in_group("player_health") as PlayerHealth
 	if health == null or not health.is_alive():
