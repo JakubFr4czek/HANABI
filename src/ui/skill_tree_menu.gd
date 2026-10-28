@@ -428,7 +428,7 @@ static func reason_text(reason: String) -> String:
 		SkillTreeData.REASON_PREREQUISITE:
 			return "Master the earlier technique first."
 		SkillTreeData.REASON_OFUDA:
-			return "Gather more Ofuda from slain yōkai."
+			return "Find hokora shrines in the forest for more Ofuda."
 		SkillTreeData.REASON_ALREADY_UNLOCKED:
 			return "Already part of your school."
 	return ""

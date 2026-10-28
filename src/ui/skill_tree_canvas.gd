@@ -337,7 +337,10 @@ func _draw_header() -> void:
 		_text("術", Vector2(62, 22), 74, GILT)
 		_text("ELEMENTAL ARTS", Vector2(150, 22), 40, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 650)
 		_text("一時停止", Vector2(580, 32), 24, GILT)
-		_text("Spend Ofuda to deepen the school on your blade", Vector2(152, 68), 26, DIM)
+		# D1: Ofuda come only from hokora shrines; say so while the wallet is empty.
+		var subtitle := "Spend Ofuda to deepen the school on your blade" if balance > 0 \
+			else "Ofuda: find the hokora shrines in the forest"
+		_text(subtitle, Vector2(152, 68), 26, DIM)
 	# Ofuda balance plaque.
 	_box(BALANCE_RECT, LACQUER_SUNK, Color(CINNABAR, 0.85), 2, 12)
 	_text("OFUDA", Vector2(BALANCE_RECT.position.x + 22, BALANCE_RECT.position.y + 10), 20, DIM)

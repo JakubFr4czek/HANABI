@@ -3,17 +3,18 @@ extends "res://src/core/test_room.gd"
 ## Survival run loop on the Dojo of the Storm shrine platform (docs/GDD.md §3, §6, NIGHT_PLAN.md §1):
 ## - Endless yōkai waves emerging from the fog across the water
 ## - Hitodama soul drops that drift into the player and grant XP
-## - Rising XP curve; on level-up time slows and 3 floating Ofuda appear in front
-##   of the player — slicing one with the katana selects the upgrade
+## - Rising XP curve; a level-up is a rank plus a small heal (D1: no card choice,
+##   no slow-motion, no upgrade pool — the Ofuda tree is the only progression)
+## - Ofuda, the one currency, come only from hokora shrines in the forest
+##   (HokoraManager); the wrist tally counts them, the tree spends them
 ## - Diegetic HUD on the katana tsuba (XP ring) and wrist (glowing HP charm, XP,
 ##   time, score, level) with no floating 2D screen-space UI
 ## - Death ends the run, saves local high score, and presents an in-world
-##   memorial stele + a Restart Ofuda that starts a new run when sliced.
+##   memorial stele + a Restart Ema (wooden votive plaque) that starts a new run
+##   when sliced.
 
-enum RunState { INTRO, PLAYING, LEVEL_UP, GAME_OVER }
+enum RunState { INTRO, PLAYING, GAME_OVER }
 
-signal level_up_started(level: int, choices: Array[Dictionary])
-signal upgrade_chosen(upgrade: Dictionary, level: int)
 signal run_ended(summary: Dictionary)
 signal run_started
 signal ofuda_changed(count: int)
@@ -25,6 +26,8 @@ signal skill_unlocked(node_id: String)
 const RUN_FOG_END := 10.5
 ## Night "milk" fog (sRGB): pale moonlit haze that swallows the forest.
 const RUN_FOG_COLOR := Color(0.5, 0.53, 0.6)
+## Health restored by each level-up (D1: the rank is the reward, the heal is the rest).
+const LEVEL_UP_HEAL_HP := 10.0
 
 @export var high_score_path := "user://high_score.cfg"
 @export var base_magnet_radius := 3.8
@@ -43,11 +46,13 @@ var score := 0
 var high_score := 0
 var new_record := false
 var soul_magnet_radius := 3.8
-var upgrade_stacks := {}  # upgrade_id -> int
-## Ofuda skill-tree currency (E2c): collected from yōkai drops, spent only
-## through [method unlock_skill]. Bank and unlocks reset every run.
+## Ofuda skill-tree currency (E2c, D1): collected from hokora shrines only,
+## spent only through [method unlock_skill]. Bank and unlocks reset every run.
 var ofuda_count := 0
 var skill_tree: SkillTreeData = null
+## Hokora shrines this run gave their Ofuda (D1). Reset every run.
+var shrines_claimed := 0
+var hokora_manager: HokoraManager = null
 
 var wave_director: WaveDirector
 var pause_controller: PauseController
@@ -58,15 +63,12 @@ const RUN_COMBAT_FOG := preload("res://src/run/run_combat_fog.gd")
 
 var combat_fog: Node
 var run_intro: RunIntro
-var active_ofuda: Array[OfudaTalisman] = []
-var restart_ofuda: OfudaTalisman = null
+var restart_ema: VotiveTablet = null
 
 var _souls_root: Node3D
-var _ofuda_root: Node3D
 var _ofuda_pickups_root: Node3D
 var _end_screen_root: Node3D
 var _base_move_speed := 3.0
-var _pending_level_ups := 0
 var _base_max_force := 260.0
 var _base_max_torque := 40.0
 var _base_follow_freq := 9.0
@@ -251,6 +253,12 @@ func _configure_run_forest() -> void:
 		forest_world.moon_direction = moon.global_basis.z.normalized()
 	_configure_run_light(we, moon)
 	forest_world.setup(player, arena_lm)
+	if hokora_manager == null:
+		hokora_manager = HokoraManager.new()
+		hokora_manager.name = "HokoraManager"
+		add_child(hokora_manager)
+		hokora_manager.shrine_claimed.connect(_on_hokora_claimed)
+	hokora_manager.setup(forest_world, player, forest_world.torii_manager)
 	if get_node_or_null("RunForestAmbience") == null:
 		var forest_amb := RunForestAmbience.new()
 		forest_amb.name = "RunForestAmbience"
@@ -326,10 +334,6 @@ func _setup_run_nodes() -> void:
 	_souls_root.name = "Souls"
 	add_child(_souls_root)
 
-	_ofuda_root = Node3D.new()
-	_ofuda_root.name = "OfudaChoices"
-	add_child(_ofuda_root)
-
 	_ofuda_pickups_root = Node3D.new()
 	_ofuda_pickups_root.name = "OfudaPickups"
 	add_child(_ofuda_pickups_root)
@@ -403,7 +407,6 @@ func start_run() -> void:
 	if VfxPool:
 		VfxPool.ensure_run_budget(40)
 	_clear_souls()
-	_clear_ofuda()
 	_clear_end_screen()
 	wave_director.clear_enemies()
 	wave_director.stop_director()
@@ -417,9 +420,8 @@ func start_run() -> void:
 	kills = 0
 	score = 0
 	new_record = false
-	_pending_level_ups = 0
-	upgrade_stacks.clear()
 	soul_magnet_radius = base_magnet_radius
+	shrines_claimed = 0
 	# Per-run progression (E2c): Ofuda bank, tree unlocks and loose drops reset.
 	ofuda_count = 0
 	if skill_tree:
@@ -428,6 +430,9 @@ func start_run() -> void:
 	element_system.reset()
 	if forest_world:
 		forest_world.reset()
+	# After the forest: the opening shrine is validated against the chunks around the spawn.
+	if hokora_manager and spawn:
+		hokora_manager.reset(spawn.global_position, -spawn.global_transform.basis.z)
 	set_seal_progress([])
 
 	var health := _player_health()
@@ -509,6 +514,8 @@ static func xp_for_level(current_level: int) -> int:
 
 func _physics_process(delta: float) -> void:
 	var p_pos := _player_center()
+	if hokora_manager:
+		hokora_manager.accepting_claims = state == RunState.PLAYING
 	if state == RunState.PLAYING:
 		run_time += delta
 		if (element_system and element_system.current_element != Elements.NONE) or (katana and katana.element != Elements.NONE):
@@ -557,15 +564,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	var key: int = event.physical_keycode
-	if state == RunState.LEVEL_UP:
-		if key in [KEY_1, KEY_2, KEY_3]:
-			var idx: int = key - KEY_1
-			slice_ofuda_choice(idx)
-			get_viewport().set_input_as_handled()
-			return
 	if key == KEY_R:
-		if state == RunState.GAME_OVER and restart_ofuda and is_instance_valid(restart_ofuda):
-			restart_ofuda.slice(restart_ofuda.global_position, Vector3.RIGHT)
+		if state == RunState.GAME_OVER and restart_ema and is_instance_valid(restart_ema):
+			restart_ema.slice(restart_ema.global_position, Vector3.RIGHT)
 		else:
 			start_run()
 		get_viewport().set_input_as_handled()
@@ -598,8 +599,6 @@ func _on_oni_defeated(oni: RunOniBoss, hit: Dictionary) -> void:
 		# Pooled orbs come back still connected from their last life.
 		if not orb.collected.is_connected(_on_soul_collected):
 			orb.collected.connect(_on_soul_collected)
-	# The Oni's fall scatters a hoard of Ofuda (ElementBalance.OFUDA_ONI_*).
-	_spawn_ofuda_drops(origin, _rng.randi_range(ElementBalance.OFUDA_ONI_MIN, ElementBalance.OFUDA_ONI_MAX))
 	GameEvents.log_event("oni_boss_kill", {"kills": kills, "element": hit.get("element", Elements.NONE)})
 
 
@@ -615,27 +614,22 @@ func _on_enemy_died(yokai: Yokai, _hit: Dictionary) -> void:
 	for orb in orbs:
 		if not orb.collected.is_connected(_on_soul_collected):
 			orb.collected.connect(_on_soul_collected)
-	# Ofuda currency drop (ElementBalance.OFUDA_*): swarm chance ×1, elite guaranteed.
-	_spawn_ofuda_drops(origin, ofuda_drop_count_for(yokai, _rng))
 
 
-# --- Ofuda currency & skill tree (E2c) -----------------------------------------
+# --- Ofuda currency & skill tree (E2c, D1) -------------------------------------
 
-## How many Ofuda [param yokai] drops on death, rolled with [param rng]:
-## standard yōkai 25% for 1; elites always drop 1–2. (The Oni drops 5–6,
-## see _on_oni_defeated.) Expected yield: ~30 in the first 5 minutes and ~55
-## in 10 (tools/balance_sim.gd, docs/ELEMENTS_PLAN.md Phase E4).
-func ofuda_drop_count_for(yokai: Yokai, rng: RandomNumberGenerator) -> int:
-	if yokai.is_elite():
-		return rng.randi_range(ElementBalance.OFUDA_ELITE_MIN, ElementBalance.OFUDA_ELITE_MAX)
-	return 1 if rng.randf() < ElementBalance.OFUDA_SWARM_CHANCE else 0
-
-
-func _spawn_ofuda_drops(origin: Vector3, count: int) -> void:
-	if count <= 0 or _ofuda_pickups_root == null:
+## The only source of Ofuda is a hokora shrine (D1). Yōkai, elites and the Oni
+## drop nothing: a kill is XP and a kill count, never currency.
+func _on_hokora_claimed(shrine: HokoraShrine, count: int) -> void:
+	shrines_claimed += 1
+	GameEvents.log_event("hokora_claimed", {"slot": [shrine.slot.x, shrine.slot.y], "ofuda": count})
+	if _ofuda_pickups_root == null:
 		return
-	for pickup in OfudaPickup.spawn_drops(_ofuda_pickups_root, origin, count, _rng):
+	# The Ofuda rise off the offering table and drift to the player (the magnet rule
+	# of OfudaPickup); each one counts only when it arrives.
+	for pickup in OfudaPickup.spawn_drops(_ofuda_pickups_root, shrine.altar_position(), count, _rng):
 		pickup.collected.connect(_on_ofuda_pickup_collected)
+	_refresh_hud()
 
 
 func _on_ofuda_pickup_collected(_pickup: OfudaPickup) -> void:
@@ -682,127 +676,25 @@ func add_xp(amount: int) -> void:
 		xp -= xp_to_next
 		level += 1
 		xp_to_next = xp_for_level(level)
-		_pending_level_ups += 1
 		GameEvents.log_event("level_up", {"level": level, "xp_to_next": xp_to_next})
-	if _pending_level_ups > 0 and state == RunState.PLAYING:
-		_present_level_up()
+		_on_level_up()
 	_refresh_hud()
 
 
-# --- Level-Up & Ofuda Slicing --------------------------------------------------
+# --- Level-up (rank + heal; no choice, no slow-motion) -------------------------------
 
-func _present_level_up() -> void:
-	if _pending_level_ups <= 0 or state == RunState.GAME_OVER:
-		return
-	_pending_level_ups -= 1
-	state = RunState.LEVEL_UP
-	_clear_ofuda()
-
-	# Slow time to 0.2x while keeping the player's blade at real-time speed.
-	TimeController.slow_motion(0.2, 120.0, true)
-
+## A level-up is a rank and a small rest. Power grows only through the Ofuda tree
+## and the soul rank (D1), so there is nothing to pick and no time to slow.
+func _on_level_up() -> void:
+	var health := _player_health()
+	if health and health.is_alive():
+		health.heal(LEVEL_UP_HEAL_HP)
 	var frame := _player_view_frame()
 	var chime_pos := frame.origin + (-frame.basis.z) * 0.8
 	Sfx.play_at("level_up", chime_pos, -4.0, 5.0)
 	var music := get_node_or_null("StormMusic") as StormMusic
 	if music:
 		music.duck_for_level_up(2.8, -9.0)
-
-	var health := _player_health()
-	var hp_ratio := (health.hp / maxf(health.max_hp, 1.0)) if health else 1.0
-	var choices := UpgradePool.pick_choices(3, upgrade_stacks, hp_ratio, _rng)
-
-	frame = _clear_frame(frame, [Vector3(-0.38, 0.0, -1.16), Vector3(0.0, 0.0, -1.16), Vector3(0.38, 0.0, -1.16), Vector3(0.0, 0.0, -0.6)])
-	var center := frame.origin + (-frame.basis.z) * 1.16
-	var ground := _ui_ground(frame.origin)
-	center.y = clampf(frame.origin.y - 0.14, ground + 1.15, ground + 1.55)
-	var right := frame.basis.x
-	var offsets: Array[float] = [-0.38, 0.0, 0.38]
-
-	for i in choices.size():
-		var ofuda := OfudaTalisman.new()
-		ofuda.setup(choices[i], i)
-		var depth_bias := 0.04 if i == 1 else 0.0
-		var card_pos: Vector3 = center + right * offsets[i] + (-frame.basis.z) * depth_bias
-		_ofuda_root.add_child(ofuda)
-		ofuda.global_position = card_pos
-		var look_target := Vector3(frame.origin.x, card_pos.y, frame.origin.z)
-		if card_pos.distance_to(look_target) > 0.05:
-			ofuda.look_at(look_target, Vector3.UP, true)
-		ofuda.sliced.connect(_on_ofuda_sliced)
-		active_ofuda.append(ofuda)
-
-	level_up_started.emit(level, choices)
-
-
-## Slice Ofuda [param index] (0 = left, 1 = center, 2 = right).
-func slice_ofuda_choice(index: int) -> void:
-	if index < 0 or index >= active_ofuda.size():
-		return
-	var target := active_ofuda[index]
-	if is_instance_valid(target) and not target.is_sliced:
-		target.slice(target.global_position, Vector3.RIGHT)
-
-
-func _on_ofuda_sliced(chosen: OfudaTalisman, upgrade: Dictionary) -> void:
-	if state != RunState.LEVEL_UP:
-		return
-	for o in active_ofuda:
-		if is_instance_valid(o) and o != chosen:
-			o.dismiss()
-	active_ofuda.clear()
-
-	_apply_upgrade(upgrade)
-	upgrade_chosen.emit(upgrade, level)
-
-	if _pending_level_ups > 0 and (_player_health() == null or _player_health().is_alive()):
-		_present_level_up()
-	else:
-		TimeController.clear()
-		if state == RunState.LEVEL_UP:
-			state = RunState.PLAYING
-	_refresh_hud()
-
-
-func _apply_upgrade(upgrade: Dictionary) -> void:
-	var id := String(upgrade.get("id", ""))
-	# Only real generic upgrades exist in the pool (E2c): unknown ids —
-	# including the retired element cards — are ignored, never stacked, so
-	# no chosen card can ever be a dead no-op.
-	if id == "" or UpgradePool.get_upgrade(id).is_empty():
-		return
-	var stacks := int(upgrade_stacks.get(id, 0)) + 1
-	upgrade_stacks[id] = stacks
-	var health := _player_health()
-
-	match id:
-		"damage":
-			if katana:
-				katana.damage_multiplier = 1.0 + 0.25 * float(stacks)
-		"max_hp":
-			if health:
-				health.add_max_hp(25.0, true)
-		"heal":
-			if health:
-				health.heal(50.0)
-		"magnet":
-			soul_magnet_radius = base_magnet_radius * (1.0 + 0.45 * float(stacks))
-		"arm_strength":
-			if katana:
-				var mult := 1.0 + 0.25 * float(stacks)
-				katana.max_force = _base_max_force * mult
-				katana.max_torque = _base_max_torque * mult
-				katana.follow_frequency = _base_follow_freq * (1.0 + 0.12 * float(stacks))
-				katana.angular_frequency = _base_angular_freq * (1.0 + 0.12 * float(stacks))
-		"regen":
-			if health:
-				health.regen_per_sec = 2.5 * float(stacks)
-
-	GameEvents.log_event("upgrade_picked", {
-		"id": id,
-		"stacks": stacks,
-		"level": level,
-	})
 
 
 func _on_game_hit(hit: Dictionary) -> void:
@@ -849,7 +741,6 @@ func _on_player_died() -> void:
 	if state == RunState.GAME_OVER:
 		return
 	state = RunState.GAME_OVER
-	_pending_level_ups = 0
 	# Per-run progression ends with the run (E2c): bank and unlocks reset.
 	ofuda_count = 0
 	if skill_tree:
@@ -864,11 +755,6 @@ func _on_player_died() -> void:
 	var oni := wave_director.get_active_oni()
 	if is_instance_valid(oni) and not oni.is_dead:
 		oni._on_permanent_defeat()
-	for o in active_ofuda:
-		if is_instance_valid(o):
-			o.dismiss()
-	active_ofuda.clear()
-
 	score = compute_score()
 	new_record = score > high_score
 	if new_record:
@@ -883,7 +769,7 @@ func _on_player_died() -> void:
 		"kills": kills,
 		"level": level,
 		"wave": wave_director.wave,
-		"upgrades": upgrade_stacks.duplicate(),
+		"shrines": shrines_claimed,
 		"build": element_system.build_summary() if element_system else "Unbound",
 	}
 	GameEvents.log_event("run_ended", summary)
@@ -961,56 +847,36 @@ func _build_end_screen(summary: Dictionary) -> void:
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		board.add_child(lbl)
 
-	var upg_parts: Array[String] = []
-	for u_id in upgrade_stacks:
-		var def := UpgradePool.get_upgrade(String(u_id))
-		var tag := String(def.get("kanji", ""))
-		if tag.is_empty():
-			tag = String(def.get("title", String(u_id))).substr(0, 3)
-		upg_parts.append("%s×%d" % [tag, int(upgrade_stacks[u_id])])
-	var upg_line := _short_upgrade_line(upg_parts)
-	var upg_lbl := MemorialTypography.stele_label(upg_line, 28, 0.00108, Color(0.74, 0.8, 0.92), Vector3(0, -0.19, 0.024))
+	# One line for what the run gave back: shrines found (D1).
+	var shrine_line := "祠  ×%d  visited" % shrines_claimed
+	var upg_lbl := MemorialTypography.stele_label(shrine_line, 28, 0.00108, Color(0.74, 0.8, 0.92), Vector3(0, -0.19, 0.024))
 	upg_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	board.add_child(upg_lbl)
 
-	# Floating Restart Ofuda positioned cleanly to the right of the Memorial Stele:
-	# slice it with the katana to begin a fresh run.
-	restart_ofuda = OfudaTalisman.new()
-	restart_ofuda.setup({
-		"id": "restart",
-		"header": "御札 · NEW RUN",
+	# A wooden votive plaque (絵馬 ema) hangs to the right of the stele: slice it to
+	# begin a fresh run. It is not Ofuda and never reads as currency (D1).
+	restart_ema = VotiveTablet.new()
+	restart_ema.setup({
+		"header": "絵馬 · NEW RUN",
 		"kanji": "再",
 		"title": "RUN AGAIN",
 		"subtitle": "Slice to begin anew",
-		"color": Color(1.0, 0.34, 0.24),
+		"color": Color(0.95, 0.52, 0.28),
+		"material": "wood",
 	}, 0)
 	var r_pos := frame.origin + (-frame.basis.z) * 1.14 + frame.basis.x * 0.38
 	r_pos.y = _ui_height(frame.origin, r_pos, 1.24)
-	_end_screen_root.add_child(restart_ofuda)
-	restart_ofuda.global_position = r_pos
+	_end_screen_root.add_child(restart_ema)
+	restart_ema.global_position = r_pos
 	var r_look := Vector3(frame.origin.x, r_pos.y, frame.origin.z)
 	if r_pos.distance_to(r_look) > 0.05:
-		restart_ofuda.look_at(r_look, Vector3.UP, true)
-	restart_ofuda.sliced.connect(_on_restart_ofuda_sliced)
+		restart_ema.look_at(r_look, Vector3.UP, true)
+	restart_ema.sliced.connect(_on_restart_ema_sliced)
 
 
-func _on_restart_ofuda_sliced(_ofuda: OfudaTalisman, _upgrade: Dictionary) -> void:
-	restart_ofuda = null
+func _on_restart_ema_sliced(_tablet: VotiveTablet, _entry: Dictionary) -> void:
+	restart_ema = null
 	start_run()
-
-
-func _short_upgrade_line(parts: Array[String]) -> String:
-	if parts.is_empty():
-		return "拾得  —"
-	const MAX_SHOW := 3
-	const MAX_CHARS := 36
-	var shown := parts.slice(0, MAX_SHOW)
-	var line := "拾得  " + " · ".join(shown)
-	if parts.size() > MAX_SHOW:
-		line += "  …+%d" % (parts.size() - MAX_SHOW)
-	if line.length() > MAX_CHARS:
-		line = line.substr(0, MAX_CHARS - 1) + "…"
-	return line
 
 
 func load_high_score() -> int:
@@ -1143,14 +1009,6 @@ func _clear_souls() -> void:
 			c.queue_free()
 
 
-func _clear_ofuda() -> void:
-	active_ofuda.clear()
-	if _ofuda_root == null:
-		return
-	for c in _ofuda_root.get_children():
-		c.queue_free()
-
-
 func _clear_ofuda_pickups() -> void:
 	if _ofuda_pickups_root == null:
 		return
@@ -1159,7 +1017,7 @@ func _clear_ofuda_pickups() -> void:
 
 
 func _clear_end_screen() -> void:
-	restart_ofuda = null
+	restart_ema = null
 	if _end_screen_root == null:
 		return
 	for c in _end_screen_root.get_children():

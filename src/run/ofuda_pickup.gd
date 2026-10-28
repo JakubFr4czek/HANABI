@@ -2,13 +2,14 @@ class_name OfudaPickup
 extends Node3D
 ## Ofuda (御札) currency pickup (docs/ELEMENTS_PLAN.md section (d), Phase E2c).
 ##
-## A small physical paper talisman (0.08 m × 0.16 m) with a cinnabar seal,
-## dropped by defeated yōkai. It hovers just above the ground, bobs gently,
+## A small physical paper talisman (0.08 m × 0.16 m) with a cinnabar seal, given
+## by a hokora shrine when it is claimed (D1: never by yōkai). It hovers just
+## above the ground, bobs gently,
 ## and is drawn into the player by the same magnet rule as Hitodama soul
 ## orbs (SoulOrb.step_orb): inside the magnet radius, or automatically after
 ## a short linger so a distant drop is never lost. Collected Ofuda are the
 ## run's only skill-tree currency (RunGame.ofuda_count), spent exclusively
-## through RunGame.unlock_skill — never at level-up.
+## through RunGame.unlock_skill.
 ##
 ## Quest budget: one shared quad + one shared shader material for every
 ## pickup, no lights, no particles.
