@@ -216,24 +216,11 @@ func _configure_run_forest() -> void:
 		# (storm_fog_color), so the forest dissolves before the edge of the
 		# loaded chunks wherever the player walks. Exponential + height fog left
 		# hills and gates 30 m away as hard dark silhouettes.
-		we.environment.fog_enabled = true
-		we.environment.fog_mode = Environment.FOG_MODE_DEPTH
-		we.environment.fog_light_color = world.fog_color()
-		we.environment.fog_light_energy = 1.0
-		we.environment.fog_depth_begin = world.fog_start
-		we.environment.fog_depth_end = world.fog_end
-		we.environment.fog_depth_curve = world.fog_curve
-		we.environment.volumetric_fog_enabled = world.volumetric_fog
-		# Inside milk fog there is no sky: the background is the fog itself,
-		# so nothing ever outlines the forest edge.
-		we.environment.background_mode = Environment.BG_COLOR
-		we.environment.background_color = world.fog_color()
+		WorldGenLook.apply_fog(we.environment, world)
+		# Inside milk fog there is no sky: the background is the fog itself
+		# (WorldGenLook.apply_fog), so nothing ever outlines the forest edge.
 		if lightning:
 			lightning.base_fog_light_color = world.fog_color()
-		we.environment.fog_density = 1.0
-		we.environment.fog_height_density = 0.0
-		# The background is fogged too, so it is the fog color by construction.
-		we.environment.fog_sky_affect = 1.0
 		# Environment colors are sRGB but the sky shader's storm_fog_color is
 		# read as linear: the same numbers rendered the fog dark navy and the
 		# horizon pale lavender, so fogged hills never dissolved into the sky.
@@ -283,18 +270,9 @@ func _configure_run_forest() -> void:
 ## reflection, no specular moon, ambient the same grey as the air.
 func _configure_run_light(we: WorldEnvironment, moon: DirectionalLight3D, world: WorldGenProfile) -> void:
 	if we and we.environment:
-		var env := we.environment
-		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.ambient_light_color = world.fog_color()
-		env.ambient_light_energy = world.ambient_energy
-		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
-		env.tonemap_exposure = world.exposure
-		env.glow_intensity = world.glow_intensity
-		env.glow_hdr_threshold = 1.7
+		WorldGenLook.apply_light(we.environment, world)
 	if moon:
-		moon.light_color = world.moon_color()
-		moon.light_energy = world.moon_energy
-		moon.light_specular = 0.0
+		WorldGenLook.apply_moon(moon, world)
 
 
 func _setup_run_storm_rain() -> void:
