@@ -255,9 +255,14 @@ func _act_skill() -> void:
 
 func _act_wrist() -> void:
 	var b := Basis(Vector3.UP, yaw)
-	var pos: Vector3 = sim.head_xf.origin + b * Vector3(-0.08, -0.28, -0.32)
-	var wrist := b * Basis.from_euler(Vector3(deg_to_rad(55.0), deg_to_rad(-20.0), deg_to_rad(35.0)))
-	sim.set_hand("left", Transform3D(wrist, pos))
+	var ring_at: Vector3 = sim.head_xf.origin + b * Vector3(-0.06, -0.20, -0.26)
+	var to_eye := (sim.head_xf.origin - ring_at).normalized()
+	var z := -(b * Vector3.UP).slide(to_eye).normalized()
+	var x := to_eye.cross(z).normalized()
+	var target_basis := Basis(x, to_eye, z)
+	var mount := Basis.from_euler(Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(-14.0)))
+	var wrist := target_basis * mount.inverse()
+	sim.set_hand("left", Transform3D(wrist, ring_at - wrist * DiegeticHud.RING_OFFSET))
 	await _frames(rng.randi_range(30, 90))
 	_rest_left()
 	await _frames(5)

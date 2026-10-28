@@ -7,6 +7,7 @@ extends Node
 ## - [view] eye height; [comfort] vignette, turning, dominant hand, seated, walk pace
 ## - [audio] Master / Music / SFX / Ambience volume, 0–100 % in 10 % steps
 ## - [access] lightning and firework flash strength, haptic strength
+## - [body] body weight for the calorie estimate (D14), 40–150 kg in 5 kg steps
 ## It configures godot-xr-tools, the AudioServer buses (through [Sfx]) and the
 ## effects that read [method flash_scale] and [method haptic_amplitude].
 
@@ -23,6 +24,9 @@ const FLASH_LEVELS: Array[int] = [100, 50, 0]
 const HAPTIC_LEVELS: Array[int] = [0, 50, 100]
 const AUDIO_KEYS: Array[String] = ["master", "music", "sfx", "ambience"]
 const VOLUME_STEP := 10
+const WEIGHT_MIN := 40.0
+const WEIGHT_MAX := 150.0
+const WEIGHT_STEP := 5.0
 
 const HEIGHT_MIN := -0.45
 const HEIGHT_MAX := 0.80
@@ -43,6 +47,8 @@ var height_offset: float = 0.0
 var audio_percent: Dictionary = {"master": 100, "music": 100, "sfx": 100, "ambience": 100}
 var flash_percent: int = 100
 var haptic_percent: int = 100
+## Body weight (kg) for the kcal estimate on the wrist ring (D14). An estimate, not a measure.
+var body_weight_kg: float = 70.0
 
 static var instance: VrComfortSettings = null
 
@@ -87,6 +93,9 @@ func load_settings() -> void:
 	if cfg.has_section("access"):
 		flash_percent = int(_snap_to(float(cfg.get_value("access", "flash_percent", flash_percent)), FLASH_LEVELS))
 		haptic_percent = int(_snap_to(float(cfg.get_value("access", "haptic_percent", haptic_percent)), HAPTIC_LEVELS))
+
+	if cfg.has_section("body"):
+		body_weight_kg = clampf(float(cfg.get_value("body", "weight_kg", body_weight_kg)), WEIGHT_MIN, WEIGHT_MAX)
 	apply_audio()
 
 
@@ -111,6 +120,7 @@ func save_settings() -> void:
 		cfg.set_value("audio", key, audio_percent[key])
 	cfg.set_value("access", "flash_percent", flash_percent)
 	cfg.set_value("access", "haptic_percent", haptic_percent)
+	cfg.set_value("body", "weight_kg", body_weight_kg)
 
 	var err := cfg.save(SETTINGS_PATH)
 	if err == OK:
@@ -127,6 +137,7 @@ func save_settings() -> void:
 			"audio": audio_percent,
 			"flash_percent": flash_percent,
 			"haptic_percent": haptic_percent,
+			"body_weight_kg": body_weight_kg,
 		})
 	settings_changed.emit()
 
@@ -236,6 +247,11 @@ func set_flash_percent(percent: int) -> void:
 
 func set_haptic_percent(percent: int) -> void:
 	haptic_percent = int(_snap_to(float(percent), HAPTIC_LEVELS))
+	save_settings()
+
+
+func adjust_body_weight(delta_kg: float) -> void:
+	body_weight_kg = clampf(snappedf(body_weight_kg + delta_kg, WEIGHT_STEP), WEIGHT_MIN, WEIGHT_MAX)
 	save_settings()
 
 

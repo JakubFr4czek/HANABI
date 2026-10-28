@@ -1,4 +1,8 @@
 extends Node
+## Windowed screenshots of the wrist readout (D14): the readout raised (desktop: H held)
+## at 100 %, 50 % and 15 % HP with the kcal figure and a storm imbue, then the hand lowered
+## (nothing drawn). Needs a window, so run it without --headless:
+##   godot --path . --fixed-fps 90 res://tests/point15_wrist_screenshot.tscn -- --desktop --shots /tmp/dir
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
 var out_dir := "/tmp/hanabi_point15_wrist"
@@ -19,17 +23,26 @@ func _ready() -> void:
 	run.wave_director.clear_enemies()
 	run.kills = 5
 	run.score = 42
-	run._refresh_hud()
+	run.xp = 14
+	run.calorie_meter.kcal = 42.6
 	player.teleport(Vector3(0.0, 0.0, 2.0), 0.0)
 	player.camera.rotation.x = deg_to_rad(-34.0)
 	player.hand_offset = Vector3(0.18, -0.14, 0.0)
+	run.element_system.imbue(Elements.STORM, 12.0)
 	await _frames(48)
-	await _shot("wrist_hud_natural_angle")
-	player.health.hp = 18.0
-	run.xp = 14
+
+	for shot in [["wrist_hp100_gesture", 1.0], ["wrist_hp50_gesture", 0.5], ["wrist_hp15_gesture", 0.15]]:
+		player.health.hp = player.health.max_hp * float(shot[1])
+		run._refresh_hud()
+		player.wrist_check = true
+		await _frames(24)
+		await _shot(String(shot[0]))
+		player.wrist_check = false
+
+	player.health.hp = player.health.max_hp
 	run._refresh_hud()
-	await _frames(10)
-	await _shot("wrist_hud_critical_hp_ring")
+	await _frames(24)
+	await _shot("wrist_lowered_hidden")
 	run.queue_free()
 	get_tree().quit(0)
 
