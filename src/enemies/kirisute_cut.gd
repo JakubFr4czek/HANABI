@@ -7,6 +7,10 @@ extends RefCounted
 
 ## Convex hull points per part half (Quest budget, see D4 §6).
 const HULL_POINTS := 32
+## The two halves start this far apart along the plane normal, so the glowing cut
+## is open in the very frame it happens (they would otherwise overlap and read
+## as one whole body until the impulse has moved them).
+const SEPARATION := 0.03
 ## Cap glow when the cut is fresh, and once it has cooled.
 const CAP_HOT := 2.4
 const CAP_COOL := 0.35
@@ -37,11 +41,17 @@ static func claim_cut() -> bool:
 	return true
 
 
-## The colour a school's cut glows in. Ink is dark, so its glow is indigo.
+## The colour a school's cut glows in. Ink is glossy black, so its glow is a deep
+## indigo kept dimmer than the others (a bright one bleaches to white).
 static func glow_color(element: String) -> Color:
 	if element == Elements.INK:
-		return Color(0.55, 0.68, 1.2)
+		return Color(0.30, 0.38, 0.85)
 	return Elements.color(element)
+
+
+## How hard the cut glows when fresh (the emission multiplier of its cap).
+static func hot_energy(element: String) -> float:
+	return 0.8 if element == Elements.INK else CAP_HOT
 
 
 ## A cut that does not split (an elite's wound, or an Oni's): sparks in the
@@ -108,7 +118,7 @@ static func split(body: Node3D, parts: Dictionary, parent: Node, point: Vector3,
 		var sign_ := 1.0 if side_name == "above" else -1.0
 		var chunk := _build_chunk(sides[side_name], cap, element)
 		parent.add_child(chunk)
-		chunk.global_transform = Transform3D(Basis.IDENTITY, point)
+		chunk.global_transform = Transform3D(Basis.IDENTITY, point + normal * sign_ * SEPARATION)
 		chunk.linear_velocity = base + normal * sign_ * 1.2 + motion * 0.8 + Vector3.UP * 1.0
 		chunk.angular_velocity = spin * sign_ * 6.0
 		pieces.append(chunk)
@@ -255,6 +265,7 @@ static func _build_chunk(side: Dictionary, cap: StandardMaterial3D, element: Str
 	chunk.add_child(visual)
 	chunk.visual = visual
 	chunk.cap_material = cap
+	chunk.hot_energy = cap.emission_energy_multiplier
 	for hull: PackedVector3Array in side.hulls:
 		if hull.size() < 4:
 			continue

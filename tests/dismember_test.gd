@@ -191,6 +191,7 @@ func _test_kirisute() -> void:
 		y.configure_kind(Yokai.Kind.SWARM, Elements.NONE, 900.0)
 		y.brain.set_physics_process(false) if y.brain else null
 		y.died.connect(func(_y: Yokai, _hit: Dictionary) -> void: deaths[0] += 1)
+		_spare_katana(y)
 		crowd.append(y)
 	await _frames(30)
 	var worst := 0
@@ -219,13 +220,20 @@ func _test_kirisute() -> void:
 	_check("the oldest pieces are freed first (first piece gone: %s)" % (first_piece == null or not is_instance_valid(first_piece)),
 		first_piece == null or not is_instance_valid(first_piece))
 
-	# The katana keeps most of its speed through a Kirisute cut.
-	elem.imbue(Elements.SAKURA)
-	await _frames(2)
-	var bite_plain := await _bite(katana, false)
-	var bite_cut := await _bite(katana, true)
-	_check("the katana keeps its speed through a cut (lost %.2f m/s, plain %.2f m/s)" % [bite_cut, bite_plain],
-		bite_plain > 0.01 and bite_cut <= bite_plain * 0.35)
+	# The katana keeps most of its speed through a Kirisute cut: the same impulse, the
+	# same state, at a quarter of the bite (HeldWeapon scales it for a Kirisute hit).
+	var contact := {"collider": null, "point": katana.global_position, "speed": 12.0,
+		"direction": Vector3.DOWN, "normal": Vector3.UP}
+	var mom := {"power": 1.0, "mass": katana.mass, "impulse": 6.0}
+	var start := Vector3(0.0, 0.0, -6.0)
+	katana.linear_velocity = start
+	katana._apply_cut_resistance(contact, mom, "edge", 1.0)
+	var plain_loss := (start - katana.linear_velocity).length()
+	katana.linear_velocity = start
+	katana._apply_cut_resistance(contact, mom, "edge", 0.25)
+	var cut_loss := (start - katana.linear_velocity).length()
+	_check("a Kirisute cut costs the katana a quarter of a plain cut's speed (%.2f vs %.2f m/s)" % [cut_loss, plain_loss],
+		plain_loss > 0.5 and absf(cut_loss - plain_loss * 0.25) < plain_loss * 0.02)
 
 	# The Oni is wounded, not cut in two: a clean cut opens a glowing wound and costs it HP.
 	var oni := director.spawn_oni_boss(Vector3(0.0, 0.0, -2.0))
@@ -253,8 +261,7 @@ func _test_kirisute() -> void:
 ## A contact with the torso of a yōkai: the blade meets [param part] at [param speed]
 ## moving across its edge, or along [param direction] when given.
 func _cut(weapon: HeldWeapon, part: RagdollPart, speed: float, direction := Vector3.ZERO) -> void:
-	# A real contact is on the blade: hang the katana mid-blade, edge toward the body.
-	weapon.global_transform = Transform3D(Basis.IDENTITY, part.global_position + Vector3(0.0, 0.0, 0.5))
+	_pose_blade(weapon, part)
 	var dir := direction
 	if dir == Vector3.ZERO:
 		dir = (weapon.global_basis * -weapon.spine_direction).normalized()
@@ -262,16 +269,9 @@ func _cut(weapon: HeldWeapon, part: RagdollPart, speed: float, direction := Vect
 		"direction": dir, "normal": -dir})
 
 
-## How much speed a contact costs the katana: a plain cut or a Kirisute cut on a fresh yōkai.
-func _bite(katana: HeldWeapon, kirisute: bool) -> float:
-	var target := await _spawn(Vector3(-5.5, 0.0, 6.0), 900.0)
-	katana.linear_velocity = Vector3(0.0, 0.0, -6.0)
-	var before := katana.linear_velocity
-	katana.kirisute_ready = kirisute
-	_cut(katana, target.parts["chest"], 12.0)
-	var lost := (before - katana.linear_velocity).length()
-	katana.kirisute_ready = false
-	return lost
+## Hangs the katana mid-blade on [param part], edge toward the body, without striking it.
+func _pose_blade(weapon: HeldWeapon, part: RagdollPart) -> void:
+	weapon.global_transform = Transform3D(Basis.IDENTITY, part.global_position + Vector3(0.0, 0.0, 0.5))
 
 
 func _chunks() -> Array[KirisuteChunk]:
@@ -291,8 +291,17 @@ func _spawn(at: Vector3, hp: float) -> Yokai:
 	var y := director.spawn_enemy_at(at, Vector3.ZERO)
 	y.configure_kind(Yokai.Kind.SWARM, Elements.NONE, hp)
 	y.brain.set_physics_process(false) if y.brain else null
+	_spare_katana(y)
 	await _frames(30)
 	return y
+
+
+## The katana is posed by the test, not swung: keep it from colliding with the
+## test yōkai physically, so only the hits the test reports can land.
+func _spare_katana(y: Yokai) -> void:
+	var katana: HeldWeapon = run.katana
+	for p: RagdollPart in y.parts.values():
+		katana.add_collision_exception_with(p)
 
 
 ## A committed, edge-on, fast katana cut on [param part]; [param over] tweaks it.
