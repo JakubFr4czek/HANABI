@@ -67,6 +67,103 @@ def mix(*tracks: list[float]) -> list[float]:
     return out
 
 
+# --- Element imbue cues (E3): one short, restrained cue per element -------------
+
+def lowpass(x: list[float], cutoff: float) -> list[float]:
+    a = 1.0 - math.exp(-2 * math.pi * cutoff / SR)
+    y, out = 0.0, []
+    for v in x:
+        y += a * (v - y)
+        out.append(y)
+    return out
+
+
+def highpass(x: list[float], cutoff: float) -> list[float]:
+    low = lowpass(x, cutoff)
+    return [v - l for v, l in zip(x, low)]
+
+
+def partials(freq: float, dur: float, parts: list[tuple[float, float, float]], delay: float = 0.0) -> list[float]:
+    """Struck-bell voice: (ratio, amplitude, decay seconds) partials, soft 4 ms attack."""
+    n = int(SR * (dur + delay))
+    out = [0.0] * n
+    start = int(SR * delay)
+    for ratio, amp, decay in parts:
+        for i in range(start, n):
+            t = (i - start) / SR
+            env = math.exp(-t / decay) * min(1.0, t / 0.004)
+            out[i] += amp * env * math.sin(2 * math.pi * freq * ratio * t)
+    return out
+
+
+def make_imbue_sakura() -> list[float]:
+    # Two glass-petal chimes a sixth apart, quiet shimmer on top.
+    bell = [(1.0, 1.0, 0.55), (2.76, 0.32, 0.28), (5.4, 0.1, 0.14)]
+    a = partials(1318.5, 1.1, bell)
+    b = partials(1760.0, 1.1, bell, delay=0.07)
+    shimmer = highpass(noise(int(SR * 1.1), 0.05, 5), 5000)
+    shimmer = [v * math.exp(-i / SR / 0.25) for i, v in enumerate(shimmer)]
+    return mix(a, [v * 0.8 for v in b], shimmer)
+
+
+def make_imbue_storm() -> list[float]:
+    # A short static zip, a dry thump, and a thin high ring.
+    n = int(SR * 0.9)
+    random.seed(21)
+    zip_ = []
+    for i in range(int(SR * 0.16)):
+        t = i / SR
+        env = (t / 0.16) ** 1.5 * math.exp(-t * 9) * 3.0
+        zip_.append(env * (random.random() * 2 - 1) * (1.0 if random.random() > 0.55 else 0.25))
+    zip_ = highpass(zip_, 1800)
+    thump = [math.exp(-i / SR / 0.11) * math.sin(2 * math.pi * (95 - 30 * min(1.0, i / SR / 0.1)) * i / SR) * 0.9 for i in range(int(SR * 0.4))]
+    ring = partials(2637.0, 0.8, [(1.0, 0.22, 0.35), (1.5, 0.1, 0.2)], delay=0.12)
+    return mix(zip_ + [0.0] * (n - len(zip_)), [0.0] * int(SR * 0.1) + thump, ring)
+
+
+def make_imbue_ink() -> list[float]:
+    # A wet brush drawn across paper, then one dark drop into the inkstone.
+    random.seed(33)
+    n = int(SR * 0.5)
+    brush = lowpass(noise(n, 0.5, 33), 900)
+    brush = [v * math.sin(math.pi * i / n) ** 2 for i, v in enumerate(brush)]
+    drop = [math.exp(-i / SR / 0.16) * math.sin(2 * math.pi * (150 - 70 * min(1.0, i / SR / 0.18)) * i / SR) * 0.9 for i in range(int(SR * 0.7))]
+    return mix([v * 1.4 for v in brush], [0.0] * int(SR * 0.22) + drop)
+
+
+def make_imbue_shadow() -> list[float]:
+    # A held breath: two detuned low tones swelling and sinking, with a hollow overtone.
+    n = int(SR * 1.3)
+    out = []
+    for i in range(n):
+        t = i / SR
+        env = math.sin(math.pi * min(1.0, t / 1.3)) ** 1.6
+        f = 164.8 * (1.0 - 0.06 * t)
+        v = math.sin(2 * math.pi * f * t) + 0.9 * math.sin(2 * math.pi * f * 1.007 * t) + 0.25 * math.sin(2 * math.pi * f * 3.0 * t)
+        out.append(0.4 * env * v)
+    air = lowpass(highpass(noise(n, 0.18, 8), 1200), 4200)
+    air = [v * math.sin(math.pi * min(1.0, i / n * 1.4)) ** 2 for i, v in enumerate(air)]
+    return mix(out, air)
+
+
+def make_element_fade() -> list[float]:
+    # The blade going quiet: a soft falling tone and a breath of steel.
+    n = int(SR * 0.55)
+    tone = [0.5 * math.sin(2 * math.pi * (520 - 190 * (i / n)) * i / SR) * (1 - i / n) ** 2 * min(1.0, i / (SR * 0.02)) for i in range(n)]
+    hiss = lowpass(highpass(noise(n, 0.12, 12), 2500), 6500)
+    hiss = [v * (1 - i / n) ** 3 for i, v in enumerate(hiss)]
+    return mix(tone, hiss)
+
+
+def write_imbue_cues() -> None:
+    os.makedirs(OUT, exist_ok=True)
+    write_wav(os.path.join(OUT, "imbue_sakura_0.wav"), make_imbue_sakura())
+    write_wav(os.path.join(OUT, "imbue_storm_0.wav"), make_imbue_storm())
+    write_wav(os.path.join(OUT, "imbue_ink_0.wav"), make_imbue_ink())
+    write_wav(os.path.join(OUT, "imbue_shadow_0.wav"), make_imbue_shadow())
+    write_wav(os.path.join(OUT, "element_fade_0.wav"), make_element_fade())
+
+
 def main() -> None:
     os.makedirs(OUT, exist_ok=True)
     write_wav(os.path.join(OUT, "firework_pop_0.wav"), mix(noise(int(SR * 0.35), 0.15), sine(400, 0.35, 0.2, 0.2)))
@@ -93,8 +190,15 @@ def main() -> None:
         crack.append(env * (0.4 * math.sin(2 * math.pi * 55 * t) + 0.2 * random.random()))
     write_wav(os.path.join(OUT, "thunder_crack_0.wav"), crack)
     write_wav(os.path.join(OUT, "torii_furin_chime.wav"), make_furin())
+    write_imbue_cues()
     print("Wrote hanabi_proc audio to", OUT)
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if "--imbue-only" in sys.argv:
+        write_imbue_cues()  # leaves the older cues byte-identical
+        print("Wrote imbue cues to", OUT)
+    else:
+        main()

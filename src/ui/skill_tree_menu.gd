@@ -28,6 +28,8 @@ const BEAM_RADIUS := 0.0022
 const STUB_LENGTH := 0.3
 ## Redraws per second for pulsing nodes and sparkle (state changes redraw at once).
 const ANIM_FPS := 30.0
+## The panel eases in over this many (real) seconds.
+const FADE_IN_SECONDS := 0.16
 
 var run_game: RunGame
 var canvas: SkillTreeCanvas
@@ -43,6 +45,7 @@ var _panel: MeshInstance3D
 var _panel_mat: StandardMaterial3D
 var _pointers: Dictionary = {}  # id -> state dictionary
 var _redraw_accum := 0.0
+var _age := 1.0
 var _stamp := 0
 var _beam_mesh: CylinderMesh
 var _reticle_mesh: TorusMesh
@@ -126,6 +129,7 @@ func open(game: RunGame, pose: Dictionary, blade_element: String, blade_seconds:
 	canvas.balance = game.ofuda_count
 	canvas.blade_element = blade_element
 	canvas.blade_seconds = blade_seconds
+	canvas.abilities = _ability_status(game)
 	canvas.hint_text = hint
 	canvas.status_text = ""
 	if Elements.COMBAT_ELEMENTS.has(blade_element):
@@ -141,6 +145,8 @@ func open(game: RunGame, pose: Dictionary, blade_element: String, blade_seconds:
 	visible = true
 	_panel.visible = true
 	_redraw_accum = 0.0
+	_age = 0.0
+	_panel_mat.albedo_color.a = 0.0
 	_redraw_now()
 
 
@@ -159,11 +165,32 @@ func close() -> void:
 func _process(delta: float) -> void:
 	if not is_open:
 		return
+	if _age < FADE_IN_SECONDS:
+		_age += delta
+		var k := clampf(_age / FADE_IN_SECONDS, 0.0, 1.0)
+		_panel_mat.albedo_color.a = k * k * (3.0 - 2.0 * k)
 	canvas.advance(delta)
 	_redraw_accum += delta
 	if _redraw_accum >= 1.0 / ANIM_FPS:
 		_redraw_accum = 0.0
 		_redraw_now()
+
+
+## The blade's two abilities for the footer line (empty on plain steel).
+static func _ability_status(game: RunGame) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var es := game.element_system
+	if es == null or es.current_element == Elements.NONE:
+		return out
+	for slot in [1, 2]:
+		var cd := es.ability_1_cooldown if slot == 1 else es.ability_2_cooldown
+		out.append({
+			"glyph": Elements.ability_glyph(es.current_element, slot),
+			"name": Elements.ability_name(es.current_element, slot),
+			"ratio": es.ability_ready_ratio(slot),
+			"seconds": cd,
+		})
+	return out
 
 
 func _redraw_now() -> void:

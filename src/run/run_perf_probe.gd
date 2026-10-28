@@ -14,14 +14,16 @@ static func rendering_info() -> Dictionary:
 static func estimate_scene_cost(root: Node) -> Dictionary:
 	var draws := 0
 	var prims := 0
+	# Only nodes that are actually drawn: a hidden parent (the arena props, the
+	# stowed kanabō, the finished intro) takes its whole subtree out of the frame.
 	for mi in root.find_children("*", "MeshInstance3D", true, false):
-		if not (mi as MeshInstance3D).visible:
+		if not (mi as MeshInstance3D).is_visible_in_tree():
 			continue
 		draws += 1
 		prims += _mesh_primitives((mi as MeshInstance3D).mesh)
 	for mmi in root.find_children("*", "MultiMeshInstance3D", true, false):
 		var inst := mmi as MultiMeshInstance3D
-		if not inst.visible:
+		if not inst.is_visible_in_tree():
 			continue
 		draws += 1
 		var mm := inst.multimesh

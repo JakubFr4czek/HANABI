@@ -57,6 +57,26 @@ func _run_all() -> void:
 	_check("Gate deactivates after crossing", not gate.is_active)
 	_check("Timer is initialized to ~20.0 s", elem_sys.element_time_remaining >= 19.5 and elem_sys.element_time_remaining <= 20.0)
 
+	# 1b. E3: the gate light. A crossed gate flares and drains to a dormant lantern;
+	# an awake one reads through the fog (lit lantern ignores fog, halo mixes over it).
+	_check("a crossed gate flares at once", gate._flare > 0.5)
+	for _i in 30:
+		gate._process(0.1)
+	_check("a spent gate is dormant: no halo drawn, lantern dull (glow %.2f)" % gate._glow,
+		gate._glow == 0.0 and not gate._halo_mesh.visible and not gate._lantern_mat.emission_enabled)
+	_check("a dormant lantern fades into the fog instead of staying a dark dot", not gate._lantern_mat.disable_fog)
+	gate.reactivate()
+	gate._process(0.5)
+	_check("a waking gate rises gradually (glow %.2f)" % gate._glow, gate._glow > 0.1 and gate._glow < 0.5 and gate._halo_mesh.visible)
+	for _i in 30:
+		gate._process(0.1)
+	_check("an awake gate: halo on, lit lantern pierces the fog", gate._glow == 1.0 and gate._halo_mesh.visible
+		and gate._lantern_mat.disable_fog and gate._lantern_mat.emission_enabled)
+	_check("the halo shader ignores fog and uses one quad", gate._halo_mat.shader.code.contains("fog_disabled") and gate._halo_mesh.mesh is QuadMesh)
+	gate.is_active = false  # back to spent, as the rest of the test expects
+	for _i in 30:
+		gate._process(0.1)
+
 	# 2. Real sword touch filter: sword & hand physically enter gate aperture and do NOT imbue
 	gate.reactivate()
 	katana.set_element(Elements.NONE)

@@ -52,9 +52,12 @@ func _run() -> void:
 		hud.wrist_face.position.y = absf(sin(deg_to_rad(tilt_deg))) * DiegeticHud.PLATE_SIZE.x * 0.57
 		await get_tree().physics_frame
 		var worst := INF
-		for gx in 5:
-			for gz in 5:
-				var local := Vector3(lerpf(-0.05, 0.05, float(gx) / 4.0), -0.006, lerpf(-0.027, 0.027, float(gz) / 4.0))
+		# The whole plate: HP row and the element strip towards the elbow.
+		var half := DiegeticHud.PLATE_SIZE * 0.5
+		for gx in 7:
+			for gz in 9:
+				var local := Vector3(lerpf(-half.x, half.x, float(gx) / 6.0), -0.006,
+					DiegeticHud.PLATE_CENTER_Z + lerpf(-half.y, half.y, float(gz) / 8.0))
 				var pc: Vector3 = ctrl.global_transform.affine_inverse() * (hud.wrist_face.global_transform * local)
 				var hand_top := -INF
 				for hv in hverts:

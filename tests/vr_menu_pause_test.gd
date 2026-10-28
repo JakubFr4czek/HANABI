@@ -60,6 +60,7 @@ func _run_all() -> void:
 	_check("the menu is not open at the start", not ctl.is_open and not get_tree().paused)
 
 	await _test_menu_button_tap_toggles()
+	await _test_menu_carries_the_blade_state()
 	await _test_world_stands_still_rig_keeps_going()
 	await _test_pointers_buy_only_through_run_game()
 	await _test_slow_motion_survives_pause()
@@ -80,6 +81,41 @@ func _test_menu_button_tap_toggles() -> void:
 	_check("the menu processes while paused", menu.process_mode == Node.PROCESS_MODE_ALWAYS and menu.visible)
 	await _tap_menu_button()
 	_check("tapping Left Menu again closes it", not ctl.is_open and not menu.visible and not get_tree().paused)
+
+
+# --- 1b. E3: nothing important lives only on the wrist plate -----------------------------
+
+## The panel can be drawn on top of everything (no clear spot to hang it), which
+## would cover the wrist plate. So the footer repeats the blade's element, the time
+## left and both buttons, and the header the Ofuda: still true in that mode.
+func _test_menu_carries_the_blade_state() -> void:
+	var es := run.element_system
+	es.imbue(Elements.SAKURA, 20.0)
+	es.element_time_remaining = 9.0
+	es.ability_1_cooldown = 0.0
+	es.ability_2_cooldown = es.ability_cooldown_total(2) * 0.5
+	run.ofuda_count = 5
+	ctl.open()
+	_check("the panel eases in rather than popping (alpha %.2f right after opening)" % menu._panel_mat.albedo_color.a,
+		menu._panel_mat.albedo_color.a < 0.2)
+	await _frames(30)
+	_check("and is fully opaque after %.2f s" % SkillTreeMenu.FADE_IN_SECONDS, menu._panel_mat.albedo_color.a > 0.99)
+	var ab: Array[Dictionary] = menu.canvas.abilities
+	_check("the footer lists A and B of the blade (%s)" % [ab], ab.size() == 2
+		and ab[0].glyph == Elements.ability_glyph(Elements.SAKURA, 1) and float(ab[0].ratio) >= 0.999
+		and ab[1].name == "Hanamai" and absf(float(ab[1].ratio) - 0.5) < 0.03)
+	_check("with the element, the seconds left and the Ofuda balance",
+		menu.canvas.blade_element == Elements.SAKURA and absf(menu.canvas.blade_seconds - 9.0) < 0.1 and menu.canvas.balance == 5)
+	ctl.close()
+	# The same in the drawn-on-top mode (a pose with no clear spot).
+	var pose := ctl._compute_pose()
+	pose["blocked"] = true
+	menu.open(run, pose, es.current_element, es.element_time_remaining, "")
+	_check("drawn on top: the panel ignores depth and still carries the same state",
+		menu.drawn_on_top and menu._panel_mat.no_depth_test and menu.canvas.abilities.size() == 2 and menu.canvas.blade_element == Elements.SAKURA)
+	menu.close()
+	es.reset()
+	run.ofuda_count = 0
 
 
 # --- 2. The world stands still, the rig keeps going ------------------------------------

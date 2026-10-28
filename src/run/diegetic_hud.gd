@@ -5,8 +5,13 @@ extends Node3D
 ##   nothing bolted onto the katana).
 ## - The wrist text only appears when the wrist is raised toward the face;
 ##   the HP charm and critical ring stay as the always-on glanceable signals.
+## - E3: an element strip under the HP row: the crest (kanji + a ring that
+##   drains with the imbue), the seconds left, and one ring per ability button
+##   (A, B) that refills as the ability recharges. All read from the
+##   [ElementSystem]; nothing is drawn on the katana.
 
 const RING_SHADER := preload("res://src/shaders/hud_ring.gdshader")
+const STRIP_SHADER := preload("res://src/shaders/wrist_element.gdshader")
 const WET_SURFACE_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const HP_RING_CRITICAL_RATIO := 0.30
 ## Wrist-to-face distance (m) where the readout is fully shown / fully hidden.
@@ -14,9 +19,19 @@ const LABEL_SHOW_DIST := 0.42
 const LABEL_HIDE_DIST := 0.62
 ## Bundled font: the system fonts the plate used before do not exist on Quest.
 const HUD_FONT_PATH := "res://assets/fonts/YujiBoku-Regular.ttf"
-const PLATE_SIZE := Vector2(0.1, 0.054)
-const CHARM_X := -0.031
-const TEXT_X := -0.009
+## The plate: the HP row (z -0.027..0.027, as before) and, towards the elbow,
+## the element strip. Text up is -Z.
+const PLATE_SIZE := Vector2(0.108, 0.096)
+const PLATE_CENTER_Z := 0.021
+const HP_ROW_HALF_Z := 0.027
+const STRIP_CENTER_Z := 0.049
+const STRIP_SIZE := Vector2(0.1, 0.034)
+const CHARM_X := -0.035
+const TEXT_X := -0.013
+## Glyph spacing in the ability label: three ideographic spaces' worth.
+const PIP_GLYPH_FONT := 27
+const CREST_FONT := 44
+const TIME_FONT := 36
 const MAX_FACE_TILT_DEG := 10.0
 
 var wrist_unit: Node3D
@@ -30,6 +45,11 @@ var hp_label: Label3D
 var guard_label: Label3D
 var hp_gauge: MeshInstance3D
 var xp_bar: MeshInstance3D
+## E3 element strip: the shader quad (crest ring + two ability rings) and its labels.
+var element_strip: MeshInstance3D
+var crest_label: Label3D
+var time_label: Label3D
+var ability_label: Label3D
 
 var _wrist_hp_mat := ShaderMaterial.new()
 var _charm_mat := StandardMaterial3D.new()
@@ -42,6 +62,12 @@ var _xp_bar_width := 0.1
 var _follow_eyes := false
 var _parry_glow := 0.0
 var _view_camera: Camera3D
+var _elements: ElementSystem
+var _strip_mat := ShaderMaterial.new()
+var _strip_cache := {}
+var _shown_element := "?"
+var _crest_flash := 0.0
+var _time_shown := -1
 
 
 func setup(player: Node3D, katana: HeldWeapon) -> void:
@@ -93,27 +119,19 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	var bm := BoxMesh.new()
 	bm.size = Vector3(PLATE_SIZE.x, 0.006, PLATE_SIZE.y)
 	plate.mesh = bm
-	plate.position.y = -0.003
+	plate.position = Vector3(0.0, -0.003, PLATE_CENTER_Z)
 	plate.material_override = _lacquer_mat
 	_no_shadow(plate)
 	wrist_face.add_child(plate)
 
-	var hx := PLATE_SIZE.x * 0.5
-	var hz := PLATE_SIZE.y * 0.5
-	for edge in [
-		[Vector3(0.0, 0.0006, -hz), Vector3(PLATE_SIZE.x + 0.002, 0.0012, 0.0016)],
-		[Vector3(0.0, 0.0006, hz), Vector3(PLATE_SIZE.x + 0.002, 0.0012, 0.0016)],
-		[Vector3(-hx, 0.0006, 0.0), Vector3(0.0016, 0.0012, PLATE_SIZE.y)],
-		[Vector3(hx, 0.0006, 0.0), Vector3(0.0016, 0.0012, PLATE_SIZE.y)],
-	]:
-		var trim := MeshInstance3D.new()
-		var tm := BoxMesh.new()
-		tm.size = edge[1]
-		trim.mesh = tm
-		trim.position = edge[0]
-		trim.material_override = _trim_mat
-		_no_shadow(trim)
-		wrist_face.add_child(trim)
+	# One mesh for the whole gilt frame (outline + the rule between the HP row
+	# and the element strip): a single draw call instead of one per edge.
+	var frame := MeshInstance3D.new()
+	frame.name = "GiltFrame"
+	frame.mesh = _gilt_frame_mesh()
+	frame.material_override = _trim_mat
+	_no_shadow(frame)
+	wrist_face.add_child(frame)
 
 	# Left: the HP charm inside its gauge ring (always on, the glanceable
 	# signal), with a red danger ring around it below 30 %.
@@ -162,11 +180,12 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_face.add_child(hp_label)
 	wrist_face.add_child(wrist_label)
 	if RuntimeGuard.enabled:
-		guard_label = _make_label("GuardLabel", font, 22, Vector3(PLATE_SIZE.x * 0.5 - 0.03, 0.0012, -PLATE_SIZE.y * 0.5 + 0.006))
+		guard_label = _make_label("GuardLabel", font, 22, Vector3(PLATE_SIZE.x * 0.5 - 0.03, 0.0012, -HP_ROW_HALF_Z + 0.006))
 		guard_label.modulate = Color(1.0, 0.25, 0.2)
 		guard_label.visible = false
 		wrist_face.add_child(guard_label)
 
+	var hz := HP_ROW_HALF_Z
 	var bar_w := PLATE_SIZE.x - 0.012
 	var track := MeshInstance3D.new()
 	track.name = "SoulBarTrack"
@@ -195,6 +214,9 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	xp_bar.position = Vector3(0.0, 0.0009, hz - 0.0042)
 	wrist_face.add_child(xp_bar)
 
+	_build_element_strip(font)
+
+
 	if player is XRPlayer:
 		var xr := player as XRPlayer
 		xr.left_controller.add_child(wrist_unit)
@@ -222,6 +244,121 @@ func _setup_wrist_unit(player: Node3D) -> void:
 		wrist_unit.basis = Basis(x_axis, to_cam, x_axis.cross(to_cam).normalized())
 	else:
 		player.add_child(wrist_unit)
+
+
+## Gilt outline of the plate plus a rule under the HP row, as one mesh.
+func _gilt_frame_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := PLATE_SIZE.x * 0.5
+	var z0 := PLATE_CENTER_Z - PLATE_SIZE.y * 0.5
+	var z1 := PLATE_CENTER_Z + PLATE_SIZE.y * 0.5
+	var t := 0.0016
+	var h := 0.0012
+	for bar in [
+		[Vector3(0.0, h * 0.5, z0), Vector3(PLATE_SIZE.x + 0.002, h, t)],
+		[Vector3(0.0, h * 0.5, z1), Vector3(PLATE_SIZE.x + 0.002, h, t)],
+		[Vector3(-hx, h * 0.5, PLATE_CENTER_Z), Vector3(t, h, PLATE_SIZE.y)],
+		[Vector3(hx, h * 0.5, PLATE_CENTER_Z), Vector3(t, h, PLATE_SIZE.y)],
+		[Vector3(0.0, h * 0.5, HP_ROW_HALF_Z + 0.0025), Vector3(PLATE_SIZE.x - 0.012, h * 0.7, 0.0008)],
+	]:
+		_add_box(st, bar[0], bar[1])
+	return st.commit()
+
+
+static func _add_box(st: SurfaceTool, c: Vector3, size: Vector3) -> void:
+	var e := size * 0.5
+	var v: Array[Vector3] = []
+	for i in 8:
+		v.append(c + Vector3(e.x if i & 1 else -e.x, e.y if i & 2 else -e.y, e.z if i & 4 else -e.z))
+	for quad in [[0, 1, 3, 2], [4, 6, 7, 5], [0, 2, 6, 4], [1, 5, 7, 3], [2, 3, 7, 6], [0, 4, 5, 1]]:
+		for tri in [[0, 1, 2], [0, 2, 3]]:
+			for k in tri:
+				st.add_vertex(v[quad[k]])
+
+
+func _build_element_strip(font: Font) -> void:
+	element_strip = MeshInstance3D.new()
+	element_strip.name = "ElementStrip"
+	var q := QuadMesh.new()
+	q.size = STRIP_SIZE
+	element_strip.mesh = q
+	_strip_mat.shader = STRIP_SHADER
+	_strip_mat.set_shader_parameter("size", STRIP_SIZE)
+	element_strip.material_override = _strip_mat
+	element_strip.position = Vector3(0.0, 0.0017, STRIP_CENTER_Z)
+	element_strip.rotation.x = -PI * 0.5
+	_no_shadow(element_strip)
+	wrist_face.add_child(element_strip)
+
+	# Crest ring centre and the pips' mid-point match the defaults of wrist_element.gdshader.
+	crest_label = _make_label("CrestLabel", font, CREST_FONT, Vector3(-0.0355, 0.0021, STRIP_CENTER_Z))
+	crest_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	time_label = _make_label("TimeLabel", font, TIME_FONT, Vector3(-0.0195, 0.0021, STRIP_CENTER_Z))
+	ability_label = _make_label("AbilityLabel", font, PIP_GLYPH_FONT, Vector3(0.0305, 0.0021, STRIP_CENTER_Z))
+	ability_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	for l in [crest_label, time_label, ability_label]:
+		# The glyphs sit on the strip's dark discs: draw them after the quad.
+		l.render_priority = 2
+		wrist_face.add_child(l)
+	_shown_element = "?"
+	_apply_strip(Elements.NONE, 0.0, 0.0, 0.0, 0.0, false)
+
+
+## Hands the HUD the element system it mirrors (called once by RunGame).
+func bind_elements(es: ElementSystem) -> void:
+	_elements = es
+	_shown_element = "?"
+
+
+func _strip_set(key: String, value: Variant) -> void:
+	if _strip_cache.get(key) == value:
+		return
+	_strip_cache[key] = value
+	_strip_mat.set_shader_parameter(key, value)
+
+
+## Pushes the element state to the strip; only touches a value that changed.
+func _apply_strip(element: String, ratio: float, left: float, ready1: float, ready2: float, warn: bool) -> void:
+	if element_strip == null:
+		return
+	var active := element != Elements.NONE
+	_strip_set("color", Elements.accent_color(element) if active else Color(0.5, 0.47, 0.55))
+	_strip_set("lit", 1.0 if active else 0.0)
+	_strip_set("crest_ratio", snappedf(ratio, 0.004))
+	_strip_set("pip1_ratio", snappedf(ready1, 0.01))
+	_strip_set("pip2_ratio", snappedf(ready2, 0.01))
+	_strip_set("warn", 1.0 if warn else 0.0)
+	_strip_set("left", left if warn else 0.0)
+	_strip_set("flash", snappedf(_crest_flash, 0.02))
+	if element != _shown_element:
+		_shown_element = element
+		var tint := Elements.accent_color(element).lightened(0.35) if active else Color(0.62, 0.6, 0.68)
+		crest_label.text = Elements.build_label(element) if active else "門"
+		crest_label.modulate = Color(tint, crest_label.modulate.a)
+		ability_label.text = "%s\u3000\u3000%s" % [Elements.ability_glyph(element, 1), Elements.ability_glyph(element, 2)] if active else ""
+		ability_label.modulate = Color(tint, ability_label.modulate.a)
+		time_label.modulate = Color(tint, time_label.modulate.a)
+		_time_shown = -2  # redraw the count for the new element
+	var secs := ceili(left) if active else -1
+	if secs != _time_shown:
+		_time_shown = secs
+		time_label.text = "%d" % secs if active else ""
+	# The count turns warm in the last seconds, like the blade starts to beat.
+	var warm := Elements.accent_color(element).lerp(Color(1.0, 0.72, 0.4), 0.7) if warn else Elements.accent_color(element).lightened(0.35)
+	if active:
+		time_label.modulate = Color(warm, time_label.modulate.a)
+
+
+func _update_element_strip(delta: float) -> void:
+	if _elements == null or not is_instance_valid(_elements) or element_strip == null:
+		return
+	var es := _elements
+	if es.current_element != _shown_element and es.current_element != Elements.NONE:
+		_crest_flash = 1.0
+	_crest_flash = maxf(_crest_flash - delta / 0.7, 0.0)
+	_apply_strip(es.current_element, es.imbue_ratio(), es.element_time_remaining,
+		es.ability_ready_ratio(1), es.ability_ready_ratio(2), es.is_fade_warning)
 
 
 func _no_shadow(mi: GeometryInstance3D) -> void:
@@ -273,6 +410,7 @@ func _process(delta: float) -> void:
 		_parry_glow = maxf(_parry_glow - delta, 0.0)
 		_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2
 	_orient_wrist_face(delta)
+	_update_element_strip(delta)
 	_update_label_visibility()
 	if guard_label:
 		var n := RuntimeGuard.violation_count()
@@ -330,13 +468,16 @@ func _update_label_visibility() -> void:
 	if cam == null or not is_instance_valid(cam):
 		cam = get_viewport().get_camera_3d() if get_viewport() else null
 	if cam == null:
-		wrist_label.visible = false
-		hp_label.visible = false
+		for l in [wrist_label, hp_label, crest_label, time_label, ability_label]:
+			if l:
+				(l as Label3D).visible = false
 		return
 	var d := wrist_unit.global_position.distance_to(cam.global_position)
 	var a := clampf((LABEL_HIDE_DIST - d) / maxf(LABEL_HIDE_DIST - LABEL_SHOW_DIST, 0.01), 0.0, 1.0)
-	for l in [wrist_label, hp_label]:
-		(l as Label3D).visible = a > 0.02
+	for l in [wrist_label, hp_label, crest_label, time_label, ability_label]:
+		if l == null:
+			continue
+		(l as Label3D).visible = a > 0.02 and (l as Label3D).text != ""
 		(l as Label3D).modulate.a = 0.98 * a
 		(l as Label3D).outline_modulate.a = 0.95 * a
 

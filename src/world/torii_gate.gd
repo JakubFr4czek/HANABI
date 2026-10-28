@@ -18,6 +18,25 @@ const WET_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const HALO_SHADER := preload("res://src/shaders/torii_lantern_halo.gdshader")
 const CHIME_AUDIO := preload("res://assets/audio/sfx/hanabi_proc/torii_furin_chime.wav")
 
+## Lantern light per element. The halo is mixed over the pale fog (not added), so
+## these are saturated, and the ink gate's is darker than the fog it sits in.
+const HALO_COLORS := {
+	Elements.SAKURA: Color(1.0, 0.22, 0.58),
+	Elements.STORM: Color(0.12, 0.62, 1.0),
+	Elements.INK: Color(0.14, 0.18, 0.62),
+	Elements.SHADOW: Color(0.62, 0.18, 0.95),
+}
+const HALO_CORES := {
+	Elements.SAKURA: Color(1.0, 0.86, 0.92),
+	Elements.STORM: Color(0.88, 0.97, 1.0),
+	Elements.INK: Color(0.42, 0.5, 0.95),
+	Elements.SHADOW: Color(0.9, 0.7, 1.0),
+}
+## Seconds for the light to rise (a gate waking) and to drain (a spent gate).
+const WAKE_SECONDS := 2.0
+const SPEND_SECONDS := 0.9
+const FLARE_SECONDS := 0.7
+
 const APERTURE_WIDTH: float = 2.4
 const APERTURE_HEIGHT: float = 3.2
 const APERTURE_DEPTH: float = 0.8
@@ -53,6 +72,10 @@ var _tracked_bodies: Dictionary = {} # Node -> Vector3 (previous pos)
 var _player_ref: Node3D = null
 var _prev_player_pos: Vector3 = Vector3.INF
 var _chime_cooldown: float = 0.5
+## Lantern light: 0 dormant .. 1 awake, plus a short flare when the gate is crossed.
+var _glow: float = 1.0
+var _flare: float = 0.0
+var _glow_ready := false
 
 
 func _ready() -> void:
@@ -166,6 +189,8 @@ func _build_components() -> void:
 	_lantern_core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_lantern_mat = StandardMaterial3D.new()
 	_lantern_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_lantern_mat.albedo_texture = _paper_texture()
+	_lantern_mat.emission_texture = _paper_texture()
 	_lantern_core.material_override = _lantern_mat
 	lantern_anchor.add_child(_lantern_core)
 
@@ -173,7 +198,7 @@ func _build_components() -> void:
 	_halo_mesh = MeshInstance3D.new()
 	_halo_mesh.name = "VolumetricHalo"
 	var quad := QuadMesh.new()
-	quad.size = Vector2(2.0, 2.0)
+	quad.size = Vector2(2.4, 5.2)
 	_halo_mesh.mesh = quad
 	_halo_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_halo_mat = ShaderMaterial.new()
@@ -394,6 +419,25 @@ func _add_octagonal_plinth(st: SurfaceTool, base_center: Vector3, radius: float,
 		st.add_vertex(chamfer_top[next_i])
 
 
+static var _paper: ImageTexture
+
+
+## Andon paper: pale, a little brighter in the middle, in a dark timber frame
+## (top, bottom, sides, one cross rib). Shared by every gate.
+static func _paper_texture() -> ImageTexture:
+	if _paper == null:
+		var w := 32
+		var h := 64
+		var img := Image.create(w, h, false, Image.FORMAT_RGB8)
+		for y in h:
+			for x in w:
+				var c := 0.78 + 0.22 * (1.0 - absf(x - w * 0.5 + 0.5) / (w * 0.5)) * (1.0 - absf(y - h * 0.5 + 0.5) / (h * 0.5))
+				var frame := x < 2 or x >= w - 2 or y < 4 or y >= h - 4 or (y >= h / 2 - 1 and y <= h / 2)
+				img.set_pixel(x, y, Color(0.05, 0.04, 0.04) if frame else Color(c, c, c))
+		_paper = ImageTexture.create_from_image(img)
+	return _paper
+
+
 func _apply_element_style() -> void:
 	if _gate_mat == null or _lantern_mat == null or _halo_mat == null:
 		return
@@ -417,19 +461,57 @@ func _apply_element_style() -> void:
 			accent = Color(0.9, 0.85, 0.8)
 
 	_gate_mat.set_shader_parameter("base_color", timber_color)
-	_lantern_mat.albedo_color = accent
-	_halo_mat.set_shader_parameter("glow_color", accent)
+	_halo_mat.set_shader_parameter("glow_color", HALO_COLORS.get(element, accent))
+	_halo_mat.set_shader_parameter("core_color", HALO_CORES.get(element, Color(1.0, 0.95, 0.9)))
+	_halo_mat.set_shader_parameter("phase", fposmod(global_position.x * 0.37 + global_position.z * 0.53, TAU) if is_inside_tree() else 0.0)
+	_apply_glow()
 
 
 func _apply_active_state() -> void:
-	if _lantern_mat:
-		_lantern_mat.emission_enabled = is_active
-		if is_active:
-			_lantern_mat.emission = Elements.accent_color(element)
-	if _halo_mesh:
-		_halo_mesh.visible = is_active
+	if _lantern_mat == null or _halo_mat == null:
+		return
+	if not _glow_ready:
+		# First look: show the state as it is, no transition.
+		_glow_ready = true
+		_glow = 1.0 if is_active else 0.0
+		_apply_glow()
+		set_process(false)
+	elif not is_active and _glow > 0.0:
+		_flare = 1.0  # the light flares as the player passes through, then drains
+		set_process(true)
+	else:
+		set_process(true)  # waking up: rises over WAKE_SECONDS
 	if not is_active and _chime_player:
 		_chime_player.stop()
+
+
+## Spent gates drain and wake gently (real time, not slow-mo), then stop processing.
+func _process(delta: float) -> void:
+	var real := delta / maxf(Engine.time_scale, 0.05)
+	var target := 1.0 if is_active else 0.0
+	var rate := (1.0 / WAKE_SECONDS) if is_active else (1.0 / SPEND_SECONDS)
+	_glow = move_toward(_glow, target, real * rate)
+	_flare = maxf(_flare - real / FLARE_SECONDS, 0.0)
+	_apply_glow()
+	if is_equal_approx(_glow, target) and _flare <= 0.0:
+		set_process(false)
+
+
+func _apply_glow() -> void:
+	if _lantern_mat == null or _halo_mat == null:
+		return
+	var accent := Elements.accent_color(element)
+	var level := _glow + _flare * 1.4
+	_halo_mat.set_shader_parameter("intensity", level)
+	if _halo_mesh:
+		_halo_mesh.visible = level > 0.01
+	# A spent lantern is dull paper: a trace of its colour, no light.
+	_lantern_mat.albedo_color = Color(0.09, 0.085, 0.09).lerp(accent, clampf(level, 0.0, 1.0))
+	_lantern_mat.emission_enabled = level > 0.02
+	_lantern_mat.emission = accent
+	_lantern_mat.emission_energy_multiplier = 0.4 + 1.1 * level
+	# A lit lantern stays visible in the mist; a spent one fades into it.
+	_lantern_mat.disable_fog = level > 0.15
 
 
 func _is_weapon_or_hand(body: Node) -> bool:
