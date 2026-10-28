@@ -15,9 +15,9 @@ signal claimed(shrine: HokoraShrine, ofuda: int)
 const HALO_SHADER := preload("res://src/shaders/torii_lantern_halo.gdshader")
 const GLOW_LIT := Color(1.0, 0.5, 0.2)
 const CORE_LIT := Color(1.0, 0.9, 0.7)
-const WOOD_COLOR := Color(0.2, 0.13, 0.08)
-const STONE_COLOR := Color(0.2, 0.2, 0.22)
-const ROOF_COLOR := Color(0.09, 0.085, 0.09)
+const WOOD_COLOR := Color(0.38, 0.26, 0.16)
+const STONE_COLOR := Color(0.34, 0.34, 0.37)
+const ROOF_COLOR := Color(0.16, 0.15, 0.16)
 ## Where the offering table stands, in shrine space (metres).
 const ALTAR_LOCAL := Vector3(0.0, 0.46, 0.78)
 const LANTERN_LOCAL := Vector3(0.44, 0.7, 0.8)
@@ -132,19 +132,20 @@ func _build_model(root: Node3D) -> void:
 	_add_box(root, "Platform", Vector3(0.96, 0.1, 0.78), Vector3(0.0, 0.45, 0.0), wood)
 	_add_box(root, "House", Vector3(0.72, 0.6, 0.6), Vector3(0.0, 0.8, 0.0), wood)
 	_add_box(root, "Door", Vector3(0.3, 0.42, 0.02), Vector3(0.0, 0.76, 0.31), dark)
-	# Gabled roof: two slopes meeting at a ridge, with eaves overhanging the house.
+	# Gabled roof: two slopes meeting at a ridge along X. Each slope is tilted so
+	# its outer (eave) edge sits lower than the ridge, with the eaves overhanging.
 	for sign_z in [-1.0, 1.0]:
-		var slope := _add_box(root, "RoofSlope", Vector3(1.1, 0.05, 0.56),
-			Vector3(0.0, 1.14, 0.2 * sign_z), roof)
-		slope.rotation_degrees.x = -30.0 * sign_z
-	_add_box(root, "RoofRidge", Vector3(1.12, 0.06, 0.07), Vector3(0.0, 1.38, 0.0), dark)
+		var slope := _add_box(root, "RoofSlope", Vector3(1.22, 0.05, 0.62),
+			Vector3(0.0, 1.16, 0.27 * sign_z), roof)
+		slope.rotation_degrees.x = 30.0 * sign_z
+	_add_box(root, "RoofRidge", Vector3(1.24, 0.06, 0.07), Vector3(0.0, 1.36, 0.0), dark)
 	_add_box(root, "Altar", Vector3(0.52, 0.42, 0.28), Vector3(0.0, 0.21, 0.78), wood)
 	var lantern := MeshInstance3D.new()
 	lantern.name = "PaperLantern"
 	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.07
-	cyl.bottom_radius = 0.09
-	cyl.height = 0.22
+	cyl.top_radius = 0.1
+	cyl.bottom_radius = 0.13
+	cyl.height = 0.28
 	lantern.mesh = cyl
 	_flame_mat = StandardMaterial3D.new()
 	_flame_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
