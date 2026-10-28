@@ -8,8 +8,9 @@ extends "res://src/core/test_room.gd"
 ##   of the skill tree (SkillTreeData)
 ## - Hokora shrines in the forest offer a choice of three yellow Ofuda (ShrineOffering,
 ##   D12): one buff for a minute, while the world holds still as it does in the menu
-## - Diegetic HUD on the katana tsuba (XP ring) and wrist (glowing HP charm, XP,
-##   time, score, level, points and active buffs) with no floating 2D screen-space UI
+## - Wrist readout (D14): a transparent HP ring with the kcal estimate inside it, shown only
+##   when the wrist is raised to the face (XP, score, level, points and buffs under it),
+##   with no floating 2D screen-space UI
 ## - Death ends the run, saves local high score, and presents an in-world
 ##   memorial stele + a Restart Ema (wooden votive plaque) that starts a new run
 ##   when sliced.
@@ -57,6 +58,8 @@ var buffs := RunBuffs.new()
 var wave_director: WaveDirector
 var pause_controller: PauseController
 var diegetic_hud: DiegeticHud
+## Estimated kilocalories of this run (D14), shown inside the wrist ring.
+var calorie_meter: CalorieMeter
 var element_system: ElementSystem
 var forest_world: ForestWorld
 const RUN_COMBAT_FOG := preload("res://src/run/run_combat_fog.gd")
@@ -349,6 +352,11 @@ func _setup_run_nodes() -> void:
 	add_child(element_system)
 	element_system.setup(self, katana)
 	diegetic_hud.bind_elements(element_system)
+	calorie_meter = CalorieMeter.new()
+	calorie_meter.name = "CalorieMeter"
+	add_child(calorie_meter)
+	calorie_meter.setup(player)
+	diegetic_hud.bind_calories(calorie_meter)
 	GameEvents.hit_landed.connect(_on_game_hit)
 	pause_controller = PauseController.new()
 	pause_controller.name = "PauseController"
@@ -406,6 +414,8 @@ func start_run() -> void:
 
 	state = RunState.INTRO
 	run_time = 0.0
+	if calorie_meter:
+		calorie_meter.reset()
 	xp = 0
 	level = 1
 	xp_to_next = xp_for_level(1)
@@ -520,6 +530,8 @@ static func xp_for_level(current_level: int) -> int:
 
 func _physics_process(delta: float) -> void:
 	var p_pos := _player_center()
+	if calorie_meter:
+		calorie_meter.counting = state == RunState.PLAYING
 	if hokora_manager:
 		hokora_manager.accepting_offerings = state == RunState.PLAYING
 	if katana:

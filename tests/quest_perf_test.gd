@@ -104,13 +104,13 @@ func _run_all() -> void:
 		RunPerfBudget.MAX_DRAW_CALLS - open_est.draw_calls >= 30)
 	run.pause_controller.close()
 
-	# E3: the wrist plate (HP row + element strip) stays a handful of meshes, and the
+	# E3/D14: the wrist readout (HP ring, element arc) stays a handful of meshes, and the
 	# element effects add no lights or draw calls of their own beyond one halo per gate.
 	var plate_meshes := 0
 	for mi in run.diegetic_hud.wrist_unit.find_children("*", "MeshInstance3D", true, false):
 		if (mi as MeshInstance3D).is_visible_in_tree():
 			plate_meshes += 1
-	_check("Wrist plate draws at most 9 meshes (%d)" % plate_meshes, plate_meshes <= 9)
+	_check("Wrist readout draws at most 9 meshes (%d)" % plate_meshes, plate_meshes <= 9)
 	var gate_halos := 0
 	for g in get_tree().get_nodes_in_group("torii_gates"):
 		if (g as ToriiGate)._halo_mesh.visible:

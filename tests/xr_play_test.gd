@@ -194,12 +194,19 @@ func _rest_left() -> void:
 	sim.set_hand("left", Transform3D(b, sim.head_xf.origin + b * Vector3(-0.22, -0.6, -0.3)))
 
 
-## Left forearm up in front of the face, back of the wrist toward the eyes.
+## Left forearm up in front of the face, back of the wrist toward the eyes. The readout
+## (the ring on the back of the wrist) lands about 0.27 m from the eyes: inside the gesture's
+## 0.35 m, as a check-the-watch turn puts it (wrist_hud_test pins the limits).
 func _raise_wrist() -> void:
 	var b := _body_basis()
-	var pos := sim.head_xf.origin + b * Vector3(-0.08, -0.28, -0.32)
-	var wrist := b * Basis.from_euler(Vector3(deg_to_rad(55.0), deg_to_rad(-20.0), deg_to_rad(35.0)))
-	sim.set_hand("left", Transform3D(wrist, pos))
+	var ring_at := sim.head_xf.origin + b * Vector3(-0.06, -0.20, -0.26)
+	var to_eye := (sim.head_xf.origin - ring_at).normalized()
+	var z := -(b * Vector3.UP).slide(to_eye).normalized()
+	var x := to_eye.cross(z).normalized()
+	var target_basis := Basis(x, to_eye, z)
+	var mount := Basis.from_euler(Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(-14.0)))
+	var wrist := target_basis * mount.inverse()
+	sim.set_hand("left", Transform3D(wrist, ring_at - wrist * DiegeticHud.RING_OFFSET))
 
 
 ## Move a hand so its weapon holder lands on [param world] over [param seconds].

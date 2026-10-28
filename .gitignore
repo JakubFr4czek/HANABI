@@ -30,7 +30,7 @@ export_presets.cfg.bak
 # Do repo trafiają tylko przeniesione do assets/ pliki faktycznie użyte (zasada 6: nic >50 MB).
 /new_assets/
 /assets_incoming/
-/docs/concept/*.import
+/docs/**/*.import
 
 # CI (GitHub Actions): outputs and the coverage addon copied in only during CI
 /ci_out/

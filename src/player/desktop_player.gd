@@ -47,6 +47,8 @@ var health := PlayerHealth.new()
 var hurt_feedback := HurtFeedback.new()
 ## Hand offset from HAND_REST in camera space (x right, y up, z forward).
 var hand_offset := Vector3.ZERO
+## Held H: the desktop stand-in for the check-the-watch gesture, which raises the wrist readout.
+var wrist_check := false
 ## Seconds a scripted swing takes (changed with the mouse wheel).
 var swing_duration := 0.22
 ## Weapons that 1 / 2 / ... switch between (set by the room).
@@ -135,6 +137,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			rotate_y(-event.relative.x * mouse_look_sensitivity)
 			_pitch = clampf(_pitch - event.relative.y * mouse_look_sensitivity, deg_to_rad(-80), deg_to_rad(80))
 			camera.rotation.x = _pitch
+	elif event is InputEventKey and event.physical_keycode == KEY_H and not event.echo:
+		wrist_check = event.pressed
 	elif event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
 			KEY_ESCAPE:

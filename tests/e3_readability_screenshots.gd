@@ -100,6 +100,8 @@ func _gate_shots() -> void:
 
 
 func _wrist_shots() -> void:
+	# The readout is drawn only while the wrist is raised: H holds it up on desktop.
+	player.wrist_check = true
 	player.camera.rotation.x = deg_to_rad(-34.0)
 	player.hand_offset = Vector3(0.18, -0.14, 0.0)
 	run.kills = 12
@@ -125,6 +127,7 @@ func _wrist_shots() -> void:
 	await _frames(12)
 	await _shot("wrist_sakura_warning")
 	es.reset()
+	player.wrist_check = false
 	player.camera.rotation.x = deg_to_rad(-6.0)
 	player.hand_offset = Vector3.ZERO
 
