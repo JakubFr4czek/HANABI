@@ -567,3 +567,68 @@ Everything the player needs to know is conveyed naturally in the game world with
 ### 5. Scope Bloat & Hackathon Feasibility Risk
 - **Critical Flaw in Initial Draft**: Attempting to implement complex branching skill trees with 10+ nodes and intricate prerequisites would jeopardize shipping within the hackathon timeline.
 - **Root Remedy Applied in Plan**: Limited each element tree to exactly 5 focused nodes (1 awakening, 2 ability augments, 1 passive, 1 master synergy). Every upgrade modifies existing properties on `HeldWeapon` or `ElementSystem` (damage multiplier, cooldown, radius, duration) rather than requiring whole new subsystems.
+
+---
+
+## D1 – ofuda z kapliczek (Hokora)
+
+### Krok 0: diagnoza (wszystkie miejsca, gdzie gracz widzi lub zbiera „ofuda" / 御札)
+
+Zweryfikowane w kodzie. Cztery źródła, jedna nazwa:
+
+| # | Miejsce | Co gracz widzi | Stan przed D1 |
+|---|---------|----------------|---------------|
+| a | `RunGame._present_level_up()` (`run_game.gd`) | 3 latające `OfudaTalisman` z 御札 w nagłówku, slow-mo 0.2×, wybór staty (`UpgradePool`) | **aktywne**, mimo że GDD §6 mówi, że to wycofane |
+| b | `ofuda_drop_count_for()` + `_spawn_ofuda_drops()` (yōkai 25 %, elita 1–2, Oni 5–6) | fizyczne 御札 na ziemi po każdym zabiciu | aktywne |
+| c | węzeł `backstab_execution` → `backstab_ofuda` (`element_system.gd`) | bonusowe 札 przy ciosie od tyłu | aktywne |
+| d | `RunGame._build_end_screen()` → `restart_ofuda` | kartka „御札 · NEW RUN" na ekranie śmierci | aktywne |
+
+Dodatkowo: tekst błędu drzewka `skill_tree_menu.gd` („Gather more Ofuda from slain yōkai") wprost mówi, że walutę daje zabijanie.
+
+**Co dokładnie myli gracza (2–3 zdania):** to jest jedno słowo na dwie różne rzeczy. Kartki z 御札 wybierane w slow-mo dają *ulepszenia*, a fizyczne 御札 na ziemi i licznik `札×N` na nadgarstku to *waluta* do drzewka – ale wyglądają tak samo i oba się zbierają/tną. Do tego ekran śmierci pokazuje kartkę 御札 „NEW RUN", a w drzewku ta sama nazwa oznacza wydawanie. Gracz nie wie, czy kartka to nagroda, koszt, czy restart, i dlaczego zabicie czegoś daje walutę, skoro level-up też „daje ofuda".
+
+### Krok 1: zasady (decyzje)
+
+1. **Ofuda pochodzą wyłącznie z kapliczek (hokora)** w lesie. Jedna waluta, jeden sink: drzewko.
+2. **Usunięte:** dropy z yōkai/elit/Oni (`OFUDA_SWARM_CHANCE`, `OFUDA_ELITE_*`, `OFUDA_ONI_*`), `backstab_ofuda`, cięcie kart przy level-upie (`OfudaTalisman` jako wybór), `UpgradePool` (sześć statystyk), klawisze 1–3 i stan `LEVEL_UP`, slow-mo przy level-upie.
+3. **Backstab:** efekt węzła zostaje, ale bez ofuda: mnożnik ciosu od tyłu **×2.5 → ×3.0** („Rear strikes ×3 damage").
+4. **Level-up:** zostaje jako **ranga/wynik** (krzywa XP bez zmian) + **leczenie 10 HP** (`RunGame.LEVEL_UP_HEAL_HP`) + dźwięk `level_up`. Bez wyboru, bez slow-mo, bez stanu. Statystyki z `UpgradePool` **usunięte** (nie przeniesione: drzewko ma już 20 węzłów; dwa systemy ulepszeń to dokładnie ten zamęt). Moc rośnie wyłącznie z drzewka i z rangi duszy (`POWER_PER_RANK`).
+5. **Restart na ekranie śmierci:** kartka 御札 → **絵馬 (ema)**, drewniana tabliczka, nagłówek „絵馬 · NEW RUN". Nie jest walutą, nie ma kanji 御札, ma inny kształt i kolor (drewno, nie papier). Klasa `OfudaTalisman` → `VotiveTablet` (`votive_tablet.gd`).
+6. **Koszty drzewka: bez zmian (3/5/5/8/12 = 33 na żywioł).** Zmienia się wydajność: zamiast ~30 ofuda z 5 min walki (dropy) jest ~6 z kapliczki i kapliczek jest mało – szczegóły w „Krok 3: balans".
+
+### Interpretacja „rzadko" (niejednoznaczność)
+
+Jakub napisał: „ta ofuda ... bedzie wystepowac duzo zardziej niz torii dosc bardzo rzadko". Przyjęta interpretacja: **„zardziej" = „rzadziej"**, czyli kapliczki są **dużo rzadsze niż torii**.
+- Torii żywiołów: co 18–32 m (średnio 24 m).
+- Kapliczka: **średnio co ~187 m marszu** (slot 6×6 chunków = 168 m, szansa 0.9 na kapliczkę w slocie), czyli **~60–90 s marszu** w tempie 2.2–3.0 m/s. To ~8× rzadziej niż torii.
+- Pierwsza kapliczka: **otwierająca**, 30 m przed startem (widoczna od razu, ~12 s marszu) – spełnia gwarancję „w zasięgu w ciągu ~60 s".
+
+Jeśli Jakub miał na myśli coś innego, zmiana to jedna stała: `ElementBalance.HOKORA_SLOT_CHANCE` / `HOKORA_SLOT_CHUNKS`.
+
+### Kapliczka (hokora) – specyfikacja
+
+- **Diegetyczna**: ciepłe, bursztynowo-czerwone światło lampionu (halo `torii_lantern_halo.gdshader`, `fog_disabled`, bez `OmniLight3D` – zero świateł w budżecie Quest), czytelne z ~20–30 m przez mgłę (mgła pełna od 10.5 m, halo do ~35 m).
+- **Dźwięk**: dzwoneczek **suzu** (`hokora_suzu`, generowany w `scripts/generate_hanabi_proc_audio.py`) przy zbliżeniu do 14 m, co 6 s.
+- **Bez strzałek UI.**
+- **Model**: proceduralny drewniany hokora na kamiennym cokole. Punkt podmiany: węzeł `ModelSlot` w `scenes/world/hokora_shrine.tscn` (D5 podmieni na asset z `assets_incoming/shrine/`).
+- **Odbiór**: **podejście** – ciało gracza w promieniu **1.4 m** od ołtarza. Bez cięcia katanĄ. Feedback: dźwięk, 6 ofuda wypływa z ołtarza i leci do gracza (`OfudaPickup`, magnes), licznik `札×N` na nadgarstku rośnie o 1 przy każdym podniesieniu, kapliczka gaśnie **na stałe** (bez farmienia, na czas runu).
+- **Liczba z jednej kapliczki: 6** (`ElementBalance.OFUDA_PER_HOKORA`).
+
+### Placement (wzór: torii E2a)
+
+- Slot = 6×6 chunków (168 m). Pozycja kandydata = deterministyczny hash (`slot`, seed świata) → ta sama mapa w każdym runie, zero losowości per chunk.
+- Walidacja **raz**, przy pierwszym zbliżeniu (≤ 34 m): `ForestWorld.is_clear_of_props(r=2.4)`, zapytanie fizyczne na warstwę pni (`TRUNK_LAYER`), odległość ≥ 10 m od torii (`ToriiManager.is_near_gate`), nachylenie terenu ≤ 0.5. Nieudany kandydat → 6 alternatywnych offsetów z tego samego hasha → inaczej slot pusty (cache `none`).
+- Kandydat trafia do cache na czas runu; węzeł kapliczki powstaje w promieniu **34 m** i jest zwalniany dopiero w promieniu **60 m** (poza mgłą, bez „znikania przed graczem").
+- Ponowne wejście w slot: ten sam węzeł (słownik `slot → węzeł`), **bez duplikatów**; odebrana kapliczka wraca jako ciemna (`claimed` trzymane w słowniku runu).
+- Nigdy w kolizji z pniem, skałą, latarnią, bramą; ≥ 30 m od startu (poza pętlą spawnu wrogów 7.6–10.8 m).
+- Otwierająca kapliczka (slot 0,0): pierwszy poprawny punkt w wachlarzu 28–34 m przed startem, co 15°.
+
+### Krok 3: balans (symulacja w `tools/balance_model.gd`)
+
+Model dostaje odległość marszu: `speed × walk_share` (profil: careful 2.2 m/s × 0.45, average 2.6 × 0.6, skilled 3.0 × 0.75). Każde przejście kolejnej pozycji kapliczki = +6 ofuda. Kille i poziomy dalej liczone walką (bez zmian).
+
+Cele (z zadania Jakuba):
+- w 8-minutowym runie **5–7 węzłów** (średni gracz),
+- finał (węzeł 5 = „cięcie jak masło", D4) osiągalny w **dobrym** runie ~8–10 min.
+
+Wynik symulacji: patrz sekcja „Wynik symulacji D1" poniżej (wpisana po implementacji).
