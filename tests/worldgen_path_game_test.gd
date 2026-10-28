@@ -1,24 +1,16 @@
 extends Node
-## The footpath is visible in the game, not only in the data (docs/WORLDGEN_TOOL.md).
-## Runs the real run scene and checks:
+## The footpath is part of the game's forest (docs/WORLDGEN_TOOL.md). Runs the real
+## run scene and checks:
 ##  a) the forest has its paths and the ground under the glade carries path weight;
 ##  b) a path starts within 6 m of the player's spawn;
-##  c) the trail reads against the ground beside it: its luminance is at least 25% above
-##     the duff, computed from the material parameters the shader really uses
-##     (the packed-earth texture, its tint and gain), with the shader's own tints
-##     for the neighbouring soil and grass. On a build without the trail material
-##     the trail is the stone layer, which the same check measures;
+##  c) lanterns stand on the trail, at least path_lantern_spacing apart in a chunk,
+##     and clear of the gates of their chunk;
 ##  d) no trunk or boulder stands inside the path's half width plus its clearance.
+## How the trail looks on screen is checked in worldgen_path_visible_test, from the
+## pixels of the rendered frame (not from material parameters).
 ##   godot --headless --path . --fixed-fps 90 res://tests/worldgen_path_game_test.tscn
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
-# The shader multiplies the soil, grass and stone by these literal vectors in
-# linear light (they are not source_color uniforms, so they are not converted).
-const SOIL_TINT := Vector3(0.58, 0.50, 0.44)
-const GRASS_TINT := Vector3(0.42, 0.52, 0.40)
-const STONE_TINT := Vector3(0.50, 0.52, 0.54)
-const OLD_TRAIL_DARKEN := 0.86
-const MIN_CONTRAST := 0.25
 
 var failures := 0
 
@@ -46,9 +38,7 @@ func _run_all() -> void:
 	var near := forest.paths.nearest_point(spawn_xz, 6.0)
 	_check("A path starts within 6 m of the spawn (nearest %s)" % str(near), near != Vector2.INF)
 
-	var contrast := _trail_contrast(forest)
-	_check("The trail is %.0f%% brighter than the ground beside it (need %.0f%%)" % [contrast * 100.0, MIN_CONTRAST * 100.0],
-		contrast >= MIN_CONTRAST)
+	_check_lanterns(forest)
 
 	var reach := forest._path_half_width() + forest.profile.path_tree_clearance - 0.5
 	var worst := INF
@@ -68,55 +58,39 @@ func _run_all() -> void:
 	await get_tree().process_frame
 
 
-## Luminance of the trail over the luminance of the ground beside it, minus one.
-## Both come from the live ground material: the trail from its packed-earth
-## texture (or, without one, the stone layer it used to share), the ground beside
-## it from the soil and grass textures with the shader's own tints.
-func _trail_contrast(forest: ForestWorld) -> float:
-	var mat := forest._ground_mat
-	var trail_lin: Vector3
-	var path_texture := mat.get_shader_parameter("path_albedo") as Texture2D
-	if path_texture != null:
-		var tint: Color = mat.get_shader_parameter("path_tint")
-		var gain := float(mat.get_shader_parameter("path_gain"))
-		trail_lin = _linear_mean(path_texture) * _linear(tint) * gain
-	else:
-		trail_lin = _linear_mean(load("res://assets/textures/forest_ground/rocky_trail/rocky_trail_diff_1k.jpg")) \
-			* STONE_TINT * OLD_TRAIL_DARKEN
-	var soil := _linear_mean(load("res://assets/textures/forest_ground/forrest_ground_01/forrest_ground_01_diff_1k.jpg")) * SOIL_TINT
-	var grass := _linear_mean(load("res://assets/textures/forest_ground/leafy_grass/leafy_grass_diff_1k.jpg")) * GRASS_TINT
-	var beside := 0.5 * soil + 0.5 * grass
-	var beside_lum := _luminance(beside)
-	if beside_lum <= 0.0:
-		return -1.0
-	return _luminance(trail_lin) / beside_lum - 1.0
-
-
-static func _linear(c: Color) -> Vector3:
-	return Vector3(_s2l(c.r), _s2l(c.g), _s2l(c.b))
-
-
-static func _s2l(v: float) -> float:
-	return v / 12.92 if v <= 0.04045 else pow((v + 0.055) / 1.055, 2.4)
-
-
-static func _luminance(c: Vector3) -> float:
-	return 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z
-
-
-## Mean colour of a texture in linear light, sampled on a 64×64 downscale.
-static func _linear_mean(texture: Texture2D) -> Vector3:
-	var img := texture.get_image()
-	# Imported ground textures are block-compressed: read them as RGBA first.
-	if img.is_compressed():
-		img.decompress()
-	img.resize(64, 64, Image.INTERPOLATE_BILINEAR)
-	var sum := Vector3.ZERO
-	for y in 64:
-		for x in 64:
-			var c := img.get_pixel(x, y)
-			sum += Vector3(_s2l(c.r), _s2l(c.g), _s2l(c.b))
-	return sum / 4096.0
+## Lanterns: on the trail, spaced along it, never beside a gate of their chunk.
+func _check_lanterns(forest: ForestWorld) -> void:
+	var spacing: float = forest.profile.path_lantern_spacing
+	var total := 0
+	var off_path := 0
+	var too_close := 0
+	var by_gate := 0
+	var worst_gap := INF
+	for key in forest._chunks:
+		var chunk := forest._chunks[key] as Node3D
+		var field := forest._path_field(key)
+		var centre := Vector2(key.x * forest.profile.chunk_size, key.y * forest.profile.chunk_size)
+		var lanterns: Array = chunk.get_meta("lantern_world_positions", [])
+		var gates: Array = chunk.get_meta("torii_world_positions", [])
+		for i in lanterns.size():
+			var a: Vector3 = lanterns[i]
+			total += 1
+			if forest._field_at(field, Vector2(a.x, a.z) - centre) > forest._path_half_width() + 3.0:
+				off_path += 1
+			for g in gates:
+				var gate: Vector3 = g
+				if Vector2(a.x - gate.x, a.z - gate.z).length() < ForestWorld.LANTERN_CLEAR_OF_TORII:
+					by_gate += 1
+			for j in range(i + 1, lanterns.size()):
+				var b: Vector3 = lanterns[j]
+				var gap := Vector2(a.x - b.x, a.z - b.z).length()
+				worst_gap = minf(worst_gap, gap)
+				if gap < spacing - 0.01:
+					too_close += 1
+	_check("Lanterns stand on the trail (%d of %d more than 3 m from it)" % [off_path, total], total > 0 and off_path == 0)
+	_check("Lanterns in a chunk keep %.0f m apart (closest %.2f m)" % [spacing, worst_gap if worst_gap < INF else -1.0],
+		too_close == 0)
+	_check("No lantern stands beside a gate of its chunk (%d too close)" % by_gate, by_gate == 0)
 
 
 static func _vertex_weights(chunk: Node3D) -> PackedFloat32Array:

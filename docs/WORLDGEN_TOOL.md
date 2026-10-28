@@ -40,7 +40,7 @@ odtwarzalny z kodu.
 | **Trees** | gatunki drzew | `trees` (lista `TreeEntry`), `density_frequency`, `tree_keep_min/max` (gęstość i prześwity) |
 | **Undergrowth** | podszycie (kamienie, a od D5 paprocie, pniaki, kłody) | `undergrowth` (lista `UndergrowthEntry`) |
 | **Torii** | bramy w lesie | `torii_scene`, `torii_chunk_chance` (rzadkość), `torii_max_per_chunk`, `torii_group_keep`, `torii_height_*`, `torii_min_spacing`, `torii_row_*` (rzędy senbon), `torii_glow_*` |
-| **Lanterns** | latarnie wzdłuż ścieżek | `lantern_scene`, `lantern_max_per_chunk`, `lantern_min_spacing`, `lantern_cluster_threshold`, `lantern_clearance` |
+| **Lanterns** | tōrō wzdłuż ścieżek | `lantern_scene`, `lantern_max_per_chunk`, `path_lantern_spacing`, `lantern_clearance` |
 | **Shrines** | kapliczki z ofudą (D1) | `shrine_slot_chunks` (rozmiar slotu), `shrine_slot_chance` (rzadkość). Musi być rzadziej niż torii – sprawdza walidacja |
 | **Lights and sky** | światło, mgła, paleta | `shafts_*` (promienie księżyca), `fog_start`, `fog_end` (≤ 14 m), `fog_curve`, `dusk_pink`, `night_blue`, `dusk_mix` (0 = noc, 1 = róż), `ambient_energy`, `moon_*`, `exposure`, `glow_intensity`, `volumetric_fog` (tylko PC) |
 | **Ground** | materiał terenu | `ground_wetness`, `ground_cavity_ao`, `ground_normal_strength`, `ground_roughness_wet` |
@@ -93,7 +93,7 @@ rozłożenia na klatki (zob. „Ograniczenia”).
 
 - **Poisson-disk (Bridson 2007):** `src/forest/poisson_disk.gd`. Drzewa,
   bramy, latarnie i kamienie: odstęp na rodzaj (`min_spacing`,
-  `torii_min_spacing`, `lantern_min_spacing`). Kandydaci drzew to funkcja
+  `torii_min_spacing`, `path_lantern_spacing`). Kandydaci drzew to funkcja
   czysta chunka i seeda: sąsiedzi widzą te same kandydaty, więc las nie zależy
   od kolejności ładowania. Źródło: R. Bridson, „Fast Poisson Disk Sampling in
   Arbitrary Dimensions”, SIGGRAPH 2007 sketch.
@@ -136,6 +136,12 @@ Dwie suity, razem ok. 30 s, bez długich czekań w czasie rzeczywistym:
   przebudowach), dock (statystyki, uwagi, reset grupy, zapis presetu), plugin
   się kompiluje i jest włączony, a gra rysuje ten sam las co podgląd.
 
+- `tests/worldgen_path_game_test.tscn`: w `run.tscn` ścieżka jest w glade i zaczyna się
+  w 6 m od spawnu, lampiony stoją na ścieżce, co najmniej 15 m od siebie w chunku i nie
+  bliżej niż 3,5 m od bramy, a pnie i kamienie nie wchodzą w pas ścieżki.
+- `tests/worldgen_path_visible_test.tscn`: **okno, nie headless.** Kontrast ścieżki z
+  pikseli klatki gry, ze spawnu i 20 m dalej (zob. „Ścieżka w grze” niżej).
+
 Testy sąsiednie, które pilnują lasu: `forest_world_test`, `quest_perf_test`,
 `hokora_test`, `torii_placement_test`, `point14_fog_torii_test`,
 `xr_forest_anchor_test`.
@@ -149,24 +155,50 @@ Zrzuty do oceny: `tools/worldgen/worldgen_screenshots.tscn` (okno, nie headless)
 
 ## Ścieżka w grze (poprawka po testach Jakuba)
 
-Zrzuty z gry (`run.tscn`, nie z podglądu), mgła i domyślna paleta:
-`docs/worldgen/shots/game_path_from_spawn.png` (ze spawnu wzdłuż ścieżki) i
-`docs/worldgen/shots/game_path_20m_along.png` (20 m dalej). Zrzuty robi
-`tools/worldgen/game_path_screenshots.tscn` (okno, nie headless).
+Ścieżka miała być czytelna w grze, nie tylko w danych. Co zrobiono i jak to sprawdzamy:
 
-Pomiar kontrastu z materiału żywego shadera: pas ścieżki jest o **ok. 41% jaśniejszy**
-niż ziemia obok (liniowa luminancja, te same mnożniki co w shaderze). Na poprzednim
-buildzie (`f186512`) ta sama asercja daje **−15%** i test pada
-(`tests/worldgen_path_game_test.tscn`).
+- **Nawierzchnia:** żwir `rocky_trail` (Poly Haven, CC0), chłodny, prawie neutralny
+  odcień (`path_tint`) i wzmocnienie `path_gain` 2,2. Stara ziemia `ground067` była
+  brązowa na brązowym gruncie i w renderze wypadała ciemniej od poboczy.
+- **Krawędź:** węższy przejściowy pas wagi ścieżki (0,75–1,2 × szerokość) i mniej
+  szumu na brzegu, więc krawędź jest ostra. Rzadkie płaskie kamienie leżą tuż za
+  krawędzią (w shaderze, bez nowych obiektów).
+- **Lampiony (tōrō):** kamienny tōrō ok. 1 m zastępuje dawną bryłę z trzech pudełek.
+  Stoją **tylko przy ścieżce**, co najmniej `path_lantern_spacing` (15 m) od siebie
+  w jednym chunku, najwyżej 2 na chunk, i nigdy bliżej niż 3,5 m od bramy tego chunku.
+  Świecą słabym, ciepłym kolorem (emisja, bez źródła światła), słabszym od poświaty
+  bramy. Lampiony nadal rysują się jednym MultiMeshem na chunk, bez nowych świateł.
+- **Podłoże:** bez zmian poza krawędzią; las i ścieżka nadal nie dzielą materiału.
 
-**Czy gracz od razu widzi ścieżkę?** Nie od razu. Na zrzucie ze spawnu pas
-zaczyna się przy dolnej krawędzi kadru i prowadzi w głąb, ale jest ciemnobrązowy
-na ciemnobrązowym gruncie, a deszcz i mgła zmiękczają krawędzie. Dopiero na drugim
-spojrzeniu widać go jako ciepły, jaśniejszy pas. Na zrzucie 20 m dalej o uwagę
-konkurują niebieska i fioletowa poświata bram, które przyciągają wzrok bardziej niż
-ścieżka. Pomiar 41% to kontrast luminancji z materiału, nie to, co gracz zauważy
-w ruchu. Nie oceniałem w VR (brak gogli w tej sesji), więc ostateczne słowo należy
-do Jakuba na goglach.
+**Test renderu** (`tests/worldgen_path_visible_test`, okno, nie headless; uruchamia go
+`tools/run_one_test.sh` bez `--headless`). Czyta piksele klatki z `run.tscn` (mgła i nocna
+paleta profilu), z kamery 1,6 m nad spawnem patrzącej wzdłuż ścieżki, a potem 20 m dalej.
+Dla odległości 2–12 m rzutuje oś ścieżki na ekran i uśrednia jasność liniową: pas ścieżki
+(przesunięcia ±0,6 m) z pasem gruntu po obu stronach (±2,4 do ±3,2 m). Próg: **≥ 25%** w
+obu kadrach.
+
+| Build | Kadr ze spawnu | Kadr 20 m dalej | Wynik |
+|---|---|---|---|
+| `fc42a47` (przed poprawką) | −15% | +4% | FAIL |
+| ta poprawka | +43% | +59% | PASS |
+
+Zrzuty z gry (`run.tscn`, mgła, noc): `docs/worldgen/shots/game_path_from_spawn.png`
+i `game_path_20m_along.png` (po poprawce), `*_before.png` (build `fc42a47`).
+Robi je `tools/worldgen/game_path_screenshots.tscn` (okno).
+
+**Czy gracz od razu widzi ścieżkę?** Tak, na zrzucie z pulpitu: ze spawnu jasny, ostro
+odcięty pas żwiru zaczyna się przy dolnej krawędzi kadru i prowadzi w głąb, a podłoże
+po bokach jest wyraźnie ciemniejsze. Zastrzeżenia, które zostają:
+- **VR nie sprawdzone.** Nie mam gogli w tej sesji. Test mierzy okno 75° bez stereo,
+  więc ostateczne słowo należy do Jakuba na goglach (pkt w `docs/QUEST_TEST.md`).
+- Pas wygląda bardziej jak żwirowa droga niż ubita ziemia. To kompromis za czytelność;
+  koncept dopuszcza taki wariant, ale to kwestia gustu.
+- Przy 20 m poświata bram (niebieska i fioletowa) nadal przyciąga wzrok mocniej niż
+  ścieżka, choć ścieżka jest już widoczna.
+- Lampiony nie wchodzą w kadry z zrzutów. Ich rozmieszczenie sprawdza
+  `tests/worldgen_path_game_test` (na ścieżce, rozstaw, z dala od bram), nie oko.
+- Rozstaw lampionów sprawdzany jest w obrębie chunku. Między sąsiednimi chunkami może
+  być mniejszy.
 
 **Koszt bramy (pkt 7 poprawek).** `find_gate_spot` (samo szukanie) mierzy
 `tests/torii_placement_test` w izolacji, mediana z 5 przebiegów: 0,034 ms

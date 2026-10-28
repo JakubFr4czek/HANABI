@@ -43,11 +43,17 @@ const KIND_TORII := 1
 const KIND_LANTERN := 2
 const KIND_UNDERGROWTH := 3
 ## Lantern parts (size, centre) shared by the mesh and its collider.
+## A low stone tōrō: base, shaft, ledge, light box, roof and finial (about 1 m).
 const LANTERN_PARTS := [
-	[Vector3(0.22, 0.42, 0.22), Vector3(0.0, 0.21, 0.0)],
-	[Vector3(0.34, 0.28, 0.34), Vector3(0.0, 0.56, 0.0)],
-	[Vector3(0.4, 0.08, 0.4), Vector3(0.0, 0.76, 0.0)],
+	[Vector3(0.46, 0.12, 0.46), Vector3(0.0, 0.06, 0.0)],
+	[Vector3(0.14, 0.40, 0.14), Vector3(0.0, 0.32, 0.0)],
+	[Vector3(0.36, 0.06, 0.36), Vector3(0.0, 0.55, 0.0)],
+	[Vector3(0.28, 0.26, 0.28), Vector3(0.0, 0.71, 0.0)],
+	[Vector3(0.44, 0.07, 0.44), Vector3(0.0, 0.875, 0.0)],
+	[Vector3(0.12, 0.10, 0.12), Vector3(0.0, 0.96, 0.0)],
 ]
+## Lanterns keep this far from a gate of their chunk (metres, from its centre).
+const LANTERN_CLEAR_OF_TORII := 3.5
 ## Trunk hull top (mesh space): above the reach of a raised blade. The
 ## trunk is hulled in slices this tall (overlapping a little), so the
 ## hull follows the taper and flare instead of bridging them.
@@ -536,6 +542,7 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 	var field := _path_field(coord)
 	var path_keep := _path_half_width() + 0.6
 	var placed: Array = []
+	var gates_here: Array = root.get_meta("torii_world_positions", []) if kind == KIND_LANTERN else []
 	for p in _sites_for(rng, coord, spec):
 		var lx: float = p.x
 		var lz: float = p.y
@@ -543,6 +550,8 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 		var wz := root.position.z + lz
 		if _in_clearing(wx, wz):
 			clearing_hits += 1
+			continue
+		if kind == KIND_LANTERN and _near_gate_of_chunk(gates_here, wx, wz):
 			continue
 		if torii_manager and torii_manager.is_near_gate(wx, wz, GATE_CLEAR_OF_LIVE_GATE):
 			continue
@@ -624,12 +633,13 @@ func _torii_spec() -> Dictionary:
 
 func _lantern_spec() -> Dictionary:
 	return {
-		"max": profile.lantern_max_per_chunk, "spacing": profile.lantern_min_spacing,
-		"cluster": profile.lantern_cluster_threshold,
+		"max": profile.lantern_max_per_chunk, "spacing": profile.path_lantern_spacing,
+		"cluster": -1.0,
 		"scale_min": profile.lantern_scale_min, "scale_max": profile.lantern_scale_max, "grow": 0.0,
 		"tree_clear": profile.lantern_clearance, "prop_clear": profile.lantern_clearance,
 		"bury": 0.0, "obstacle": true,
 		"path_share": profile.lantern_on_path, "path_offset": _path_half_width() + 1.4, "avoid_path": false,
+		"path_only": true,
 	}
 
 
@@ -1010,7 +1020,11 @@ func _sites_for(rng: RandomNumberGenerator, coord: Vector2i, spec: Dictionary) -
 	var count := int(spec.max)
 	var spacing := float(spec.spacing)
 	var share := float(spec.path_share)
-	var poisson := _prop_sites(rng, count, spacing)
+	# Path-only kinds (lanterns) never fall back to random sites.
+	var path_only: bool = spec.get("path_only", false)
+	var poisson: Array[Vector2] = []
+	if not path_only:
+		poisson = _prop_sites(rng, count, spacing)
 	if paths == null or share <= 0.0 or count <= 0:
 		return poisson
 	var size := _chunk_size
@@ -1033,12 +1047,23 @@ func _sites_for(rng: RandomNumberGenerator, coord: Vector2i, spec: Dictionary) -
 			break
 		if _spaced(picks, site, spacing):
 			picks.append(site)
+	if path_only:
+		return picks
 	for site in poisson:
 		if picks.size() >= count:
 			break
 		if _spaced(picks, site, spacing):
 			picks.append(site)
 	return picks
+
+
+## True when a world point is within LANTERN_CLEAR_OF_TORII of a gate of the chunk.
+static func _near_gate_of_chunk(gates: Array, wx: float, wz: float) -> bool:
+	for g in gates:
+		var e: Vector3 = g
+		if Vector2(wx - e.x, wz - e.z).length() < LANTERN_CLEAR_OF_TORII:
+			return true
+	return false
 
 
 static func _spaced(picks: Array[Vector2], site: Vector2, spacing: float) -> bool:
@@ -1485,7 +1510,8 @@ static func _path_colour(field: PackedFloat32Array, idx: int, half_width: float)
 	if field.is_empty():
 		return Color.BLACK
 	var d := field[idx]
-	return Color(1.0 - smoothstep(half_width * 0.5, half_width * 1.6, d), 0.0, 0.0, 1.0)
+	# A tight ramp: the trail edge reads as an edge, not as a blur.
+	return Color(1.0 - smoothstep(half_width * 0.75, half_width * 1.2, d), 0.0, 0.0, 1.0)
 
 
 func _build_materials() -> void:
@@ -1504,8 +1530,9 @@ func _build_materials() -> void:
 		_ground_mat.set_shader_parameter(layer + "_normal", load(dir + "_nor_gl_1k.jpg"))
 	_ground_mat.set_shader_parameter("fog_fade_start", profile.ground_fade_start)
 	# Footpath material: its own texture and warm tint (see forest_ground.gdshader).
-	_ground_mat.set_shader_parameter("path_albedo", load("res://assets/textures/forest_path/ground067_diff_1k.jpg"))
-	_ground_mat.set_shader_parameter("path_normal", load("res://assets/textures/forest_path/ground067_nor_gl_1k.jpg"))
+	# Pale gravel (Poly Haven rocky_trail): lighter than the duff either side of it.
+	_ground_mat.set_shader_parameter("path_albedo", load("res://assets/textures/forest_ground/rocky_trail/rocky_trail_diff_1k.jpg"))
+	_ground_mat.set_shader_parameter("path_normal", load("res://assets/textures/forest_ground/rocky_trail/rocky_trail_nor_gl_1k.jpg"))
 	_ground_mat.set_shader_parameter("path_tint", profile.path_tint)
 	_ground_mat.set_shader_parameter("path_gain", profile.path_gain)
 	_ground_mat.set_shader_parameter("fog_fade_end", profile.ground_fade_end)
@@ -1534,7 +1561,8 @@ func _build_materials() -> void:
 	_lantern_mat.set_shader_parameter("fill", 0.3)
 	_lantern_mat.set_shader_parameter("specular_scale", 0.0)
 	_lantern_mat.set_shader_parameter("fog_fill", 0.2)
-	_lantern_mat.set_shader_parameter("emission_tint", Color(0.04, 0.05, 0.06))
+	# A faint warm glow, weaker than the torii's: no light source, only emission.
+	_lantern_mat.set_shader_parameter("emission_tint", Color(0.10, 0.055, 0.025))
 
 
 ## No per-node visibility range: Godot measures it to the node origin, i.e. a
