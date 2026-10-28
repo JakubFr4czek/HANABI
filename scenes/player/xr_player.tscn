@@ -23,6 +23,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
 near = 0.03
 
 [node name="Vignette" parent="XROrigin3D/XRCamera3D" instance=ExtResource("9_vignette")]
+process_mode = 1
 
 [node name="LeftHand" type="XRController3D" parent="XROrigin3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 1.1, -0.3)

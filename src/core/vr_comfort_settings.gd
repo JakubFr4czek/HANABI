@@ -144,10 +144,14 @@ func apply_to_player(player: Node3D) -> void:
 		vignette.set("auto_adjust", vignette_enabled)
 		# 0.0 strength = 0.65 inner radius (mild), 1.0 strength = 0.15 inner radius (strong)
 		vignette.set("auto_inner_radius", lerp(0.65, 0.15, vignette_strength))
-		if not vignette_enabled:
+		var mesh: Node = vignette.get_node_or_null("Mesh")
+		if vignette_enabled:
+			if mesh:
+				mesh.set("visible", true)
+		else:
 			vignette.set("radius", 1.0)
-			if vignette.has_node("Mesh"):
-				(vignette.get_node("Mesh") as CanvasItem if vignette.get_node("Mesh") is CanvasItem else vignette.get_node("Mesh") as Node3D).visible = false
+			if mesh:
+				mesh.set("visible", false)
 
 
 func set_vignette_enabled(enabled: bool, player: Node3D = null) -> void:

@@ -713,7 +713,7 @@ func _draw_comfort() -> void:
 	_draw_comfort_button("height_plus", "+ 5 cm", false, COMFORT_ACCENT)
 	_draw_comfort_button("height_reset", "RESET", false, COMFORT_ACCENT)
 
-	_draw_comfort_button("recenter", "◎ RECENTER HEADSET VIEW (OR HOLD LEFT MENU 1s)", false, Color(0.86, 0.45, 0.35))
+	_draw_comfort_button("recenter", "◎ RECENTER HEADSET VIEW (OR HOLD B/Y 0.6s)", false, Color(0.86, 0.45, 0.35))
 	_text("Configuration auto-saved to user://hanabi_vr.cfg", Vector2(840, 816), 18, DIM)
 
 
