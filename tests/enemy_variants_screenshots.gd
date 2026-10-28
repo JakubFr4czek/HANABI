@@ -30,6 +30,22 @@ func _ready() -> void:
 	await _frames(28)
 	await _shot("elite_shadow_pack")
 
+	# Each element's elite at 2.5 m, and a swarm yōkai at 2.5 m and 8 m.
+	for el in [Elements.SAKURA, Elements.STORM, Elements.INK, Elements.SHADOW]:
+		run.wave_director.clear_enemies()
+		var elite_el := run.wave_director.spawn_elite_at(Vector3(0.0, 0.0, -0.5), player.global_position, el)
+		elite_el.set_pose("stalk")
+		await _frames(28)
+		await _shot("elite_%s_2m5" % el)
+
+	run.wave_director.clear_enemies()
+	var near := run.wave_director.spawn_enemy_at(Vector3(0.0, 0.0, -0.5), player.global_position)
+	var far := run.wave_director.spawn_enemy_at(Vector3(0.0, 0.0, -6.0), player.global_position)
+	near.set_pose("stalk")
+	far.set_pose("stalk")
+	await _frames(28)
+	await _shot("swarm_2m5_8m")
+
 	run.wave_director.clear_enemies()
 	var oni := run.wave_director.spawn_oni_boss(player.global_position)
 	oni.global_position = Vector3(0.0, 0.0, -2.35)
