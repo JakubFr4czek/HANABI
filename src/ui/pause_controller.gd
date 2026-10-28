@@ -258,4 +258,4 @@ func _haptic(pointer_id: String, amplitude: float, seconds: float) -> void:
 func _hint_text() -> String:
 	if player is XRPlayer:
 		return "TRIGGER  select   ·   MENU  close"
-	return "CLICK  select   ·   1-4  school   ·   5/C  settings   ·   ENTER  unlock   ·   TAB / ESC  close"
+	return "CLICK  select   ·   1-4  school   ·   5/C  settings   ·   ENTER  unlock   ·   ESC  close"
