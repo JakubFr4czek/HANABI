@@ -29,8 +29,7 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Oni boss: mask `oni_mask_run.glb` + normal map; body `oni_body_run.glb` + kanabō `oni_kanabo_run.glb` (project CC0, `tools/gen_oni_mask_glb.py`, `tools/gen_oni_body_glb.py`; §17/§21 no account-free external boss mesh)
 - Memorial stele engraving font: **Yuji Boku** (Kinuta, SIL OFL), `assets/fonts/YujiBoku-Regular.ttf`
 - Skill-tree menu Latin lettering: **Cinzel** (The Cinzel Project Authors, SIL OFL 1.1), `assets/fonts/Cinzel-Variable.ttf`
-- Boot splash art (HANABI firework `firework_transparent.png` and the HANABI board `hanabi_splash_1920x1080.png`): original project artwork, made with AI image tools by Jakub Frączek (project asset, `assets/ui/splash/`)
-- NANJO studio logo (`nanjo_logo_transparent.png`, `nanjo_logo_1920x1080.png`): Nanjo studio logo, the studio's own asset (`assets/ui/splash/`)
+- Boot splash films: "HANABI" firework film (`assets/splash/hanabi.ogv`, its frame is the boot still `assets/splash/hanabi_boot.png`) and "NANJO" studio film (`assets/splash/nanjo.ogv`): **Nanjo (original)**, the studio's own work; re-encoded to 1280x720 Theora for the game (`assets/splash/`)
 
 ## Required attributions (CC BY 4.0 / CC BY 2.1 JP)
 These are also shown in game on the `CreditsLabel` under the controls board at the arena's edge.
