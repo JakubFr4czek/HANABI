@@ -159,11 +159,23 @@ niż ziemia obok (liniowa luminancja, te same mnożniki co w shaderze). Na poprz
 buildzie (`f186512`) ta sama asercja daje **−15%** i test pada
 (`tests/worldgen_path_game_test.tscn`).
 
-**Czy gracz od razu widzi ścieżkę?** Na zrzutach z pulpitu: ścieżka jest czytelna
-jako jaśniejszy, ciepły pas prowadzący przed spawn, ale nie jest oczywista od
-pierwszego spojrzenia. Pod deszczem i w mgle różnica jest umiarkowana, a pas nie
-ma koncepcyjnej czytelności (kamienne kontury, światło). Nie oceniałem w VR (brak
-gogli w tej sesji), więc ostateczne słowo należy do Jakuba na goglach.
+**Czy gracz od razu widzi ścieżkę?** Nie od razu. Na zrzucie ze spawnu pas
+zaczyna się przy dolnej krawędzi kadru i prowadzi w głąb, ale jest ciemnobrązowy
+na ciemnobrązowym gruncie, a deszcz i mgła zmiękczają krawędzie. Dopiero na drugim
+spojrzeniu widać go jako ciepły, jaśniejszy pas. Na zrzucie 20 m dalej o uwagę
+konkurują niebieska i fioletowa poświata bram, które przyciągają wzrok bardziej niż
+ścieżka. Pomiar 41% to kontrast luminancji z materiału, nie to, co gracz zauważy
+w ruchu. Nie oceniałem w VR (brak gogli w tej sesji), więc ostateczne słowo należy
+do Jakuba na goglach.
+
+**Koszt bramy (pkt 7 poprawek).** `find_gate_spot` (samo szukanie) mierzy
+`tests/torii_placement_test` w izolacji, mediana z 5 przebiegów: 0,034 ms
+(3 z 3 przebiegów; próg 2,0 ms bez zmian). Sam `spawn_gate_at` w
+`tests/diag/torii_spawn_cost.tscn` (mediana z 9, ta sama pozycja, bramę usuwamy
+po pomiarze): 0,60 ms na obecnym buildzie (2 bramy w scenie) i 0,68–0,71 ms na
+buildzie sprzed D8 (`7fad688`, 1 brama). Spawn nie wzrósł. Pierwsze wywołanie na
+buildzie sprzed D8 trwało 253 ms (maksimum w tym pomiarze); nie zbadałem, czy to
+jednorazowe ładowanie sceny bramy, bo mediana go nie obejmuje.
 
 ## Samoocena (surowo)
 
