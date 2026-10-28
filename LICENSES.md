@@ -28,7 +28,11 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/audio/sfx/cc0_combat/*.ogg` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 1.0 (`assets/audio/sfx/cc0_combat/LICENSE.txt`) |
 | `assets/audio/sfx/kenney_run/*.ogg` | https://kenney.nl/assets/interface-sounds & https://kenney.nl/assets/impact-sounds | Kenney | CC0 1.0 (`assets/audio/sfx/kenney_run/LICENSE.txt`) |
 | `assets/audio/sfx/cc0_storm/*` | https://opengameart.org/content/amb-rain-loop-1 , https://opengameart.org/content/rain-long-thunder , thunderclap WAV on OGA | Kresiek The Furry / WuxiaScrub / OGA submitters | CC0 (`assets/audio/sfx/cc0_storm/LICENSE.txt`) |
+| `assets/audio/sfx/bonsho/bonsho_*.wav` | https://commons.wikimedia.org/wiki/File:Bonsyou5599.ogg | Jnn | **CC BY 2.1 JP** / FAL / CC BY-SA (`assets/audio/sfx/bonsho/LICENSE.txt`) |
 | `assets/audio/music/cc0_run/orientalsomber.ogg` | https://opengameart.org/content/oriental-somber | Tozan | CC0 |
+| `assets/audio/music/cc0_run/taiko_layer.wav` | https://commons.wikimedia.org/wiki/File:02_Taiko2_(short).oga | Scott Harding / Singapore Wind Symphony Percussion Ensemble (Teohui) | CC0 1.0 Universal |
+| `assets/audio/music/cc0_run/shakuhachi_layer.wav` | https://commons.wikimedia.org/wiki/File:Shikanotoone_new.ogg | Araki Kodō III (1879–1935) | Public Domain (CC0 equivalent) |
+| `assets/audio/music/cc0_run/shakuhachi_taiko_layer.wav` | in-project arrangement of CC0 taiko & shakuhachi recordings | Singapore Wind Symphony / Araki Kodō III / HANABI | CC0 1.0 |
 | `assets/models/environment/torii_bazylonator/` ("Japanese Torii gate Game Asset", hero torii) | https://sketchfab.com/3d-models/japanese-torii-gate-game-asset-e12d2fa1b2b94928b8b87cb7787e2462 | Bazylonator | **CC BY 4.0**, modified (rescaled, rain/wet shading); credited in `CREDITS.md` and in game |
 | `assets/models/environment/torii_old_primagenevieve/` ("Old Torii", sunken torii) | https://sketchfab.com/3d-models/old-torii-34f21f85784a4dcf9e0f9c6b9d772e37 | Sarah Nguyen (Nguyen Phuong Hoa) (primagenevieve) | **CC BY 4.0**, modified (rescaled, darkened, wet shading); credited in `CREDITS.md` and in game |
 | `assets/models/enemies/oni_mask_run.glb`, `oni_mask_run_normal.png` | `tools/gen_oni_mask_glb.py`, `ONI_MASK_LICENSE.txt` | Jakub Frączek (HANABI) | CC0 1.0 — §17: no suitable external CC0 GLB without login |

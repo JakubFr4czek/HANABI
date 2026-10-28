@@ -26,10 +26,14 @@ const CATEGORIES := {
 	"imbue_ink": ["res://assets/audio/sfx/hanabi_proc", "imbue_ink"],
 	"imbue_shadow": ["res://assets/audio/sfx/hanabi_proc", "imbue_shadow"],
 	"element_fade": ["res://assets/audio/sfx/hanabi_proc", "element_fade"],
+	# Bonshō temple bell cues (Zadanie 5)
+	"bonsho": ["res://assets/audio/sfx/bonsho", ""],
+	"bonsho_oni": ["res://assets/audio/sfx/bonsho", "bonsho_oni"],
+	"bonsho_gate": ["res://assets/audio/sfx/bonsho", "bonsho_gate"],
 }
 const POOL_SIZE := 24
 const MAX_ACTIVE_WORLD_VOICES := 20
-const SOFT_CAP_CATEGORIES := ["enemy_tell", "blade_ring", "slap"]
+const SOFT_CAP_CATEGORIES := ["enemy_tell", "blade_ring", "slap", "bonsho_gate"]
 const WORLD_BUS := &"World"
 const AMBIENCE_BUS := &"Ambience"
 const MUSIC_BUS := &"Music"
@@ -138,8 +142,9 @@ func _load_category(category: String) -> void:
 	var prefix: String = CATEGORIES[category][1]
 	var randomizer := AudioStreamRandomizer.new()
 	var combat := category in ["swing", "clash", "cut", "slap", "impact_light", "impact_heavy", "player_hurt", "yokai_slice"]
-	randomizer.random_pitch = 1.14 if combat else 1.06
-	randomizer.random_volume_offset_db = 2.0 if combat else 1.5
+	var bell := category.begins_with("bonsho")
+	randomizer.random_pitch = 1.14 if combat else (1.02 if bell else 1.06)
+	randomizer.random_volume_offset_db = 2.0 if combat else (0.8 if bell else 1.5)
 	for file in ResourceLoader.list_directory(dir):
 		if file.get_extension() not in ["ogg", "wav"]:
 			continue
