@@ -29,6 +29,9 @@ const HEIGHT := 0.16
 @export var auto_drift_delay := 2.4
 
 var velocity := Vector3.ZERO
+## When set (a hokora claim, D1), the pickup flies to this node (the wrist tally)
+## instead of to the player's body.
+var fly_to: Node3D = null
 
 var _age := 0.0
 var _phase := 0.0
@@ -86,6 +89,8 @@ func step_pickup(delta: float, target_pos: Vector3, magnet_radius: float) -> boo
 	if _collected:
 		return true
 	_age += delta
+	if fly_to and is_instance_valid(fly_to):
+		target_pos = fly_to.global_position
 	# Face the player flat-on so the cinnabar seal always reads.
 	var to_target := target_pos - global_position
 	if Vector2(to_target.x, to_target.z).length_squared() > 0.001:

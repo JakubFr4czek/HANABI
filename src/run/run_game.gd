@@ -625,10 +625,14 @@ func _on_hokora_claimed(shrine: HokoraShrine, count: int) -> void:
 	GameEvents.log_event("hokora_claimed", {"slot": [shrine.slot.x, shrine.slot.y], "ofuda": count})
 	if _ofuda_pickups_root == null:
 		return
-	# The Ofuda rise off the offering table and drift to the player (the magnet rule
-	# of OfudaPickup); each one counts only when it arrives.
+	# The Ofuda rise off the offering table and fly to the wrist tally; each one
+	# counts only when it arrives there. The wrist plate also gives a pulse.
+	var wrist: Node3D = diegetic_hud.wrist_label if diegetic_hud else null
 	for pickup in OfudaPickup.spawn_drops(_ofuda_pickups_root, shrine.altar_position(), count, _rng):
+		pickup.fly_to = wrist
 		pickup.collected.connect(_on_ofuda_pickup_collected)
+	if player is XRPlayer:
+		(player as XRPlayer).left_holder.pulse(0.6, 0.14)
 	_refresh_hud()
 
 
