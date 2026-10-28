@@ -63,6 +63,15 @@ Zrzuty menu (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/sk
 - [ ] Dźwięk przy nasyceniu (inny per żywioł, cichy) i miękkie „zgaśnięcie” przy końcu.
 - [ ] Menu wsuwa się płynnie; stopka pokazuje żywioł, sekundy, A/B i 札. Zrzuty: `godot --path . --fixed-fps 90 res://tests/e3_readability_screenshots.tscn -- --desktop --shots /tmp/hanabi_e3`.
 
+## Cięcie jak masło (D4, tachi)
+
+- [ ] Węzeł 5 drzewka (Hanadachi / Raidachi / Sumidachi / Kagedachi) odblokowany, imbue żywiołu trwa: czyste, szybkie cięcie krawędzią (≥ 8 m/s) rozcina yōkai na dwie części w płaszczyźnie ostrza (poziomo przy cięciu w pasie).
+- [ ] Przekrój od pierwszej klatki widać jako świecąca linia w kolorze żywiołu (Ink: ciemna czerń z indygo, nie biała plama); żarzenie gaśnie w ~1.6 s.
+- [ ] Połówki leżą w miejscu cięcia, rozpadają się w płatki sakury i znikają po ~3.4 s. Nic nie blokuje ostrza ani gracza (kolizja tylko z terenem).
+- [ ] Ostrze nie szarpie się w dłoni po cięciu (odpór ~¼ zwykłego cięcia); spam kilku cięć na klatkę nie zapycha sceny (≤ 8 kawałków, ≤ 2 podziały na klatkę).
+- [ ] Elita: mocne cięcie to rana, dopiero zabójstwo ją rozcina. Oni: świecąca szczelina (~2 s) na korpusie zamiast rozcięcia.
+- [ ] Zrzuty: `godot --path . res://tests/element_abilities_screenshots.tscn -- --shots /tmp/hanabi_kirisute` (bez `--headless`). Ocena surowa: przekrój jest płaską plamą bez żarzącej się krawędzi (do poprawy).
+
 ## Komfort VR
 
 - [ ] Chwyt katany stabilny (brak dryfu dłoni > ~15 cm).
