@@ -10,7 +10,9 @@ enum Source {
 	SCENE,
 }
 
+## Name shown in the dock and in validation messages.
 @export var label := "Boulder"
+## BOULDER is the procedural stone; SCENE takes the mesh from the scene below.
 @export var source: Source = Source.BOULDER
 ## Used when source is SCENE (imported ferns, logs, stumps: D5).
 @export var scene: PackedScene
@@ -20,6 +22,7 @@ enum Source {
 @export_range(0, 24, 1) var max_per_chunk := 4
 ## Scale range, applied on top of the mesh's own size.
 @export_range(0.2, 4.0, 0.01) var scale_min := 1.0
+## Largest scale of this kind.
 @export_range(0.2, 4.0, 0.01) var scale_max := 2.3
 ## Fraction of the height sunk into the floor, so it does not balance on the slope.
 @export_range(0.0, 0.6, 0.01) var bury := 0.15

@@ -112,7 +112,21 @@ var _torii_mat: ShaderMaterial
 var _lantern_mat: ShaderMaterial
 var _tree_material_cache: ShaderMaterial = null
 var _rock_material_cache: ShaderMaterial = null
+## Profile numbers the height and clearance queries read on every call (a
+## gate search asks for hundreds of heights). Copied once per profile in _apply_profile.
+var _chunk_size := 28.0
+var _clearing_radius := 5.2
+var _prop_clearing := 3.4
+var _hill_amplitude := 4.6
+var _hill_blend := 9.0
+var _bump_amplitude := 0.18
+var _pocket_amount := 0.15
+var _root_amount := 0.10
+var _terrain_res := 41
 var _lightmap_gi: LightmapGI
+## Bark radius at chest height of the first tree kind (what a blade or body
+## stops short of). Read by the tests and the blink checks.
+var _trunk_chest_radius := 0.8
 var _static_gi := false
 var torii_manager: ToriiManager = null
 
@@ -171,6 +185,15 @@ func reset() -> void:
 
 ## Noise, materials and meshes come from the profile. Called whenever it changes.
 func _apply_profile() -> void:
+	_chunk_size = profile.chunk_size
+	_clearing_radius = profile.clearing_radius
+	_prop_clearing = profile.prop_clearing_radius
+	_hill_amplitude = profile.hill_amplitude
+	_hill_blend = profile.hill_blend_distance
+	_bump_amplitude = profile.bump_amplitude
+	_pocket_amount = profile.pocket_amount
+	_root_amount = profile.root_amount
+	_terrain_res = profile.terrain_resolution
 	var seed_mix := profile.world_seed
 	_tree_spot_cache.clear()
 	_potential_cache.clear()
@@ -235,7 +258,7 @@ func height_at(wx: float, wz: float) -> float:
 ## height_at() on the global lattice and splits each quad the same way,
 ## so this reproduces the visible ground instead of the analytic ideal.
 func _mesh_height(wx: float, wz: float) -> float:
-	var step := profile.chunk_size / float(profile.terrain_resolution - 1)
+	var step := _chunk_size / float(_terrain_res - 1)
 	var fx := wx / step
 	var fz := wz / step
 	var ix := int(floor(fx))
@@ -266,32 +289,32 @@ func _mesh_min_height(wx: float, wz: float, radius: float) -> float:
 ## trunk can be sunk into soil that belongs to the ground.
 func _hill_height(wx: float, wz: float) -> float:
 	var d := Vector2(wx, wz).length()
-	var clearing := profile.clearing_radius
+	var clearing := _clearing_radius
 	if d < clearing - MOUND_FADE_START:
 		return CLEARING_HEIGHT
-	var blend := smoothstep(clearing - HILL_BLEND_START, clearing + profile.hill_blend_distance, d)
-	var n := _height_noise.get_noise_2d(wx, wz) * profile.hill_amplitude
-	n += _bump_noise.get_noise_2d(wx, wz) * profile.bump_amplitude
+	var blend := smoothstep(clearing - HILL_BLEND_START, clearing + _hill_blend, d)
+	var n := _height_noise.get_noise_2d(wx, wz) * _hill_amplitude
+	n += _bump_noise.get_noise_2d(wx, wz) * _bump_amplitude
 	# Grade of the broad hill over a couple of metres. Pockets sit on the
 	# flats; a slope that is already near the walk limit does not get steeper.
 	var flat := _hill_flatness(wx, wz)
 	var pocket := _floor_noise.get_noise_2d(wx, wz)
 	var root := 1.0 - absf(_floor_noise.get_noise_2d(wx * 0.41 + 18.0, wz * 0.41))
-	n += (pocket * profile.pocket_amount + root * root * profile.root_amount) * flat
+	n += (pocket * _pocket_amount + root * root * _root_amount) * flat
 	return lerpf(CLEARING_HEIGHT, CLEARING_HEIGHT + n, blend)
 
 
 func _hill_flatness(wx: float, wz: float) -> float:
 	var sx := _height_noise.get_noise_2d(wx + 1.2, wz) - _height_noise.get_noise_2d(wx - 1.2, wz)
 	var sz := _height_noise.get_noise_2d(wx, wz + 1.2) - _height_noise.get_noise_2d(wx, wz - 1.2)
-	var grade := clampf(Vector2(sx, sz).length() * profile.hill_amplitude / 2.4, 0.0, 1.0)
+	var grade := clampf(Vector2(sx, sz).length() * _hill_amplitude / 2.4, 0.0, 1.0)
 	return 1.0 - smoothstep(0.22, 0.48, grade)
 
 
 ## Soil heaped against the trunk. Same spots the trees use, so the mound and
 ## the mesh meet. Fades out in the level glade and on slopes that are already steep.
 func _root_mound(wx: float, wz: float) -> float:
-	var clearing := profile.clearing_radius
+	var clearing := _clearing_radius
 	var d := Vector2(wx, wz).length()
 	if d < clearing - MOUND_FADE_START:
 		return 0.0
@@ -299,23 +322,23 @@ func _root_mound(wx: float, wz: float) -> float:
 	# Chunks are centered on their origin, so a point just west of 0 still
 	# belongs to chunk 0. Search the round neighbourhood, not floor() — but
 	# only the 4 m buckets the 1.6 m mound radius can touch.
-	var cx := int(round(wx / profile.chunk_size))
-	var cz := int(round(wz / profile.chunk_size))
+	var cx := int(round(wx / _chunk_size))
+	var cz := int(round(wz / _chunk_size))
 	var best := 0.0
 	var lox := int(floor((wx - 1.7) / MOUND_CELL))
 	var hix := int(floor((wx + 1.7) / MOUND_CELL))
 	var loz := int(floor((wz - 1.7) / MOUND_CELL))
 	var hiz := int(floor((wz + 1.7) / MOUND_CELL))
-	var half := profile.chunk_size * 0.5
+	var half := _chunk_size * 0.5
 	for ox in range(-1, 2):
 		# A neighbour's trunks can only reach this point if the 1.7 m reach crosses
 		# the shared border: most points only ever query their own chunk.
 		var nx := cx + ox
-		if wx + 1.7 < nx * profile.chunk_size - half or wx - 1.7 > nx * profile.chunk_size + half:
+		if wx + 1.7 < nx * _chunk_size - half or wx - 1.7 > nx * _chunk_size + half:
 			continue
 		for oz in range(-1, 2):
 			var nz := cz + oz
-			if wz + 1.7 < nz * profile.chunk_size - half or wz - 1.7 > nz * profile.chunk_size + half:
+			if wz + 1.7 < nz * _chunk_size - half or wz - 1.7 > nz * _chunk_size + half:
 				continue
 			var packed: Dictionary = _tree_spots(Vector2i(nx, nz))
 			var cells: Dictionary = packed.get("cells", {})
@@ -396,7 +419,7 @@ func _make_chunk(coord: Vector2i) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Chunk_%d_%d" % [coord.x, coord.y]
 	add_child(root)
-	root.position = Vector3(coord.x * profile.chunk_size, 0.0, coord.y * profile.chunk_size)
+	root.position = Vector3(coord.x * _chunk_size, 0.0, coord.y * _chunk_size)
 
 	var terrain := MeshInstance3D.new()
 	terrain.name = "Terrain"
@@ -619,7 +642,7 @@ func _potential_trunks(coord: Vector2i) -> Dictionary:
 		return _potential_cache[coord]
 	var points: Array[Vector4] = []
 	var clearing := 0
-	var size := profile.chunk_size
+	var size := _chunk_size
 	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
 	var field := _path_field(coord)
 	var path_gap := _path_half_width() + profile.path_tree_clearance
@@ -733,7 +756,7 @@ func _too_close_to_trees(spots: Array[Vector4], ids: PackedInt32Array, halo: Arr
 
 
 func _pick_focal_spot(coord: Vector2i, spots: Array[Vector4], ids: PackedInt32Array) -> int:
-	var chunk_center := Vector2(float(coord.x) * profile.chunk_size, float(coord.y) * profile.chunk_size)
+	var chunk_center := Vector2(float(coord.x) * _chunk_size, float(coord.y) * _chunk_size)
 	var best_idx := -1
 	var best_score := -INF
 	for i in spots.size():
@@ -741,7 +764,7 @@ func _pick_focal_spot(coord: Vector2i, spots: Array[Vector4], ids: PackedInt32Ar
 			continue
 		var s: Vector4 = spots[i]
 		var dist_to_center := Vector2(s.x - chunk_center.x, s.y - chunk_center.y).length()
-		var center_penalty := maxf(0.0, dist_to_center - (profile.chunk_size * 0.35)) * 0.3
+		var center_penalty := maxf(0.0, dist_to_center - (_chunk_size * 0.35)) * 0.3
 		var h := _hill_height(s.x, s.y)
 		var score := h - center_penalty
 		if score > best_score:
@@ -803,7 +826,7 @@ func _rebuild_chunk(coord: Vector2i) -> void:
 func is_clear_of_props(wx: float, wz: float, clearance: float) -> bool:
 	var cl_sq := clearance * clearance
 	var tree_cl_sq := (clearance + 0.35) * (clearance + 0.35)
-	var size := profile.chunk_size
+	var size := _chunk_size
 	var min_cx := int(round((wx - clearance - 0.35) / size))
 	var max_cx := int(round((wx + clearance + 0.35) / size))
 	var min_cz := int(round((wz - clearance - 0.35) / size))
@@ -913,8 +936,8 @@ func _path_field(coord: Vector2i) -> PackedFloat32Array:
 		return PackedFloat32Array()
 	if _path_field_cache.has(coord):
 		return _path_field_cache[coord]
-	var res := profile.terrain_resolution
-	var size := profile.chunk_size
+	var res := _terrain_res
+	var size := _chunk_size
 	var step := size / float(res - 1)
 	var half := size * 0.5
 	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
@@ -945,9 +968,9 @@ func _path_field(coord: Vector2i) -> PackedFloat32Array:
 
 ## Field value at a chunk-local point (nearest lattice vertex).
 func _field_at(field: PackedFloat32Array, local: Vector2) -> float:
-	var res := profile.terrain_resolution
-	var step := profile.chunk_size / float(res - 1)
-	var half := profile.chunk_size * 0.5
+	var res := _terrain_res
+	var step := _chunk_size / float(res - 1)
+	var half := _chunk_size * 0.5
 	var i := clampi(int(round((local.x + half) / step)), 0, res - 1)
 	var j := clampi(int(round((local.y + half) / step)), 0, res - 1)
 	return field[j * res + i]
@@ -963,7 +986,7 @@ func _sites_for(rng: RandomNumberGenerator, coord: Vector2i, spec: Dictionary) -
 	var poisson := _prop_sites(rng, count, spacing)
 	if paths == null or share <= 0.0 or count <= 0:
 		return poisson
-	var size := profile.chunk_size
+	var size := _chunk_size
 	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
 	var on_path: Array[Vector2] = []
 	for sample in paths.samples_in_rect(Rect2(centre - Vector2(size, size) * 0.5, Vector2(size, size)), spacing):
@@ -1002,8 +1025,8 @@ static func _spaced(picks: Array[Vector2], site: Vector2, spacing: float) -> boo
 ## (Bridson) at least [param spacing] apart, then [param count] of them picked
 ## at random. Any subset of a Poisson set keeps the spacing between its picks.
 func _prop_sites(rng: RandomNumberGenerator, count: int, spacing: float) -> Array[Vector2]:
-	var half := profile.chunk_size * 0.5
-	var sample := PoissonDisk.sample(rng, Vector2(-half, -half), Vector2(profile.chunk_size, profile.chunk_size), spacing)
+	var half := _chunk_size * 0.5
+	var sample := PoissonDisk.sample(rng, Vector2(-half, -half), Vector2(_chunk_size, _chunk_size), spacing)
 	for i in range(sample.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
 		var tmp := sample[i]
@@ -1024,7 +1047,7 @@ func _place_moon_shafts(root: Node3D, coord: Vector2i) -> void:
 	# lying across the forest.
 	var axis := Vector3(moon_direction.x * 0.45, maxf(moon_direction.y, 0.55), moon_direction.z * 0.45).normalized()
 	var transforms: Array[Transform3D] = []
-	var size := profile.chunk_size
+	var size := _chunk_size
 	var most := profile.shafts_max_per_chunk
 	var count := rng.randi_range(mini(2, most), most) if most > 0 else 0
 	for i in count:
@@ -1067,6 +1090,22 @@ func _new_collider(body_name: String, surface: String) -> StaticBody3D:
 	# What the blade feels when it meets it (HeldWeapon reads this).
 	body.set_meta("env_surface", surface)
 	return body
+
+
+## Collider body for placed props by kind: 0 trees (first tree kind), 1 gates,
+## 2 lanterns, 3 and up undergrowth (kind minus 3). Same layout as the spawn kinds.
+func _build_trunk_colliders(xfs: Array, kind: int, root: Node3D) -> StaticBody3D:
+	var typed: Array[Transform3D] = []
+	for xf in xfs:
+		typed.append(xf)
+	match kind:
+		KIND_TORII:
+			return _build_torii_colliders(typed, root)
+		KIND_LANTERN:
+			return _build_lantern_colliders(typed, root)
+		0:
+			return _build_tree_colliders(typed, 0, root)
+	return _build_undergrowth_colliders(typed, maxi(kind - KIND_UNDERGROWTH, 0), root)
 
 
 func _build_tree_colliders(xfs: Array[Transform3D], entry_index: int, root: Node3D) -> StaticBody3D:
@@ -1259,7 +1298,7 @@ func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 	if corridor_val < profile.torii_row_threshold:
 		return
 	var axis_x := corridor_val > SENBON_AXIS_THRESHOLD
-	var size := profile.chunk_size
+	var size := _chunk_size
 	var transforms: Array[Transform3D] = []
 	var span := profile.torii_row_max - profile.torii_row_min + 1
 	var gate_count := profile.torii_row_min + int((_hash01(_hash_coord(coord, 9, 0), 0) * float(span)))
@@ -1309,8 +1348,8 @@ func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 func _build_terrain_mesh(coord: Vector2i) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var size := profile.chunk_size
-	var res := profile.terrain_resolution
+	var size := _chunk_size
+	var res := _terrain_res
 	var step := size / float(res - 1)
 	var field := _path_field(coord)
 	var half_width := _path_half_width()
@@ -1357,7 +1396,7 @@ func _build_terrain_collider(mesh: ArrayMesh) -> StaticBody3D:
 
 
 func _in_clearing(wx: float, wz: float, margin: float = 0.0) -> bool:
-	return Vector2(wx, wz).length() < profile.prop_clearing_radius + margin
+	return Vector2(wx, wz).length() < _prop_clearing + margin
 
 
 ## Instance scale that makes the shared gate mesh [param height] metres tall.
@@ -1505,6 +1544,8 @@ func _build_meshes() -> void:
 		_tree_mats.append(_sakura_material(entry) if entry.crown == TreeEntry.Crown.SAKURA else _tree_material())
 		_tree_shapes.append(built.hulls)
 		_tree_chest.append(float(built.chest))
+	if not _tree_chest.is_empty():
+		_trunk_chest_radius = _tree_chest[0]
 	_torii_mesh = _built_once("torii|%s" % _scene_key(profile.torii_scene), _build_torii_mesh) as Mesh
 	_torii_shapes = _built_once("torii_hulls|%s" % _scene_key(profile.torii_scene), _torii_hulls) as Array[ConvexPolygonShape3D]
 	_lantern_mesh = _built_once("lantern|%s" % _scene_key(profile.lantern_scene), _build_lantern_mesh) as Mesh
@@ -2022,7 +2063,7 @@ func nearest_prop_distance() -> float:
 		for wp_v in chunk.get_meta("prop_world_positions", []):
 			var wp: Vector3 = wp_v
 			var flat := Vector2(wp.x, wp.z).length()
-			if flat < profile.prop_clearing_radius:
+			if flat < _prop_clearing:
 				best = minf(best, flat)
 	return best
 
@@ -2030,7 +2071,7 @@ func nearest_prop_distance() -> float:
 ## Chunk roots sit on coord * chunk_size (terrain spans ±half around them),
 ## so the mapping rounds; floor() lagged a rebuild by half a chunk.
 func _world_to_chunk(pos: Vector3) -> Vector2i:
-	return Vector2i(int(round(pos.x / profile.chunk_size)), int(round(pos.z / profile.chunk_size)))
+	return Vector2i(int(round(pos.x / _chunk_size)), int(round(pos.z / _chunk_size)))
 
 
 static func _hash_coord(coord: Vector2i, kind: int, index: int) -> int:
