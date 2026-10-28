@@ -30,9 +30,7 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/audio/sfx/cc0_storm/*` | https://opengameart.org/content/amb-rain-loop-1 , https://opengameart.org/content/rain-long-thunder , thunderclap WAV on OGA | Kresiek The Furry / WuxiaScrub / OGA submitters | CC0 (`assets/audio/sfx/cc0_storm/LICENSE.txt`) |
 | `assets/audio/sfx/bonsho/bonsho_*.wav` | https://commons.wikimedia.org/wiki/File:Bonsyou5599.ogg | Jnn | **CC BY 2.1 JP** / FAL / CC BY-SA (`assets/audio/sfx/bonsho/LICENSE.txt`) |
 | `assets/audio/music/cc0_run/orientalsomber.ogg` | https://opengameart.org/content/oriental-somber | Tozan | CC0 |
-| `assets/audio/music/cc0_run/taiko_layer.wav` | https://commons.wikimedia.org/wiki/File:02_Taiko2_(short).oga | Scott Harding / Singapore Wind Symphony Percussion Ensemble (Teohui) | CC0 1.0 Universal |
-| `assets/audio/music/cc0_run/shakuhachi_layer.wav` | https://commons.wikimedia.org/wiki/File:Shikanotoone_new.ogg | Araki Kodō III (1879–1935) | Public Domain (CC0 equivalent) |
-| `assets/audio/music/cc0_run/shakuhachi_taiko_layer.wav` | in-project arrangement of CC0 taiko & shakuhachi recordings | Singapore Wind Symphony / Araki Kodō III / HANABI | CC0 1.0 |
+| `assets/audio/music/cc0_run/shakuhachi_taiko_layer.wav` | in-project arrangement of CC0 taiko (Scott Harding / Singapore Wind Symphony) & public domain shakuhachi (Araki Kodō III) recordings | Singapore Wind Symphony / Araki Kodō III / HANABI | CC0 1.0 (`assets/audio/music/cc0_run/LICENSE.txt`) |
 | `assets/models/environment/torii_bazylonator/` ("Japanese Torii gate Game Asset", hero torii) | https://sketchfab.com/3d-models/japanese-torii-gate-game-asset-e12d2fa1b2b94928b8b87cb7787e2462 | Bazylonator | **CC BY 4.0**, modified (rescaled, rain/wet shading); credited in `CREDITS.md` and in game |
 | `assets/models/environment/torii_old_primagenevieve/` ("Old Torii", sunken torii) | https://sketchfab.com/3d-models/old-torii-34f21f85784a4dcf9e0f9c6b9d772e37 | Sarah Nguyen (Nguyen Phuong Hoa) (primagenevieve) | **CC BY 4.0**, modified (rescaled, darkened, wet shading); credited in `CREDITS.md` and in game |
 | `assets/models/enemies/oni_mask_run.glb`, `oni_mask_run_normal.png` | `tools/gen_oni_mask_glb.py`, `ONI_MASK_LICENSE.txt` | Jakub Frączek (HANABI) | CC0 1.0 — §17: no suitable external CC0 GLB without login |
@@ -58,33 +56,3 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 
 | Folder | Source | Author | License |
 |---|---|---|---|
-| `HANABI_assets_midpoly/` (Sketchfab CC BY 4.0 sakura trees, torii, stone lanterns, platform, dummy; Poly Haven CC0 rocks, katana, stand, textures, sky) | per-asset links in `assets_raw/HANABI_assets_midpoly/CREDITS.md` | see that file | CC BY 4.0 / CC0 1.0 (each CC BY model needs an in-game credit if used) |
-| `katana/Katana_ColoradoStark/` | https://opengameart.org/content/katana-2 | Colorado Stark | CC0 |
-| `katana/grab3d_katana/` | https://grab3d.com/models/weapons/katana/ | Grab3D | CC0 1.0 |
-| `assets/audio/sfx/hanabi_proc/*.wav` (run stingers, forest wind, element imbue cues `imbue_*`, `element_fade`) | `scripts/generate_hanabi_proc_audio.py` in repo | Jakub Frączek / HANABI | CC0 (procedural) |
-| `assets/models/environment/forest_trees/` (run forest MultiMesh; Grab3D cherry, canopy simplified, albedo recolored for night fog) | https://grab3d.com/models/nature/cherry-blossom-tree/ | Grab3D | CC0 1.0 |
-| `assets/models/environment/forest_quaternius/tree_simple_quaternius.glb` (unused fallback mesh) | https://quaternius.com/packs/simplenature.html | Quaternius | CC0 |
-| `assets/models/environment/forest_quaternius/torii_gate_polyfork.glb` (run forest MultiMesh) | https://polyfork.dev/asset/torii-gate-402f30 | polyfork.dev (Little Tokyo kit) | CC0 / commercial use per site |
-| `environment/polypizza/Torii_Gate_Quaternius.glb` | https://poly.pizza/m/7SyXZ62xR5 | Quaternius | CC0 |
-| `environment/polypizza/Shrine_KayLousberg.glb` | https://poly.pizza/m/tFxdxO5clk | Kay Lousberg | CC0 |
-| `environment/polypizza/Lantern_KayLousberg.glb` | https://poly.pizza/m/CtHBJ1ufeW | Kay Lousberg | CC0 |
-| `environment/pixor_cherry_tree/` | https://pixor.art/library/nature/cherry-tree/ | Pixor | CC0 |
-| `environment/grab3d_cherry_tree/` | https://grab3d.com/models/nature/cherry-blossom-tree/ | Grab3D | CC0 1.0 |
-| `environment/kenney_nature-kit/` | https://kenney.nl/assets/nature-kit | Kenney | CC0 |
-| `enemies/quaternius_ultimate_monsters/*.glb` (45 animated models) | https://quaternius.com/packs/ultimatemonsters.html | Quaternius | CC0 |
-| `enemies/quaternius_universal_base_characters/` (+ hairstyles) | https://quaternius.com/packs/universalbasecharacters.html | Quaternius | CC0 (Standard/free edition) |
-| `enemies/quaternius_universal_animation_library/` | https://quaternius.com/packs/universalanimationlibrary.html | Quaternius | CC0 |
-| `textures/rough_wood`, `rock_pitted_mossy`, `cobblestone_01`, `sakura_bark` | https://polyhaven.com | Poly Haven | CC0 |
-| `hdri/moonless_golf_2k.hdr` | https://polyhaven.com/a/moonless_golf | Poly Haven | CC0 |
-| `vfx_shaders/kenney_particle-pack/` | https://kenney.nl/assets/particle-pack | Kenney | CC0 |
-| `vfx_shaders/procedural_slash.gdshader` | https://thegodotbarn.com/contributions/shader/86/procedural-slash | Casual Garage Coder (alkaliii) | CC0 |
-| `vfx_shaders/lightning_fencerdevlog.gdshader` | https://godotshaders.com/shader/lightning/ | FencerDevLog | MIT (keep the notice in the file) |
-| `vfx_shaders/GPUTrail-main/` | https://github.com/celyk/GPUTrail | celyk | MIT |
-| `sfx/starninjas_swords/` | https://opengameart.org/content/20-sword-sound-effects-attacks-and-clashes | StarNinjas | CC0 |
-| `sfx/kenney_impact-sounds/` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 |
-| `music/vacuous_horror_bgm_vol06/` | https://vacuous2409.itch.io/horror-exploration-bgm-pack-vol06 | Vacuous BGM | Free for games incl. commercial, no attribution; **do not redistribute the audio files**; never commit |
-| `music/orientalsomber.ogg`, `.mid` | https://opengameart.org/content/oriental-somber | Tozan | CC0 |
-| `music/ruskerdax_-_kamogawa_nightbreak.mp3` | https://opengameart.org/content/kamogawa-nightbreak | Ruskerdax | CC0 |
-| `fonts/yujisyuku`, `yujiboku`, `yujimai`, `zenantique` | https://github.com/google/fonts/tree/main/ofl | Kinuta Font Factory / Yoshimichi Ohira | SIL OFL 1.1 |
-
-Not downloaded (need a login, see `assets_raw/*/MANUAL_DOWNLOADS.md`): Mixamo, Freesound sounds. Any CC BY asset added to `assets/` needs a row here, a credit in `CREDITS.md`, and a line in the in-game `CreditsLabel` (`scenes/training_arena.tscn`).

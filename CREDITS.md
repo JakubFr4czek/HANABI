@@ -5,7 +5,7 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 ## Code and plugins
 - **Godot Engine**: Juan Linietsky, Ariel Manzur and contributors (MIT)
 - **Godot XR Tools**: Bastiaan Olij and contributors (MIT); hand models by DigitalN8m4r3 (CC0)
-- **Godot OpenXR Vendors**: Godot XR contributors (MIT), with the Khronos OpenXR loader (Apache 2.0) and the Meta OpenXR loader (Oculus SDK License)
+- **Godot OpenXR Vendors**: Godot XR contributors / W4 Games (MIT), with the Khronos OpenXR loader (Apache 2.0) and the Meta OpenXR loader (Oculus SDK License)
 
 ## Assets in the game
 - Katana: "Antique Katana 01" by **Tal Swicegood** (Poly Haven, CC0)
@@ -16,13 +16,11 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Sword swing and clash sounds: **StarNinjas** (OpenGameArt, CC0)
 - Impact sounds + combat cuts/slaps/hurt/tells: **Kenney** Impact Sounds (kenney.nl, CC0), `assets/audio/sfx/impact/` & `cc0_combat/`
 - Run sting SFX (soul collect, firework, ofuda slice, level-up, yōkai slice): **Kenney** Interface Sounds & Impact Sounds (kenney.nl, CC0), in `assets/audio/sfx/kenney_run/`
-- Bonshō temple bell (run start toll, Oni boss arrival, Torii gate imbue): authentic field recording at Chōmei-ji (長命寺), Shiga Prefecture, Japan by **Jnn** (Wikimedia Commons, CC BY 2.1 JP / FAL / CC BY-SA / GFDL), modified (attack trimmed, resampled to 44.1 kHz, volume normalized, tuned per cue), `assets/audio/sfx/bonsho/`
+- Bonshō temple bell (run start toll, Oni boss arrival, Torii gate imbue): authentic field recording at Chōmei-ji (長命寺), Shiga Prefecture, Japan by **Jnn** (Wikimedia Commons, CC BY 2.1 JP / FAL / CC BY-SA / GFDL), modified (DC offset removed, attack trimmed, resampled to 44.1 kHz, volume normalized to -1 dBFS, tuned per cue), `assets/audio/sfx/bonsho/`
 - Forest wind bed, Torii gate fūrin (wind chime) & element imbue cues: procedural WAV in `assets/audio/sfx/hanabi_proc/` (project author, CC0)
 - Storm rain + thunder: Kresiek The Furry, WuxiaScrub, OpenGameArt CC0 in `assets/audio/sfx/cc0_storm/` (see `LICENSE.txt`)
 - Run ambient music: Tozan "Oriental Somber" (OpenGameArt CC0), `assets/audio/music/cc0_run/orientalsomber.ogg`
-- Run music taiko layer: Scott Harding's "Taiko", performed live by the **Singapore Wind Symphony Percussion Ensemble** (Teohui, Wikimedia Commons, CC0 1.0 Universal), `assets/audio/music/cc0_run/taiko_layer.wav`
-- Run music shakuhachi layer: Traditional Honkyoku "Shika no Tōne" (鹿の遠音) performed on bamboo shakuhachi by master **Araki Kodō III** (1879–1935) (Wikimedia Commons, Public Domain / CC0 equivalent), `assets/audio/music/cc0_run/shakuhachi_layer.wav`
-- Run music shakuhachi & taiko ensemble layer: balanced arrangement combining the CC0 taiko drum rhythm and shakuhachi flute meditation into a seamless 24s loop on the Music bus, `assets/audio/music/cc0_run/shakuhachi_taiko_layer.wav`
+- Run music shakuhachi & taiko ensemble layer: balanced arrangement combining CC0 taiko drum rhythm (Scott Harding / **Singapore Wind Symphony Percussion Ensemble**) and shakuhachi flute meditation (**Araki Kodō III**, Public Domain) into a seamless 24s loop on the Music bus, `assets/audio/music/cc0_run/shakuhachi_taiko_layer.wav`
 - Run forest trees: "Cherry Blossom Tree" by **Grab3D** (CC0), crown simplified and the daylight blossoms recolored to night foliage, `assets/models/environment/forest_trees/`
 - Run forest torii (distant MultiMesh): procedural torii gate from **polyfork.dev** (commercial/CC0 kit, no attribution required; credited here by choice)
 - Interactive Torii gate & andon lantern: hexagonal paper andon with eaves and ribs, procedural mesh by project author (CC0)
@@ -35,7 +33,7 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 These are also shown in game on the `CreditsLabel` under the controls board at the arena's edge.
 - "Japanese Torii gate Game Asset" by Bazylonator (https://sketchfab.com/3d-models/japanese-torii-gate-game-asset-e12d2fa1b2b94928b8b87cb7787e2462), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (rescaled, rain/wet shading over the original PBR textures).
 - "Old Torii" by Sarah Nguyen (Nguyen Phuong Hoa) (primagenevieve) (https://sketchfab.com/3d-models/old-torii-34f21f85784a4dcf9e0f9c6b9d772e37), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (rescaled, darkened, rain/wet shading over the original PBR textures).
-- "Bonsyou5599" by Jnn (https://commons.wikimedia.org/wiki/File:Bonsyou5599.ogg), licensed under CC BY 2.1 JP / FAL / CC BY-SA — modified (attack trimmed, resampled to 44.1 kHz, pitch and decay tuned for run start, Oni arrival, and gate imbue).
+- "Bonsyou5599" by Jnn (https://commons.wikimedia.org/wiki/File:Bonsyou5599.ogg), licensed under CC BY 2.1 JP / FAL / CC BY-SA — modified (DC offset removed, attack trimmed, resampled to 44.1 kHz, pitch and decay tuned for run start, Oni arrival, and gate imbue).
 
 ## Thanks (optional credits for CC0 packs available to the project)
 Quaternius, Kay Lousberg, Poly Haven (Greg Zaal and team), Grab3D, Pixor, Tozan, Ruskerdax, Vacuous BGM, Casual Garage Coder, FencerDevLog, celyk (GPUTrail), Jnn, Scott Harding, Singapore Wind Symphony Percussion Ensemble, Araki Kodō III;
