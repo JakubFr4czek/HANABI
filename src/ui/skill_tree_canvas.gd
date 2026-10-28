@@ -4,11 +4,11 @@ extends Control
 ##
 ## A [SkillTreeMenu] shows this inside a SubViewport on a single world-space
 ## quad: one draw call, fog-proof, crisp text. The canvas is pure presentation
-## plus layout: it never spends Ofuda (the menu does, through
+## plus layout: it never spends points (the menu does, through
 ## RunGame.unlock_skill) and answers [method hit_test] for the pointer.
 ##
 ## Layout (1600 x 1000 px, about 1 px per headset pixel at 1.1 m):
-## header (title, Ofuda balance, close) / four element tabs / the five-node
+## header (title, points balance, close) / four element tabs / the five-node
 ## tree of the chosen element on the left / detail + UNLOCK button on the right /
 ## footer (controls, what is on the blade).
 
@@ -295,8 +295,8 @@ func button_spec(id: String) -> Dictionary:
 			return {"mode": "owned", "label": "UNLOCKED"}
 		"available":
 			if balance >= cost:
-				return {"mode": "ready", "label": "UNLOCK   札 × %d" % cost}
-			return {"mode": "poor", "label": "NEED 札 × %d MORE" % (cost - balance)}
+				return {"mode": "ready", "label": "UNLOCK   点 × %d" % cost}
+			return {"mode": "poor", "label": "NEED 点 × %d MORE" % (cost - balance)}
 	return {"mode": "locked", "label": "LOCKED"}
 
 
@@ -394,14 +394,14 @@ func _draw_header() -> void:
 		_text("術", Vector2(62, 22), 74, GILT)
 		_text("ELEMENTAL ARTS", Vector2(150, 22), 40, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 650)
 		_text("一時停止", Vector2(580, 32), 24, GILT)
-		# D1: Ofuda come only from hokora shrines; say so while the wallet is empty.
-		var subtitle := "Spend Ofuda to deepen the school on your blade" if balance > 0 \
-			else "Ofuda: find the hokora shrines in the forest"
+		# D12: points come from levels; say so while the wallet is empty.
+		var subtitle := "Spend points to deepen the school on your blade" if balance > 0 \
+			else "Points: every level gives one, so keep fighting"
 		_text(subtitle, Vector2(152, 68), 26, DIM)
-	# Ofuda balance plaque.
+	# Points balance plaque (D12).
 	_box(BALANCE_RECT, LACQUER_SUNK, Color(CINNABAR, 0.85), 2, 12)
-	_text("OFUDA", Vector2(BALANCE_RECT.position.x + 22, BALANCE_RECT.position.y + 10), 20, DIM)
-	_text("札 × %d" % balance, Vector2(BALANCE_RECT.position.x + 22, BALANCE_RECT.position.y + 28), 46, PAPER)
+	_text("POINTS", Vector2(BALANCE_RECT.position.x + 22, BALANCE_RECT.position.y + 10), 20, DIM)
+	_text("点 × %d" % balance, Vector2(BALANCE_RECT.position.x + 22, BALANCE_RECT.position.y + 28), 46, PAPER)
 	# Close.
 	var hot := String(hover.get("kind", "")) == "close"
 	_box(CLOSE_RECT, Color(CINNABAR, 0.30) if hot else LACQUER_SUNK, Color(GILT, 0.9 if hot else 0.5), 2, 35)
@@ -546,9 +546,9 @@ func _draw_node(n: Dictionary, accent: Color) -> void:
 			draw_circle(seal, 11.0, CINNABAR)
 			draw_arc(seal, 11.0, 0.0, TAU, 24, Color(1, 0.8, 0.7, 0.7), 1.5, true)
 		"available":
-			_text("札 × %d" % cost, r.position + Vector2(116, 80), 30, GILT if affordable else CINNABAR)
+			_text("点 × %d" % cost, r.position + Vector2(116, 80), 30, GILT if affordable else CINNABAR)
 		_:
-			_text("札 × %d" % cost, r.position + Vector2(116, 80), 28, FAINT)
+			_text("点 × %d" % cost, r.position + Vector2(116, 80), 28, FAINT)
 			_draw_lock(r.position + Vector2(218, 97))
 	# Role caption above the plaque.
 	_text(String(ROLE_CAPTION[int(n.tier)]), r.position + Vector2(6, -27), 22, Color(FAINT, 1.0).lightened(0.12))
@@ -612,8 +612,8 @@ func _draw_detail() -> void:
 			line_y += _draw_requirement(rid, Vector2(x, line_y), accent, req_w)
 	var cost_x := x + w - 150.0
 	_text("COST", Vector2(cost_x, req_y), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
-	_text("札 × %d" % int(n.cost), Vector2(cost_x, req_y + 24), 46, GILT, HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
-	_text("you hold 札 × %d" % balance, Vector2(cost_x - 60, req_y + 84), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 210.0)
+	_text("点 × %d" % int(n.cost), Vector2(cost_x, req_y + 24), 46, GILT, HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
+	_text("you hold 点 × %d" % balance, Vector2(cost_x - 60, req_y + 84), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 210.0)
 	if status_text != "":
 		_text(status_text, Vector2(x, UNLOCK_RECT.position.y - 42.0), 24, Color(CINNABAR, 0.95),
 				HORIZONTAL_ALIGNMENT_CENTER, w)

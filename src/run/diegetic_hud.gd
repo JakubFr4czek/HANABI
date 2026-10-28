@@ -61,6 +61,14 @@ var _xp_bar_left := 0.0
 var _xp_bar_width := 0.1
 var _follow_eyes := false
 var _parry_glow := 0.0
+## Level-up flash (D12): the charm brightens for LEVEL_FLASH_SECONDS, and the wrist
+## readout shows the new level and the point for LEVEL_TEXT_SECONDS.
+const LEVEL_FLASH_SECONDS := 0.6
+const LEVEL_FLASH_STRENGTH := 1.6
+const LEVEL_TEXT_SECONDS := 1.5
+var _level_flash := 0.0
+var _level_text_left := 0.0
+var _level_text := ""
 var _view_camera: Camera3D
 var _elements: ElementSystem
 var _strip_mat := ShaderMaterial.new()
@@ -410,6 +418,11 @@ func _process(delta: float) -> void:
 	if _parry_glow > 0.0:
 		_parry_glow = maxf(_parry_glow - delta, 0.0)
 		_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2
+	if _level_flash > 0.0:
+		_level_flash = maxf(_level_flash - delta, 0.0)
+		_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2 \
+			+ LEVEL_FLASH_STRENGTH * _level_flash / LEVEL_FLASH_SECONDS
+	_level_text_left = maxf(_level_text_left - delta, 0.0)
 	_orient_wrist_face(delta)
 	_update_element_strip(delta)
 	_update_label_visibility()
@@ -456,6 +469,13 @@ func on_parry() -> void:
 	_parry_glow = 0.42
 
 
+## A level-up (D12): a short flash on the charm and the new level for the readout.
+func flash_level_up(new_level: int) -> void:
+	_level_flash = LEVEL_FLASH_SECONDS
+	_level_text = "位 LV %d  ·  +1 点" % new_level
+	_level_text_left = LEVEL_TEXT_SECONDS
+
+
 var _charm_base_energy := 0.28
 
 
@@ -483,7 +503,7 @@ func _update_label_visibility() -> void:
 		(l as Label3D).outline_modulate.a = 0.95 * a
 
 
-func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, wave: int, score: int, kills: int, run_seconds: float, active_element: String, ofuda_count: int = 0) -> void:
+func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, wave: int, score: int, kills: int, run_seconds: float, active_element: String, points: int = 0, buff_text: String = "") -> void:
 	var hp_ratio := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
 	var critical := hp_ratio <= HP_RING_CRITICAL_RATIO
 
@@ -516,9 +536,15 @@ func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, 
 		xp_bar.scale.x = maxf(r, 0.001)
 		xp_bar.position.x = _xp_bar_left + _xp_bar_width * r * 0.5
 	if wrist_label:
-		# Engraved readout in the game's voice: rank, wave, kills, score,
-		# and the spendable Ofuda tally (E2c, plan section (f)).
-		wrist_label.text = "位 %d · 波 %d · 斬 %d\n%d pt · 札×%d" % [level, wave, kills, score, ofuda_count]
+		# Engraved readout in the game's voice (plan section (f), D12): rank, kills and
+		# score; then XP to the next rank, the skill points to spend and the wave; then any buffs.
+		var first := "位 %d · 斬 %d · %d pt" % [level, kills, score]
+		if _level_text_left > 0.0:
+			first = _level_text
+		var lines := [first, "XP %d/%d · 点 %d · 波 %d" % [xp, xp_to_next, points, wave]]
+		if buff_text != "":
+			lines.append(buff_text)
+		wrist_label.text = "\n".join(lines)
 
 func update_wrist_attachment(player: Node3D) -> void:
 	if player is XRPlayer and wrist_unit:

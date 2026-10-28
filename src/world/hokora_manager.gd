@@ -12,10 +12,10 @@ extends Node3D
 ## chunks around the spot are loaded by then), so streaming never changes the
 ## answer.
 ##
-## Shrines are built inside spawn range and freed past cull range. A claimed slot
-## is remembered for the whole run: walking back never refills or duplicates it.
-
-signal shrine_claimed(shrine: HokoraShrine, ofuda: int)
+## Shrines are built inside spawn range and freed past cull range. A used slot
+## (its yellow Ofuda choice taken, D12) is remembered for the whole run: walking back
+## never lights it again. Walking up to a shrine does nothing; a hand on the offering
+## table does (see [method poll_touch]).
 
 const SHRINE_SCENE := preload("res://scenes/world/hokora_shrine.tscn")
 ## Keep the footprint half a chunk away from the slot edge.
@@ -37,13 +37,13 @@ var follow: Node3D
 var torii_manager: ToriiManager
 var start_position := Vector3.ZERO
 var start_forward := Vector3.FORWARD
-## Set by RunGame: shrines only pay while the run is PLAYING (not in the intro, not
-## on the end screen). They still glow and ring either way.
-var accepting_claims := true
+## Set by RunGame: a touch opens a choice only while the run is PLAYING (not in the
+## intro, not on the end screen). Shrines still glow and ring either way.
+var accepting_offerings := true
 
 var _candidates: Dictionary = {}  # Vector2i -> Vector3 (Vector3.INF = no shrine)
 var _shrines: Dictionary = {}     # Vector2i -> HokoraShrine (built now)
-var _claimed: Dictionary = {}     # Vector2i -> true (kept for the run)
+var _used: Dictionary = {}        # Vector2i -> true (kept for the run)
 var _tick := TICK
 var _clearance_query: PhysicsShapeQueryParameters3D = null
 var _clearance_shape: CylinderShape3D = null
@@ -69,7 +69,7 @@ func reset(p_start: Vector3, p_forward: Vector3) -> void:
 				parent.remove_child(s)
 			s.free()
 	_shrines.clear()
-	_claimed.clear()
+	_used.clear()
 	_candidates.clear()
 	start_position = p_start
 	var flat := Vector3(p_forward.x, 0.0, p_forward.z)
@@ -91,8 +91,51 @@ func alive_shrines() -> Array[HokoraShrine]:
 	return out
 
 
-func claimed_count() -> int:
-	return _claimed.size()
+func used_count() -> int:
+	return _used.size()
+
+
+## The shrine a hand in [param hands] touches this frame, or null. Only lit shrines
+## are checked, nearest first, so a hand on one shrine never opens another.
+func poll_touch(hands: Array[Vector3]) -> HokoraShrine:
+	var p := _player_pos()
+	var best: HokoraShrine = null
+	var best_d := INF
+	for s in _shrines.values():
+		var shrine := s as HokoraShrine
+		if not is_instance_valid(shrine) or not shrine.lit:
+			continue
+		var d := shrine.altar_position().distance_to(p)
+		if d >= best_d:
+			continue
+		for hand in hands:
+			if shrine.is_touched_by(hand, p):
+				best = shrine
+				best_d = d
+				break
+	return best
+
+
+## The altar of the shrine nearest to the player, or Vector3.INF when none is lit
+## within reach. Desktop uses it for the reach key (E), so a desktop player touches the
+## same offering table a VR hand would.
+func nearest_altar() -> Vector3:
+	var p := _player_pos()
+	var best := Vector3.INF
+	for s in _shrines.values():
+		var shrine := s as HokoraShrine
+		if not is_instance_valid(shrine) or not shrine.lit:
+			continue
+		var altar := shrine.altar_position()
+		if altar.distance_to(p) < best.distance_to(p):
+			best = altar
+	return best
+
+
+## The choice of [param shrine] was taken: it goes dark and stays dark for the run.
+func consume(shrine: HokoraShrine) -> void:
+	_used[shrine.slot] = true
+	shrine.consume()
 
 
 func slot_of(p: Vector3) -> Vector2i:
@@ -107,8 +150,6 @@ func _physics_process(delta: float) -> void:
 		var shrine := s as HokoraShrine
 		if is_instance_valid(shrine):
 			shrine.step(delta, p)
-			if accepting_claims:
-				shrine.try_claim(p)
 	_tick += delta
 	if _tick >= TICK:
 		_tick = 0.0
@@ -239,14 +280,8 @@ func _spawn(slot: Vector2i, spot: Vector3) -> void:
 	shrine.position = Vector3(spot.x, forest_world.height_at(spot.x, spot.z), spot.z)
 	shrine.rotation.y = _slot_rng(slot, 1).randf() * TAU
 	forest_world.connect_shrine(shrine)
-	shrine.set_lit(not _claimed.has(slot))
-	shrine.claimed.connect(_on_shrine_claimed)
+	shrine.set_lit(not _used.has(slot))
 	_shrines[slot] = shrine
-
-
-func _on_shrine_claimed(shrine: HokoraShrine, ofuda: int) -> void:
-	_claimed[shrine.slot] = true
-	shrine_claimed.emit(shrine, ofuda)
 
 
 func _slot_rng(slot: Vector2i, salt: int) -> RandomNumberGenerator:

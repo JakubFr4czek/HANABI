@@ -3,12 +3,13 @@ extends "res://src/core/test_room.gd"
 ## Survival run loop on the Dojo of the Storm shrine platform (docs/GDD.md §3, §6, NIGHT_PLAN.md §1):
 ## - Endless yōkai waves emerging from the fog across the water
 ## - Hitodama soul drops that drift into the player and grant XP
-## - Rising XP curve; a level-up is a rank plus a small heal (D1: no card choice,
-##   no slow-motion, no upgrade pool — the Ofuda tree is the only progression)
-## - Ofuda, the one currency, come only from hokora shrines in the forest
-##   (HokoraManager); the wrist tally counts them, the tree spends them
+## - Enemies drop soul orbs (XP); a level-up gives one skill point (D12) and a small
+##   heal, with no card choice and no slow motion. The points are the only currency
+##   of the skill tree (SkillTreeData)
+## - Hokora shrines in the forest offer a choice of three yellow Ofuda (ShrineOffering,
+##   D12): one buff for a minute, while the world holds still as it does in the menu
 ## - Diegetic HUD on the katana tsuba (XP ring) and wrist (glowing HP charm, XP,
-##   time, score, level) with no floating 2D screen-space UI
+##   time, score, level, points and active buffs) with no floating 2D screen-space UI
 ## - Death ends the run, saves local high score, and presents an in-world
 ##   memorial stele + a Restart Ema (wooden votive plaque) that starts a new run
 ##   when sliced.
@@ -17,10 +18,11 @@ enum RunState { INTRO, PLAYING, GAME_OVER }
 
 signal run_ended(summary: Dictionary)
 signal run_started
-signal ofuda_changed(count: int)
+signal points_changed(count: int)
+signal level_gained(level: int)
 signal skill_unlocked(node_id: String)
 
-## Health restored by each level-up (D1: the rank is the reward, the heal is the rest).
+## Health restored by each level-up (D1: the rank is the reward, the heal is the rest; D12: plus one point).
 const LEVEL_UP_HEAL_HP := 10.0
 
 @export var high_score_path := "user://high_score.cfg"
@@ -43,13 +45,16 @@ var score := 0
 var high_score := 0
 var new_record := false
 var soul_magnet_radius := 3.8
-## Ofuda skill-tree currency (E2c, D1): collected from hokora shrines only,
-## spent only through [method unlock_skill]. Bank and unlocks reset every run.
-var ofuda_count := 0
+## Skill points (D12): one for every level gained, spent only through
+## [method unlock_skill]. Bank and unlocks reset every run.
+var skill_points := 0
 var skill_tree: SkillTreeData = null
-## Hokora shrines this run gave their Ofuda (D1). Reset every run.
+## Hokora shrines this run gave their buff (D12). Reset every run.
 var shrines_claimed := 0
 var hokora_manager: HokoraManager = null
+var shrine_offering: ShrineOffering = null
+## Timed buffs from the shrine choices (D12). Reset every run.
+var buffs := RunBuffs.new()
 
 var wave_director: WaveDirector
 var pause_controller: PauseController
@@ -65,7 +70,6 @@ var restart_ema: VotiveTablet = null
 var _boot_splash_played := false
 
 var _souls_root: Node3D
-var _ofuda_pickups_root: Node3D
 var _end_screen_root: Node3D
 var _base_move_speed := 3.0
 var _base_max_force := 260.0
@@ -73,6 +77,8 @@ var _base_max_torque := 40.0
 var _base_follow_freq := 9.0
 var _base_angular_freq := 9.0
 var _rng := RandomNumberGenerator.new()
+## Desktop stand-in for a hand on the offering table: set by E for one physics frame.
+var _desktop_reach := false
 ## Linear storm_fog_color the run sets for the sky horizon (see _configure_run_forest).
 var horizon_fog_color := Color.BLACK
 
@@ -248,7 +254,6 @@ func _configure_run_forest() -> void:
 		hokora_manager = HokoraManager.new()
 		hokora_manager.name = "HokoraManager"
 		add_child(hokora_manager)
-		hokora_manager.shrine_claimed.connect(_on_hokora_claimed)
 	hokora_manager.setup(forest_world, player, forest_world.torii_manager)
 	if get_node_or_null("RunForestAmbience") == null:
 		var forest_amb := RunForestAmbience.new()
@@ -316,10 +321,6 @@ func _setup_run_nodes() -> void:
 	_souls_root.name = "Souls"
 	add_child(_souls_root)
 
-	_ofuda_pickups_root = Node3D.new()
-	_ofuda_pickups_root.name = "OfudaPickups"
-	add_child(_ofuda_pickups_root)
-
 	if skill_tree == null:
 		skill_tree = SkillTreeData.new()
 	if player is DesktopPlayer:
@@ -357,6 +358,10 @@ func _setup_run_nodes() -> void:
 	pause_controller.name = "PauseController"
 	add_child(pause_controller)
 	pause_controller.setup(self, player, katana)
+	shrine_offering = ShrineOffering.new()
+	shrine_offering.name = "ShrineOffering"
+	add_child(shrine_offering)
+	shrine_offering.setup(self, pause_controller)
 	if player.has_signal("menu_requested") and not player.menu_requested.is_connected(pause_controller.toggle):
 		player.menu_requested.connect(pause_controller.toggle)
 	if player.has_signal("ability_1_requested") and not player.ability_1_requested.is_connected(_on_ability_1_requested):
@@ -413,11 +418,13 @@ func start_run() -> void:
 	new_record = false
 	soul_magnet_radius = base_magnet_radius
 	shrines_claimed = 0
-	# Per-run progression (E2c): Ofuda bank, tree unlocks and loose drops reset.
-	ofuda_count = 0
+	# Per-run progression (E2c, D12): points, tree unlocks and buffs reset.
+	skill_points = 0
 	if skill_tree:
 		skill_tree.reset()
-	_clear_ofuda_pickups()
+	buffs.clear()
+	if shrine_offering:
+		shrine_offering.cancel()
 	element_system.reset()
 	if forest_world:
 		forest_world.reset(spawn.global_position if spawn else Vector3.INF,
@@ -509,15 +516,18 @@ func _on_boot_splash_finished() -> void:
 	_refresh_hud()
 
 
-## Rising XP requirement for advancing from [param current_level] to the next.
+## XP needed to advance from [param current_level] to the next one (D12): linear,
+## 150 + 45 per level. One skill point comes with each level.
 static func xp_for_level(current_level: int) -> int:
-	return int(round(24.0 * pow(1.35, float(maxi(current_level - 1, 0)))))
+	return ElementBalance.XP_FIRST_LEVEL + ElementBalance.XP_LEVEL_STEP * maxi(current_level - 1, 0)
 
 
 func _physics_process(delta: float) -> void:
 	var p_pos := _player_center()
 	if hokora_manager:
-		hokora_manager.accepting_claims = state == RunState.PLAYING
+		hokora_manager.accepting_offerings = state == RunState.PLAYING
+	if katana:
+		katana.outgoing_scale = buffs.damage_multiplier()
 	if state == RunState.PLAYING:
 		run_time += delta
 		if (element_system and element_system.current_element != Elements.NONE) or (katana and katana.element != Elements.NONE):
@@ -529,25 +539,22 @@ func _physics_process(delta: float) -> void:
 		wave_director.recall_stragglers(p_pos)
 		if combat_fog:
 			combat_fog.step(p_pos, wave_director.alive_enemies(), true)
+		buffs.step(delta, _player_health())
+		_poll_shrine_touch()
 	elif combat_fog:
 		combat_fog.step(p_pos, [], false)
 
-	# Abyssal Sea (Ink Node 5): +20% locomotion while standing in own ink, on
-	# the desktop rig and on the XR rig (the game's main platform).
+	# Abyssal Sea (Ink Node 5): +20% locomotion while standing in own ink, and the
+	# shrine speed buff (D12) on top; both multiply with the walking pace of Settings.
 	if element_system:
-		apply_locomotion_speed(element_system.get_player_speed_multiplier())
+		apply_locomotion_speed(element_system.get_player_speed_multiplier() * buffs.speed_multiplier())
 
-	# Step soul orbs even during level-up slow-mo (using simulation delta).
+	# Step soul orbs even while a menu or a shrine choice holds the world.
 	if _souls_root == null:
 		return
 	for child in _souls_root.get_children():
 		if child is SoulOrb:
 			(child as SoulOrb).step_orb(delta, p_pos, soul_magnet_radius)
-	# Ofuda currency pickups ride the same soul magnet.
-	if _ofuda_pickups_root:
-		for child in _ofuda_pickups_root.get_children():
-			if child is OfudaPickup:
-				(child as OfudaPickup).step_pickup(delta, p_pos, soul_magnet_radius)
 
 	_refresh_hud()
 
@@ -566,6 +573,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	var key: int = event.physical_keycode
+	if key == KEY_E and player is DesktopPlayer:
+		reach_for_offering()
+		get_viewport().set_input_as_handled()
+		return
 	if key == KEY_R:
 		if state == RunState.GAME_OVER and restart_ema and is_instance_valid(restart_ema):
 			restart_ema.slice(restart_ema.global_position, Vector3.RIGHT)
@@ -596,7 +607,7 @@ func _on_oni_defeated(oni: RunOniBoss, hit: Dictionary) -> void:
 	kills += 3
 	score = compute_score()
 	var origin: Vector3 = hit.get("point", oni.global_position + Vector3(0, 1.2, 0))
-	var orbs := SoulOrb.spawn_cluster(_souls_root, origin, 8, xp_per_orb + 2, Elements.STORM)
+	var orbs := SoulOrb.spawn_cluster(_souls_root, origin, 8, ElementBalance.XP_ONI / 8, Elements.STORM)
 	for orb in orbs:
 		# Pooled orbs come back still connected from their last life.
 		if not orb.collected.is_connected(_on_soul_collected):
@@ -612,60 +623,93 @@ func _on_enemy_died(yokai: Yokai, _hit: Dictionary) -> void:
 	score = compute_score()
 	var origin: Vector3 = (yokai.parts["chest"] as RagdollPart).global_position if yokai.parts.has("chest") else yokai.global_position + Vector3(0, 1.0, 0)
 	var elem: String = _soul_element_for_kill(yokai)
-	var orbs := SoulOrb.spawn_cluster(_souls_root, origin, orbs_per_kill, xp_per_orb, elem)
+	# D12: an elite is worth twice a yōkai. Both drop the same number of orbs.
+	var kill_xp := ElementBalance.XP_ELITE if yokai.is_elite() else ElementBalance.XP_YOKAI
+	var orbs := SoulOrb.spawn_cluster(_souls_root, origin, ElementBalance.ORBS_PER_KILL, kill_xp / ElementBalance.ORBS_PER_KILL, elem)
 	for orb in orbs:
 		if not orb.collected.is_connected(_on_soul_collected):
 			orb.collected.connect(_on_soul_collected)
 
 
-# --- Ofuda currency & skill tree (E2c, D1) -------------------------------------
+# --- Skill points & the shrine choice (D12) ----------------------------------------
 
-## The only source of Ofuda is a hokora shrine (D1). Yōkai, elites and the Oni
-## drop nothing: a kill is XP and a kill count, never currency.
-func _on_hokora_claimed(shrine: HokoraShrine, count: int) -> void:
-	shrines_claimed += 1
-	GameEvents.log_event("hokora_claimed", {"slot": [shrine.slot.x, shrine.slot.y], "ofuda": count})
-	if _ofuda_pickups_root == null:
+## A hand on a shrine's offering table opens its yellow Ofuda choice. A touch the
+## choice refuses (a yōkai close by, or no room for three cards) rings the bell
+## quietly and the shrine stays lit.
+func _poll_shrine_touch() -> void:
+	if hokora_manager == null or shrine_offering == null or shrine_offering.is_open():
 		return
-	# The Ofuda rise off the offering table and fly to the wrist tally; each one
-	# counts only when it arrives there. The wrist plate also gives a pulse.
-	var wrist: Node3D = diegetic_hud.wrist_label if diegetic_hud else null
-	for pickup in OfudaPickup.spawn_drops(_ofuda_pickups_root, shrine.altar_position(), count, _rng):
-		pickup.fly_to = wrist
-		pickup.collected.connect(_on_ofuda_pickup_collected)
+	var hands := _hand_positions()
+	if hands.is_empty():
+		return
+	var shrine := hokora_manager.poll_touch(hands)
+	if shrine == null:
+		return
+	if shrine_offering.try_open(shrine):
+		GameEvents.log_event("hokora_offering_opened", {"slot": [shrine.slot.x, shrine.slot.y]})
+	else:
+		shrine.refuse()
+		GameEvents.log_event("hokora_touch_refused", {"slot": [shrine.slot.x, shrine.slot.y]})
+
+
+## Desktop stand-in for a hand on the offering table (D12): E reaches for the nearest
+## altar for one physics frame. VR does not use it; its hands touch the altar.
+func reach_for_offering() -> void:
+	_desktop_reach = true
+
+
+## Where the hands that may touch an offering are: the hands that hold no katana (VR),
+## or the altar of the nearest shrine when E is pressed on desktop.
+func _hand_positions() -> Array[Vector3]:
+	var out: Array[Vector3] = []
 	if player is XRPlayer:
-		(player as XRPlayer).left_holder.pulse(0.6, 0.14)
+		var xr := player as XRPlayer
+		for holder in [xr.left_holder, xr.right_holder]:
+			if holder and holder.held == null:
+				out.append(holder.global_position)
+	elif _desktop_reach and hokora_manager:
+		var altar := hokora_manager.nearest_altar()
+		if altar != Vector3.INF:
+			out.append(altar)
+	_desktop_reach = false
+	return out
+
+
+## The buff of a chosen Ofuda: applied at once, the shrine goes dark (ShrineOffering
+## calls this when the katana cuts a card).
+func buff_chosen(shrine: HokoraShrine, kind: int) -> void:
+	var health := _player_health()
+	var gained := buffs.apply(kind, health)
+	if hokora_manager:
+		hokora_manager.consume(shrine)
+	shrines_claimed += 1
+	GameEvents.log_event("hokora_buff_chosen", {"slot": [shrine.slot.x, shrine.slot.y], "kind": kind, "healed": snappedf(gained, 0.1)})
 	_refresh_hud()
 
 
-func _on_ofuda_pickup_collected(_pickup: OfudaPickup) -> void:
-	add_ofuda(1)
-	_refresh_hud()
-
-
-## Adds (or, with a negative amount, removes) spendable Ofuda. Never below 0.
-func add_ofuda(amount: int) -> void:
+## Skill points: the one currency of the tree. Points only come with levels (D12).
+func add_points(amount: int) -> void:
 	if amount == 0:
 		return
-	ofuda_count = maxi(0, ofuda_count + amount)
-	ofuda_changed.emit(ofuda_count)
-	GameEvents.log_event("ofuda_changed", {"delta": amount, "total": ofuda_count})
+	skill_points = maxi(0, skill_points + amount)
+	points_changed.emit(skill_points)
+	GameEvents.log_event("points_changed", {"delta": amount, "total": skill_points})
 
 
-## Buys skill-tree node [param node_id] with the Ofuda wallet. This is the
-## single spending path — the E2d VR tree menu calls exactly this. Returns
-## SkillTreeData's verdict plus the wallet balance after the attempt.
+## Buys skill-tree node [param node_id] with the skill points. This is the
+## single spending path — the VR tree menu calls exactly this. Returns
+## SkillTreeData's verdict plus the points left after the attempt.
 func unlock_skill(node_id: String) -> Dictionary:
 	if skill_tree == null:
-		return {"ok": false, "reason": SkillTreeData.REASON_UNKNOWN_NODE, "cost": 0, "balance": ofuda_count}
-	var verdict := skill_tree.try_unlock(node_id, ofuda_count)
+		return {"ok": false, "reason": SkillTreeData.REASON_UNKNOWN_NODE, "cost": 0, "balance": skill_points}
+	var verdict := skill_tree.try_unlock(node_id, skill_points)
 	if bool(verdict.get("ok", false)):
-		ofuda_count = maxi(0, ofuda_count - int(verdict.get("cost", 0)))
-		ofuda_changed.emit(ofuda_count)
+		skill_points = maxi(0, skill_points - int(verdict.get("cost", 0)))
+		points_changed.emit(skill_points)
 		skill_unlocked.emit(node_id)
-		GameEvents.log_event("skill_unlocked", {"id": node_id, "cost": int(verdict.get("cost", 0)), "balance": ofuda_count})
+		GameEvents.log_event("skill_unlocked", {"id": node_id, "cost": int(verdict.get("cost", 0)), "balance": skill_points})
 		_refresh_hud()
-	verdict["balance"] = ofuda_count
+	verdict["balance"] = skill_points
 	return verdict
 
 
@@ -682,19 +726,28 @@ func add_xp(amount: int) -> void:
 		xp -= xp_to_next
 		level += 1
 		xp_to_next = xp_for_level(level)
+		add_points(1)
 		GameEvents.log_event("level_up", {"level": level, "xp_to_next": xp_to_next})
+		level_gained.emit(level)
 		_on_level_up()
 	_refresh_hud()
 
 
-# --- Level-up (rank + heal; no choice, no slow-motion) -------------------------------
+# --- Level-up (rank, point, heal; no choice, no slow-motion) -------------------------
 
-## A level-up is a rank and a small rest. Power grows only through the Ofuda tree
-## and the soul rank (D1), so there is nothing to pick and no time to slow.
+## A level-up is a rank, a point for the tree and a small rest (D12). The feedback is
+## diegetic and short: a chime, a pulse in both hands and a flash on the wrist. The
+## world never slows: no slow motion, no time scale.
 func _on_level_up() -> void:
 	var health := _player_health()
 	if health and health.is_alive():
 		health.heal(LEVEL_UP_HEAL_HP)
+	if diegetic_hud:
+		diegetic_hud.flash_level_up(level)
+	if player is XRPlayer:
+		var xr := player as XRPlayer
+		xr.left_holder.pulse(0.5, 0.12)
+		xr.right_holder.pulse(0.5, 0.12)
 	var frame := _player_view_frame()
 	var chime_pos := frame.origin + (-frame.basis.z) * 0.8
 	Sfx.play_at("level_up", chime_pos, -4.0, 5.0)
@@ -752,11 +805,13 @@ func _on_player_died() -> void:
 	if state == RunState.GAME_OVER:
 		return
 	state = RunState.GAME_OVER
-	# Per-run progression ends with the run (E2c): bank and unlocks reset.
-	ofuda_count = 0
+	# Per-run progression ends with the run (E2c, D12): points, unlocks and buffs reset.
+	skill_points = 0
 	if skill_tree:
 		skill_tree.reset()
-	_clear_ofuda_pickups()
+	buffs.clear()
+	if shrine_offering:
+		shrine_offering.cancel()
 	TimeController.clear()
 	wave_director.stop_director()
 	for e in wave_director.alive_enemies():
@@ -914,7 +969,7 @@ func _refresh_hud() -> void:
 	var hp_val := health.hp if health else 100.0
 	var max_hp_val := health.max_hp if health else 100.0
 	var elem := element_system.visual_element() if element_system else (katana.element if katana else Elements.NONE)
-	diegetic_hud.update_hud(hp_val, max_hp_val, xp, xp_to_next, level, maxi(wave_director.wave, 1), score, kills, run_time, elem, ofuda_count)
+	diegetic_hud.update_hud(hp_val, max_hp_val, xp, xp_to_next, level, maxi(wave_director.wave, 1), score, kills, run_time, elem, skill_points, buffs.hud_text())
 
 
 func _on_parry_diegetic(_info: Dictionary) -> void:
@@ -1019,12 +1074,6 @@ func _clear_souls() -> void:
 		else:
 			c.queue_free()
 
-
-func _clear_ofuda_pickups() -> void:
-	if _ofuda_pickups_root == null:
-		return
-	for c in _ofuda_pickups_root.get_children():
-		c.queue_free()
 
 
 func _clear_end_screen() -> void:

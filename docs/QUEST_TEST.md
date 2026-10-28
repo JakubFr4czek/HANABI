@@ -14,7 +14,7 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 - [ ] **Nadgarstek (§15):** HUD na dłoni, bez „pływającego pergaminu”; pierścień HP **tylko przy niskim HP**; tsuba XP czytelna.
 - [ ] **Las CC0:** drzewa/torii do ~12 m; **za wielkim torii** tylko mgła (§14).
 - [ ] Hitodama: po killu lecą, spiralnie wciągane; zbieranie bez lag spike’a.
-- [ ] Level-up ofuda: slow-mo, slice, wybór upgrade’u — bez freezu.
+- [ ] **Level-up (D12):** bez slow-mo i bez wyboru; haptyka obu dłoni, błysk na nadgarstku (~0.6 s), tekst „位 LV n · +1 点" przez 1.5 s.
 
 ## Walka i VFX
 
@@ -48,7 +48,7 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 - [ ] Muzyka przygasa i staje się „zamknięta” (low-pass), po zamknięciu wraca w ~0.25 s.
 - [ ] Wskaźnik z **obu** kontrolerów (spust = wybór): zakładki żywiołów, węzły, przycisk UNLOCK; hover daje krótki puls haptyczny.
 - [ ] Menu otwarte przy drzewie / ścianie / torii: panel **nie wchodzi w geometrię**, jest czytelny w mgle (nie zamglony), dłonie i ostrze zasłaniają go poprawnie.
-- [ ] Zakup tylko z wystarczającą liczbą 札 i spełnionym wymaganiem; odmowa = drżenie przycisku + bzyk, bez utraty 札.
+- [ ] Zakup tylko z wystarczającą liczbą 点 (punktów z poziomów) i spełnionym wymaganiem; odmowa = drżenie przycisku + bzyk, bez utraty punktów.
 - [ ] Ink Node 5 (Abyssal Sea): +20% prędkości chodzenia w VR w swoim tuszu; nietykalność tylko 0.5 s po wejściu w tusz.
 
 Zrzuty menu (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/skill_menu_screenshots.tscn -- --desktop --shots /tmp/hanabi_e2d`
@@ -58,10 +58,21 @@ Zrzuty menu (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/sk
 
 - [ ] Ostrze świeci **krawędzią** w kolorze żywiołu (nie płaską plamą); imbue przebiega od jabłka do czubka w ~0.4 s; po wygaśnięciu światło spływa (~0.6 s).
 - [ ] Ostatnie 3 s: ostrze, smuga i pierścień na nadgarstku pulsują razem (3 Hz).
-- [ ] Nadgarstek (podniesiony): kanji żywiołu + pierścień czasu, liczba sekund, dwa pierścienie A / B z glifami (pełny jasny = gotowe), 札×N. Stal bez żywiołu: przygaszone 門.
+- [ ] Nadgarstek (podniesiony): kanji żywiołu + pierścień czasu, liczba sekund, dwa pierścienie A / B z glifami (pełny jasny = gotowe), linia „XP a/b · 点 N · 波 w”. Stal bez żywiołu: przygaszone 門.
 - [ ] Brama aktywna widoczna we mgle z ~25 m jako pionowa smuga światła w kolorze żywiołu; po przejściu rozbłysk i wygaszenie; nieaktywna ginie we mgle.
 - [ ] Dźwięk przy nasyceniu (inny per żywioł, cichy) i miękkie „zgaśnięcie” przy końcu.
-- [ ] Menu wsuwa się płynnie; stopka pokazuje żywioł, sekundy, A/B i 札. Zrzuty: `godot --path . --fixed-fps 90 res://tests/e3_readability_screenshots.tscn -- --desktop --shots /tmp/hanabi_e3`.
+- [ ] Menu wsuwa się płynnie; stopka pokazuje żywioł, sekundy, A/B i 点. Zrzuty: `godot --path . --fixed-fps 90 res://tests/e3_readability_screenshots.tscn -- --desktop --shots /tmp/hanabi_e3`.
+
+## Kapliczka i żółta ofuda (D12)
+
+- [ ] Podejście do kapliczki **nic nie robi**: dźwięk suzu i światło, bez pauzy.
+- [ ] **Dłoń bez katany** na ofierze (ołtarz, 0.35 m) i stojąc blisko: otwiera się wybór. Dłoń z kataną nie otwiera.
+- [ ] Wróg w 3.5 m: wybór **odmówiony**, suzu cicho, kapliczka dalej zapalona.
+- [ ] Wybór: trzy żółte ofudy w wolnej przestrzeni przed tobą, **bez przenikania** przez drzewo, skałę, latarnię ani wroga.
+- [ ] Świat **stoi** jak w menu (wróg, pociski, timery, buffy); nie idziesz i się nie obracasz; katana nie krzywdzi wrogów.
+- [ ] Cięcie ofudy: buff z timerem na nadgarstku, dwie pozostałe znikają, świat rusza płynnie, kapliczka gaśnie na stałe.
+- [ ] Nieużyta kapliczka po odejściu i powrocie świeci dalej.
+- [ ] Zrzuty: `godot --path . --fixed-fps 90 res://tests/hokora_screenshots.tscn -- --desktop --shots /tmp/hanabi_d12`.
 
 ## Cięcie jak masło (D4, tachi)
 

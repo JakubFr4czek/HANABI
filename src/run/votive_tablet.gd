@@ -52,7 +52,9 @@ var _prev_blade_starts := {}  # weapon -> Vector3
 
 
 ## [param p_entry] keys: header, kanji, title, subtitle, color, and material
-## ("wood" gives the plaque its wooden paper colour).
+## ("wood" gives the plaque its wooden paper colour). Optional, for a card on
+## light paper (OfudaTalisman): paper (Color), ink (title), sub_ink (subtitle),
+## header_ink, kanji_ink and outline (Color, alpha 0 for none).
 func setup(p_entry: Dictionary, p_index: int = 0) -> void:
 	entry = p_entry.duplicate()
 	index = p_index
@@ -70,6 +72,8 @@ func _ready() -> void:
 	_mat.set_shader_parameter("accent_color", accent)
 	if String(entry.get("material", "")) == "wood":
 		_mat.set_shader_parameter("paper_color", WOOD_COLOR)
+	if entry.has("paper"):
+		_mat.set_shader_parameter("paper_color", entry.paper)
 	_mesh_inst.mesh = quad
 	_mesh_inst.material_override = _mat
 	_mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -86,22 +90,23 @@ func _build_labels(accent: Color) -> void:
 		"Hiragino Mincho ProN", "YuMincho", "Songti SC", "Noto Serif CJK JP", "Hiragino Sans", "Arial Unicode MS"
 	])
 
+	var outline: Color = entry.get("outline", Color(0.01, 0.01, 0.02, 0.95))
 	var header_text: String = String(entry.get("header", "絵馬"))
-	_header_lbl = make_label(header_text, sys_font, 26, 0.0011, Color(0.88, 0.78, 0.56), Vector3(0, 0.21, 0.004))
+	_header_lbl = make_label(header_text, sys_font, 26, 0.0011, entry.get("header_ink", Color(0.88, 0.78, 0.56)), Vector3(0, 0.21, 0.004), outline)
 	_card_root.add_child(_header_lbl)
 
 	var kanji_str := String(entry.get("kanji", "斬"))
-	var kanji_col := Color(accent.r * 1.45 + 0.18, accent.g * 1.45 + 0.18, accent.b * 1.45 + 0.18, 1.0)
-	_kanji_lbl = make_label(kanji_str, sys_font, 114, 0.00145, kanji_col, Vector3(0, 0.068, 0.005))
+	var kanji_col: Color = entry.get("kanji_ink", Color(accent.r * 1.45 + 0.18, accent.g * 1.45 + 0.18, accent.b * 1.45 + 0.18, 1.0))
+	_kanji_lbl = make_label(kanji_str, sys_font, 114, 0.00145, kanji_col, Vector3(0, 0.068, 0.005), outline)
 	_card_root.add_child(_kanji_lbl)
 
 	var title_str := String(entry.get("title", ""))
-	_title_lbl = make_label(title_str, sys_font, 30, 0.00092, Color(0.97, 0.96, 0.99), Vector3(0, -0.092, 0.004))
+	_title_lbl = make_label(title_str, sys_font, 30, 0.00092, entry.get("ink", Color(0.97, 0.96, 0.99)), Vector3(0, -0.092, 0.004), outline)
 	_fit_to_card(_title_lbl)
 	_card_root.add_child(_title_lbl)
 
 	var sub_str := String(entry.get("subtitle", ""))
-	_sub_lbl = make_label(sub_str, sys_font, 24, 0.00082, Color(0.84, 0.88, 0.96), Vector3(0, -0.158, 0.004))
+	_sub_lbl = make_label(sub_str, sys_font, 24, 0.00082, entry.get("sub_ink", Color(0.84, 0.88, 0.96)), Vector3(0, -0.158, 0.004), outline)
 	_fit_to_card(_sub_lbl)
 	_sub_lbl.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_card_root.add_child(_sub_lbl)
@@ -115,7 +120,8 @@ static func _fit_to_card(lbl: Label3D) -> void:
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
-static func make_label(txt: String, font: Font, fsize: int, psize: float, col: Color, pos: Vector3) -> Label3D:
+static func make_label(txt: String, font: Font, fsize: int, psize: float, col: Color, pos: Vector3,
+		outline: Color = Color(0.01, 0.01, 0.02, 0.95)) -> Label3D:
 	var lbl := Label3D.new()
 	lbl.text = txt
 	lbl.font = font
@@ -125,7 +131,7 @@ static func make_label(txt: String, font: Font, fsize: int, psize: float, col: C
 	lbl.shaded = false
 	lbl.double_sided = true
 	lbl.outline_size = 6
-	lbl.outline_modulate = Color(0.01, 0.01, 0.02, 0.95)
+	lbl.outline_modulate = outline
 	lbl.position = pos
 	# Draw after the card paper (both are sorted as transparent); otherwise the
 	# paper often wins and the ink reads as a dim smudge behind it.

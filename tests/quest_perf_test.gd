@@ -120,7 +120,7 @@ func _run_all() -> void:
 
 	# D4: a wave of Kirisute splits (two a frame, eight yōkai) stays in budget. The pieces
 	# are bounded and each one's surfaces count as draw calls.
-	run.ofuda_count = 1000
+	run.skill_points = 1000
 	for node: Dictionary in SkillTreeData.nodes_for_element(Elements.SAKURA):
 		run.unlock_skill(String(node.id))
 	run.element_system.imbue(Elements.SAKURA)

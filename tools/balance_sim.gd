@@ -7,23 +7,24 @@ const Model := preload("res://tools/balance_model.gd")
 
 
 func _ready() -> void:
-	print("=== ECONOMY (D1: Ofuda only from hokora shrines, walking distance) ===")
-	print("shrine spacing %.0f m, %d Ofuda each, first at %.0f m" % [Model.hokora_spacing(),
-		ElementBalance.OFUDA_PER_HOKORA, ElementBalance.HOKORA_OPENING_DISTANCE])
+	print("=== ECONOMY (D12: XP from kills, one skill point per level, shrine buffs from walking) ===")
+	print("shrine spacing %.0f m, first at %.0f m; XP per kill: yokai %d, elite %d, oni %d; level %d needs %d XP, +%d per level" % [
+		Model.hokora_spacing(), ElementBalance.HOKORA_OPENING_DISTANCE, ElementBalance.XP_YOKAI,
+		ElementBalance.XP_ELITE, ElementBalance.XP_ONI, 1, RunGame.xp_for_level(1), ElementBalance.XP_LEVEL_STEP])
 	for profile_name: String in ["careful", "average", "skilled"]:
 		var eco: Dictionary = Model.economy(profile_name, 720.0)
 		var line := "%-8s" % profile_name
 		for minute in [2, 4, 6, 8, 10, 12]:
 			var s: Dictionary = eco.timeline[mini(minute * 6, eco.timeline.size() - 1)]
-			line += "  %2dmin: %2d shrines %3d札 (%d nodes)" % [minute, s.shrines, int(s.ofuda), Model.nodes_for_budget(int(s.ofuda))]
+			line += "  %2dmin: LV%2d %2dpt (%d nodes)" % [minute, s.level, int(s.points), Model.nodes_for_budget(int(s.points))]
 		print(line)
-		var sakura_costs: Array[int] = Model.cumulative_costs(Model.full_order(Elements.SAKURA))
+		var school_costs: Array[int] = Model.cumulative_costs(Model.full_order(Elements.SAKURA))
 		var parts := ""
-		for i in sakura_costs.size():
-			parts += "  node%d(%d札)@%s" % [i + 1, sakura_costs[i], _fmt(Model.time_to_afford(eco.timeline, sakura_costs[i]))]
+		for i in school_costs.size():
+			parts += "  node%d(%dpt)@%s" % [i + 1, school_costs[i], _fmt(Model.time_to_afford(eco.timeline, school_costs[i]))]
 		print("         one school, cumulative:" + parts)
-		print("         first shrine @%s, kills %d, elites %d, level %d, wave %d" % [
-			_fmt(Model.time_to_afford(eco.timeline, 1)), eco.kills, eco.elites, eco.level, eco.wave])
+		print("         kills %d, elites %d, level %d, points %d, shrines %d, buff uptime %.0f%%, wave %d" % [
+			eco.kills, eco.elites, eco.level, eco.points, eco.shrines, float(eco.buff_uptime) * 100.0, eco.wave])
 
 	print("\n=== KITS: per imbue window, pack of 1 / 4 yōkai, soul rank 1 ===")
 	for school: String in Elements.COMBAT_ELEMENTS:
