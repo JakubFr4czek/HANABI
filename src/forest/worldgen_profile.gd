@@ -94,15 +94,11 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Stone lantern used along the forest path. Empty uses the procedural lantern.
 @export var lantern_scene: PackedScene
 ## Most lanterns a chunk can hold.
-@export_range(0, 12, 1) var lantern_max_per_chunk := 5
-## Smallest distance between two lanterns of a chunk, metres (Poisson-disk spacing).
-@export_range(1.0, 30.0, 0.5) var lantern_min_spacing := 5.0
+@export_range(0, 12, 1) var lantern_max_per_chunk := 2
 ## Smallest lantern size (multiplier on its mesh).
 @export_range(0.2, 3.0, 0.01) var lantern_scale_min := 0.6
 ## Largest lantern size (multiplier on its mesh).
 @export_range(0.2, 3.0, 0.01) var lantern_scale_max := 1.33
-## Scatter-noise threshold: higher = lanterns cluster in fewer spots.
-@export_range(0.0, 1.0, 0.01) var lantern_cluster_threshold := 0.5
 ## Clearance from trunks and other props, metres.
 @export_range(0.0, 6.0, 0.05) var lantern_clearance := 1.0
 
@@ -170,14 +166,19 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(0.0, 2.0, 0.01) var path_curviness := 0.6
 ## Gap kept free of trunks beside a path, metres (on top of half the width).
 @export_range(0.0, 6.0, 0.05) var path_tree_clearance := 2.0
-## Colour of the packed earth on the trail (multiplies its texture, lit by the night palette).
-@export var path_tint := Color(1.0, 0.9, 0.76)
+## Colour of the gravel on the trail (multiplies its texture, lit by the night palette).
+## Cool and near neutral, so the trail is paler than the warm duff beside it.
+@export var path_tint := Color(0.94, 0.95, 0.98)
 ## Brightness of the trail against the duff beside it (1.0 = same as its texture).
-@export_range(1.0, 2.5, 0.01) var path_gain := 1.5
+@export_range(1.0, 3.0, 0.01) var path_gain := 2.2
 ## Share of gates that stand beside a path instead of at a random site.
 @export_range(0.0, 1.0, 0.01) var torii_on_path := 0.6
-## Share of lanterns that stand along a path instead of at a random site.
-@export_range(0.0, 1.0, 0.01) var lantern_on_path := 0.7
+## Share of lanterns that stand along a path. The rest of the lanterns stand
+## on the trail only: a lantern is never placed off the path.
+@export_range(0.0, 1.0, 0.01) var lantern_on_path := 1.0
+## Smallest distance between two lanterns along a path, metres: the tōrō stand
+## about every 15 to 25 m, so the trail reads as a lit walk, not a row of posts.
+@export_range(5.0, 40.0, 0.5) var path_lantern_spacing := 15.0
 
 @export_group("Distance and LOD")
 ## Trees are drawn out to this distance from the camera; past it they are fog.

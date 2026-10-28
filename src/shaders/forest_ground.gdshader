@@ -71,8 +71,13 @@ void fragment() {
 	// Footpaths (vertex colour R, ForestWorld._build_terrain_mesh). The strip is
 	// its own material: no stone, grass or soil mixes into it. The edge is soft
 	// and noisy, so it never reads as a drawn line.
-	float trail = smoothstep(0.3, 0.7, COLOR.r + (vnoise(p * 0.9) - 0.5) * 0.35);
-	float free = 1.0 - trail;
+	// Sharp edge: a little noise only, so the border is ragged but still a border.
+	float trail = smoothstep(0.42, 0.58, COLOR.r + (vnoise(p * 0.9) - 0.5) * 0.14);
+	// Flat stones just outside the border (a band about 0.5 m wide), rare: only the
+	// noisiest spots of the band get one.
+	float beside = smoothstep(0.0, 0.3, COLOR.r) * (1.0 - smoothstep(0.3, 0.6, COLOR.r));
+	float kerb = beside * smoothstep(0.7, 0.8, vnoise(p * 1.9 + 3.0));
+	float free = clamp(1.0 - trail - kerb, 0.0, 1.0);
 	float w_stone = clamp(smoothstep(0.07, 0.19, slope) + smoothstep(0.74, 0.86, beds) * 0.85, 0.0, 1.0) * free;
 	float w_grass = smoothstep(0.44, 0.6, broad) * max(free - w_stone, 0.0);
 	float w_soil = max(free - w_stone - w_grass, 0.0);
@@ -86,6 +91,7 @@ void fragment() {
 	// Packed earth of the trail; a coarser second sample breaks the tiling.
 	vec3 path = mix(texture(path_albedo, p / path_tile).rgb,
 		texture(path_albedo, p / (path_tile * 0.4) + vec2(3.0, 7.0)).rgb, 0.35) * path_tint * path_gain;
+	vec3 flat_stone = texture(stone_albedo, p / (stone_tile * 0.6)).rgb * vec3(0.9, 0.92, 0.96) * 1.1;
 	vec3 nrm = texture(soil_normal, p / soil_tile).rgb * w_soil
 		+ texture(grass_normal, p / grass_tile).rgb * w_grass
 		+ texture(stone_normal, p / stone_tile).rgb * w_stone
@@ -95,7 +101,8 @@ void fragment() {
 	vec3 alb = soil * vec3(0.58, 0.50, 0.44) * w_soil
 		+ grass * vec3(0.42, 0.52, 0.40) * w_grass
 		+ stone * vec3(0.50, 0.52, 0.54) * w_stone
-		+ path * trail;
+		+ path * trail
+		+ flat_stone * kerb;
 	float litter = vnoise(p * 1.65 + 4.0);
 	float damp = vnoise(p * 0.27 + 11.0);
 	alb *= mix(0.74, 1.08, litter);
