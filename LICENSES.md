@@ -34,6 +34,7 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/models/enemies/oni_mask_run.glb`, `oni_mask_run_normal.png` | `tools/gen_oni_mask_glb.py`, `ONI_MASK_LICENSE.txt` | Jakub Frączek (HANABI) | CC0 1.0 — §17: no suitable external CC0 GLB without login |
 | `assets/models/enemies/oni_body_run.glb`, `oni_kanabo_run.glb` | `tools/gen_oni_body_glb.py` | Jakub Frączek (HANABI) | CC0 1.0 (§21 procedural boss shell) |
 | `assets/fonts/YujiBoku-Regular.ttf` | https://github.com/google/fonts/tree/main/ofl/yujiboku | Kinuta Font Factory | SIL OFL 1.1 (`assets/fonts/LICENSE.txt`) |
+| `assets/fonts/Cinzel-Variable.ttf`, `OFL-Cinzel.txt` | https://github.com/google/fonts/tree/main/ofl/cinzel | The Cinzel Project Authors (Natanael Gama) | SIL OFL 1.1 (`assets/fonts/OFL-Cinzel.txt`); free, no attribution required in game, 125 KB |
 | `assets/models/weapons/antique_katana_01/` (glTF, 2K) | https://polyhaven.com/a/antique_katana_01 | Tal Swicegood (Poly Haven) | CC0 1.0 |
 | `assets/models/props/katana_stand_01/` (glTF, textures downscaled to 1K) | https://polyhaven.com/a/katana_stand_01 | Rico Cilliers (Poly Haven) | CC0 1.0 |
 | `assets/models/environment/rocks/rock_face_01/` (glTF, textures 1K) | https://polyhaven.com/a/rock_face_01 | Dario Barresi (Poly Haven) | CC0 1.0 |
