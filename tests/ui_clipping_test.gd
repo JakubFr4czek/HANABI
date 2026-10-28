@@ -44,6 +44,7 @@ func _run_all() -> void:
 	await _test_hills()
 	await _test_restart_ema_beside_obstacles()
 	await _test_restart_ema_beside_torii()
+	await _test_settings_page_beside_tree()
 	_test_material_guarantees()
 	run.queue_free()
 
@@ -228,6 +229,28 @@ func _test_restart_ema_beside_torii() -> void:
 		await _end_run(false)
 	_check("restart ema hangs clear of a torii gate from %d stances (overlapping samples: %d)" % [stances, worst], worst == 0)
 	_clear_blockers()
+
+
+## D3: the SETTINGS tab draws on the same panel, so it cannot grow into a tree.
+## The biggest page (the controller diagram) is opened beside one, 0.9 m ahead.
+func _test_settings_page_beside_tree() -> void:
+	await _stand_at(Vector3(0.0, 0.0, 0.0))
+	var head := _head()
+	_add_prop(0, _ground(head + Vector3(0.0, 0.0, -(forest._trunk_chest_radius * 1.2 + 0.90))), 1.2)
+	await _frames(3)
+	run.pause_controller.open()
+	var menu := run.pause_controller.menu
+	menu.canvas.is_settings_tab = true
+	menu.canvas.settings_page = SkillTreeCanvas.PAGE_CONTROLS
+	await _frames(4)
+	_check_pose("settings diagram, tree 0.9 m ahead", _pose())
+	_check("the settings diagram sits on the same depth-tested panel (blocked %s, no_depth_test %s)" % [
+			menu.drawn_on_top, menu._panel_mat.no_depth_test], not menu.drawn_on_top and not menu._panel_mat.no_depth_test)
+	run.pause_controller.close()
+	menu.canvas.is_settings_tab = false
+	menu.canvas.settings_page = SkillTreeCanvas.PAGE_AUDIO
+	_clear_blockers()
+	await _frames(2)
 
 
 ## Starts a fresh run after a forced death so the next stance begins alive.
