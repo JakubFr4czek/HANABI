@@ -133,10 +133,27 @@ const KIRISUTE_CAP_FADE_SECONDS := 1.6
 ## An Oni takes a glowing wound instead of splitting; it stays open this long.
 const KIRISUTE_WOUND_SECONDS := 2.0
 
-# --- Ofuda economy (D1): the only currency the trees are bought with ----------------
-## Ofuda come from hokora shrines in the forest and from nothing else: yōkai,
-## elites and the Oni drop none (docs/ELEMENTS_PLAN.md, D1).
-const OFUDA_PER_HOKORA := 6
+# --- XP and skill points (D12): enemies give XP, every level gives one point ----------
+## XP per kill, the sum of the soul orbs the kill drops (orbs × value per orb).
+## Yōkai: 4 orbs × 6. Elite: 4 × 12 (twice a yōkai, so it is worth turning to).
+## The Oni: 8 × 8.
+const XP_YOKAI := 24
+const XP_ELITE := 48
+const XP_ONI := 64
+const ORBS_PER_KILL := 4
+## XP to climb from level L to L+1: linear, 150 + 45 × (L − 1). Gives one skill point
+## per level (SkillTreeData costs 1/1/1/2/3). Measured in tools/balance_model.gd.
+const XP_FIRST_LEVEL := 150
+const XP_LEVEL_STEP := 45
+
+# --- Hokora shrine and the yellow Ofuda choice (D12) ----------------------------------
+## Walking into the shrine's reach is not enough: the player places a hand on the
+## offering table (no katana in it) within HOKORA_HAND_RADIUS, standing within
+## HOKORA_TOUCH_RADIUS of the altar. A living yōkai within HOKORA_REFUSE_ENEMY_RADIUS
+## of the player refuses the touch, so the choice never opens in a fight by accident.
+const HOKORA_HAND_RADIUS := 0.35
+const HOKORA_TOUCH_RADIUS := 2.2
+const HOKORA_REFUSE_ENEMY_RADIUS := 3.5
 ## The forest is cut into square slots of profile.shrine_slot_chunks chunks on a
 ## side, and a slot holds one shrine with profile.shrine_slot_chance (both in the
 ## WorldGenProfile: placement is world generation, not balance). The player only
@@ -155,8 +172,20 @@ const HOKORA_OPENING_DISTANCE := 30.0
 ## distance (the fog hides everything past 10.5 m; the halo shows to ~35 m).
 const HOKORA_SPAWN_RADIUS := 34.0
 const HOKORA_CULL_RADIUS := 60.0
-## Body distance from the altar that claims the shrine (no blade needed).
-const HOKORA_CLAIM_RADIUS := 1.4
 ## Keep shrines away from torii gates (metres) and from the spawn ring.
 const HOKORA_TORII_CLEARANCE := 10.0
 const HOKORA_MIN_START_DISTANCE := 20.0
+
+# --- Shrine buffs (D12): one of three yellow Ofuda, a minute long --------------------
+## Speed: walking speed × this, for BUFF_SECONDS. Stacks with the ink boost and the
+## walking pace of Settings (both multiply).
+const BUFF_SPEED_MULTIPLIER := 1.2
+## Damage: every blade and ability hit × this, for BUFF_SECONDS.
+const BUFF_DAMAGE_MULTIPLIER := 1.2
+const BUFF_SECONDS := 60.0
+## Heal: a share of max HP at once, then a share of max HP over BUFF_HEAL_SECONDS.
+## Max HP never grows, and a heal at full health adds nothing.
+const BUFF_HEAL_NOW := 0.35
+const BUFF_HEAL_OVER_TIME := 0.15
+const BUFF_HEAL_SECONDS := 10.0
+

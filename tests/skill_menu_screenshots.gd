@@ -37,7 +37,7 @@ func _ready() -> void:
 	player.teleport(stand, yaw)
 	await _frames(40)
 
-	run.ofuda_count = 9
+	run.skill_points = 9
 	run.unlock_skill("petal_sense")
 	run.unlock_skill("hanami_storm")
 	run.element_system.imbue(Elements.SAKURA)
@@ -68,7 +68,7 @@ func _ready() -> void:
 	await _shot("03_storm_unlock_hover")
 
 	# Ink: locked node selected, balance too low.
-	run.ofuda_count = 1
+	run.skill_points = 1
 	menu.canvas.balance = 1
 	menu.select_element(Elements.INK)
 	menu.select_node("abyssal_sea")
@@ -77,7 +77,7 @@ func _ready() -> void:
 	await _shot("04_ink_locked_node")
 
 	# Buy something: flash.
-	run.ofuda_count = 6
+	run.skill_points = 6
 	menu.canvas.balance = 6
 	menu.select_element(Elements.SHADOW)
 	menu.select_node("night_veil")

@@ -109,6 +109,11 @@ const PLAYER_BODY_LAYER: int = XRPlayer.COLLISION_LAYER_BODY
 @export var max_damage := 120.0
 ## Run upgrade multiplier applied to base damage.
 @export var damage_multiplier := 1.0
+## Run-wide outgoing multiplier from a shrine buff (D12). 1.0 = no buff.
+var outgoing_scale := 1.0
+## While a shrine's Ofuda choice holds the world, the blade hits only the cards:
+## every other receiver is ignored, so a cut on a yōkai does nothing (D12).
+var combat_blocked := false
 ## Hits doing at least this much damage trigger hit-stop.
 @export var hit_stop_damage := 40.0
 ## Hits from this much damage up to [member hit_stop_damage] get a micro-stop.
@@ -927,10 +932,12 @@ func _handle_hit(c: Dictionary) -> void:
 		return
 	var part: Node = c.collider
 	var receiver: Node = part.get_meta("hit_receiver")
+	if combat_blocked and not receiver.is_in_group("ofuda_talismans"):
+		return
 	var strike := classify_strike(c.point, c.direction)
 	var mom := strike_momentum(c.point, c.direction, c.speed)
 	var base_damage := clampf((c.speed - min_hit_speed) * damage_per_speed, 0.0, max_damage) \
-		* lerpf(flick_damage, 1.0, mom.power) * float(strike.multiplier) * damage_multiplier
+		* lerpf(flick_damage, 1.0, mom.power) * float(strike.multiplier) * damage_multiplier * outgoing_scale
 	# Kirisute (D4): a clean, fast edge cut under an active finisher is offered to the
 	# receiver, which decides whether it splits. The blade's plane is the contact
 	# point with the motion and the blade's own axis (see KirisuteCut.plane_normal).

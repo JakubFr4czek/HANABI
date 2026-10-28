@@ -3,8 +3,9 @@ extends RefCounted
 ##
 ## No scene tree, no physics: it reads the game's own numbers ([ElementBalance],
 ## [SkillTreeData], the formulas of [WaveDirector]) and answers two questions fast:
-##   1. economy(): how many Ofuda does a 5–10 minute run earn, and when does each
-##      skill-tree node become affordable?
+##   1. economy(): how much XP does a 5–10 minute run earn, how many levels (skill
+##      points) does it give, when does each node become affordable, and how long do
+##      the shrine buffs last (D12)?
 ##   2. kit(): what does one imbue window of each school deliver (damage, control,
 ##      protection) against a lone yōkai and against a pack, base and upgraded?
 ## tools/balance_sim.gd prints the tables; tests/skill_tree_data_test.gd asserts
@@ -15,11 +16,12 @@ extends RefCounted
 ##    the next one, a fraction of the time lost to walking between gates;
 ##  - a solid sword cut is 85 HP, `hits_per_second` of them connect on average;
 ##  - the blade does not grow with level (D1: level-up cards are gone, so power
-##    comes from the Ofuda tree only);
-##  - Ofuda come ONLY from hokora shrines (D1): a shrine is passed every
-##    WorldGenProfile shrine slot spacing metres of walking, the first one
-##    HOKORA_OPENING_DISTANCE metres out, and each gives OFUDA_PER_HOKORA.
-##    Yōkai, elites and the Oni give nothing.
+##    comes from the skill tree only);
+##  - XP comes from kills (D12): a yōkai gives XP_YOKAI, an elite XP_ELITE, the Oni
+##    XP_ONI. Every level gives one skill point (RunGame.xp_for_level).
+##  - A hokora shrine (D1) is passed every WorldGenProfile shrine slot spacing metres
+##    of walking, the first one HOKORA_OPENING_DISTANCE metres out. The model assumes
+##    the player takes its buff (one kind, BUFF_SECONDS, refreshed not stacked).
 
 const SWORD_HIT := 85.0
 
@@ -43,10 +45,11 @@ static func hokora_spacing() -> float:
 	return side * side / (band * world.shrine_slot_chance * ElementBalance.HOKORA_VALID_SHARE)
 
 
-## One run simulated with the real wave formulas. Kills and the rank come from
-## the fight; Ofuda come from the distance walked past hokora shrines (D1).
-## Returns {"timeline": [{t, kills, ofuda, level, shrines, wave}], "total": int,
-## "kills": int, "shrines": int, ...} with one sample every 10 s up to [param seconds].
+## One run simulated with the real wave formulas. Kills give XP by type and the XP
+## curve gives the levels and skill points (D12); shrines give buffs from the distance
+## walked. Returns {"timeline": [{t, kills, points, level, wave, shrines, buff}], ...}
+## with one sample every 10 s up to [param seconds]. "buff" is the share of the run
+## so far with a shrine buff running (union of the 60 s windows).
 static func economy(profile_name: String, seconds: float = 600.0, seed_value: int = 7) -> Dictionary:
 	var prof: Dictionary = PROFILES[profile_name]
 	var wd := WaveDirector.new()
@@ -66,26 +69,31 @@ static func economy(profile_name: String, seconds: float = 600.0, seed_value: in
 	var kills := 0
 	var oni_kills := 0
 	var elites := 0
-	var xp := 0.0
+	var xp := 0
 	var level := 1
+	var points := 0
 	var walked := 0.0
 	var shrines := 0
 	var next_shrine_at := ElementBalance.HOKORA_OPENING_DISTANCE
-	var ofuda := 0
+	var buff_covered_until := 0.0
+	var buff_seconds := 0.0
 	var timeline: Array[Dictionary] = []
 	var next_sample := 0.0
 
 	while t <= seconds:
 		if t >= next_sample:
-			timeline.append({"t": t, "kills": kills, "ofuda": ofuda, "level": level,
-				"wave": wave, "shrines": shrines, "walked": walked})
+			timeline.append({"t": t, "kills": kills, "points": points, "level": level,
+				"wave": wave, "shrines": shrines, "walked": walked,
+				"buff": buff_seconds / maxf(t, 1.0)})
 			next_sample += 10.0
 		t += dt
 		wave_timer += dt
 		walked += float(prof.walk_speed) * float(prof.walk_share) * dt
 		while walked >= next_shrine_at:
 			shrines += 1
-			ofuda += ElementBalance.OFUDA_PER_HOKORA
+			var until := t + ElementBalance.BUFF_SECONDS
+			buff_seconds += until - maxf(t, buff_covered_until)
+			buff_covered_until = maxf(buff_covered_until, until)
 			next_shrine_at += hokora_spacing()
 		var ramp := clampf(t / wd.ramp_seconds, 0.0, 1.0)
 		var cap := clampi(wd.start_concurrent_enemies + int(t / wd.seconds_per_extra_enemy),
@@ -128,21 +136,26 @@ static func economy(profile_name: String, seconds: float = 600.0, seed_value: in
 				if float(target.hp) <= 0.0:
 					alive.erase(target)
 					kills += 1
+					var kill_xp := ElementBalance.XP_YOKAI
 					if target.kind == "elite":
 						elites += 1
+						kill_xp = ElementBalance.XP_ELITE
 					elif target.kind == "oni":
 						oni_kills += 1
-					xp += 24.0
+						kill_xp = ElementBalance.XP_ONI
+					xp += kill_xp
 					while xp >= RunGame.xp_for_level(level):
 						xp -= RunGame.xp_for_level(level)
 						level += 1
+						points += 1
 					target = {}
 	wd.free()
 	return {"timeline": timeline, "kills": kills, "oni_kills": oni_kills, "elites": elites,
-		"level": level, "total": ofuda, "shrines": shrines, "wave": wave}
+		"level": level, "points": points, "shrines": shrines, "wave": wave,
+		"buff_uptime": buff_seconds / maxf(seconds, 1.0)}
 
 
-## Most nodes a player can own with [param budget] Ofuda when they always buy the
+## Most nodes a player can own with [param budget] skill points when they always buy the
 ## cheapest node whose prerequisites are met (what an average player can afford).
 static func nodes_for_budget(budget: int) -> int:
 	var unlocked := {}
@@ -171,8 +184,8 @@ static func nodes_for_budget(budget: int) -> int:
 	return bought
 
 
-## D1: the Razor Edge card is gone and nothing else raises the sword, so the
-## blade is the same at every level (the Ofuda tree and the rank do the growing).
+## D1/D12: nothing raises the sword at a level, so the blade is the same at every
+## level (the skill tree and the rank do the growing).
 static func blade_power(_level: int) -> float:
 	return 1.0
 
@@ -191,16 +204,16 @@ static func _spawn(wd: WaveDirector, rng: RandomNumberGenerator, wave: int, t: f
 	return {"hp": hp, "kind": "swarm"}
 
 
-## Seconds until the cumulative cost of [param costs] is first covered, per the
+## Seconds until the run has earned [param cumulative_cost] skill points, per the
 ## timeline of [method economy]; -1 when the run never gets there.
 static func time_to_afford(timeline: Array[Dictionary], cumulative_cost: int) -> float:
 	for s in timeline:
-		if int(floor(float(s.ofuda))) >= cumulative_cost:
+		if int(s.points) >= cumulative_cost:
 			return float(s.t)
 	return -1.0
 
 
-## Cumulative Ofuda needed to own the first [param count] nodes of a buying
+## Cumulative skill points needed to own the first [param count] nodes of a buying
 ## order (ids). Order must respect prerequisites.
 static func cumulative_costs(order: Array) -> Array[int]:
 	var out: Array[int] = []

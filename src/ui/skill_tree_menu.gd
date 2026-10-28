@@ -1,6 +1,6 @@
 class_name SkillTreeMenu
 extends Node3D
-## The Ofuda skill-tree scroll as a world-space panel with laser pointers
+## The skill-tree scroll (points from levels, D12) as a world-space panel with laser pointers
 ## (docs/ELEMENTS_PLAN.md Phase E2d).
 ##
 ## One quad shows a [SkillTreeCanvas] rendered into a SubViewport (updated only
@@ -126,7 +126,7 @@ func open(game: RunGame, pose: Dictionary, blade_element: String, blade_seconds:
 	drawn_on_top = bool(pose.get("blocked", false))
 	_panel_mat.no_depth_test = drawn_on_top
 	canvas.tree = game.skill_tree
-	canvas.balance = game.ofuda_count
+	canvas.balance = game.skill_points
 	canvas.blade_element = blade_element
 	canvas.blade_seconds = blade_seconds
 	canvas.abilities = _ability_status(game)
@@ -406,7 +406,7 @@ func unlock_selected(pointer_id: String = "") -> Dictionary:
 		return {}
 	var id := canvas.selected_id
 	var verdict := run_game.unlock_skill(id)
-	canvas.balance = run_game.ofuda_count
+	canvas.balance = run_game.skill_points
 	if bool(verdict.get("ok", false)):
 		canvas.status_text = ""
 		canvas.flash_unlock(id)
@@ -428,8 +428,8 @@ static func reason_text(reason: String) -> String:
 	match reason:
 		SkillTreeData.REASON_PREREQUISITE:
 			return "Master the earlier technique first."
-		SkillTreeData.REASON_OFUDA:
-			return "Find hokora shrines in the forest for more Ofuda."
+		SkillTreeData.REASON_POINTS:
+			return "Every level gives one point. Keep fighting."
 		SkillTreeData.REASON_ALREADY_UNLOCKED:
 			return "Already part of your school."
 	return ""

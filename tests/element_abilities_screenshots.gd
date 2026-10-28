@@ -64,7 +64,7 @@ func _ready() -> void:
 ## about a second later with the pieces on the ground.
 func _kirisute_shots(run: RunGame, player: DesktopPlayer) -> void:
 	for element in Elements.COMBAT_ELEMENTS:
-		run.ofuda_count = 1000
+		run.skill_points = 1000
 		for node: Dictionary in SkillTreeData.nodes_for_element(element):
 			run.unlock_skill(String(node.id))
 		# One yōkai alone in the frame: the earlier shots' enemies would hide the cut.

@@ -75,8 +75,45 @@ func _run_all() -> void:
 	await _test_refused_states()
 	await _test_music_ducking()
 	await _test_locomotion_speed_boost()
+	await _test_offering_touch_in_vr()
 	_test_ui_source_has_one_spending_path()
 	run.queue_free()
+
+
+# --- D12. Shrine touch in VR --------------------------------------------------------
+
+## A free hand on a shrine's offering table opens the yellow Ofuda choice; the sword
+## hand does not (the blade never opens a shrine). Tracking runs on the sim's hands.
+func _test_offering_touch_in_vr() -> void:
+	run.start_run()
+	run.wave_director.stop_director()
+	run.wave_director.clear_enemies()
+	await _frames(20)
+	var shrine := run.hokora_manager.shrine_at(Vector2i.ZERO)
+	_check("the opening shrine is in the run for the VR touch test", shrine != null and shrine.lit)
+	if shrine == null:
+		return
+	var altar := shrine.altar_position()
+	xr.teleport_feet(Vector3(altar.x + 0.9, run.forest_world.height_at(altar.x + 0.9, altar.z), altar.z))
+	await _frames(20)
+	var sword_hand := origin.global_transform.affine_inverse() * Transform3D(Basis(), altar)
+	sim.set_hand("right", sword_hand)
+	await _frames(12)
+	_check("the sword hand on the altar does not open the choice", not run.shrine_offering.is_open())
+	sim.set_hand("right", Transform3D(sim.hand_xf["right"].basis, sim.hand_xf["right"].origin + Vector3(0.0, 0.0, -0.5)))
+	var free_hand := origin.global_transform.affine_inverse() * Transform3D(Basis(), altar)
+	sim.set_hand("left", free_hand)
+	await _frames(12)
+	_check("a free hand on the altar opens the yellow choice", run.shrine_offering.is_open())
+	_check("the VR world holds still for the choice (paused, three cards)",
+		get_tree().paused and get_tree().get_nodes_in_group("ofuda_talismans").size() == 3)
+	# Lift the hand first: a hand still on the altar would open the choice again next frame.
+	sim.set_hand("left", Transform3D(sim.hand_xf["left"].basis, sim.hand_xf["left"].origin + Vector3(0.0, 0.0, 0.6)))
+	await _frames(6)
+	run.shrine_offering.cancel()
+	await _frames(10)
+	_check("cancelling the choice resumes the world (paused %s, offering %s)" % [get_tree().paused, ctl.offering_open],
+		not get_tree().paused and not ctl.offering_open)
 
 
 # --- 1. Left Menu button ---------------------------------------------------------------
@@ -102,7 +139,7 @@ func _test_menu_carries_the_blade_state() -> void:
 	es.element_time_remaining = 9.0
 	es.ability_1_cooldown = 0.0
 	es.ability_2_cooldown = es.ability_cooldown_total(2) * 0.5
-	run.ofuda_count = 5
+	run.skill_points = 5
 	ctl.open()
 	_check("the panel eases in rather than popping (alpha %.2f right after opening)" % menu._panel_mat.albedo_color.a,
 		menu._panel_mat.albedo_color.a < 0.2)
@@ -123,7 +160,7 @@ func _test_menu_carries_the_blade_state() -> void:
 		menu.drawn_on_top and menu._panel_mat.no_depth_test and menu.canvas.abilities.size() == 2 and menu.canvas.blade_element == Elements.SAKURA)
 	menu.close()
 	es.reset()
-	run.ofuda_count = 0
+	run.skill_points = 0
 
 
 # --- 2. The world stands still, the rig keeps going ------------------------------------
@@ -297,7 +334,7 @@ func _test_pointers_buy_only_through_run_game() -> void:
 	var cost2 := int(SkillTreeData.node_by_id("thunder_splitter").cost)
 	var purse := cost1 + cost2 - 1
 	var left := purse - cost1
-	run.ofuda_count = purse
+	run.skill_points = purse
 	run.skill_tree.reset()
 	var events: Array[String] = []
 	run.skill_unlocked.connect(func(id: String) -> void: events.append(id))
@@ -314,19 +351,19 @@ func _test_pointers_buy_only_through_run_game() -> void:
 	await _click("left", SkillTreeCanvas.UNLOCK_RECT.get_center())
 	_check("UNLOCK buys through RunGame.unlock_skill (signal %s)" % [events],
 		events == ["static_conduit"] and run.skill_tree.is_unlocked("static_conduit"))
-	_check("the cost left the wallet (%d -> %d) and the pane follows" % [purse, run.ofuda_count], run.ofuda_count == left and c.balance == left)
+	_check("the cost left the wallet (%d -> %d) and the pane follows" % [purse, run.skill_points], run.skill_points == left and c.balance == left)
 
 	# Right hand: a locked node is refused and costs nothing.
 	await _click("right", c.node_rect(SkillTreeData.node_by_id("ikazuchi_avatar")).get_center())
 	_check("the right-hand pointer selects too", c.selected_id == "ikazuchi_avatar")
 	await _click("right", SkillTreeCanvas.UNLOCK_RECT.get_center())
-	_check("a locked node cannot be bought (still %d Ofuda)" % run.ofuda_count,
-		not run.skill_tree.is_unlocked("ikazuchi_avatar") and run.ofuda_count == left and c.status_text != "")
+	_check("a locked node cannot be bought (still %d Ofuda)" % run.skill_points,
+		not run.skill_tree.is_unlocked("ikazuchi_avatar") and run.skill_points == left and c.status_text != "")
 	# Affordability: Thunder Splitter costs one more Ofuda than we hold.
 	await _click("right", c.node_rect(SkillTreeData.node_by_id("thunder_splitter")).get_center())
 	await _click("right", SkillTreeCanvas.UNLOCK_RECT.get_center())
 	_check("an unaffordable node is refused without charge",
-		not run.skill_tree.is_unlocked("thunder_splitter") and run.ofuda_count == left)
+		not run.skill_tree.is_unlocked("thunder_splitter") and run.skill_points == left)
 	var spec := c.button_spec("thunder_splitter")
 	_check("the button reads how many Ofuda are missing (%s)" % spec.label, spec.mode == "poor" and "1" in String(spec.label))
 	_check("only the one legitimate purchase was signalled", events == ["static_conduit"])
@@ -344,7 +381,7 @@ func _test_pointers_buy_only_through_run_game() -> void:
 	await _tap_menu_button()
 	_check("the menu closes after shopping", not ctl.is_open)
 	_check("the purchase is live in the ability (Static Conduit: imbue 24 s)", _imbue_seconds(Elements.STORM) == 24.0)
-	run.ofuda_count = 0
+	run.skill_points = 0
 	run.skill_tree.reset()
 	run.element_system.reset()
 
@@ -784,7 +821,7 @@ func _test_ui_source_has_one_spending_path() -> void:
 		if not f.ends_with(".gd"):
 			continue
 		var src := FileAccess.get_file_as_string("res://src/ui/" + f)
-		if "try_unlock(" in src or "ofuda_count -=" in src or "ofuda_count =" in src or "add_ofuda(" in src:
+		if "try_unlock(" in src or "skill_points -=" in src or "skill_points =" in src or "add_points(" in src:
 			offenders.append(f)
 	_check("UI code never touches the wallet or tree directly (%s)" % [offenders], offenders.is_empty())
 
