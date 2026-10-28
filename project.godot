@@ -14,6 +14,10 @@ config/name="hanabi"
 config/description="HANABI (花火): VR Japanese dark-fantasy sword survivor."
 run/main_scene="res://scenes/run.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
+boot_splash/image="res://assets/ui/splash/hanabi_splash_1920x1080.png"
+boot_splash/bg_color=Color(0, 0, 0, 1)
+boot_splash/fullsize=true
+boot_splash/use_filter=true
 
 [autoload]
 
