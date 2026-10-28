@@ -1,7 +1,7 @@
 extends Node
 ## Boot splash (D7) on the XR rig, driven through XrSim (run with --xr-sim):
-## a trigger or A/X press skips the splash without skipping the intro, and A/X
-## skips the intro itself once it runs.
+## the film panel stands in front of the headset, a trigger or A/X press skips
+## the splash without skipping the intro, and A/X skips the intro itself once it runs.
 
 const MAIN_SCENE := preload("res://scenes/main.tscn")
 
@@ -26,7 +26,7 @@ func _run_all() -> void:
 	var cam := xr.get_node("XROrigin3D/XRCamera3D") as Camera3D
 	_check("XR launch shows the boot splash, intro waits", xr != null and splash.is_active()
 		and not run.run_intro.is_active())
-	_check("XR boards stand ~3 m ahead at eye height, world-locked", _boards_placed(splash, cam))
+	_check("XR board stands 3.5 m ahead at eye height, world-locked", _boards_placed(splash, cam))
 
 	await _frames(40)
 	_sim.set_button("left", "ax_button", true)
@@ -62,7 +62,7 @@ func _boards_placed(splash: RunSplash, cam: Camera3D) -> bool:
 	var anchor := splash.global_position
 	var eye := cam.global_position
 	var flat := Vector3(anchor.x - eye.x, 0.0, anchor.z - eye.z)
-	var distance_ok := absf(flat.length() - 3.0) <= 0.1
+	var distance_ok := absf(flat.length() - RunSplash.BOARD_DISTANCE) <= 0.1
 	var height_ok := absf(anchor.y - eye.y) <= 0.2
 	var locked := splash.get_parent() != cam and not cam.is_ancestor_of(splash)
 	var facing := splash.global_basis.z.dot(-flat.normalized()) > 0.99
