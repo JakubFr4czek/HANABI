@@ -332,7 +332,7 @@ func _apply_kind_visuals() -> void:
 	scale = Vector3.ONE
 	var accent := Elements.accent_color(elite_element)
 	var ember := _elite_ember(accent)
-	_skin.set_shader_parameter("base_color", SKIN_BASE.lerp(accent, 0.14))
+	_skin.set_shader_parameter("base_color", SKIN_BASE.lerp(accent, 0.18))
 	_sigil_mat.emission = ember * 1.35
 	_eyes.emission = ember * 1.6
 	EyeGlow.set_color(_eye_glows, ember)
