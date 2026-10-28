@@ -103,7 +103,23 @@ func _run_all() -> void:
 		open_lights <= RunPerfBudget.MAX_DYNAMIC_LIGHTS and open_voices <= RunPerfBudget.MAX_AUDIO_VOICES)
 	_check("Menu open: its viewport updates on change only, not every frame",
 		menu._viewport.render_target_update_mode != SubViewport.UPDATE_ALWAYS)
+	_check("Menu open: at least 30 draw calls of headroom (%d of %d)" % [RunPerfBudget.MAX_DRAW_CALLS - open_est.draw_calls, RunPerfBudget.MAX_DRAW_CALLS],
+		RunPerfBudget.MAX_DRAW_CALLS - open_est.draw_calls >= 30)
 	run.pause_controller.close()
+
+	# E3: the wrist plate (HP row + element strip) stays a handful of meshes, and the
+	# element effects add no lights or draw calls of their own beyond one halo per gate.
+	var plate_meshes := 0
+	for mi in run.diegetic_hud.wrist_unit.find_children("*", "MeshInstance3D", true, false):
+		if (mi as MeshInstance3D).is_visible_in_tree():
+			plate_meshes += 1
+	_check("Wrist plate draws at most 9 meshes (%d)" % plate_meshes, plate_meshes <= 9)
+	var gate_halos := 0
+	for g in get_tree().get_nodes_in_group("torii_gates"):
+		if (g as ToriiGate)._halo_mesh.visible:
+			gate_halos += 1
+	_check("Gate lights are one quad each, no OmniLight3D (%d lit gates)" % gate_halos,
+		run.find_children("*", "OmniLight3D", true, false).filter(func(n): return n.get_parent() is ToriiGate or n.get_parent().get_parent() is ToriiGate).is_empty())
 
 	run.queue_free()
 

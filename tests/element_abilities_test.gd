@@ -47,6 +47,7 @@ func _run_all() -> void:
 	await _test_cooldowns_and_refresh()
 	await _test_ongoing_completion_on_expiry()
 	await _test_pause_respect()
+	await _test_readability()
 	await _test_perf_limits()
 
 	run.queue_free()
@@ -293,6 +294,93 @@ func _test_pause_respect() -> void:
 	get_tree().paused = false
 	elem_sys._physics_process(0.5)
 	_check("Unpaused tree resumes timers", elem_sys.element_time_remaining < timer_before and elem_sys.ability_1_cooldown < cd_before)
+
+
+# --- E3: the player always knows what is on the blade -----------------------------------
+
+func _blade_param(key: String) -> Variant:
+	return run.katana._get_blade_material().get_shader_parameter(key)
+
+
+func _playing_cue(category: String) -> bool:
+	for p in Sfx._pool:
+		if p.playing and p.stream == Sfx._streams.get(category):
+			return true
+	return false
+
+
+func _test_readability() -> void:
+	var hud := run.diegetic_hud
+	elem_sys.reset()
+	await _frames(3)
+	# A reset lets the light drain for a moment: skip past it.
+	run.katana._fade_msec -= int(BladeBody.FADE_SECONDS * 1000.0) + 50
+	run.katana._update_blade_material()
+	_check("plain steel: the wrist strip is dimmed, crest shows the gate kanji, no count",
+		hud._strip_cache.get("lit") == 0.0 and hud.crest_label.text == "門" and hud.time_label.text == "")
+	_check("plain steel: the blade has no element light", float(_blade_param("element_glow")) == 0.0)
+
+	# Every element: blade kind/colour, crest kanji, ability glyphs, the imbue cue.
+	for el in Elements.COMBAT_ELEMENTS:
+		elem_sys.reset()
+		for p in Sfx._pool:
+			p.stop()
+		elem_sys.imbue(el, 20.0)
+		_check("%s: a cue plays when the blade takes the element" % el, _playing_cue("imbue_" + el))
+		await _frames(3)
+		var c := Elements.accent_color(el)
+		var bc: Vector3 = _blade_param("element_color")
+		_check("%s: the blade lights up in its own colour and kind" % el,
+			float(_blade_param("element_glow")) > 0.5 and int(_blade_param("element_kind")) == run.katana.KIND[el]
+			and absf(bc.x - c.r) < 0.01 and absf(bc.z - c.b) < 0.01)
+		_check("%s: the wrist crest shows %s and both ability glyphs" % [el, Elements.build_label(el)],
+			hud.crest_label.text == Elements.build_label(el)
+			and hud.ability_label.text.contains(Elements.ability_glyph(el, 1))
+			and hud.ability_label.text.contains(Elements.ability_glyph(el, 2)))
+
+	# The numbers on the wrist follow the system: time arc, count, button rings.
+	elem_sys.reset()
+	elem_sys.imbue(Elements.STORM, 20.0)
+	elem_sys.element_time_remaining = 12.0
+	elem_sys.ability_1_cooldown = 0.0
+	elem_sys.ability_2_cooldown = elem_sys.ability_cooldown_total(2) * 0.5
+	await _frames(3)
+	_check("the crest arc shows the time left (12/20 = %.2f)" % float(hud._strip_cache.get("crest_ratio")),
+		absf(float(hud._strip_cache.get("crest_ratio")) - 0.6) < 0.02 and hud.time_label.text == "12")
+	_check("button A reads ready, button B half recharged (%.2f / %.2f)" % [float(hud._strip_cache.get("pip1_ratio")), float(hud._strip_cache.get("pip2_ratio"))],
+		float(hud._strip_cache.get("pip1_ratio")) >= 0.999 and absf(float(hud._strip_cache.get("pip2_ratio")) - 0.5) < 0.03)
+	elem_sys.execute_ability_1(Vector3.FORWARD)
+	await _frames(3)
+	_check("firing A empties its ring", float(hud._strip_cache.get("pip1_ratio")) < 0.1)
+
+	# The last 3 s: the blade and the crest beat together, on the imbue clock.
+	_check("no warning beat before the last 3 s", float(_blade_param("element_warn")) == 0.0 and float(hud._strip_cache.get("warn")) == 0.0)
+	elem_sys.element_time_remaining = 2.6
+	elem_sys._physics_process(0.016)
+	await _frames(3)
+	_check("last 3 s: blade pulse on", float(_blade_param("element_warn")) == 1.0 and absf(float(_blade_param("element_left")) - elem_sys.element_time_remaining) < 0.2)
+	_check("last 3 s: the wrist crest beats too", float(hud._strip_cache.get("warn")) == 1.0)
+	# Same-element top-up: the warning ends and a softer cue plays.
+	for p in Sfx._pool:
+		p.stop()
+	elem_sys.imbue(Elements.STORM, 20.0)
+	elem_sys._physics_process(0.016)
+	await _frames(2)
+	_check("a gate topping the element up ends the warning and chimes again", float(_blade_param("element_warn")) == 0.0 and _playing_cue("imbue_storm"))
+
+	# Expiry: the light drains instead of snapping off, and a soft cue plays.
+	for p in Sfx._pool:
+		p.stop()
+	elem_sys.element_time_remaining = 0.05
+	elem_sys._physics_process(0.1)
+	_check("expiry plays the fade cue", _playing_cue("element_fade"))
+	run.katana._update_blade_material()
+	_check("expiry: the blade is still glowing while it fades", float(_blade_param("element_glow")) > 0.0)
+	run.katana._fade_msec -= int(BladeBody.FADE_SECONDS * 1000.0) + 50
+	run.katana._update_blade_material()
+	_check("expiry: then plain steel", float(_blade_param("element_glow")) == 0.0)
+	await _frames(3)
+	_check("expiry: the wrist strip dims again", hud._strip_cache.get("lit") == 0.0 and hud.time_label.text == "")
 
 
 func _test_perf_limits() -> void:

@@ -20,6 +20,12 @@ const CATEGORIES := {
 	"ofuda_slice": ["res://assets/audio/sfx/kenney_run", "ofuda_slice"],
 	"level_up": ["res://assets/audio/sfx/kenney_run", "level_up"],
 	"yokai_slice": ["res://assets/audio/sfx/kenney_run", "yokai_slice"],
+	# Element imbue cues (E3): one quiet cue per school and the blade going plain.
+	"imbue_sakura": ["res://assets/audio/sfx/hanabi_proc", "imbue_sakura"],
+	"imbue_storm": ["res://assets/audio/sfx/hanabi_proc", "imbue_storm"],
+	"imbue_ink": ["res://assets/audio/sfx/hanabi_proc", "imbue_ink"],
+	"imbue_shadow": ["res://assets/audio/sfx/hanabi_proc", "imbue_shadow"],
+	"element_fade": ["res://assets/audio/sfx/hanabi_proc", "element_fade"],
 }
 const POOL_SIZE := 24
 const MAX_ACTIVE_WORLD_VOICES := 20
