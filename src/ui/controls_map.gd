@@ -172,26 +172,26 @@ static func _callout(b: Dictionary, slot: String, roles: Dictionary) -> Dictiona
 		"top_button":
 			if side == "right":
 				c.title = "META  ·  SYSTEM"
-				c.body = "Reserved by the headset, not the game"
+				c.body = "Reserved by the headset"
 				c.system = true
 			else:
 				c.title = "MENU"
-				c.body = "Tap: skill tree  ·  hold 1 s: recenter"
+				c.body = "Tap: skill tree"
 		"face_top":
 			c.title = "%s  ·  ABILITY 1" % letter
-			c.body = "Element skill 1, from either hand"
+			c.body = "Element skill 1, either hand"
 		"face_bottom":
 			c.title = "%s  ·  ABILITY 2" % letter
-			c.body = "Skill 2 with the katana. Grip + B/Y: recall"
+			c.body = "Skill 2; grip + B/Y recalls"
 		"stick":
 			c.title = "THUMBSTICK"
 			c.body = "Walk, smooth locomotion" if side == roles.move else "Turn, snap or smooth"
 		"trigger":
 			c.title = "TRIGGER"
-			c.body = "Pick in menus  ·  skip the splash"
+			c.body = "Pick in menus · skip splash"
 		"grip":
 			c.title = "GRIP"
-			c.body = "Grab or drop the katana, hold near the blade"
+			c.body = "Grab or drop the katana"
 	return c
 
 
