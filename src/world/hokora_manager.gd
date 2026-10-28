@@ -233,6 +233,7 @@ func _spawn(slot: Vector2i, spot: Vector3) -> void:
 	add_child(shrine)
 	shrine.position = Vector3(spot.x, forest_world.height_at(spot.x, spot.z), spot.z)
 	shrine.rotation.y = _slot_rng(slot, 1).randf() * TAU
+	forest_world.connect_shrine(shrine)
 	shrine.set_lit(not _claimed.has(slot))
 	shrine.claimed.connect(_on_shrine_claimed)
 	_shrines[slot] = shrine
