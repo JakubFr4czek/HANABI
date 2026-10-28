@@ -433,7 +433,7 @@ func _pulse_lightning() -> void:
 	if _lightning:
 		_lightning.trigger_strike(0.06)
 	else:
-		RenderingServer.global_shader_parameter_set("storm_flash", 0.85)
+		RenderingServer.global_shader_parameter_set("storm_flash", 0.85 * VrComfortSettings.flash_scale())
 		RenderingServer.global_shader_parameter_set("storm_flash_dir", Vector2(0.08, -0.98))
 
 
@@ -500,7 +500,7 @@ func _take_air_step(height: float) -> void:
 		var xr := _player as XRPlayer
 		var ctrl := xr.left_controller if side < 0.0 else xr.right_controller
 		if ctrl:
-			ctrl.trigger_haptic_pulse("haptic", 0.0, 0.25, 0.05, 0.0)
+			ctrl.trigger_haptic_pulse("haptic", 0.0, VrComfortSettings.haptic_amplitude(0.25), 0.05, 0.0)
 
 
 func _update_air_steps(delta: float) -> void:

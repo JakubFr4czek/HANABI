@@ -48,13 +48,15 @@ func spawn_firework_flash(parent: Node, at: Vector3, col: Color, vis: float) -> 
 	if parent == null:
 		return
 	_prune_firework_flashes()
-	if _firework_flashes.size() >= MAX_FIREWORK_FLASH_LIGHTS:
+	# Flash strength 0 (Settings > ACCESS) keeps the sparks and drops the lamp.
+	var flash := VrComfortSettings.flash_scale()
+	if flash <= 0.0 or _firework_flashes.size() >= MAX_FIREWORK_FLASH_LIGHTS:
 		spawn_spark(parent, at, Vector3.UP, col * 1.55, 14, 3.5 * vis)
 		return
 	var lamp := OmniLight3D.new()
 	lamp.name = "FireworkFlash"
 	lamp.light_color = col.lerp(Color(1.0, 0.92, 0.95), 0.22)
-	lamp.light_energy = 2.2 * vis
+	lamp.light_energy = 2.2 * vis * flash
 	lamp.omni_range = 3.6 * vis
 	lamp.omni_attenuation = 1.35
 	lamp.shadow_enabled = false

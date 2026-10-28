@@ -35,6 +35,8 @@ extends Node3D
 const XR_HANDS_MIRROR_X := 0.01
 
 var held: HeldWeapon = null
+## Amplitude of the last [method pulse] after the haptic strength setting (tests).
+var last_pulse_amplitude := 0.0
 
 var _controller: XRController3D = null
 var _recall_was_pressed := false
@@ -152,10 +154,12 @@ func recall() -> void:
 		grab(weapon, Transform3D.IDENTITY)
 
 
-## Controller vibration; no-op on the desktop rig.
+## Controller vibration after the player's haptic strength (Settings > ACCESS);
+## no-op on the desktop rig. [member last_pulse_amplitude] is what was sent.
 func pulse(amplitude: float, duration: float) -> void:
+	last_pulse_amplitude = VrComfortSettings.haptic_amplitude(amplitude)
 	if _controller:
-		_controller.trigger_haptic_pulse("haptic", 0.0, amplitude, duration, 0.0)
+		_controller.trigger_haptic_pulse("haptic", 0.0, last_pulse_amplitude, duration, 0.0)
 
 
 ## Plays [amplitude, seconds] steps back to back in real time (unaffected by
