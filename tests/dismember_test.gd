@@ -21,6 +21,7 @@ func _ready() -> void:
 
 
 func _run_all() -> void:
+	_test_slicer()
 	run = RUN_SCENE.instantiate()
 	run.skip_run_intro = true
 	add_child(run)
@@ -161,6 +162,94 @@ func _tear(e: ActiveRagdoll) -> float:
 		var rest_d := ((e._rest[part_name] as Transform3D).origin - rest_root.origin).length()
 		worst = maxf(worst, absf((e.parts[part_name] as RagdollPart).global_position.distance_to(pelvis.global_position) - rest_d))
 	return worst
+
+
+## The mesh cut behind Kirisute (docs/ELEMENTS_PLAN.md, D4 §3): a convex
+## primitive cut by a plane gives two halves that close on the cut, add up to
+## the whole, wind the way their normals say, and leave the cap as its own surface.
+func _test_slicer() -> void:
+	var box := BoxMesh.new()
+	box.size = Vector3(0.4, 0.4, 0.4)
+	var capsule := CapsuleMesh.new()
+	capsule.radius = 0.062
+	capsule.height = 0.82
+	capsule.radial_segments = 10
+	capsule.rings = 2
+	var cases := [
+		["box", box, Vector3(0.05, 0.0, 0.0), Vector3.RIGHT],
+		["capsule", capsule, Vector3(0.01, 0.1, 0.0), Vector3(0.6, 0.8, 0.1)],
+	]
+	for c: Array in cases:
+		var label: String = c[0]
+		var arrays := MeshSlicer.surface_arrays(c[1])
+		var whole_verts := _expand_arrays(arrays)
+		var whole := MeshSlicer.volume_of(whole_verts)
+		var p: Vector3 = c[2]
+		var n: Vector3 = (c[3] as Vector3).normalized()
+		var halves := MeshSlicer.cut(arrays, p, n)
+		var above: Dictionary = halves["above"]
+		var below: Dictionary = halves["below"]
+		var s := MeshSlicer.winding_sign(arrays[Mesh.ARRAY_VERTEX], arrays[Mesh.ARRAY_NORMAL], arrays[Mesh.ARRAY_INDEX])
+		var open_above := _open_rim_edges(above["verts"], p, n)
+		var open_below := _open_rim_edges(below["verts"], p, n)
+		_check("%s cut in two halves that close on the cut (open rim edges %d and %d)" % [label, open_above, open_below],
+			open_above == 0 and open_below == 0 and (above["verts"] as PackedVector3Array).size() > 0)
+		var sum := float(above["volume"]) + float(below["volume"])
+		_check("%s halves add up to the whole (%.4f vs %.4f m³)" % [label, sum, whole],
+			absf(sum - whole) <= whole * 0.05)
+		_check("%s triangles wind with their normals on both halves" % label,
+			_bad_winding(above, s) == 0 and _bad_winding(below, s) == 0)
+		var cap_from: int = above["cap_from"]
+		_check("%s the cap is its own surface after the skin (cap starts at %d of %d)" % [label, cap_from, (above["verts"] as PackedVector3Array).size()],
+			cap_from > 0 and cap_from < (above["verts"] as PackedVector3Array).size())
+		var coll := MeshSlicer.decimate_points(arrays[Mesh.ARRAY_VERTEX], 32)
+		_check("%s collision hull stays at 32 points or fewer (%d)" % [label, coll.size()], coll.size() <= 32)
+
+
+## Triangle list of an indexed surface, with the index applied.
+func _expand_arrays(arrays: Array) -> PackedVector3Array:
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var index = arrays[Mesh.ARRAY_INDEX]
+	if index == null:
+		return verts
+	var out := PackedVector3Array()
+	for i: int in index:
+		out.append(verts[i])
+	return out
+
+
+## Edges that lie on the plane and are not used by exactly two triangles.
+## Matched by distance, not by rounding, so float noise cannot split an edge.
+func _open_rim_edges(verts: PackedVector3Array, p: Vector3, n: Vector3) -> int:
+	var rim: Array = []
+	for i in range(0, verts.size(), 3):
+		for k in 3:
+			var a := verts[i + k]
+			var b := verts[i + (k + 1) % 3]
+			if absf(n.dot(a - p)) < 1e-4 and absf(n.dot(b - p)) < 1e-4 and a.distance_to(b) > 1e-4:
+				rim.append([a, b])
+	var open := 0
+	for e: Array in rim:
+		var uses := 0
+		for f: Array in rim:
+			if (e[0].distance_to(f[0]) < 1e-4 and e[1].distance_to(f[1]) < 1e-4) \
+					or (e[0].distance_to(f[1]) < 1e-4 and e[1].distance_to(f[0]) < 1e-4):
+				uses += 1
+		if uses != 2:
+			open += 1
+	return open
+
+
+## Triangles whose geometric winding disagrees with their vertex normal.
+func _bad_winding(side: Dictionary, s: float) -> int:
+	var verts: PackedVector3Array = side["verts"]
+	var norms: PackedVector3Array = side["normals"]
+	var bad := 0
+	for i in range(0, verts.size(), 3):
+		var g := (verts[i + 1] - verts[i]).cross(verts[i + 2] - verts[i])
+		if g.length_squared() > 1e-14 and g.dot(norms[i]) * s <= 0.0:
+			bad += 1
+	return bad
 
 
 func _check(label: String, ok: bool) -> void:
