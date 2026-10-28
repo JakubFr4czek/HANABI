@@ -164,6 +164,25 @@ def write_imbue_cues() -> None:
     write_wav(os.path.join(OUT, "element_fade_0.wav"), make_element_fade())
 
 
+def make_suzu() -> list[float]:
+    """Hokora handbell (suzu, D1): a short shake of small bright metal tinkles."""
+    dur = 1.6
+    samples = [0.0] * int(SR * dur)
+    for k, t0 in enumerate([0.0, 0.11, 0.2, 0.33, 0.41]):
+        start = int(SR * t0)
+        amp = 0.55 - 0.06 * k
+        for freq, harm_amp, decay in [(2480.0, 1.0, 0.45), (3720.0, 0.45, 0.28), (5190.0, 0.22, 0.16)]:
+            for i in range(start, len(samples)):
+                t = (i - start) / SR
+                samples[i] += harm_amp * amp * math.exp(-t / decay) * math.sin(2 * math.pi * freq * t)
+    return samples
+
+
+def write_suzu() -> None:
+    os.makedirs(OUT, exist_ok=True)
+    write_wav(os.path.join(OUT, "hokora_suzu_0.wav"), make_suzu())
+
+
 def main() -> None:
     os.makedirs(OUT, exist_ok=True)
     write_wav(os.path.join(OUT, "firework_pop_0.wav"), mix(noise(int(SR * 0.35), 0.15), sine(400, 0.35, 0.2, 0.2)))
@@ -197,7 +216,10 @@ def main() -> None:
 if __name__ == "__main__":
     import sys
 
-    if "--imbue-only" in sys.argv:
+    if "--suzu-only" in sys.argv:
+        write_suzu()  # hokora_suzu_0.wav alone (D1); leaves every other cue byte-identical
+        print("Wrote hokora suzu to", OUT)
+    elif "--imbue-only" in sys.argv:
         write_imbue_cues()  # leaves the older cues byte-identical
         print("Wrote imbue cues to", OUT)
     else:

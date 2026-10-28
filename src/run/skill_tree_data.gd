@@ -5,11 +5,11 @@ extends RefCounted
 ## Four trees (Sakura, Storm, Ink, Shadow) of five nodes each. Node 1 is the
 ## school awakening, Nodes 2/3 augment Ability 1/2, Node 4 is a passive that
 ## needs Node 2 OR Node 3, and Node 5 is the master technique needing Node 4.
-## Costs are 3/5/5/8/12 Ofuda — 33 for a full tree. Phase E4 calibration
-## (tools/balance_sim.gd): an average player earns ~13 Ofuda by minute 3, ~30
-## by minute 5 and ~55 by minute 10, so Node 1 lands inside the first minute,
-## three nodes by ~2:30, the passive by ~4:00, the master technique around
-## 6:30 and a second school is started in the 8–10 minute window.
+## Costs are 3/5/5/8/12 Ofuda — 33 for a full tree. Ofuda come only from hokora
+## shrines (D1, 6 each, ~215 m apart), so the balance is walking-based: see
+## tools/balance_model.gd and docs/ELEMENTS_PLAN.md (D1, Krok 3) for the
+## numbers the tests assert (5–7 nodes by minute 8, master by minute 10 on a
+## good run).
 ## All numeric effects come from [ElementBalance].
 ##
 ## This class is pure data + unlock state: it never touches the scene tree.
@@ -165,9 +165,9 @@ const NODES: Array[Dictionary] = [
 	{
 		"id": "backstab_execution", "element": Elements.SHADOW, "tier": 4,
 		"kanji": "暗殺", "title": "BACKSTAB EXECUTION",
-		"subtitle": "Rear strikes ×2.5 and yield 1 bonus Ofuda",
+		"subtitle": "Rear strikes ×3 damage",
 		"cost": 8, "requires_all": [], "requires_any": ["phantom_retaliation", "umbral_reach"],
-		"effects": {"backstab_multiplier": ElementBalance.BACKSTAB_MULTIPLIER, "backstab_ofuda": ElementBalance.BACKSTAB_OFUDA},
+		"effects": {"backstab_multiplier": ElementBalance.BACKSTAB_MULTIPLIER},
 	},
 	{
 		"id": "shadow_clones", "element": Elements.SHADOW, "tier": 5,

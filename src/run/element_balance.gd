@@ -112,14 +112,34 @@ const YAMI_CRIT_MULTIPLIER := 2.2          # next sword cut within the window
 const YAMI_CRIT_SECONDS := 2.5
 const DECOY_EXPLOSION_DAMAGE := 60.0
 const DECOY_EXPLOSION_RADIUS := 3.0
-const BACKSTAB_MULTIPLIER := 2.5
-const BACKSTAB_OFUDA := 1
-const BACKSTAB_OFUDA_THROTTLE := 6.0       # seconds between bonus Ofuda
+const BACKSTAB_MULTIPLIER := 3.0           # was 2.5 + a bonus Ofuda (D1: Ofuda come from hokora only)
 const SHADOW_CLONES := 2
 
-# --- Ofuda economy (the currency the trees are bought with) ----------------------------
-const OFUDA_SWARM_CHANCE := 0.25
-const OFUDA_ELITE_MIN := 1
-const OFUDA_ELITE_MAX := 2
-const OFUDA_ONI_MIN := 5
-const OFUDA_ONI_MAX := 6
+# --- Ofuda economy (D1): the only currency the trees are bought with ----------------
+## Ofuda come from hokora shrines in the forest and from nothing else: yōkai,
+## elites and the Oni drop none (docs/ELEMENTS_PLAN.md, D1).
+const OFUDA_PER_HOKORA := 6
+## The forest is cut into square slots of HOKORA_SLOT_CHUNKS × HOKORA_SLOT_CHUNKS
+## forest chunks (28 m each). A slot holds one shrine with HOKORA_SLOT_CHANCE, and
+## the player only meets it inside the spawn radius, a 68 m band across the walk.
+## So a shrine is met about every S² / (68 × chance × valid share) metres (see
+## tools/balance_model.gd hokora_spacing): ~215 m, about 80 s of walking at an
+## average pace, roughly 8× rarer than the 18–32 m torii spacing.
+const HOKORA_SLOT_CHUNKS := 4
+const HOKORA_SLOT_CHANCE := 0.9
+## Share of slots whose candidates include a spot that passes the placement rules
+## (measured headless: tests/hokora_test.gd walks 1.5 km and meets 7 shrines, ~214 m
+## apart, which this share reproduces).
+const HOKORA_VALID_SHARE := 0.95
+## The first shrine stands this far in front of the spawn, so the economy starts
+## inside the first minute (≈12 s of walking) and the mechanic is in view at once.
+const HOKORA_OPENING_DISTANCE := 30.0
+## A shrine is built when the player comes this close and freed past the cull
+## distance (the fog hides everything past 10.5 m; the halo shows to ~35 m).
+const HOKORA_SPAWN_RADIUS := 34.0
+const HOKORA_CULL_RADIUS := 60.0
+## Body distance from the altar that claims the shrine (no blade needed).
+const HOKORA_CLAIM_RADIUS := 1.4
+## Keep shrines away from torii gates (metres) and from the spawn ring.
+const HOKORA_TORII_CLEARANCE := 10.0
+const HOKORA_MIN_START_DISTANCE := 20.0

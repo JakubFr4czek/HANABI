@@ -26,6 +26,8 @@ const CATEGORIES := {
 	"imbue_ink": ["res://assets/audio/sfx/hanabi_proc", "imbue_ink"],
 	"imbue_shadow": ["res://assets/audio/sfx/hanabi_proc", "imbue_shadow"],
 	"element_fade": ["res://assets/audio/sfx/hanabi_proc", "element_fade"],
+	# Hokora shrine handbell (D1): rings on approach, once per claim.
+	"hokora_suzu": ["res://assets/audio/sfx/hanabi_proc", "hokora_suzu"],
 	# Bonshō temple bell cues (Zadanie 5)
 	"bonsho": ["res://assets/audio/sfx/bonsho", "bonsho_run_start"],
 	"bonsho_oni": ["res://assets/audio/sfx/bonsho", "bonsho_oni"],
