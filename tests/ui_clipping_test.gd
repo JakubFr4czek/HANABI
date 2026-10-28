@@ -15,6 +15,7 @@ var run: RunGame
 var player: DesktopPlayer
 var forest: ForestWorld
 var _blockers: Array[Node] = []
+var _prop_roots: Array[Node3D] = []
 
 
 func _ready() -> void:
@@ -42,6 +43,7 @@ func _run_all() -> void:
 	await _test_standing_yokai()
 	await _test_hills()
 	await _test_level_up_cards_beside_obstacles()
+	await _test_level_up_cards_beside_torii()
 	_test_material_guarantees()
 	run.queue_free()
 
@@ -57,9 +59,15 @@ func _test_tree_nose_to_bark() -> void:
 	var bark := _distance_ahead()
 	_check("nose to bark: the bark really is close (%.2f m)" % bark, bark > 0.1 and bark < 0.6)
 	var pose := _pose()
-	_check_pose("nose to bark", pose)
-	_check("nose-to-bark: the panel turned away from the trunk to find free air (%.0f°)" % pose.yaw_offset_deg,
-		not bool(pose.blocked) and absf(float(pose.yaw_offset_deg)) > 1.0)
+	# Either the panel turned (at most 50°, still in view) to free air, or no clear
+	# spot exists and it is flagged for on-top drawing: never a silent overlap.
+	if bool(pose.blocked):
+		_check("nose to bark: no clear spot, so the panel is flagged blocked at the minimum distance (%.2f m)" % pose.distance,
+			absf(float(pose.distance) - UiPlacement.MIN_DISTANCE) < 0.001)
+	else:
+		_check_pose("nose to bark", pose)
+		_check("nose-to-bark: the panel turned %.0f° (≤ 50°) away from the trunk" % pose.yaw_offset_deg,
+			absf(float(pose.yaw_offset_deg)) > 1.0 and absf(float(pose.yaw_offset_deg)) <= 50.0)
 	_clear_blockers()
 
 
@@ -199,6 +207,36 @@ func _test_level_up_cards_beside_obstacles() -> void:
 	_clear_blockers()
 
 
+func _test_level_up_cards_beside_torii() -> void:
+	# A torii gate (not in the forest's trunk registry) straight ahead: the
+	# talismans must not hang inside its pillars either.
+	var gate: ToriiGate = GATE_SCENE.instantiate()
+	run.add_child(gate)
+	_blockers.append(gate)
+	var worst := 0
+	var stances := 0
+	# Stances that put a pillar (at ±1.13 m from the gate's centre) right where a card would hang.
+	for dx in [-1.13, 1.13, -0.75, 0.75, -1.5]:
+		await _stand_at(Vector3(0.0, 0.0, 0.0))
+		var feet := player.global_position
+		gate.global_position = Vector3(feet.x - dx, feet.y, feet.z - 1.16)
+		gate.global_rotation = Vector3.ZERO
+		await _frames(3)
+		run.xp_to_next = 1
+		run.add_xp(5)
+		await _frames(3)
+		if run.active_ofuda.size() != 3:
+			worst += 100
+		for card in run.active_ofuda:
+			worst += _card_overlaps(card)
+		stances += 1
+		run.slice_ofuda_choice(1)
+		TimeController.clear()
+		await _frames(25)
+	_check("level-up cards hang clear of a torii gate from %d stances (overlapping samples: %d)" % [stances, worst], worst == 0)
+	_clear_blockers()
+
+
 func _test_material_guarantees() -> void:
 	var menu := run.pause_controller.menu
 	_check("panel material ignores fog (menu stays crisp in the milk fog)", menu._panel_mat.disable_fog)
@@ -249,9 +287,11 @@ func _pose() -> Dictionary:
 
 func _add_prop(kind: int, pos: Vector3, scale: float) -> void:
 	var xf := Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * scale), pos)
-	var body := forest._build_trunk_colliders([xf], kind, Node3D.new())
+	var root := Node3D.new()
+	var body := forest._build_trunk_colliders([xf], kind, root)
 	run.add_child(body)
 	_blockers.append(body)
+	_prop_roots.append(root)  # carries the registry entries _clear_blockers must forget
 
 
 func _add_wall(centre: Vector3, size: Vector3) -> void:
@@ -268,6 +308,11 @@ func _add_wall(centre: Vector3, size: Vector3) -> void:
 
 
 func _clear_blockers() -> void:
+	# Props the test planted are also registered in the forest's steering index.
+	for root in _prop_roots:
+		forest._forget_trunks(root)
+		root.free()
+	_prop_roots.clear()
 	for b in _blockers:
 		if is_instance_valid(b):
 			b.queue_free()

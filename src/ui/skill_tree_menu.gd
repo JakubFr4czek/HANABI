@@ -81,6 +81,7 @@ func _ready() -> void:
 	_panel.material_override = _panel_mat
 	_panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_panel.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	_panel.visible = false
 	add_child(_panel)
 
 	_beam_mesh = CylinderMesh.new()
@@ -138,6 +139,7 @@ func open(game: RunGame, pose: Dictionary, blade_element: String, blade_seconds:
 		_pointers[id]["pressed"] = true  # a trigger already held at opening must not click
 	is_open = true
 	visible = true
+	_panel.visible = true
 	_redraw_accum = 0.0
 	_redraw_now()
 
@@ -145,6 +147,7 @@ func open(game: RunGame, pose: Dictionary, blade_element: String, blade_seconds:
 func close() -> void:
 	is_open = false
 	visible = false
+	_panel.visible = false
 	_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	for id: String in _pointers.keys():
 		_hide_pointer_visuals(_pointers[id])

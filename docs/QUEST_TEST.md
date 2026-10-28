@@ -41,6 +41,19 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 - [ ] Oni w walce: rim Omni **tylko < 14 m** (poza zasięgiem wyłączony).
 - [ ] Headless `quest_perf_test` z symulacją 3× `VfxPool.spawn_firework_flash` + `ElementFirework` — draw ≤ 345, lights ≤ 12.
 
+## Menu drzewka umiejętności (E2d)
+
+- [ ] **Lewy Menu (tap)** otwiera menu 1.1 m przed twarzą; drugi tap zamyka. Przytrzymanie 1 s = recenter (nie otwiera menu).
+- [ ] Świat **stoi** (yōkai, deszcz, timer żywiołu, cooldowny), ale głowa, dłonie i katana ruszają się płynnie; katana nie wypada z ręki po zamknięciu.
+- [ ] Muzyka przygasa i staje się „zamknięta” (low-pass), po zamknięciu wraca w ~0.25 s.
+- [ ] Wskaźnik z **obu** kontrolerów (spust = wybór): zakładki żywiołów, węzły, przycisk UNLOCK; hover daje krótki puls haptyczny.
+- [ ] Menu otwarte przy drzewie / ścianie / torii: panel **nie wchodzi w geometrię**, jest czytelny w mgle (nie zamglony), dłonie i ostrze zasłaniają go poprawnie.
+- [ ] Zakup tylko z wystarczającą liczbą 札 i spełnionym wymaganiem; odmowa = drżenie przycisku + bzyk, bez utraty 札.
+- [ ] Ink Node 5 (Abyssal Sea): +20% prędkości chodzenia w VR w swoim tuszu; nietykalność tylko 0.5 s po wejściu w tusz.
+
+Zrzuty menu (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/skill_menu_screenshots.tscn -- --desktop --shots /tmp/hanabi_e2d`
+(`canvas_*.png` = sama tafla 1600×1000 jak w goglach).
+
 ## Komfort VR
 
 - [ ] Chwyt katany stabilny (brak dryfu dłoni > ~15 cm).

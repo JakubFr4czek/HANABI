@@ -2,3 +2,9 @@ Yuji Boku (assets/fonts/YujiBoku-Regular.ttf)
 Copyright Kinuta Font Factory
 SIL Open Font License 1.1 — https://scripts.sil.org/OFL
 Source: https://github.com/google/fonts/tree/main/ofl/yujiboku
+
+Cinzel (assets/fonts/Cinzel-Variable.ttf)
+Copyright 2020 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel)
+SIL Open Font License 1.1 — full text in assets/fonts/OFL-Cinzel.txt
+Source: https://github.com/google/fonts/tree/main/ofl/cinzel
+Used for the Latin text of the skill-tree menu (kanji fall back to Yuji Boku).
