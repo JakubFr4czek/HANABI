@@ -2,12 +2,15 @@ class_name StormMusic
 extends Node
 ## Subdued CC0 ambient loop on the Music bus (NIGHT_PLAN §15, §18).
 ## Dual-player crossfade avoids OGG loop clicks; ducks under level-up stingers.
+## Features a subtle CC0 shakuhachi & taiko layer on the Music bus (Zadanie 5).
 
 const TRACK := preload("res://assets/audio/music/cc0_run/orientalsomber.ogg")
+const LAYER_TRACK := preload("res://assets/audio/music/cc0_run/shakuhachi_taiko_layer.wav")
 const CROSSFADE_SEC := 0.5
 const LOOP_TAIL_TRIM_SEC := 0.2
 
 @export var volume_db := -12.0
+@export var layer_volume_db := -15.5
 
 var _players: Array[AudioStreamPlayer] = []
 var _lead := 0
@@ -15,6 +18,8 @@ var _track_length := 279.0
 var _duck_offset_db := 0.0
 var _crossfading := false
 var _duck_tween: Tween
+
+var _layer_player: AudioStreamPlayer
 
 
 func _ready() -> void:
@@ -31,6 +36,8 @@ func _ready() -> void:
 		add_child(player)
 		_players.append(player)
 	_players[0].play()
+
+	_setup_layer_player()
 	set_process(true)
 
 
@@ -43,7 +50,25 @@ func _music_stream() -> AudioStream:
 	return stream
 
 
+func _setup_layer_player() -> void:
+	_layer_player = AudioStreamPlayer.new()
+	_layer_player.name = "RunMusicLayer"
+	_layer_player.stream = LAYER_TRACK
+	_layer_player.volume_db = _target_layer_volume_db()
+	_layer_player.bus = Sfx.MUSIC_BUS
+	add_child(_layer_player)
+	_layer_player.play()
+
+
+func get_layer_player() -> AudioStreamPlayer:
+	return _layer_player
+
+
 func _process(_delta: float) -> void:
+	if is_instance_valid(_layer_player) and not _layer_player.playing:
+		_layer_player.volume_db = _target_layer_volume_db()
+		_layer_player.play()
+
 	if _crossfading or _players.is_empty():
 		return
 	var lead := _players[_lead]
@@ -100,8 +125,14 @@ func _target_volume_db() -> float:
 	return volume_db + _duck_offset_db
 
 
+func _target_layer_volume_db() -> float:
+	return layer_volume_db + _duck_offset_db
+
+
 func _apply_volume_to_players() -> void:
 	var vol := _target_volume_db()
 	for p in _players:
 		if p.playing or p == _players[_lead]:
 			p.volume_db = vol
+	if is_instance_valid(_layer_player):
+		_layer_player.volume_db = _target_layer_volume_db()

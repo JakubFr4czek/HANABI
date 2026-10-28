@@ -1,0 +1,9 @@
+Bonshō temple bell sound effects (assets/audio/sfx/bonsho/).
+
+- bonsho_run_start.wav, bonsho_oni.wav, bonsho_gate.wav
+  Original source: "File:Bonsyou5599.ogg" on Wikimedia Commons
+  https://commons.wikimedia.org/wiki/File:Bonsyou5599.ogg
+  Authentic recording of the bonshō (梵鐘, Buddhist temple bell) at Chōmei-ji (長命寺), Shiga Prefecture, Japan.
+  Author: Jnn (https://commons.wikimedia.org/wiki/User:Jnn)
+  License: Free Art License (FAL) / CC BY 2.1 JP / CC BY-SA 4.0 / GFDL
+  Modifications: trimmed attack lead-in, resampled to 44.1 kHz 16-bit PCM, volume normalized, tuned and shaped for run start, Oni arrival, and Torii gate imbue cues.

@@ -347,6 +347,7 @@ func _setup_run_nodes() -> void:
 	wave_director.name = "WaveDirector"
 	wave_director.enemy_died.connect(_on_enemy_died)
 	wave_director.oni_defeated.connect(_on_oni_defeated)
+	wave_director.oni_spawned.connect(_on_oni_spawned)
 	if forest_world:
 		wave_director.ground_height = forest_world.height_at
 	add_child(wave_director)
@@ -475,6 +476,7 @@ func _begin_play_after_intro() -> void:
 	wave_director.start_director()
 	GameEvents.log_event("run_started", {"high_score": high_score})
 	run_started.emit()
+	_play_run_start_bell()
 	_refresh_hud()
 
 
@@ -569,6 +571,20 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 # --- Kills, Souls & XP ---------------------------------------------------------
+
+func _play_run_start_bell() -> void:
+	if not Sfx:
+		return
+	var bell_pos := _player_center() + Vector3(0.0, 3.5, -12.0)
+	Sfx.play_at("bonsho", bell_pos, -2.0, 18.0, 1.0)
+
+
+func _on_oni_spawned(oni: RunOniBoss) -> void:
+	if not Sfx:
+		return
+	var pos := oni.global_position if is_instance_valid(oni) else (_player_center() + Vector3(0.0, 3.0, -15.0))
+	Sfx.play_at("bonsho_oni", pos, 0.0, 22.0, 0.82)
+
 
 func _on_oni_defeated(oni: RunOniBoss, hit: Dictionary) -> void:
 	if state == RunState.GAME_OVER:
