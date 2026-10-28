@@ -37,6 +37,7 @@ var touch_cooldown := 0.0
 var _halo: MeshInstance3D
 var _halo_mat: ShaderMaterial
 var _flame_mat: StandardMaterial3D
+var _altar_cloth_mat: StandardMaterial3D
 var _suzu_cd := 0.0
 var _clock := 0.0
 
@@ -118,6 +119,9 @@ func _apply_lit() -> void:
 		var glow := 1.8 if lit else 0.0
 		_flame_mat.emission_energy_multiplier = glow
 		_flame_mat.albedo_color = Color(0.9, 0.7, 0.5) if lit else Color(0.12, 0.1, 0.09)
+	if _altar_cloth_mat:
+		_altar_cloth_mat.emission_energy_multiplier = 0.45 if lit else 0.0
+		_altar_cloth_mat.albedo_color = Color(0.85, 0.30, 0.16) if lit else Color(0.20, 0.12, 0.10)
 	if _halo and _halo_mat:
 		_halo.visible = lit
 		_halo_mat.set_shader_parameter("intensity", 1.45 if lit else 0.0)
@@ -164,6 +168,14 @@ func _build_model(root: Node3D) -> void:
 		slope.rotation_degrees.x = 30.0 * sign_z
 	_add_box(root, "RoofRidge", Vector3(1.24, 0.06, 0.07), Vector3(0.0, 1.36, 0.0), dark)
 	_add_box(root, "Altar", Vector3(0.52, 0.42, 0.28), Vector3(0.0, 0.21, 0.78), wood)
+	_altar_cloth_mat = StandardMaterial3D.new()
+	_altar_cloth_mat.albedo_color = Color(0.85, 0.30, 0.16)
+	_altar_cloth_mat.emission_enabled = true
+	_altar_cloth_mat.emission = Color(0.95, 0.45, 0.18)
+	_altar_cloth_mat.emission_energy_multiplier = 0.45
+	_altar_cloth_mat.roughness = 0.75
+	var cloth := _add_box(root, "AltarCloth", Vector3(0.46, 0.015, 0.24), Vector3(0.0, 0.425, 0.78), _altar_cloth_mat)
+	cloth.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var lantern := MeshInstance3D.new()
 	lantern.name = "PaperLantern"
 	var cyl := CylinderMesh.new()

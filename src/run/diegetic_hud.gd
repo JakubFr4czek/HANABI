@@ -268,7 +268,10 @@ func _process(delta: float) -> void:
 		_refresh_status()
 	_orient_wrist_face(delta)
 
+	var was_raised := _raised
 	_raised = _gesture_held()
+	if not was_raised and _raised:
+		_trigger_wrist_haptic()
 	_presence = move_toward(_presence, 1.0 if _raised else 0.0, delta / FADE_SECONDS)
 	# The state is kept current even while hidden, so a raised wrist shows the right
 	# figures at once; only the drawing (the subtree's visibility) follows the gesture.
@@ -285,6 +288,16 @@ func _process(delta: float) -> void:
 		guard_label.visible = n > 0
 		if n > 0:
 			guard_label.text = "! %d" % n
+
+
+func _trigger_wrist_haptic() -> void:
+	if wrist_unit == null:
+		return
+	var ctrl := wrist_unit.get_parent() as XRController3D
+	if ctrl and VrComfortSettings:
+		var amp := VrComfortSettings.haptic_amplitude(0.22)
+		if amp > 0.0:
+			ctrl.trigger_haptic_pulse("haptic", 0.0, amp, 0.04, 0.0)
 
 
 ## The check-the-watch gesture (XR): the wrist close to the eyes, its face turned to
