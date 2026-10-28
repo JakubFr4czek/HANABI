@@ -96,6 +96,23 @@ func polyline(key: Vector4i) -> PackedVector2Array:
 	return line
 
 
+## A routed line between two arbitrary world points (A*, metre spacing), not
+## cached: used for short spurs such as a shrine's connection to the network.
+func route_between(a: Vector2, b: Vector2) -> PackedVector2Array:
+	return _route(a, b)
+
+
+## Drops the cached routes whose edge lies outside [param keep] (world xz).
+## Routes are cheap to rebuild, and the cache must not grow while the player walks.
+func prune(keep: Rect2) -> void:
+	for key in _routes.keys():
+		var a := node_xz(Vector2i(key.x, key.y))
+		var b := node_xz(Vector2i(key.z, key.w))
+		var box := Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)), Vector2(absf(a.x - b.x), absf(a.y - b.y)))
+		if not keep.intersects(box):
+			_routes.erase(key)
+
+
 ## Segments (pairs of consecutive points) of the paths near [param rect].
 func segments_in_rect(rect: Rect2, margin: float = 0.0) -> PackedVector2Array:
 	var out := PackedVector2Array()
