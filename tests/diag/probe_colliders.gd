@@ -4,8 +4,9 @@ extends Node
 func _ready() -> void:
 	var fw := ForestWorld.new()
 	add_child(fw)
-	fw._build_meshes()
-	var tree: Mesh = fw._tree_mesh
+	fw.profile = WorldGenProfile.make_default()
+	fw._apply_profile()
+	var tree: Mesh = fw._tree_meshes[0]
 	var a := tree.surface_get_arrays(0)
 	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
 	var uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
@@ -51,6 +52,6 @@ func _ready() -> void:
 			if p.y >= y0 and p.y < y1:
 				xmin = minf(xmin, p.x); xmax = maxf(xmax, p.x); zmin = minf(zmin, p.z); zmax = maxf(zmax, p.z); n += 1
 		print("TORII y %.2f-%.2f n %d x [%.2f, %.2f] z [%.2f, %.2f]" % [y0, y1, n, xmin, xmax, zmin, zmax])
-	print("ROCK aabb ", fw._rock_mesh.get_aabb())
+	print("ROCK aabb ", fw._under_meshes[0].get_aabb())
 	print("LANTERN aabb ", fw._lantern_mesh.get_aabb())
 	get_tree().quit()
