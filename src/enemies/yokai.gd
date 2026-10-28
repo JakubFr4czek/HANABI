@@ -17,6 +17,11 @@ const MOVE_ACCEL := 5.0
 const BURST_ACCEL := 24.0
 ## Parts a very strong clean cut takes off. A leg or the head is fatal.
 const SEVERABLE := ["arm_l", "arm_r", "leg_l", "leg_r", "head"]
+## Skin of a swarm body; an elite tints it a little toward its element.
+const SKIN_BASE := Color(0.18, 0.17, 0.26)
+## Elite eyes, sigil and claws burn this much brighter than a swarm's, so the
+## element still reads from across the fog.
+const ELITE_LIFT := 1.3
 
 @export var profile: EnemyProfile
 ## A cut severs the limb it lands on only when all of these hold: the edge
@@ -72,7 +77,6 @@ var _slow_scale := 1.0
 var _confusion_time := 0.0
 var _lod_far := false
 var _lod_tick := 0
-var _elite_halo: MeshInstance3D
 var _flinch_time := 0.0
 var _torso_lag_pitch := 0.0
 var _severed := {}  # part name -> true while that limb is gone
@@ -92,7 +96,7 @@ func prepare_for_spawn() -> void:
 	last_kill_element = Elements.NONE
 	visible = true
 	# The death dissolve shrinks limbs and fades every material to ~0; a pooled
-	# body reused without this comes back tiny, dark and haloed by its elite life.
+	# body reused without this comes back tiny, dark and tinted by its elite life.
 	_reset_spawn_look()
 	_severed.clear()
 	for p: RagdollPart in parts.values():
@@ -151,7 +155,7 @@ func _ready() -> void:
 	# Weathered indigo-slate rain-soaked skin with moonlit sky fill so the
 	# silhouette reads clearly against the storm fog and dark water.
 	_skin.shader = WET_SURFACE_SHADER
-	_skin.set_shader_parameter("base_color", Color(0.18, 0.17, 0.26))
+	_skin.set_shader_parameter("base_color", SKIN_BASE)
 	_skin.set_shader_parameter("roughness_dry", 0.70)
 	_skin.set_shader_parameter("roughness_wet", 0.34)
 	_skin.set_shader_parameter("wetness", 0.50)
@@ -291,13 +295,11 @@ func apply_stagger(duration: float = 1.4) -> void:
 
 
 ## Swarm base look (matches _ready): also the cleanup for a pooled elite
-## reused as a swarm — normal size, no halo, no elite group or tint.
+## reused as a swarm — normal size, no elite group or element tint.
 func _reset_spawn_look() -> void:
 	scale = Vector3.ONE
 	remove_from_group("elite_yokai")
-	if _elite_halo and is_instance_valid(_elite_halo):
-		_elite_halo.queue_free()
-	_elite_halo = null
+	_skin.set_shader_parameter("base_color", SKIN_BASE)
 	_skin.set_shader_parameter("fill", 1.65)
 	_skin.set_shader_parameter("flash", 0.0)
 	_mask_mat.set_shader_parameter("fill", MASK_FILL)
@@ -325,48 +327,24 @@ func _apply_kind_visuals() -> void:
 	# No node scaling: scaling the Yokai node moves rigid-body parts away
 	# from their joint anchors (shapes do not scale with the node), so elite
 	# bodies fought their own joints and tore themselves apart. Elites read
-	# as bigger through the halo, tint and glow instead.
+	# as elite from the element in the eyes, sigil, sash, claws and skin, not
+	# from a ring drawn around them (a ring showed through trees and bodies).
 	scale = Vector3.ONE
 	var accent := Elements.accent_color(elite_element)
-	_sigil_mat.emission = accent * 1.35
-	_sigil_mat.emission_energy_multiplier = 0.95
-	_eyes.emission = accent * 1.6
-	_eyes.emission_energy_multiplier = 1.05
-	EyeGlow.set_color(_eye_glows, accent)
+	var ember := _elite_ember(accent)
+	_skin.set_shader_parameter("base_color", SKIN_BASE.lerp(accent, 0.14))
+	_sigil_mat.emission = ember * 1.35
+	_eyes.emission = ember * 1.6
+	EyeGlow.set_color(_eye_glows, ember)
 	_sash.set_shader_parameter("base_color", accent.darkened(0.55))
-	_claw_mat.emission = accent * 1.2
-	_attach_elite_halo(accent)
+	_claw_mat.emission = ember * 1.2
 
 
-func _attach_elite_halo(accent: Color) -> void:
-	if _elite_halo and is_instance_valid(_elite_halo):
-		_elite_halo.queue_free()
-	var chest := parts.get("chest") as RagdollPart if parts.has("chest") else null
-	if chest == null:
-		return
-	_elite_halo = MeshInstance3D.new()
-	_elite_halo.name = "EliteHalo"
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.38
-	torus.outer_radius = 0.46
-	torus.rings = 10
-	torus.ring_segments = 24
-	_elite_halo.mesh = torus
-	_elite_halo.rotation.x = PI * 0.5
-	_elite_halo.position = Vector3(0, 0.42, 0)
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.albedo_color = accent * 2.2
-	mat.emission_enabled = true
-	mat.emission = accent * 1.65
-	mat.emission_energy_multiplier = 1.8
-	mat.no_depth_test = true
-	_elite_halo.material_override = mat
-	_elite_halo.scale = Vector3(1.08, 1.08, 1.08)
-	_elite_halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	chest.add_child(_elite_halo)
+## The elite's lit colour (eyes, sigil, claws). The accents of ink and storm are
+## pale, and the eye shader's bloom (×5.5 at the core) pushes a pale glow to
+## white. More saturation and a value cap keep the hue once it blooms.
+static func _elite_ember(accent: Color) -> Color:
+	return Color.from_hsv(accent.h, clampf(accent.s * 1.6, 0.0, 1.0), minf(accent.v, 0.75))
 
 
 # --- 7-body lightweight ragdoll ------------------------------------------------
@@ -936,9 +914,6 @@ func _physics_process(delta: float) -> void:
 		face_toward(intent.face_position)
 	_apply_move(move, delta, intent.get("plant", false))
 	_show_tell(float(intent.get("tell", 0.0)))
-	if kind == Kind.ELITE and _elite_halo and is_instance_valid(_elite_halo):
-		var pulse := 1.06 + sin(Time.get_ticks_msec() * 0.007) * 0.14
-		_elite_halo.scale = Vector3(pulse, pulse, pulse)
 	super._physics_process(delta)
 	# No ground under the feet to lean on, so a standing pelvis is kept
 	# upright by bleeding off its pitch/roll spin; the balance drive does
@@ -1163,10 +1138,11 @@ func _show_tell(tell: float) -> void:
 	# The wind-up reads from the pose and the sound; the glow only warms
 	# slightly. The old multipliers blew the eyes/claws out to white-hot
 	# signal lights, which read as UI markers instead of a creature.
-	_eyes.emission_energy_multiplier = 0.85 + tell * tell * 1.6
+	var lift := ELITE_LIFT if kind == Kind.ELITE else 1.0
+	_eyes.emission_energy_multiplier = (0.85 + tell * tell * 1.6) * lift
 	EyeGlow.set_glow(_eye_glows, 1.0 + tell * tell * 0.7)
-	_claw_mat.emission_energy_multiplier = 0.32 + tell * tell * 1.4
-	_sigil_mat.emission_energy_multiplier = 0.55 + tell * tell * 1.0
+	_claw_mat.emission_energy_multiplier = (0.32 + tell * tell * 1.4) * lift
+	_sigil_mat.emission_energy_multiplier = (0.55 + tell * tell * 1.0) * lift
 	if tell > 0.05 and _last_tell <= 0.05:
 		var head_part: RagdollPart = parts.get("head")
 		Sfx.play_at("enemy_tell", head_part.global_position if head_part else global_position, -5.0)
