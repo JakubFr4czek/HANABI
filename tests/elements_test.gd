@@ -30,7 +30,7 @@ func _run_all() -> void:
 	run.wave_director.clear_enemies()
 	await _frames(4)
 
-	_test_pool_and_limits()
+	_test_level_up_is_rank_only()
 	await _test_storm()
 	await _test_ink()
 	await _test_sakura()
@@ -38,55 +38,18 @@ func _run_all() -> void:
 	run.queue_free()
 
 
-func _test_pool_and_limits() -> void:
-	# E2c: the level-up pool holds only generic upgrades with real effects.
-	# Element cards were removed, so no offered card can be a dead no-op;
-	# elements come from Torii gates, progression from the Ofuda skill tree.
-	var generic_ids: Array[String] = []
-	for u: Dictionary in UpgradePool.GENERIC_UPGRADES:
-		generic_ids.append(String(u.id))
-	var rng := RandomNumberGenerator.new()
-	var hands_ok := true
-	var seen := {}
-	for s in 60:
-		rng.seed = 100 + s
-		var hand := UpgradePool.pick_choices(3, {}, 1.0, rng)
-		if hand.size() != 3:
-			hands_ok = false
-		for c: Dictionary in hand:
-			if c.has("element") or not generic_ids.has(String(c.get("id", ""))):
-				hands_ok = false
-			seen[String(c.get("id", ""))] = true
-	_check("Level-up hands offer only real generic upgrades (no element/dead cards)", hands_ok)
-	_check("Seeded level-up hands cover the generic pool (%d ids)" % seen.size(), seen.size() >= 5)
-
-	# No dead card: every generic upgrade changes observable state via RunGame.
-	run.element_system.reset()
-	run.katana.set_element(Elements.NONE)
-	var dmg0 := run.katana.damage_multiplier
-	run._apply_upgrade({"id": "damage"})
-	var hp0 := player.health.max_hp
-	run._apply_upgrade({"id": "max_hp"})
-	player.health.hp = 30.0
-	run._apply_upgrade({"id": "heal"})
-	var healed := player.health.hp
-	var mag0 := run.soul_magnet_radius
-	run._apply_upgrade({"id": "magnet"})
-	var force0 := run.katana.max_force
-	run._apply_upgrade({"id": "arm_strength"})
-	run._apply_upgrade({"id": "regen"})
-	_check("Every generic upgrade applies a real effect (no dead cards)",
-		run.katana.damage_multiplier > dmg0 and player.health.max_hp > hp0
-		and healed > 30.0 and run.soul_magnet_radius > mag0
-		and run.katana.max_force > force0 and player.health.regen_per_sec > 0.0)
-	run._apply_upgrade({"id": "storm_chain"})
-	_check("Retired element card id is ignored, never stacked",
-		not run.upgrade_stacks.has("storm_chain"))
-
+func _test_level_up_is_rank_only() -> void:
+	# D1: a level-up is a rank and a heal. There is no upgrade pool and no card
+	# choice; elements come from Torii gates, power from the Ofuda tree only.
+	_check("Upgrade pool and level-up cards are gone (no upgrade_pool.gd, no ofuda_talisman.gd)",
+		not ResourceLoader.exists("res://src/run/upgrade_pool.gd")
+		and not ResourceLoader.exists("res://src/run/ofuda_talisman.gd"))
 	run.katana.set_element(Elements.NONE)
 	run.element_system.reset()
-	run._apply_upgrade({"id": "damage"})
-	_check("Level-up upgrade does not grant element to katana (remains NONE)", run.katana.element == Elements.NONE)
+	var level0 := run.level
+	run.add_xp(run.xp_to_next)
+	_check("Level-up does not grant an element to the katana (level %d -> %d, element NONE)" % [level0, run.level],
+		run.katana.element == Elements.NONE and run.level == level0 + 1)
 	run.element_system.imbue(Elements.STORM, 20.0)
 	_check("Torii gate imbue binds element to blade for 20s", run.katana.element == Elements.STORM and run.element_system.element_time_remaining == 20.0)
 

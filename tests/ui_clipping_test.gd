@@ -42,8 +42,8 @@ func _run_all() -> void:
 	await _test_torii_pillar()
 	await _test_standing_yokai()
 	await _test_hills()
-	await _test_level_up_cards_beside_obstacles()
-	await _test_level_up_cards_beside_torii()
+	await _test_restart_ema_beside_obstacles()
+	await _test_restart_ema_beside_torii()
 	_test_material_guarantees()
 	run.queue_free()
 
@@ -183,58 +183,60 @@ func _test_hills() -> void:
 	_clear_blockers()
 
 
-func _test_level_up_cards_beside_obstacles() -> void:
+## D1: a level-up no longer offers cards, so the plaque that can hang in front of
+## the player is the run-over Restart Ema. It must clear trees and boulders the
+## same way the old cards did.
+func _test_restart_ema_beside_obstacles() -> void:
 	await _stand_at(Vector3(0.0, 0.0, 0.0))
 	var frame := run._player_view_frame()
 	var fwd := -frame.basis.z
 	fwd.y = 0.0
 	fwd = fwd.normalized()
-	# A tree where the middle card would hang and a boulder where the right one would.
+	# A tree where the middle plaque would hang and a boulder where the right one would.
 	_add_prop(0, _ground(frame.origin + fwd * 1.16), 1.0)
 	_add_prop(3, _ground(frame.origin + fwd * 1.0 + frame.basis.x * 0.55), 1.6)
 	await _frames(3)
-	run.xp_to_next = 1
-	run.add_xp(5)
+	run._on_player_died()
 	await _frames(5)
-	var worst := 0
-	for card in run.active_ofuda:
-		worst += _card_overlaps(card)
-	_check("level-up cards (%d) hang clear of a tree and a boulder (overlapping samples: %d)" % [run.active_ofuda.size(), worst],
-		run.active_ofuda.size() == 3 and worst == 0)
-	run.slice_ofuda_choice(1)
-	TimeController.clear()
-	await _frames(20)
-	_clear_blockers()
+	var worst := _plaque_overlaps(run.restart_ema) if run.restart_ema else 100
+	_check("restart ema hangs clear of a tree and a boulder (overlapping samples: %d)" % worst, worst == 0)
+	await _end_run()
 
 
-func _test_level_up_cards_beside_torii() -> void:
+func _test_restart_ema_beside_torii() -> void:
 	# A torii gate (not in the forest's trunk registry) straight ahead: the
-	# talismans must not hang inside its pillars either.
+	# plaque must not hang inside its pillars either.
 	var gate: ToriiGate = GATE_SCENE.instantiate()
 	run.add_child(gate)
 	_blockers.append(gate)
 	var worst := 0
 	var stances := 0
-	# Stances that put a pillar (at ±1.13 m from the gate's centre) right where a card would hang.
+	# Stances that put a pillar (at ±1.13 m from the gate's centre) right where a plaque would hang.
 	for dx in [-1.13, 1.13, -0.75, 0.75, -1.5]:
 		await _stand_at(Vector3(0.0, 0.0, 0.0))
 		var feet := player.global_position
 		gate.global_position = Vector3(feet.x - dx, feet.y, feet.z - 1.16)
 		gate.global_rotation = Vector3.ZERO
 		await _frames(3)
-		run.xp_to_next = 1
-		run.add_xp(5)
+		run._on_player_died()
 		await _frames(3)
-		if run.active_ofuda.size() != 3:
+		if run.restart_ema == null:
 			worst += 100
-		for card in run.active_ofuda:
-			worst += _card_overlaps(card)
+		else:
+			worst += _plaque_overlaps(run.restart_ema)
 		stances += 1
-		run.slice_ofuda_choice(1)
-		TimeController.clear()
-		await _frames(25)
-	_check("level-up cards hang clear of a torii gate from %d stances (overlapping samples: %d)" % [stances, worst], worst == 0)
+		await _end_run(false)
+	_check("restart ema hangs clear of a torii gate from %d stances (overlapping samples: %d)" % [stances, worst], worst == 0)
 	_clear_blockers()
+
+
+## Starts a fresh run after a forced death so the next stance begins alive.
+func _end_run(clear_blockers: bool = true) -> void:
+	run.start_run()
+	TimeController.clear()
+	await _frames(25)
+	if clear_blockers:
+		_clear_blockers()
 
 
 func _test_material_guarantees() -> void:
@@ -342,13 +344,13 @@ func _overlaps(pose: Dictionary) -> int:
 	return hits
 
 
-func _card_overlaps(card: OfudaTalisman) -> int:
+func _plaque_overlaps(plaque: VotiveTablet) -> int:
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(OfudaTalisman.WIDTH, OfudaTalisman.HEIGHT, 0.04)
+	shape.size = Vector3(VotiveTablet.WIDTH, VotiveTablet.HEIGHT, 0.04)
 	var q := PhysicsShapeQueryParameters3D.new()
 	q.shape = shape
 	q.collision_mask = ForestWorld.TRUNK_LAYER | 1
-	q.transform = card.global_transform
+	q.transform = plaque.global_transform
 	return _space().intersect_shape(q, 4).size()
 
 

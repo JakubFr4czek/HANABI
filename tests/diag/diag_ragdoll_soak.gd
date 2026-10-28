@@ -40,8 +40,6 @@ func _ready() -> void:
 	for f in frames:
 		await get_tree().physics_frame
 		health.heal_full()
-		if run.state == RunGame.RunState.LEVEL_UP and not run.active_ofuda.is_empty():
-			run.slice_ofuda_choice(randi() % run.active_ofuda.size())
 		swing_cd -= 1.0 / 90.0
 		var nearest: ActiveRagdoll = null
 		var best := 2.4

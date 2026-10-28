@@ -423,7 +423,7 @@ func _test_slow_motion_survives_pause() -> void:
 # --- 6. The menu only opens mid-fight --------------------------------------------------
 
 func _test_refused_states() -> void:
-	for st in [RunGame.RunState.INTRO, RunGame.RunState.LEVEL_UP, RunGame.RunState.GAME_OVER]:
+	for st in [RunGame.RunState.INTRO, RunGame.RunState.GAME_OVER]:
 		run.state = st
 		await _tap_menu_button()
 		_check("the menu does not open in state %d" % st, not ctl.is_open and not get_tree().paused)

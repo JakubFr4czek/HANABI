@@ -7,24 +7,23 @@ const Model := preload("res://tools/balance_model.gd")
 
 
 func _ready() -> void:
-	print("=== ECONOMY (Ofuda collected, nodes affordable) ===")
+	print("=== ECONOMY (D1: Ofuda only from hokora shrines, walking distance) ===")
+	print("shrine spacing %.0f m, %d Ofuda each, first at %.0f m" % [Model.hokora_spacing(),
+		ElementBalance.OFUDA_PER_HOKORA, ElementBalance.HOKORA_OPENING_DISTANCE])
 	for profile_name: String in ["careful", "average", "skilled"]:
-		var eco: Dictionary = Model.economy(profile_name, 600.0)
+		var eco: Dictionary = Model.economy(profile_name, 720.0)
 		var line := "%-8s" % profile_name
-		for minute in [1, 2, 3, 5, 7, 10]:
+		for minute in [2, 4, 6, 8, 10, 12]:
 			var s: Dictionary = eco.timeline[mini(minute * 6, eco.timeline.size() - 1)]
-			line += "  %2dmin: %3d kills %3d札 L%d" % [minute, s.kills, int(s.ofuda), s.level]
+			line += "  %2dmin: %2d shrines %3d札 (%d nodes)" % [minute, s.shrines, int(s.ofuda), Model.nodes_for_budget(int(s.ofuda))]
 		print(line)
-		var order := ["t1", "t2", "t3", "t4", "t5"]
-		for school: String in Elements.COMBAT_ELEMENTS:
-			if school != Elements.SAKURA:
-				continue
-			var costs: Array[int] = Model.cumulative_costs(Model.full_order(school))
-			var parts := ""
-			for i in costs.size():
-				parts += "  node%d(%d札)@%s" % [i + 1, costs[i], _fmt(Model.time_to_afford(eco.timeline, costs[i]))]
-			print("         cumulative buy path:" + parts)
-		print("         oni kills %d, elites %d, wave %d" % [eco.oni_kills, eco.elites, eco.wave])
+		var sakura_costs: Array[int] = Model.cumulative_costs(Model.full_order(Elements.SAKURA))
+		var parts := ""
+		for i in sakura_costs.size():
+			parts += "  node%d(%d札)@%s" % [i + 1, sakura_costs[i], _fmt(Model.time_to_afford(eco.timeline, sakura_costs[i]))]
+		print("         one school, cumulative:" + parts)
+		print("         first shrine @%s, kills %d, elites %d, level %d, wave %d" % [
+			_fmt(Model.time_to_afford(eco.timeline, 1)), eco.kills, eco.elites, eco.level, eco.wave])
 
 	print("\n=== KITS: per imbue window, pack of 1 / 4 yōkai, soul rank 1 ===")
 	for school: String in Elements.COMBAT_ELEMENTS:

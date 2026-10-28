@@ -144,13 +144,9 @@ func _run_all() -> void:
 	_check("Run starts on plain steel", run.katana.element == Elements.NONE)
 	run.add_xp(run.xp_to_next)
 	await _frames(3)
-	_check("Level-up presents 3 real Ofuda choices", run.state == RunGame.RunState.LEVEL_UP and run.active_ofuda.size() == 3)
-	var card_id := String(run.active_ofuda[0].upgrade.get("id", ""))
-	run.slice_ofuda_choice(0)
-	await _frames(3)
-	_check("Chosen level-up card '%s' applied via RunGame" % card_id,
-		int(run.upgrade_stacks.get(card_id, 0)) >= 1 and card_id != "")
-	_check("Level-up upgrade does not grant element to katana (remains NONE)",
+	_check("Level-up keeps the run PLAYING with no card choice (D1)",
+		run.state == RunGame.RunState.PLAYING and run.get_tree().get_nodes_in_group("votive_tablets").is_empty())
+	_check("Level-up does not grant element to katana (remains NONE)",
 		run.katana.element == Elements.NONE and run.element_system.current_element == Elements.NONE
 		and run.element_system.element_time_remaining == 0.0)
 	run.queue_free()

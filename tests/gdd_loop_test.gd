@@ -26,10 +26,10 @@ func _run_all() -> void:
 		int(seal_mat.get_shader_parameter("active_elements_mask")) == 0)
 
 	# New system (ELEMENTS_PLAN): blade element comes only from Torii gates.
-	# Level-up cards never imbue the blade.
-	run._apply_upgrade({"id": "damage"})
+	# A level-up never imbues the blade (D1: it is a rank and a heal, nothing else).
+	run.add_xp(run.xp_to_next)
 	run._update_element_seal()
-	_check("Level-up card does NOT imbue the blade (Torii gates only)",
+	_check("A level-up does NOT imbue the blade (Torii gates only)",
 		run.element_system.current_element == Elements.NONE
 		and int(seal_mat.get_shader_parameter("active_elements_mask")) == 0)
 

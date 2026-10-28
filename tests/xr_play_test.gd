@@ -2,8 +2,8 @@ extends Node
 ## Plays the game as a VR player would, through the real XRPlayer driven by
 ## XrSim (fake head and controller tracking, grip and stick input): watch the
 ## gate, reach for the katana and close the hand, turn to the yōkai, walk with
-## the stick, cut with arm swings, pick upgrades by cutting a talisman, glance
-## at the wrist, die, restart by cutting the restart talisman, and do it all
+## the stick, cut with arm swings, glance
+## at the wrist, die, restart by cutting the restart ema, and do it all
 ## again. Everything is done physically; whatever cannot be done that way is a
 ## bug. The RuntimeGuard watches the whole session. Run with:
 ##   godot --headless --path . --fixed-fps 90 res://tests/xr_play_test.tscn -- --xr-sim
@@ -75,10 +75,7 @@ func _intro_and_grab(tag: String) -> void:
 
 func _fight(tag: String, seconds: float) -> void:
 	var kills0 := run.kills
-	var cut_cards := 0
-	var card_fallbacks := 0
 	var wrist_seen := false
-	var card_wait := 0.0
 	var t := 0.0
 	var hp_low := false
 	while t < seconds:
@@ -89,34 +86,7 @@ func _fight(tag: String, seconds: float) -> void:
 		if health.hp < 35.0:
 			health.heal(health.max_hp)  # stay alive to see the whole fight
 			hp_low = true
-		if run.state == RunGame.RunState.LEVEL_UP and not run.active_ofuda.is_empty():
-			# Cut the middle talisman with a real swing through it.
-			card_wait += dt
-			var card: OfudaTalisman = run.active_ofuda[mini(1, run.active_ofuda.size() - 1)]
-			if is_instance_valid(card):
-				_look_at_world(card.global_position)
-				_step_toward(card.global_position, 1.3)
-				if _swing_t < 0.0 and card.is_ready_to_cut() and _flat_dist(card.global_position) <= 1.4:
-					_start_swing_through(card.global_position)
-				if OS.get_cmdline_user_args().has("--verbose-cards") and _swing_t >= 0.0:
-					var inv := card._card_root.global_transform.affine_inverse()
-					print("    card t%.2f tip %s start %s speed %.1f armed %s clear %s" % [_swing_t,
-						(inv * run.katana.get_tip_global()).snapped(Vector3.ONE * 0.01),
-						(inv * run.katana.get_blade_start_global()).snapped(Vector3.ONE * 0.01),
-						run.katana.measured_tip_speed, card.is_armed(), card._blade_clear])
-			if card_wait > 4.0:
-				var cr: OfudaTalisman = run.active_ofuda[mini(1, run.active_ofuda.size() - 1)]
-				var g := run.forest_world.height_at(_feet().x, _feet().z)
-				print("    card fallback: card %s (%.2f over ground), dist %.2f, ready %s, head %s" % [cr.global_position.snapped(Vector3.ONE * 0.01),
-					cr.global_position.y - g, _flat_dist(cr.global_position), cr.is_ready_to_cut(),
-					(xr.get_node("XROrigin3D/XRCamera3D") as Node3D).global_position.snapped(Vector3.ONE * 0.01)])
-				card_fallbacks += 1
-				run.slice_ofuda_choice(1)
-				card_wait = 0.0
-		elif run.state == RunGame.RunState.PLAYING:
-			if card_wait > 0.0:
-				cut_cards += 1
-				card_wait = 0.0
+		if run.state == RunGame.RunState.PLAYING:
 			var target := _nearest_enemy()
 			if target:
 				var tp := target.root_part().global_position
@@ -137,8 +107,6 @@ func _fight(tag: String, seconds: float) -> void:
 		_step_swing(dt)
 	sim.set_stick("left", Vector2.ZERO)
 	_check("%s: arm swings kill yōkai (%d kills)" % [tag, run.kills - kills0], run.kills - kills0 > 0)
-	if cut_cards + card_fallbacks > 0:
-		_check("%s: upgrades are picked by cutting a talisman (%d cut, %d needed help)" % [tag, cut_cards, card_fallbacks], card_fallbacks == 0)
 	_check("%s: raising the wrist shows the HUD readout" % tag, wrist_seen)
 	_check("%s: the katana stays in the hand through the fight" % tag, xr.right_holder.held == run.katana)
 	if hp_low:
@@ -150,34 +118,34 @@ func _die_and_restart(tag: String) -> void:
 	xr.health.take_hit(10000.0, _feet() + Vector3.FORWARD)
 	for i in 600:
 		await get_tree().physics_frame
-		if is_instance_valid(run.restart_ofuda) and run.restart_ofuda.is_ready_to_cut():
+		if is_instance_valid(run.restart_ema) and run.restart_ema.is_ready_to_cut():
 			break
-	_check("%s: death raises the restart talisman" % tag, is_instance_valid(run.restart_ofuda))
+	_check("%s: death raises the restart ema" % tag, is_instance_valid(run.restart_ema))
 	var cut := false
 	for i in 600:
 		await get_tree().physics_frame
 		if run.state == RunGame.RunState.INTRO:
 			cut = true
 			break
-		if is_instance_valid(run.restart_ofuda):
-			_look_at_world(run.restart_ofuda.global_position)
-			_step_toward(run.restart_ofuda.global_position, 1.3)
-			if _swing_t < 0.0 and run.restart_ofuda.is_ready_to_cut() and _flat_dist(run.restart_ofuda.global_position) <= 1.4:
-				_start_swing_through(run.restart_ofuda.global_position)
+		if is_instance_valid(run.restart_ema):
+			_look_at_world(run.restart_ema.global_position)
+			_step_toward(run.restart_ema.global_position, 1.3)
+			if _swing_t < 0.0 and run.restart_ema.is_ready_to_cut() and _flat_dist(run.restart_ema.global_position) <= 1.4:
+				_start_swing_through(run.restart_ema.global_position)
 			if OS.get_cmdline_user_args().has("--verbose-cards") and i % 15 == 0:
-				var ro := run.restart_ofuda
+				var ro := run.restart_ema
 				var inv := ro._card_root.global_transform.affine_inverse()
 				print("    restart i%d dist %.2f ready %s armed %s clear %s swing %.2f tip %s stick %s feet %s ro %s" % [i, _flat_dist(ro.global_position),
 					ro.is_ready_to_cut(), ro.is_armed(), ro._blade_clear, _swing_t, (inv * run.katana.get_tip_global()).snapped(Vector3.ONE * 0.01),
 					sim._hands["left"].get_input("primary"), _feet().snapped(Vector3.ONE * 0.01), ro.global_position.snapped(Vector3.ONE * 0.01)])
 		_step_swing(1.0 / 90.0)
-	_check("%s: cutting the restart talisman starts a new run" % tag, cut)
-	if not cut and is_instance_valid(run.restart_ofuda):
-		var rp := run.restart_ofuda.global_position
-		print("    restart miss: trunk push at the talisman %.2f, ground %.2f, ro y %.2f" % [
+	_check("%s: cutting the restart ema starts a new run" % tag, cut)
+	if not cut and is_instance_valid(run.restart_ema):
+		var rp := run.restart_ema.global_position
+		print("    restart miss: trunk push at the ema %.2f, ground %.2f, ro y %.2f" % [
 			run.forest_world.trunk_push(rp, Vector3.FORWARD, 0.9).length(), run.forest_world.height_at(rp.x, rp.z), rp.y])
-	if not cut and is_instance_valid(run.restart_ofuda):
-		run.restart_ofuda.slice(run.restart_ofuda.global_position, Vector3.RIGHT)
+	if not cut and is_instance_valid(run.restart_ema):
+		run.restart_ema.slice(run.restart_ema.global_position, Vector3.RIGHT)
 	sim.set_grip("right", 0.0)
 	await _frames(10)
 
