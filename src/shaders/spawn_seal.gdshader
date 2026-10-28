@@ -3,7 +3,7 @@ render_mode blend_mix, depth_draw_never, cull_disabled, unshaded;
 
 // Four-part spawn seal on the arena floor: 桜 (Sakura) 雷 (Storm) 墨 (Ink) 影 (Shadow).
 // At rest it is a dim, wet silver inlay in the stone; unlocked element quadrants
-// light up in their neon color (up to 2 elements + evolution inner star in RunGame).
+// light up in their neon color (the blade's current school in a run).
 
 global uniform float storm_flash;
 
@@ -14,7 +14,6 @@ uniform vec3 ink_color : source_color = vec3(0.50, 0.62, 0.88);
 uniform vec3 shadow_color : source_color = vec3(0.66, 0.26, 1.0);
 uniform int active_element_index = -1; // -1 = none, 0 = sakura, 1 = storm, 2 = ink, 3 = shadow
 uniform int active_elements_mask = 0;  // bitmask: 1=sakura(0), 2=storm(1), 4=ink(2), 8=shadow(3)
-uniform int evolution_mask = 0;        // bitmask: 1=black_lightning, 2=phantom_petals
 uniform float intro_seal_glow : hint_range(0.0, 1.0) = 0.0;
 
 float line(float d, float w) {
@@ -42,7 +41,6 @@ void fragment() {
 		+ line(diag, 0.008) * step(0.24, r) * step(r, 0.94) * 0.5, 0.0, 1.0);
 
 	bool quad_active = (active_element_index == quad) || ((active_elements_mask & (1 << quad)) != 0);
-	bool evo_active = (evolution_mask != 0) && (r < 0.54);
 	float pulse = 0.86 + 0.14 * sin(TIME * 1.8 + float(quad) * 1.2);
 	float fill = quad_active ? smoothstep(0.52, 0.60, r) * (1.0 - smoothstep(0.80, 0.87, r)) * gap * 0.055 : 0.0;
 
@@ -53,15 +51,7 @@ void fragment() {
 	if (quad_active) {
 		col = elem * (0.56 * pattern + fill * 0.40) * pulse;
 	}
-	if (evo_active) {
-		vec3 evo_col = (evolution_mask & 1) != 0
-			? mix(storm_color, ink_color, 0.5 + 0.5 * sin(angle * 4.0 + TIME * 3.0))
-			: mix(sakura_color, shadow_color, 0.5 + 0.5 * sin(angle * 4.0 - TIME * 3.0));
-		float inner_fill = smoothstep(0.18, 0.24, r) * (1.0 - smoothstep(0.46, 0.53, r)) * 0.075;
-		col = max(col, evo_col * (0.82 * inner_star + inner_fill * 0.52) * pulse);
-		fill = max(fill, inner_fill);
-	}
 
 	ALBEDO = col;
-	ALPHA = clamp((quad_active || evo_active) ? pattern * 0.96 + fill : pattern * 0.72, 0.0, 0.96);
+	ALPHA = clamp(quad_active ? pattern * 0.96 + fill : pattern * 0.72, 0.0, 0.96);
 }

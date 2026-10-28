@@ -1,6 +1,6 @@
 extends Node
 ## Headless verification for E2c (docs/ELEMENTS_PLAN.md Phase E2c):
-## - Skill tree data: 4 elements x 5 nodes, costs 2/4/4/6/8 (24 per tree)
+## - Skill tree data: 4 elements x 5 nodes, costs 3/5/5/8/12 (33 per tree)
 ## - Cannot unlock without the prerequisite or without enough Ofuda
 ## - Node 4 accepts Node 2 OR Node 3; Node 5 needs Node 4
 ## - An unlock measurably changes the ability (petal count, cooldown,
@@ -9,6 +9,7 @@ extends Node
 ##   godot --headless --path . --fixed-fps 90 res://tests/skill_tree_data_test.tscn -- --desktop
 
 const KATANA_SCENE := preload("res://scenes/weapons/katana.tscn")
+const BalanceModel := preload("res://tools/balance_model.gd")
 
 var failures := 0
 
@@ -22,6 +23,7 @@ func _ready() -> void:
 func _run_all() -> void:
 	_test_data_shape()
 	_test_purchase_rules()
+	_test_balance_targets()
 
 	var katana: HeldWeapon = KATANA_SCENE.instantiate()
 	add_child(katana)
@@ -57,14 +59,65 @@ func _test_data_shape() -> void:
 			for req: String in n.get("requires_any", []):
 				if String(SkillTreeData.node_by_id(req).get("element", "")) != element:
 					shape_ok = false
-		if costs != [2, 4, 4, 6, 8]:
+		if costs != [3, 5, 5, 8, 12]:
 			shape_ok = false
-	_check("Each element has 5 nodes costing 2/4/4/6/8 with same-element prerequisites", shape_ok)
+	_check("Each element has 5 nodes costing 3/5/5/8/12 with same-element prerequisites", shape_ok)
 	var totals_ok := true
 	for element: String in Elements.COMBAT_ELEMENTS:
-		if SkillTreeData.tree_cost(element) != 24:
+		if SkillTreeData.tree_cost(element) != 33:
 			totals_ok = false
-	_check("Full tree costs 24 Ofuda per element (one 5–10 min demo run)", totals_ok)
+	_check("Full tree costs 33 Ofuda per element", totals_ok)
+
+
+## E4 guardrails: the progression curve and the school identities that
+## docs/ELEMENTS_PLAN.md (Phase E4) promises, measured by the balance model
+## (tools/balance_model.gd, ~1 s). A later tweak that breaks the feel of a
+## 5–10 minute demo run fails here instead of in a headset.
+func _test_balance_targets() -> void:
+	var order := BalanceModel.full_order(Elements.SAKURA)
+	var costs: Array[int] = BalanceModel.cumulative_costs(order)
+	var avg: Dictionary = BalanceModel.economy("average", 600.0)
+	var careful: Dictionary = BalanceModel.economy("careful", 600.0)
+	var first: float = BalanceModel.time_to_afford(avg.timeline, costs[0])
+	_check("average player buys the first node inside the first minute (%.0f s)" % first, first > 0.0 and first <= 60.0)
+	var third: float = BalanceModel.time_to_afford(avg.timeline, costs[2])
+	_check("three nodes by ~3 minutes (%.0f s)" % third, third > 0.0 and third <= 180.0)
+	var master: float = BalanceModel.time_to_afford(avg.timeline, costs[4])
+	_check("the master technique lands between 4 and 8 minutes (%.0f s)" % master, master >= 240.0 and master <= 480.0)
+	var at5: int = int(avg.timeline[mini(30, avg.timeline.size() - 1)].ofuda)
+	var at10: int = int(avg.timeline[mini(60, avg.timeline.size() - 1)].ofuda)
+	_check("Ofuda earned: 22–40 by minute 5 (%d), 45–70 by minute 10 (%d)" % [at5, at10],
+		at5 >= 22 and at5 <= 40 and at10 >= 45 and at10 <= 70)
+	var careful_nodes := 0
+	for c in costs:
+		if int(careful.timeline[mini(30, careful.timeline.size() - 1)].ofuda) >= c:
+			careful_nodes += 1
+	_check("even a careful player owns 3+ nodes by minute 5 (%d)" % careful_nodes, careful_nodes >= 3)
+
+	# Each school adds something real, none of them dwarfs the sword.
+	var identity_ok := true
+	var detail := ""
+	for school: String in Elements.COMBAT_ELEMENTS:
+		var nodes := BalanceModel.full_order(school)
+		var bare: Dictionary = BalanceModel.kit(school, [], 1)
+		var full1: Dictionary = BalanceModel.kit(school, nodes, 1)
+		var full4_late: Dictionary = BalanceModel.kit(school, nodes, 4, 10)
+		var utility := float(bare.control) + float(bare.guard)
+		if float(bare.ratio) < 0.12 or float(bare.ratio) > 0.40:
+			identity_ok = false
+		if float(full1.ratio) <= float(bare.ratio) * 1.5:
+			identity_ok = false   # the tree must visibly matter
+		if float(full4_late.ratio) > 2.4:
+			identity_ok = false   # ...but never turn the sword into a prop
+		if float(bare.ratio) < 0.25 and utility < 6.0:
+			identity_ok = false   # a weak damage dealer must bring control or protection
+		detail += " %s %.0f%%->%.0f%%" % [school, float(bare.ratio) * 100.0, float(full1.ratio) * 100.0]
+	_check("every school: 12–40%% of the sword bare, clearly stronger fully upgraded, never above 240%% (%s )" % detail, identity_ok)
+	var kits_differ := absf(float(BalanceModel.kit(Elements.INK, [], 4).control)
+		- float(BalanceModel.kit(Elements.SAKURA, [], 4).control)) > 20.0 \
+		and float(BalanceModel.kit(Elements.SHADOW, [], 1).guard) > float(BalanceModel.kit(Elements.STORM, [], 1).guard) \
+		and float(BalanceModel.kit(Elements.SAKURA, [], 4).d1) > float(BalanceModel.kit(Elements.SAKURA, [], 1).d1) * 1.5
+	_check("identities stay distinct: Ink controls, Shadow guards, Sakura cuts packs", kits_differ)
 
 
 func _test_purchase_rules() -> void:
@@ -75,8 +128,8 @@ func _test_purchase_rules() -> void:
 		not no_prereq.get("ok", true) and no_prereq.get("reason") == SkillTreeData.REASON_PREREQUISITE
 		and not tree.is_unlocked("razor_petals"))
 
-	var poor: Dictionary = tree.try_unlock("petal_sense", 1)
-	_check("Cannot unlock without enough Ofuda (needs 2, has 1)",
+	var poor: Dictionary = tree.try_unlock("petal_sense", 2)
+	_check("Cannot unlock without enough Ofuda (needs 3, has 2)",
 		not poor.get("ok", true) and poor.get("reason") == SkillTreeData.REASON_OFUDA
 		and not tree.is_unlocked("petal_sense"))
 
@@ -84,9 +137,9 @@ func _test_purchase_rules() -> void:
 	_check("Unknown node id is rejected",
 		not unknown.get("ok", true) and unknown.get("reason") == SkillTreeData.REASON_UNKNOWN_NODE)
 
-	var bought: Dictionary = tree.try_unlock("petal_sense", 2)
+	var bought: Dictionary = tree.try_unlock("petal_sense", 3)
 	_check("Node 1 unlocks with exactly its cost in Ofuda",
-		bought.get("ok", false) and int(bought.get("cost", 0)) == 2 and tree.is_unlocked("petal_sense"))
+		bought.get("ok", false) and int(bought.get("cost", 0)) == 3 and tree.is_unlocked("petal_sense"))
 
 	var again: Dictionary = tree.try_unlock("petal_sense", 99)
 	_check("Unlocking the same node twice is rejected",
@@ -114,14 +167,15 @@ func _test_purchase_rules() -> void:
 func _test_unlock_changes_abilities(elem_sys: ElementSystem, tree: SkillTreeData, katana: HeldWeapon) -> void:
 	# Baseline: untouched Sakura numbers.
 	elem_sys.imbue(Elements.SAKURA)
-	_check("Baseline imbue lasts 20.0 s", elem_sys.element_time_remaining == 20.0)
+	_check("Baseline imbue lasts ElementBalance.IMBUE_SECONDS (20.0 s)",
+		elem_sys.element_time_remaining == 20.0 and ElementBalance.IMBUE_SECONDS == 20.0)
 	var counts: Array = []
 	var cb := func(type: String, data: Dictionary) -> void:
 		if type == "senbonzakura":
 			counts.append(int(data.get("count", 0)))
 	elem_sys.effect_triggered.connect(cb)
 	_check("Baseline Senbonzakura fires", elem_sys.execute_ability_1(Vector3.FORWARD))
-	_check("Baseline Senbonzakura releases 6 petals", counts == [6])
+	_check("Baseline Senbonzakura releases %d petals" % ElementBalance.SENBONZAKURA_PETALS, counts == [ElementBalance.SENBONZAKURA_PETALS])
 
 	# Unlocks must change the ability, not just a flag in a menu.
 	tree.try_unlock("petal_sense", 99)
@@ -130,7 +184,8 @@ func _test_unlock_changes_abilities(elem_sys: ElementSystem, tree: SkillTreeData
 	tree.try_unlock("razor_petals", 99)
 	elem_sys.ability_1_cooldown = 0.0
 	_check("Upgraded Senbonzakura fires", elem_sys.execute_ability_1(Vector3.FORWARD))
-	_check("Razor Petals releases 8 petals after unlock", counts == [6, 8])
+	_check("Razor Petals releases %d petals after unlock" % ElementBalance.SENBONZAKURA_PETALS_T2,
+		counts == [ElementBalance.SENBONZAKURA_PETALS, ElementBalance.SENBONZAKURA_PETALS_T2])
 
 	tree.try_unlock("hanami_storm", 99)
 	elem_sys.ability_2_cooldown = 0.0

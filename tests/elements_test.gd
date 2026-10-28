@@ -129,9 +129,8 @@ func _test_storm() -> void:
 	_check("Short-lived mesh VFX are hard-capped for Quest",
 		run.element_system._transients.size() <= ElementSystem.MAX_TRANSIENT_MESHES)
 
-	_check("Spawn seal lights the Storm quadrant and no evolution star",
-		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 2
-		and int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("evolution_mask")) == 0)
+	_check("Spawn seal lights the Storm quadrant",
+		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 2)
 
 
 func _test_ink() -> void:
@@ -157,9 +156,8 @@ func _test_ink() -> void:
 	for i in 9:
 		run.element_system.paint_ink(Vector3(float(i) * 0.1, 0.0, -0.4))
 	_check("Ink VFX pool is hard-capped for Quest", run.element_system._ink_pools.size() <= ElementSystem.MAX_INK_POOLS)
-	_check("Spawn seal lights the Ink quadrant and no evolution star",
-		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 4
-		and int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("evolution_mask")) == 0)
+	_check("Spawn seal lights the Ink quadrant",
+		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 4)
 
 
 func _test_sakura() -> void:
@@ -195,14 +193,14 @@ func _test_sakura() -> void:
 	var u1: Dictionary = run.unlock_skill("petal_sense")
 	var u2: Dictionary = run.unlock_skill("razor_petals")
 	var u4: Dictionary = run.unlock_skill("life_bloom")
-	_check("Life Bloom chain unlocks with Ofuda (2+4+6)",
-		u1.get("ok", false) and u2.get("ok", false) and u4.get("ok", false) and run.ofuda_count == 8)
+	var chain_cost := _node_cost("petal_sense") + _node_cost("razor_petals") + _node_cost("life_bloom")
+	_check("Life Bloom chain unlocks with Ofuda (%d札)" % chain_cost,
+		u1.get("ok", false) and u2.get("ok", false) and u4.get("ok", false) and run.ofuda_count == 20 - chain_cost)
 	run.element_system.on_enemy_died(petal_target)
-	_check("Life Bloom restores 12 HP on a Sakura kill (60 -> %.1f)" % player.health.hp,
-		player.health.hp == 72.0)
-	_check("Spawn seal lights the Sakura quadrant and no evolution star",
-		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 1
-		and int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("evolution_mask")) == 0)
+	_check("Life Bloom restores %.0f HP on a Sakura kill (60 -> %.1f)" % [ElementBalance.LIFE_BLOOM_HEAL_KILL, player.health.hp],
+		is_equal_approx(player.health.hp, 60.0 + ElementBalance.LIFE_BLOOM_HEAL_KILL))
+	_check("Spawn seal lights the Sakura quadrant",
+		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 1)
 
 
 func _test_shadow() -> void:
@@ -239,9 +237,8 @@ func _test_shadow() -> void:
 	_check("a blink at a tree stops short of the bark (%.2f m from the axis, bark ~%.2f m)" % [gap, run.forest_world._trunk_chest_radius],
 		gap > run.forest_world._trunk_chest_radius + 0.2)
 	trunk.queue_free()
-	_check("Spawn seal lights the Shadow quadrant and no evolution star",
-		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 8
-		and int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("evolution_mask")) == 0)
+	_check("Spawn seal lights the Shadow quadrant",
+		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 8)
 
 
 func _check(label: String, ok: bool) -> void:
@@ -257,3 +254,7 @@ func _frames(count: int) -> void:
 
 func _seconds(seconds: float) -> void:
 	await _frames(int(seconds * Engine.physics_ticks_per_second))
+
+
+func _node_cost(id: String) -> int:
+	return int(SkillTreeData.node_by_id(id).get("cost", 0))

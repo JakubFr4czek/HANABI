@@ -15,8 +15,6 @@ extends RigidBody3D
 @export var weapon_name := "weapon"
 ## Active element: colors the trail now, drives on-hit effects later (GDD section 5).
 @export var element := Elements.NONE
-const ELEMENT_DURATION: float = 20.0
-const FADE_WARNING_TIME: float = 3.0
 
 var current_element: String:
 	get:
@@ -96,7 +94,7 @@ func set_element(new_element: String) -> void:
 			_flash_msec = _sweep_msec
 	element = new_element
 	# Single source of truth: set_element sets visual state without starting a timer.
-	# The 20s countdown is managed exclusively by ElementSystem via imbue_element.
+	# The imbue countdown (ElementBalance.IMBUE_SECONDS) is managed exclusively by ElementSystem via imbue_element.
 	element_time_remaining = 0.0
 	is_fade_warning = false
 	if trail:
@@ -104,7 +102,7 @@ func set_element(new_element: String) -> void:
 	_update_blade_material()
 
 
-func imbue_element(new_element: String, duration: float = ELEMENT_DURATION) -> void:
+func imbue_element(new_element: String, duration: float = ElementBalance.IMBUE_SECONDS) -> void:
 	var now := Time.get_ticks_msec()
 	if new_element == element and element != Elements.NONE:
 		element_time_remaining = duration

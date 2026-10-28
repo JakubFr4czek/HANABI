@@ -19,8 +19,7 @@ func _ready() -> void:
 	var player := run.player as DesktopPlayer
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
-	for id in ["storm_chain", "ink_pool"]:
-		run._apply_upgrade({"id": id})
+	run.element_system.imbue(Elements.STORM)
 	run.kills = 12
 	run.level = 4
 	run.run_time = 98.0
