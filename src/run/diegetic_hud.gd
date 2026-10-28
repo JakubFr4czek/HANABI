@@ -70,7 +70,10 @@ var _crest_flash := 0.0
 var _time_shown := -1
 
 
+var _bound_player: Node3D = null
+
 func setup(player: Node3D, katana: HeldWeapon) -> void:
+	_bound_player = player
 	if player:
 		for layer in player.find_children("*", "CanvasLayer", true, false):
 			(layer as CanvasLayer).visible = false
@@ -78,6 +81,8 @@ func setup(player: Node3D, katana: HeldWeapon) -> void:
 
 	_setup_wrist_unit(player)
 	update_hud(100.0, 100.0, 0, 30, 1, 1, 0, 0, 0.0, Elements.NONE)
+	if VrComfortSettings and not VrComfortSettings.settings_changed.is_connected(_on_comfort_settings_changed):
+		VrComfortSettings.settings_changed.connect(_on_comfort_settings_changed)
 
 
 func _resolve_view_camera(player: Node3D) -> Camera3D:
@@ -219,17 +224,13 @@ func _setup_wrist_unit(player: Node3D) -> void:
 
 	if player is XRPlayer:
 		var xr := player as XRPlayer
-		xr.left_controller.add_child(wrist_unit)
-		# Back of the left wrist, rolled a little toward the thumb so a
-		# "check the watch" turn of the forearm shows it to the eyes. The
-		# mount stands clear of the hand mesh: measured on the XR Tools
-		# hand, its surface rises to y≈0.062 (controller space) under the
-		# old mount while the plate dipped to y≈0.003 — the readout sank
-		# into the hand. Higher, farther up the wrist and flatter keeps
-		# the whole plate above the skin (headless probe:
-		# tests/diag/probe_hud.tscn).
+		var offhand: XRController3D = xr.get_offhand_controller() if xr.has_method("get_offhand_controller") else xr.left_controller
+		offhand.add_child(wrist_unit)
+		# Back of the wrist, rolled a little toward the thumb so a
+		# "check the watch" turn of the forearm shows it to the eyes.
+		var is_right := (offhand == xr.right_controller)
 		wrist_unit.position = Vector3(0.0, 0.058, 0.066)
-		wrist_unit.rotation = Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(-14.0))
+		wrist_unit.rotation = Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(14.0 if is_right else -14.0))
 		_follow_eyes = true
 	elif player is DesktopPlayer:
 		var dp := player as DesktopPlayer
@@ -518,3 +519,18 @@ func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, 
 		# Engraved readout in the game's voice: rank, wave, kills, score,
 		# and the spendable Ofuda tally (E2c, plan section (f)).
 		wrist_label.text = "位 %d · 波 %d · 斬 %d\n%d pt · 札×%d" % [level, wave, kills, score, ofuda_count]
+
+func update_wrist_attachment(player: Node3D) -> void:
+	if player is XRPlayer and wrist_unit:
+		var xr := player as XRPlayer
+		var offhand: XRController3D = xr.get_offhand_controller() if xr.has_method("get_offhand_controller") else xr.left_controller
+		if wrist_unit.get_parent() != offhand and offhand != null:
+			wrist_unit.reparent(offhand)
+			var is_right := (offhand == xr.right_controller)
+			wrist_unit.position = Vector3(0.0, 0.058, 0.066)
+			wrist_unit.rotation = Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(14.0 if is_right else -14.0))
+
+
+func _on_comfort_settings_changed() -> void:
+	if _bound_player:
+		update_wrist_attachment(_bound_player)

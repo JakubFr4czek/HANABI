@@ -120,6 +120,8 @@ func _input(event: InputEvent) -> void:
 			close()
 		KEY_1, KEY_2, KEY_3, KEY_4:
 			menu.select_element(Elements.COMBAT_ELEMENTS[key - KEY_1])
+		KEY_5, KEY_C:
+			menu.select_comfort()
 		KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
 			menu.unlock_selected("mouse")
 		_:
@@ -256,4 +258,4 @@ func _haptic(pointer_id: String, amplitude: float, seconds: float) -> void:
 func _hint_text() -> String:
 	if player is XRPlayer:
 		return "TRIGGER  select   ·   MENU  close"
-	return "CLICK  select   ·   1-4  school   ·   ENTER  unlock   ·   TAB / ESC  close"
+	return "CLICK  select   ·   1-4  school   ·   5/C  comfort   ·   ENTER  unlock   ·   TAB / ESC  close"

@@ -260,8 +260,9 @@ func _grant_katana() -> void:
 		(_player as DesktopPlayer).take_weapon(_katana)
 	elif _player is XRPlayer:
 		var xr := _player as XRPlayer
-		if xr.right_holder:
-			xr.right_holder.grab(_katana)
+		var holder: WeaponHolder = xr.get_dominant_holder() if xr.has_method("get_dominant_holder") else xr.right_holder
+		if holder:
+			holder.grab(_katana)
 			_katana.snap_to_hand()
 
 

@@ -24,6 +24,7 @@ Sfx="*res://src/core/sfx.gd"
 TimeController="*res://src/core/time_controller.gd"
 VfxPool="*res://src/vfx/vfx_pool.gd"
 RuntimeGuard="*res://src/debug/runtime_guard.gd"
+VrComfortSettings="*res://src/core/vr_comfort_settings.gd"
 
 [display]
 
