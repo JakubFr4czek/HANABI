@@ -34,6 +34,9 @@ const LEVEL_UP_HEAL_HP := 10.0
 @export var orbs_per_kill := 4
 @export var xp_per_orb := 6
 @export var skip_run_intro := false
+## Plays the HANABI + NANJO boot splash once, before the first intro (D7). Only
+## the launch scene (scenes/main.tscn) sets it, so tests and tools skip it.
+@export var play_boot_splash := false
 
 var state := RunState.INTRO
 var run_time := 0.0
@@ -63,7 +66,9 @@ const RUN_COMBAT_FOG := preload("res://src/run/run_combat_fog.gd")
 
 var combat_fog: Node
 var run_intro: RunIntro
+var run_splash: RunSplash
 var restart_ema: VotiveTablet = null
+var _boot_splash_played := false
 
 var _souls_root: Node3D
 var _ofuda_pickups_root: Node3D
@@ -401,8 +406,17 @@ func _setup_run_nodes() -> void:
 	run_intro.finished.connect(_on_run_intro_finished)
 	add_child(run_intro)
 
+	run_splash = RunSplash.new()
+	run_splash.name = "RunSplash"
+	add_child(run_splash)
+	run_splash.setup(player)
+	run_splash.finished.connect(_on_boot_splash_finished)
+
 
 func start_run() -> void:
+	# R during the boot splash waits for it: the splash then hands over to the intro.
+	if run_splash and run_splash.is_active():
+		return
 	TimeController.clear()
 	if VfxPool:
 		VfxPool.ensure_run_budget(40)
@@ -451,6 +465,9 @@ func start_run() -> void:
 
 	if skip_run_intro:
 		_begin_play_after_intro()
+	elif play_boot_splash and not _boot_splash_played:
+		_boot_splash_played = true
+		run_splash.start()
 	else:
 		run_intro.start()
 	_refresh_hud()
@@ -505,6 +522,13 @@ func element_uptime_ratio() -> float:
 
 func _on_run_intro_finished() -> void:
 	_begin_play_after_intro()
+
+
+## The boot splash hands over to the intro, which starts only now, so the press
+## that ended the splash cannot also skip the intro.
+func _on_boot_splash_finished() -> void:
+	run_intro.start()
+	_refresh_hud()
 
 
 ## Rising XP requirement for advancing from [param current_level] to the next.
@@ -707,6 +731,11 @@ func _on_game_hit(hit: Dictionary) -> void:
 
 
 func _on_ability_1_requested(direction: Vector3) -> void:
+	# In a run the XR rig reports A/X as ability 1 (run_element_mode), never as
+	# reset_requested, so A/X skips the intro here.
+	if player is XRPlayer and state == RunState.INTRO and run_intro and run_intro.is_active():
+		run_intro.skip()
+		return
 	# The rig keeps reading buttons while a menu pauses the game: no abilities then.
 	if state == RunState.PLAYING and element_system and not get_tree().paused:
 		element_system.execute_ability_1(direction)
