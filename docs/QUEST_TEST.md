@@ -69,6 +69,17 @@ Zrzuty menu (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/sk
 - [ ] Brak nausea przy level-up slow-mo i magnet orbs.
 - [ ] Boundary platformy — nie wypadasz z dysku.
 
+## Ustawienia (D3)
+
+- [ ] Menu **5 / 安 SETTINGS** otwiera się na AUDIO; zakładka trzyma pauzę (świat stoi), zamknięcie wznawia.
+- [ ] **DŹWIĘK:** każdy suwak co 10 %; Master gasi wszystko, SFX gra krótki sygnał przy zmianie; po ponownym uruchomieniu poziomy wracają z `hanabi_vr.cfg`.
+- [ ] **RUCH:** tempo SLOW / NORMAL / FAST działa i sumuje się z mocą atramentu; wignieta i obrót bez zmian.
+- [ ] **UŁATWIENIA:** `OFF 0 %` błysku: brak rozbłysku lampy pioruna i fajerwerku, łuk pioruna i grzmot zostają. Haptyka `OFF`: cisza; `TEST`: impuls w dłoni z kataną.
+- [ ] **STEROWANIE:** każdy przycisk Questa z mapy jest opisany; po zamianie ręki dominującej katana, drążek ruchu, drążek obrotu i HUD zmieniają strony (pigułki i podsumowanie u góry).
+- [ ] Przycisk Meta opisany jako systemowy; nic z tekstu nie wychodzi poza kafelek przy 0,8–1 m.
+
+Zrzuty (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/skill_menu_screenshots.tscn -- --desktop --shots /tmp/hanabi_d3` (`canvas_07` … `canvas_11`).
+
 ## Perf HUD (F3 / `--perf-hud`)
 
 - [ ] FPS nie spada poniżej **65** w szczyt fali (krótkie spadki OK).
