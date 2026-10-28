@@ -40,6 +40,12 @@ const TREE_SCENE := preload("res://assets/models/environment/forest_trees/cherry
 const TREE_DIFFUSE := preload("res://src/shaders/forest_diffuse.gdshader")
 const TREE_ALBEDO := preload("res://assets/models/environment/forest_trees/cherry_forest_albedo.jpg")
 const TREE_NORMAL := preload("res://assets/models/environment/forest_trees/cherry_forest_normal.jpg")
+const SAKURA_TREE_SHADER := preload("res://src/shaders/sakura_tree.gdshader")
+## A few rare emissive pink sakura trees as focal points in the forest (GDD §9).
+## Roughly 1 chunk in 5-6 holds one majestic sakura tree.
+const SAKURA_CHUNK_CHANCE := 0.18
+const SAKURA_DRAW_RADIUS := 14.0
+const SAKURA_SCALE_BOOST := 1.2
 const TORII_MESH_SCALE := 0.42
 ## Trunks and gate pillars collide on their own layer: the player walks into
 ## them, yōkai ragdolls do not (their limbs snag and topple them); yōkai steer
@@ -89,6 +95,7 @@ var _floor_noise := FastNoiseLite.new()
 var _scatter_noise := FastNoiseLite.new()
 var _corridor_noise := FastNoiseLite.new()
 var _tree_mesh: Mesh
+var _sakura_mesh: Mesh
 var _shaft_mesh: QuadMesh
 var _shaft_mat: ShaderMaterial
 var _torii_mesh: Mesh
@@ -104,6 +111,7 @@ var _rock_shape: ConvexPolygonShape3D
 var _trunk_chest_radius := 0.8
 var _ground_mat: ShaderMaterial
 var _tree_mat: ShaderMaterial
+var _sakura_mat: ShaderMaterial
 var _torii_mat: ShaderMaterial
 var _lantern_mat: ShaderMaterial
 var _rock_mat: ShaderMaterial
@@ -464,6 +472,26 @@ func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 
 ## Same jitter and density as the old tree scatter, cached so the soil mound
 ## and the mesh share one set of trunks.
+func _is_sakura_chunk(coord: Vector2i) -> bool:
+	return _hash01(_hash_coord(coord, 4, 101), 0) < SAKURA_CHUNK_CHANCE
+
+
+func _pick_sakura_spot(coord: Vector2i, spots: Array[Vector4]) -> int:
+	var chunk_center := Vector2(float(coord.x) * CHUNK_SIZE, float(coord.y) * CHUNK_SIZE)
+	var best_idx := 0
+	var best_score := -INF
+	for i in spots.size():
+		var s: Vector4 = spots[i]
+		var dist_to_center := Vector2(s.x - chunk_center.x, s.y - chunk_center.y).length()
+		var center_penalty := maxf(0.0, dist_to_center - (CHUNK_SIZE * 0.35)) * 0.3
+		var h := _hill_height(s.x, s.y)
+		var score := h - center_penalty
+		if score > best_score:
+			best_score = score
+			best_idx = i
+	return best_idx
+
+
 func _tree_spots(coord: Vector2i) -> Dictionary:
 	if _tree_spot_cache.has(coord):
 		return _tree_spot_cache[coord]
@@ -498,6 +526,12 @@ func _tree_spots(coord: Vector2i) -> Dictionary:
 		if _too_close_to_trees(spots, halo, wx, wz):
 			continue
 		spots.append(Vector4(wx, wz, rng.randf_range(0.85, 1.4), rng.randf() * TAU))
+	var sakura_idx := -1
+	if _is_sakura_chunk(coord) and not spots.is_empty():
+		sakura_idx = _pick_sakura_spot(coord, spots)
+		if sakura_idx >= 0 and sakura_idx < spots.size():
+			var s: Vector4 = spots[sakura_idx]
+			spots[sakura_idx] = Vector4(s.x, s.y, s.z * SAKURA_SCALE_BOOST, s.w)
 	# 4 m buckets so mound queries check a handful of trunks instead of the
 	# whole ±1-chunk neighbourhood on every height sample.
 	var cells := {}
@@ -507,7 +541,7 @@ func _tree_spots(coord: Vector2i) -> Dictionary:
 		if not cells.has(key):
 			cells[key] = []
 		(cells[key] as Array).append(spot)
-	var packed := {"spots": spots, "clearing": clearing, "cells": cells}
+	var packed := {"spots": spots, "clearing": clearing, "cells": cells, "sakura_idx": sakura_idx}
 	_tree_spot_cache[coord] = packed
 	return packed
 
@@ -601,10 +635,12 @@ func _spot_blocked(occupied: Array, wx: float, wz: float, clearance: float) -> b
 
 func _populate_trees(root: Node3D, coord: Vector2i) -> int:
 	var packed := _tree_spots(coord)
+	var sakura_idx: int = packed.get("sakura_idx", -1)
 	var transforms: Array[Transform3D] = []
+	var sakura_transforms: Array[Transform3D] = []
 	var props: Array = root.get_meta("prop_world_positions", [])
-	for s in packed.spots:
-		var spot: Vector4 = s
+	for i in packed.spots.size():
+		var spot: Vector4 = packed.spots[i]
 		var wx := spot.x
 		var wz := spot.y
 		var scale := spot.z
@@ -612,18 +648,28 @@ func _populate_trees(root: Node3D, coord: Vector2i) -> int:
 		# Plant from the rendered mesh, sunk below the lowest ground in ribbon
 		# reach: on a slope the analytic height floats above the downhill
 		# mesh, which left roots standing in the air.
-		var base := _mesh_min_height(wx, wz, 2.1) - 0.05 * scale
+		var base := _mesh_min_height(wx, wz, 2.1 * (SAKURA_SCALE_BOOST if i == sakura_idx else 1.0)) - 0.05 * scale
 		# Lean with the hill, not the mound, so the roots lie on the slope
 		# instead of sticking out on the downhill side.
 		var up := Vector3.UP.lerp(_hill_normal(wx, wz), 0.72).normalized()
 		var basis := _basis_up(up, yaw, scale)
-		transforms.append(Transform3D(basis, Vector3(wx - root.position.x, base, wz - root.position.z)))
+		var xf := Transform3D(basis, Vector3(wx - root.position.x, base, wz - root.position.z))
+		if i == sakura_idx:
+			sakura_transforms.append(xf)
+		else:
+			transforms.append(xf)
 		props.append(Vector3(wx, base, wz))
 	root.set_meta("prop_world_positions", props)
 	root.set_meta("tree_local_xfs", transforms)
+	root.set_meta("sakura_tree_local_xfs", sakura_transforms)
 	if not transforms.is_empty():
 		_commit_multimesh(root, "Trees", _tree_mesh, _tree_mat, transforms)
-		root.add_child(_build_trunk_colliders(transforms, 0, root))
+	if not sakura_transforms.is_empty():
+		_commit_multimesh(root, "SakuraTrees", _sakura_mesh, _sakura_mat, sakura_transforms)
+	var all_trees := transforms.duplicate()
+	all_trees.append_array(sakura_transforms)
+	if not all_trees.is_empty():
+		root.add_child(_build_trunk_colliders(all_trees, 0, root))
 	return int(packed.clearing)
 
 
@@ -937,6 +983,7 @@ func _commit_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 	mm_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mm_inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	_set_view_range(mm_inst)
+	mm_inst.custom_aabb = AABB(Vector3(-16.0, -2.0, -16.0), Vector3(32.0, 24.0, 32.0))
 	root.add_child(mm_inst)
 	call_deferred("_refresh_multimesh_transforms", mm_inst, transforms)
 
@@ -944,7 +991,7 @@ func _commit_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 func _refresh_multimesh_transforms(mm_inst: MultiMeshInstance3D, transforms: Array[Transform3D]) -> void:
 	if not is_instance_valid(mm_inst) or mm_inst.multimesh == null:
 		return
-	if mm_inst.name == "Trees" and follow:
+	if (mm_inst.name == "Trees" or mm_inst.name == "SakuraTrees") and follow:
 		_refresh_tree_draw(_anchor_position())
 		return
 	var mm := mm_inst.multimesh
@@ -956,34 +1003,51 @@ func _refresh_multimesh_transforms(mm_inst: MultiMeshInstance3D, transforms: Arr
 ## Trees past the fog are the fog. Keep their colliders; drop the draw.
 func _refresh_tree_draw(origin: Vector3) -> void:
 	var r2 := TREE_DRAW_RADIUS * TREE_DRAW_RADIUS
+	var sakura_r2 := SAKURA_DRAW_RADIUS * SAKURA_DRAW_RADIUS
 	for key in _chunks:
 		var chunk := _chunks[key] as Node3D
 		var inst := chunk.get_node_or_null("Trees") as MultiMeshInstance3D
-		if inst == null or inst.multimesh == null:
-			continue
-		var all: Array = chunk.get_meta("tree_local_xfs", [])
-		var mm := inst.multimesh
-		var near: Array[Transform3D] = []
-		var base := chunk.position
-		var idx := 0
-		for xf in all:
-			var placed := xf as Transform3D
-			var dx := base.x + placed.origin.x - origin.x
-			var dz := base.z + placed.origin.z - origin.z
-			var d2 := dx * dx + dz * dz
-			if d2 > r2:
+		if inst != null and inst.multimesh != null:
+			var all: Array = chunk.get_meta("tree_local_xfs", [])
+			var mm := inst.multimesh
+			var near: Array[Transform3D] = []
+			var base := chunk.position
+			var idx := 0
+			for xf in all:
+				var placed := xf as Transform3D
+				var dx := base.x + placed.origin.x - origin.x
+				var dz := base.z + placed.origin.z - origin.z
+				var d2 := dx * dx + dz * dz
+				if d2 > r2:
+					idx += 1
+					continue
+				if d2 > TREE_FAR_START * TREE_FAR_START and _hash01(idx, 7) >= TREE_FAR_KEEP:
+					idx += 1
+					continue
+				near.append(placed)
 				idx += 1
-				continue
-			if d2 > TREE_FAR_START * TREE_FAR_START and _hash01(idx, 7) >= TREE_FAR_KEEP:
-				idx += 1
-				continue
-			near.append(placed)
-			idx += 1
-		# instance_count is what the headless perf probe counts. A visibility
-		# cap on top of the full buffer still submitted every tree.
-		mm.instance_count = near.size()
-		for i in near.size():
-			mm.set_instance_transform(i, near[i])
+			# instance_count is what the headless perf probe counts. A visibility
+			# cap on top of the full buffer still submitted every tree.
+			mm.instance_count = near.size()
+			for i in near.size():
+				mm.set_instance_transform(i, near[i])
+
+		var sakura_inst := chunk.get_node_or_null("SakuraTrees") as MultiMeshInstance3D
+		if sakura_inst != null and sakura_inst.multimesh != null:
+			var all_sakura: Array = chunk.get_meta("sakura_tree_local_xfs", [])
+			var mm_sakura := sakura_inst.multimesh
+			var near_sakura: Array[Transform3D] = []
+			var base := chunk.position
+			for xf in all_sakura:
+				var placed := xf as Transform3D
+				var dx := base.x + placed.origin.x - origin.x
+				var dz := base.z + placed.origin.z - origin.z
+				var d2 := dx * dx + dz * dz
+				if d2 <= sakura_r2:
+					near_sakura.append(placed)
+			mm_sakura.instance_count = near_sakura.size()
+			for i in near_sakura.size():
+				mm_sakura.set_instance_transform(i, near_sakura[i])
 
 
 func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
@@ -1084,6 +1148,19 @@ func torii_scale_for_height(height: float) -> float:
 	return height / maxf(h, 0.1)
 
 
+## World position of the generated sakura focal tree nearest to [param from] (INF if none).
+func nearest_sakura_position(from: Vector3) -> Vector3:
+	var best := Vector3.INF
+	for key in _chunks:
+		var chunk := _chunks[key] as Node3D
+		var xfs: Array = chunk.get_meta("sakura_tree_local_xfs", [])
+		for xf in xfs:
+			var p := chunk.global_transform * (xf as Transform3D).origin
+			if best == Vector3.INF or p.distance_to(from) < best.distance_to(from):
+				best = p
+	return best
+
+
 ## World position of the generated gate nearest to [param from] (INF if none).
 func nearest_torii_position(from: Vector3) -> Vector3:
 	var best := Vector3.INF
@@ -1130,6 +1207,19 @@ func _build_materials() -> void:
 	_tree_mat.shader = TREE_DIFFUSE
 	_tree_mat.set_shader_parameter("albedo_texture", TREE_ALBEDO)
 	_tree_mat.set_shader_parameter("normal_texture", TREE_NORMAL)
+
+	_sakura_mat = ShaderMaterial.new()
+	_sakura_mat.shader = SAKURA_TREE_SHADER
+	_sakura_mat.set_shader_parameter("albedo_texture", TREE_ALBEDO)
+	_sakura_mat.set_shader_parameter("normal_texture", TREE_NORMAL)
+	_sakura_mat.set_shader_parameter("bark_tint", Color(0.12, 0.09, 0.08))
+	_sakura_mat.set_shader_parameter("deep_plum_color", Color(0.11, 0.02, 0.07))
+	_sakura_mat.set_shader_parameter("mid_petal_color", Color(0.76, 0.28, 0.48))
+	_sakura_mat.set_shader_parameter("neon_pink_accent", Color(1.0, 0.30, 0.68))
+	_sakura_mat.set_shader_parameter("rim_glow_color", Color(0.96, 0.65, 0.98))
+	_sakura_mat.set_shader_parameter("stamen_color", Color(1.0, 0.88, 0.95))
+	_sakura_mat.set_shader_parameter("emission_strength", 1.35)
+	_sakura_mat.set_shader_parameter("neon_sparsity", 0.70)
 
 	_torii_mat = ShaderMaterial.new()
 	_torii_mat.shader = WET_SHADER
@@ -1184,12 +1274,13 @@ func _build_meshes() -> void:
 	# Same grey as the fog, dim. A blue-white beam reads as a plastic tube.
 	_shaft_mat.set_shader_parameter("shaft_color", Color(0.62, 0.64, 0.66))
 	_shaft_mat.set_shader_parameter("intensity", 0.2)
-	_tree_mesh = _merge_scene_meshes(TREE_SCENE, 1.0)
-	if _tree_mesh == null:
+	var raw_scan := _merge_scene_meshes(TREE_SCENE, 1.0)
+	if raw_scan == null:
 		_tree_mesh = _build_tree_mesh()
+		_sakura_mesh = _tree_mesh
 	else:
-		_tree_mesh = _rebuild_crown(_tree_mesh)
-	_tree_mesh = _append_root_flare(_tree_mesh)
+		_tree_mesh = _append_root_flare(_rebuild_crown(raw_scan, CROWN_CLUMPS, 7.3))
+		_sakura_mesh = _append_root_flare(_rebuild_crown(raw_scan, SAKURA_CLUMPS, 4.2))
 	_torii_mesh = _build_torii_mesh()
 	_lantern_mesh = _build_lantern_mesh()
 	_rock_mesh = _extract_rock_mesh()
@@ -1202,6 +1293,26 @@ func _build_meshes() -> void:
 ## (trunk and boughs, the atlas's bottom-left strip) and grow the crown again
 ## as solid foliage clumps where the scan's leaf mass was (weighted k-means of
 ## the scanned crown: centre, radius). ~1k triangles instead of ~5.3k.
+const SAKURA_CLUMPS := [
+	# Lower drooping/cascading blossom clusters (eye-level focal framing at 3.8 - 5.2 m height)
+	[Vector3(3.2, 4.4, 1.6), 2.1],
+	[Vector3(-3.0, 4.6, -1.8), 2.1],
+	[Vector3(1.6, 4.2, -3.0), 2.0],
+	[Vector3(-2.0, 4.3, 2.6), 2.0],
+	[Vector3(0.2, 4.8, 3.4), 1.9],
+	# Mid spreading boughs (cascading layers at 5.8 - 7.4 m height)
+	[Vector3(4.2, 6.4, -0.6), 2.2],
+	[Vector3(-4.0, 6.6, 1.0), 2.2],
+	[Vector3(1.1, 6.2, -3.8), 2.1],
+	[Vector3(-1.3, 6.5, 3.6), 2.1],
+	[Vector3(3.4, 7.0, 2.4), 2.0],
+	# High crown dome (8.4 - 9.8 m height)
+	[Vector3(0.1, 9.2, -0.2), 2.4],
+	[Vector3(2.2, 8.4, -1.6), 2.0],
+	[Vector3(-2.0, 8.5, 1.7), 2.0],
+	[Vector3(-1.6, 8.2, -2.2), 1.9],
+]
+
 const CROWN_CLUMPS := [
 	[Vector3(0.08, 10.14, -3.36), 2.2], [Vector3(4.03, 9.42, -0.61), 2.1],
 	[Vector3(-0.14, 11.66, 0.19), 2.3], [Vector3(5.80, 10.63, -2.85), 2.0],
@@ -1211,7 +1322,7 @@ const CROWN_CLUMPS := [
 ]
 
 
-func _rebuild_crown(scan: Mesh) -> ArrayMesh:
+func _rebuild_crown(scan: Mesh, clumps: Array = CROWN_CLUMPS, fork_y_base: float = 7.3) -> ArrayMesh:
 	var arrays := scan.surface_get_arrays(0)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
@@ -1241,15 +1352,15 @@ func _rebuild_crown(scan: Mesh) -> ArrayMesh:
 	var noise := FastNoiseLite.new()
 	noise.seed = 0x4C454146
 	noise.frequency = 0.9
-	for c in CROWN_CLUMPS.size():
+	for c in clumps.size():
 		# Slightly oversized so neighbouring clumps merge into one canopy
 		# mass instead of reading as separate balloons.
-		_add_foliage_clump(st, CROWN_CLUMPS[c][0], float(CROWN_CLUMPS[c][1]) * 1.18, noise, c)
+		_add_foliage_clump(st, clumps[c][0], float(clumps[c][1]) * 1.18, noise, c)
 	# The scan's own boughs are cut at 8.8 m, well below the clump centres:
 	# without a branch into each clump the crown read as floating balloons
 	# tied to nothing. Grow a tapered bough from the fork into every clump.
-	for c in CROWN_CLUMPS.size():
-		_add_branch(st, CROWN_CLUMPS[c][0], float(CROWN_CLUMPS[c][1]), c)
+	for c in clumps.size():
+		_add_branch(st, clumps[c][0], float(clumps[c][1]), c, fork_y_base)
 	# The bark is normal-mapped: without tangents its lighting turns to NaN
 	# and the trunks vanish.
 	st.generate_tangents()
@@ -1260,8 +1371,9 @@ func _rebuild_crown(scan: Mesh) -> ArrayMesh:
 ## scan's boughs end) into a foliage clump, ending inside the leaf mass.
 ## Three rings with a slight mid droop; UVs sit in the atlas bark strip so
 ## the tree shader treats it as bark, not leaf or root.
-func _add_branch(st: SurfaceTool, clump_center: Vector3, clump_radius: float, seed_i: int) -> void:
-	var fork := Vector3(clump_center.x * 0.10, 7.3 + float(seed_i % 3) * 0.45, clump_center.z * 0.10)
+func _add_branch(st: SurfaceTool, clump_center: Vector3, clump_radius: float, seed_i: int, fork_y_base: float = 7.3) -> void:
+	var fork_y := minf(clump_center.y - 0.7, fork_y_base + float(seed_i % 3) * 0.45)
+	var fork := Vector3(clump_center.x * 0.10, fork_y, clump_center.z * 0.10)
 	var to_center := clump_center - fork
 	var end := clump_center - to_center.normalized() * clump_radius * 0.45
 	var mid := fork.lerp(end, 0.52) + Vector3(0.0, -0.22, 0.0)

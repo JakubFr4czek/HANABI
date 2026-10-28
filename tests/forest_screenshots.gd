@@ -83,8 +83,62 @@ func _ready() -> void:
 		player.camera.rotation.x = deg_to_rad(4.0)
 		await _frames(45)
 		await _shot("forest_torii_7m")
+
+	# Rare emissive pink sakura tree as focal point in the forest (Zadanie 7 / GDD §9)
+	var sakura := run.forest_world.nearest_sakura_position(Vector3.ZERO)
+	print("NEAREST SAKURA IS AT: ", sakura)
+	if sakura != Vector3.INF:
+		# Find unobstructed viewing angles
+		var best_angle := _find_best_sakura_view_angle(run, sakura, 5.2)
+		var dir := Vector3(cos(best_angle), 0.0, sin(best_angle))
+		
+		# Vista at 5.2m: clear hero shot showing trunk and blooming canopy
+		var stand_5m := sakura + dir * 5.2
+		player.teleport(Vector3(stand_5m.x, run.forest_world.height_at(stand_5m.x, stand_5m.z) + 0.2, stand_5m.z), 0.0)
+		player.camera.look_at(sakura + Vector3(0.0, 4.5, 0.0), Vector3.UP)
+		await _frames(45)
+		await _shot("forest_sakura_focal_6m")
+
+		# Close-up at 2.8m: showing bark detail, stamen sparks, and petal edge glow
+		var stand_3m := sakura + dir * 2.8
+		player.teleport(Vector3(stand_3m.x, run.forest_world.height_at(stand_3m.x, stand_3m.z) + 0.2, stand_3m.z), 0.0)
+		player.camera.look_at(sakura + Vector3(0.0, 3.8, 0.0), Vector3.UP)
+		await _frames(30)
+		await _shot("forest_sakura_close_3m")
+
 	run.queue_free()
 	get_tree().quit(0)
+
+
+func _find_best_sakura_view_angle(run: RunGame, sakura: Vector3, dist: float) -> float:
+	var normal_trees: Array[Vector3] = []
+	for chunk in run.forest_world.get_children():
+		var trees := chunk.get_node_or_null("Trees") as MultiMeshInstance3D
+		if trees and trees.multimesh:
+			for i in trees.multimesh.instance_count:
+				var tp: Vector3 = trees.global_transform * trees.multimesh.get_instance_transform(i).origin
+				if tp.distance_to(sakura) < dist + 4.0:
+					normal_trees.append(tp)
+
+	var best_angle := 0.0
+	var max_clearance := -1.0
+	for step in 36:
+		var angle := float(step) * (TAU / 36.0)
+		var cam_pos := sakura + Vector3(cos(angle), 0.0, sin(angle)) * dist
+		var min_dist_to_ray := 999.0
+		for tp in normal_trees:
+			var d_cam := cam_pos.distance_to(tp)
+			var seg := sakura - cam_pos
+			var t := clampf((tp - cam_pos).dot(seg) / maxf(0.001, seg.length_squared()), 0.0, 1.0)
+			var proj := cam_pos + seg * t
+			var dist_to_segment := tp.distance_to(proj)
+			min_dist_to_ray = minf(min_dist_to_ray, minf(d_cam, dist_to_segment))
+		if min_dist_to_ray > max_clearance:
+			max_clearance = min_dist_to_ray
+			best_angle = angle
+
+	print("Best sakura view angle: ", rad_to_deg(best_angle), " deg with clearance: ", max_clearance, "m")
+	return best_angle
 
 
 func _nearest_drawn_tree(run: RunGame, from: Vector3) -> Vector3:
@@ -150,21 +204,6 @@ func _debug_roots(run: RunGame, trunk_pos: Vector3) -> void:
 		else:
 			below += 1
 	print("roots above ", above, " below ", below, " clearance ", lo, " .. ", hi, " hi radial ", hi_r, " outside ", out_high)
-
-
-func _nearest_tree(run: RunGame, from: Vector3) -> Vector3:
-	var best := Vector3.INF
-	var best_d := INF
-	for chunk in run.forest_world.get_children():
-		if not chunk.has_meta("tree_local_xfs"):
-			continue
-		for xf in chunk.get_meta("tree_local_xfs"):
-			var p: Vector3 = chunk.global_position + (xf as Transform3D).origin
-			var d := Vector2(p.x - from.x, p.z - from.z).length()
-			if d < best_d:
-				best_d = d
-				best = p
-	return best
 
 
 func _frames(n: int) -> void:

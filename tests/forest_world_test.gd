@@ -147,6 +147,42 @@ func _run_all() -> void:
 	_check("Planted trunk bases sit in the ground (%d/%d buried)" % [sampled - floating, sampled],
 		sampled > 0 and floating == 0)
 
+	# Rare emissive pink sakura focal trees (Zadanie 7 / GDD §9)
+	var sakura_count := 0
+	var sakura_floating := 0
+	for key in forest._chunks:
+		var chunk := forest._chunks[key] as Node3D
+		var xfs: Array = chunk.get_meta("sakura_tree_local_xfs", [])
+		for xf in xfs:
+			sakura_count += 1
+			var local: Vector3 = (xf as Transform3D).origin
+			var w := chunk.global_transform * local
+			var mesh_floor := forest._mesh_min_height(w.x, w.z, 2.1 * ForestWorld.SAKURA_SCALE_BOOST)
+			if w.y > mesh_floor + 0.02:
+				sakura_floating += 1
+	_check("Rare sakura trees spawn as focal points (%d in 3x3 ring)" % sakura_count,
+		sakura_count >= 1 and sakura_count <= 4)
+	_check("Sakura trunk bases sit in the ground (%d/%d buried)" % [sakura_count - sakura_floating, sakura_count],
+		sakura_count > 0 and sakura_floating == 0)
+
+	var nearest_sakura := forest.nearest_sakura_position(Vector3.ZERO)
+	_check("Nearest sakura focal tree is positioned in the forest (%s)" % str(nearest_sakura),
+		nearest_sakura != Vector3.INF and nearest_sakura.length() > ForestWorld.CLEARING_RADIUS)
+
+	# Verify SakuraTrees MultiMesh uses the dedicated sakura shader with emission parameters
+	var has_sakura_mm := false
+	var valid_sakura_shader := false
+	for key in forest._chunks:
+		var chunk := forest._chunks[key] as Node3D
+		var s_inst := chunk.get_node_or_null("SakuraTrees") as MultiMeshInstance3D
+		if s_inst != null and s_inst.material_override is ShaderMaterial:
+			has_sakura_mm = true
+			var sm: ShaderMaterial = s_inst.material_override
+			if sm.shader == ForestWorld.SAKURA_TREE_SHADER and sm.get_shader_parameter("neon_pink_accent") != null:
+				valid_sakura_shader = true
+				break
+	_check("Sakura focal trees use dedicated emissive neon shader", has_sakura_mm and valid_sakura_shader)
+
 	# Walking inside one chunk toward the treeline must reveal trees without
 	# waiting for a chunk-border crossing.
 	player.teleport(Vector3(0.0, forest.height_at(0.0, 26.0) + 0.5, 26.0), 0.0)
