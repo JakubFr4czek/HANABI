@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/diag/torii_spawn_cost.gd" id="1"]
+
+[node name="TorriiSpawnCost" type="Node"]
+script = ExtResource("1")
