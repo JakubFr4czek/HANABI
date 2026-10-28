@@ -95,12 +95,14 @@ func _run_all() -> void:
 	await get_tree().process_frame
 	var space := run.get_world_3d().direct_space_state
 	var blocked := false
+	# Trunk positions come from chunk meta: MultiMesh buffers read back empty
+	# under the headless renderer.
 	for key in forest._chunks:
-		var inst := (forest._chunks[key] as Node3D).get_node_or_null("Trees0") as MultiMeshInstance3D
-		if inst == null or inst.multimesh == null or inst.multimesh.instance_count == 0:
+		var chunk := forest._chunks[key] as Node3D
+		var xfs: Array = chunk.get_meta("tree_local_xfs", [])
+		if xfs.is_empty():
 			continue
-		var local: Vector3 = inst.multimesh.get_instance_transform(0).origin
-		var trunk := (forest._chunks[key] as Node3D).global_transform * local
+		var trunk := chunk.global_transform * (xfs[0] as Transform3D).origin
 		var query := PhysicsRayQueryParameters3D.create(
 			trunk + Vector3(2.0, 0.0, 0.0) + Vector3.UP * 1.2, trunk + Vector3.UP * 1.2)
 		query.collision_mask = ForestWorld.TRUNK_LAYER

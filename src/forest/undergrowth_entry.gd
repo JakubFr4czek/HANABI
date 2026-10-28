@@ -23,6 +23,8 @@ enum Source {
 @export_range(0.2, 4.0, 0.01) var scale_max := 2.3
 ## Fraction of the height sunk into the floor, so it does not balance on the slope.
 @export_range(0.0, 0.6, 0.01) var bury := 0.15
+## Smallest distance between two of this kind, metres (Poisson-disk spacing).
+@export_range(0.5, 12.0, 0.05) var min_spacing := 3.0
 ## Base clearance to other props, metres (grows by half the scale).
 @export_range(0.0, 6.0, 0.05) var clearance := 1.0
 ## Scatter-noise value below which the kind is not placed: higher = more clustered, fewer spots.
