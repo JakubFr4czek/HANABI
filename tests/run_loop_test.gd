@@ -6,11 +6,10 @@ extends Node
 ##   platform boundary onto the stone disc and attack with telegraphed claws
 ## - Killing a yōkai with the katana drops Hitodama soul orbs that magnetize to
 ##   the player and grant XP along a rising curve
-## - Level-up triggers compensated slow motion and spawns 3 floating Ofuda;
-##   physically slicing one with the katana picks the upgrade and resumes play
-## - All 6 generic upgrades apply their effects
+## - Level-up is a rank plus a small heal (D1): no slow motion, no card choice,
+##   no votive plaque or upgrade pool in play
 ## - Death ends the run, saves local high score, displays the in-world memorial
-##   stele + Restart Ofuda, and slicing the Restart Ofuda starts a fresh run.
+##   stele + Restart Ema, and slicing the Restart Ema starts a fresh run.
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
 const TEST_SAVE_PATH := "user://test_run_high_score.cfg"
@@ -132,69 +131,27 @@ func _run_all() -> void:
 	_check("Hitodama orbs magnetize to the player and grant XP (xp=%d, level=%d)" % [run.xp, run.level],
 		run.xp > 0 or run.level > 1)
 
-	# 4. XP rising curve & Level-up slow motion + slicing 1 of 3 Ofuda with the sword.
+	# 4. XP rising curve; a level-up is a rank and a heal (D1), never a card choice.
 	_check("XP curve rises with level (%d < %d < %d)" % [
 		RunGame.xp_for_level(1), RunGame.xp_for_level(2), RunGame.xp_for_level(3)],
 		RunGame.xp_for_level(1) < RunGame.xp_for_level(2) and RunGame.xp_for_level(2) < RunGame.xp_for_level(3))
 
-	if run.state != RunGame.RunState.LEVEL_UP:
-		run.add_xp(run.xp_to_next)
-	await _wait(0.1)
-
-	_check("Level-up enters LEVEL_UP state with compensated slow motion (scale %.2f)" % TimeController.time_scale,
-		run.state == RunGame.RunState.LEVEL_UP and TimeController.time_scale < 0.5 and TimeController.player_compensated)
-	_check("Three floating Ofuda talismans appear in front of the player (%d)" % run.active_ofuda.size(),
-		run.active_ofuda.size() == 3)
-
-	# Aim the player at the center Ofuda and swing the katana physically straight down through it!
-	# Fresh cards (the orbs above may have levelled up a while ago), then a
-	# swing still going as they appear must not pick one by accident.
-	run._pending_level_ups += 1
-	run._present_level_up()
-	var center_ofuda := run.active_ofuda[1]
-	var chosen_id := String(center_ofuda.upgrade.get("id", ""))
-	player.swing_duration = 0.16
-	player.swing([Vector3(-0.15, 0.5, 0.0), Vector3(-0.15, -0.5, 0.0)])
-	await _wait(0.3)
-	_check("A cut through a card that is still drifting in does not pick it",
-		run.state == RunGame.RunState.LEVEL_UP and not center_ofuda.is_sliced)
-	var arm_deadline := Time.get_ticks_msec() + 2500
-	while not center_ofuda.is_ready_to_cut() and Time.get_ticks_msec() < arm_deadline:
-		await _wait(0.05)
-	_check("Cards settle and arm within a second", center_ofuda.is_ready_to_cut())
-	# The desktop right hand rests 22 cm off-center; offset the scripted cut so
-	# its swept blade, not merely the hand, passes through the center card.
-	player.swing([Vector3(-0.15, 0.5, 0.0), Vector3(-0.15, -0.5, 0.0)])
-	await _wait(0.45)
-
-	_check("Physical katana swing slices the Ofuda, applies upgrade '%s', and exits slow-mo" % chosen_id,
-		run.state == RunGame.RunState.PLAYING
-		and TimeController.time_scale > 0.95
-		and int(run.upgrade_stacks.get(chosen_id, 0)) >= 1)
-
-	# 5. Verify all 6 generic upgrades modify their target stats.
+	# Level-up: rank goes up, HP is restored by LEVEL_UP_HEAL_HP, the game keeps
+	# running at full speed and no votive plaque or card appears.
 	player.health.hp = 40.0
-	var dmg_before := run.katana.damage_multiplier
-	run._apply_upgrade({"id": "damage"})
-	var max_hp_before := player.health.max_hp
-	run._apply_upgrade({"id": "max_hp"})
-	var hp_mid := player.health.hp
-	run._apply_upgrade({"id": "heal"})
-	var mag_before := run.soul_magnet_radius
-	run._apply_upgrade({"id": "magnet"})
-	var force_before := run.katana.max_force
-	run._apply_upgrade({"id": "arm_strength"})
-	run._apply_upgrade({"id": "regen"})
-	_check("All 6 generic upgrades apply effects (dmg, max_hp, heal, magnet, arm_strength, regen)",
-		run.katana.damage_multiplier > dmg_before
-		and player.health.max_hp > max_hp_before
-		and player.health.hp > hp_mid
-		and run.soul_magnet_radius > mag_before
-		and run.katana.max_force > force_before
-		and player.health.regen_per_sec > 0.0)
+	var level_before := run.level
+	run.add_xp(run.xp_to_next)
+	await _wait(0.1)
+	_check("Level-up raises the rank (%d -> %d) and heals %d HP (hp %.0f)" % [
+		level_before, run.level, int(RunGame.LEVEL_UP_HEAL_HP), player.health.hp],
+		run.level == level_before + 1 and absf(player.health.hp - (40.0 + RunGame.LEVEL_UP_HEAL_HP)) < 0.5)
+	_check("Level-up keeps playing: state PLAYING, no slow motion (scale %.2f)" % TimeController.time_scale,
+		run.state == RunGame.RunState.PLAYING and TimeController.time_scale > 0.95)
+	_check("Level-up presents no card: no votive plaque in the run",
+		run.get_tree().get_nodes_in_group("votive_tablets").is_empty())
 
-	# 6. Death ends the run, saves high score locally, shows End Screen & Restart Ofuda;
-	#    slicing the Restart Ofuda with the katana starts a new run.
+	# 6. Death ends the run, saves high score locally, shows End Screen & Restart Ema;
+	#    slicing the Restart Ema with the katana starts a new run.
 	# New system (ELEMENTS_PLAN): the blade element comes only from a Torii gate,
 	# never from level-up cards. Imbue Storm directly as a gate crossing would.
 	run.element_system.imbue(Elements.STORM)
@@ -211,11 +168,11 @@ func _run_all() -> void:
 	await _wait(0.15)
 	_check("Lethal hit ends the run (GAME_OVER) without auto-reviving",
 		run.state == RunGame.RunState.GAME_OVER and not player.health.is_alive())
-	_check("High score (%d) is saved locally and MemorialStele + RestartOfuda appear" % run.high_score,
+	_check("High score (%d) is saved locally and MemorialStele + Restart Ema appear" % run.high_score,
 		run.high_score > 0
 		and run.load_high_score() == run.high_score
 		and run.get_node_or_null("EndScreen/MemorialStele") != null
-		and run.restart_ofuda != null)
+		and run.restart_ema != null)
 	# The stele must list the element the blade carries (imbued via Torii gate).
 	var stele_text := _stele_label_text(run)
 	var lists_build := stele_text.contains("BUILD") and run.element_system.current_element != Elements.NONE
@@ -225,16 +182,16 @@ func _run_all() -> void:
 		lists_build)
 
 	var saved_best := run.high_score
-	# Slice the Restart Ofuda with a katana swing to start a fresh run.
+	# Slice the Restart Ema with a katana swing to start a fresh run.
 	player.swing_duration = 0.16
 	player.swing(DesktopPlayer.SLASH_OVERHEAD)
 	await _wait(0.45)
-	if run.state == RunGame.RunState.GAME_OVER and run.restart_ofuda != null:
-		# Fallback if overhead arc passed above the lower restart talisman: slice directly.
-		run.restart_ofuda.slice(run.restart_ofuda.global_position, Vector3.RIGHT)
+	if run.state == RunGame.RunState.GAME_OVER and run.restart_ema != null:
+		# Fallback if overhead arc passed above the lower plaque: slice directly.
+		run.restart_ema.slice(run.restart_ema.global_position, Vector3.RIGHT)
 		await _wait(0.1)
 
-	_check("Slicing the Restart Ofuda starts a new run at full HP while keeping high score (%d)" % run.high_score,
+	_check("Slicing the Restart Ema starts a new run at full HP while keeping high score (%d)" % run.high_score,
 		run.state == RunGame.RunState.PLAYING
 		and player.health.is_alive()
 		and run.level == 1

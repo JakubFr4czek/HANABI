@@ -74,25 +74,28 @@ func _test_data_shape() -> void:
 ## (tools/balance_model.gd, ~1 s). A later tweak that breaks the feel of a
 ## 5–10 minute demo run fails here instead of in a headset.
 func _test_balance_targets() -> void:
+	# D1 (docs/ELEMENTS_PLAN.md, "Krok 3: balans"): Ofuda come only from hokora
+	# shrines, one per ~215 m of walking, 6 each. The targets are the ones set for
+	# the demo: 5–7 nodes by minute 8 for an average player, the master technique
+	# (node 5, 33 Ofuda) reachable on a good run in about 7–10 minutes.
 	var order := BalanceModel.full_order(Elements.SAKURA)
 	var costs: Array[int] = BalanceModel.cumulative_costs(order)
 	var avg: Dictionary = BalanceModel.economy("average", 600.0)
 	var careful: Dictionary = BalanceModel.economy("careful", 600.0)
+	var good: Dictionary = BalanceModel.economy("skilled", 600.0)
 	var first: float = BalanceModel.time_to_afford(avg.timeline, costs[0])
 	_check("average player buys the first node inside the first minute (%.0f s)" % first, first > 0.0 and first <= 60.0)
-	var third: float = BalanceModel.time_to_afford(avg.timeline, costs[2])
-	_check("three nodes by ~3 minutes (%.0f s)" % third, third > 0.0 and third <= 180.0)
-	var master: float = BalanceModel.time_to_afford(avg.timeline, costs[4])
-	_check("the master technique lands between 4 and 8 minutes (%.0f s)" % master, master >= 240.0 and master <= 480.0)
-	var at5: int = int(avg.timeline[mini(30, avg.timeline.size() - 1)].ofuda)
-	var at10: int = int(avg.timeline[mini(60, avg.timeline.size() - 1)].ofuda)
-	_check("Ofuda earned: 22–40 by minute 5 (%d), 45–70 by minute 10 (%d)" % [at5, at10],
-		at5 >= 22 and at5 <= 40 and at10 >= 45 and at10 <= 70)
-	var careful_nodes := 0
-	for c in costs:
-		if int(careful.timeline[mini(30, careful.timeline.size() - 1)].ofuda) >= c:
-			careful_nodes += 1
-	_check("even a careful player owns 3+ nodes by minute 5 (%d)" % careful_nodes, careful_nodes >= 3)
+	var at8: int = int(avg.timeline[mini(48, avg.timeline.size() - 1)].ofuda)
+	_check("Ofuda earned by minute 8 (average): 18–30 (%d)" % at8, at8 >= 18 and at8 <= 30)
+	var nodes8: int = BalanceModel.nodes_for_budget(at8)
+	_check("average player owns 5–7 nodes at minute 8 (%d)" % nodes8, nodes8 >= 5 and nodes8 <= 7)
+	var master: float = BalanceModel.time_to_afford(good.timeline, costs[4])
+	_check("the master technique is reachable on a good run in 6–10 minutes (%.0f s)" % master,
+		master >= 360.0 and master <= 600.0)
+	var careful_nodes := BalanceModel.nodes_for_budget(int(careful.timeline[mini(36, careful.timeline.size() - 1)].ofuda))
+	_check("even a careful player owns 3+ nodes by minute 6 (%d)" % careful_nodes, careful_nodes >= 3)
+	_check("shrines stay rare: one per ~215 m, 6 Ofuda each (spacing %.0f m)" % BalanceModel.hokora_spacing(),
+		absf(BalanceModel.hokora_spacing() - 215.0) < 5.0 and ElementBalance.OFUDA_PER_HOKORA == 6)
 
 	# Each school adds something real, none of them dwarfs the sword.
 	var identity_ok := true
