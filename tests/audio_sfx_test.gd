@@ -18,7 +18,14 @@ func _ready() -> void:
 	# Zadanie 5: Bonshō temple bell cues
 	_check("Bonsho category exposes recorded temple bell cues", Sfx._streams.has("bonsho") and Sfx.CATEGORIES["bonsho"][0].contains("bonsho"))
 	_check("Bonsho oni and gate categories exist", Sfx._streams.has("bonsho_oni") and Sfx._streams.has("bonsho_gate"))
-	_check("Bonsho category has multiple recorded variants", Sfx._streams["bonsho"].streams_count >= 1)
+	_check("Bonsho run start stream has exactly 1 cue", Sfx._streams["bonsho"].streams_count == 1)
+	_check("Bonsho oni stream has exactly 1 cue", Sfx._streams["bonsho_oni"].streams_count == 1)
+	_check("Bonsho gate stream has exactly 1 cue", Sfx._streams["bonsho_gate"].streams_count == 1)
+
+	# Verify DC offset and zero-start for all bonsho recordings (AudioStreamWAV.data)
+	_check("bonsho_run_start.wav has zero click and <1% DC offset", _check_wav_dc_clean("res://assets/audio/sfx/bonsho/bonsho_run_start.wav"))
+	_check("bonsho_oni.wav has zero click and <1% DC offset", _check_wav_dc_clean("res://assets/audio/sfx/bonsho/bonsho_oni.wav"))
+	_check("bonsho_gate.wav has zero click and <1% DC offset", _check_wav_dc_clean("res://assets/audio/sfx/bonsho/bonsho_gate.wav"))
 
 	Sfx.play_at("soul_collect", Vector3.ZERO, -20.0)
 	Sfx.play_at("firework", Vector3(1, 0, 0), -20.0)
@@ -27,18 +34,55 @@ func _ready() -> void:
 	Sfx.play_at("bonsho_gate", Vector3(0, 2, 0), -20.0)
 	_check("Sfx play_at uses pooled players without new nodes", Sfx.get_child_count() <= 30)
 
-	await _check_music()
+	await _check_music_and_voice_cap()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	get_tree().quit(1 if failures > 0 else 0)
 
 
+## Verifies 16-bit PCM WAV has no click at start (|first_sample| near 0) and |DC mean| < 1% full scale.
+func _check_wav_dc_clean(path: String) -> bool:
+	var stream := load(path) as AudioStreamWAV
+	if not stream:
+		return false
+	var data := stream.data
+	if data.is_empty():
+		return false
+	var first_sample: int = data.decode_s16(0)
+	var sum: float = 0.0
+	var sample_count: int = data.size() / 2
+	for i in sample_count:
+		sum += data.decode_s16(i * 2)
+	var mean: float = sum / float(sample_count)
+	var mean_pct: float = absf(mean) / 32768.0 * 100.0
+	print("  [%s] first_sample=%d, mean=%.2f (%.4f%% full scale)" % [path.get_file(), first_sample, mean, mean_pct])
+	return mean_pct < 1.0 and absi(first_sample) <= 50
+
+
+func _count_playing_players_in_tree() -> int:
+	var count := 0
+	for p in get_tree().root.find_children("*", "AudioStreamPlayer", true, false):
+		if (p as AudioStreamPlayer).playing:
+			count += 1
+	for p in get_tree().root.find_children("*", "AudioStreamPlayer3D", true, false):
+		if (p as AudioStreamPlayer3D).playing:
+			count += 1
+	return count
+
+
 ## The run music must actually be playing, on a bus that exists, at a level
 ## a headset speaker can hear, with a subtle CC0 shakuhachi & taiko layer.
-func _check_music() -> void:
+## Real voice cap test counts every playing player in SceneTree under full storm + combat load.
+func _check_music_and_voice_cap() -> void:
 	var music := StormMusic.new()
 	add_child(music)
+	var storm_ambience := StormAmbience.new()
+	add_child(storm_ambience)
+	var forest_ambience := RunForestAmbience.new()
+	add_child(forest_ambience)
+
 	await get_tree().process_frame
 	await get_tree().process_frame
+
 	var bus_idx := AudioServer.get_bus_index(Sfx.MUSIC_BUS)
 	_check("music bus exists", bus_idx >= 0)
 	var lead: AudioStreamPlayer = music._players[music._lead]
@@ -67,16 +111,39 @@ func _check_music() -> void:
 		await get_tree().process_frame
 		_check("stopped music layer restarts itself", layer.playing)
 
-	# 28-voice cap verification under heavy combat stress with music + layer + bonsho
-	for i in 25:
+	# Persistent soundscape players check
+	var base_ambient_voices := _count_playing_players_in_tree()
+	_check("Persistent soundscape active in tree (music, layer, rain, wind; %d >= 4)" % base_ambient_voices, base_ambient_voices >= 4)
+
+	# Soft cap verification for bonsho_gate
+	# Fill Sfx pool up to MAX_ACTIVE_WORLD_VOICES (20)
+	for i in Sfx.MAX_ACTIVE_WORLD_VOICES:
 		Sfx.play_at("clash", Vector3(i * 0.1, 0, 0), -20.0)
-		Sfx.play_at("bonsho", Vector3(0, 3, -10), -20.0)
-	var sfx_active := Sfx._active_world_voices()
-	var total_voices := sfx_active + (1 if lead.playing else 0) + (1 if (layer and layer.playing) else 0)
-	_check("Sfx active world voices bounded by pool size (%d <= %d)" % [sfx_active, Sfx.POOL_SIZE], sfx_active <= Sfx.POOL_SIZE)
-	_check("All audio cues stay strictly within the 28-voice cap (%d <= 28)" % total_voices, total_voices <= 28)
+	var active_before := Sfx._active_world_voices()
+	_check("Sfx pool reached soft cap threshold (%d >= %d)" % [active_before, Sfx.MAX_ACTIVE_WORLD_VOICES], active_before >= Sfx.MAX_ACTIVE_WORLD_VOICES)
+
+	# Trigger bonsho_gate while pool is saturated; soft cap must drop it
+	Sfx.play_at("bonsho_gate", Vector3(0, 2, 0), -20.0)
+	var active_after_gate := Sfx._active_world_voices()
+	_check("Soft cap drops bonsho_gate when pool is at voice limit (%d == %d)" % [active_after_gate, active_before], active_after_gate == active_before)
+
+	# Non-soft-capped cues (e.g. cut, bonsho, bonsho_oni) still play safely via pool reuse
+	Sfx.play_at("bonsho_oni", Vector3(0, 3, -15), -20.0)
+
+	# Full heavy combat burst stress test: 40 simultaneous cues with music, layer, rain, wind
+	for i in 40:
+		Sfx.play_at("clash", Vector3(i * 0.05, 0, 0), -20.0)
+		Sfx.play_at("cut", Vector3(-i * 0.05, 0, 0), -20.0)
+		Sfx.play_at("bonsho", Vector3(0, 3, -12), -20.0)
+		Sfx.play_at("bonsho_gate", Vector3(0, 2, 0), -20.0)
+
+	var total_tree_voices := _count_playing_players_in_tree()
+	print("SceneTree playing voices under heavy combat stress: %d (Quest 3 cap <= 28)" % total_tree_voices)
+	_check("Real total playing players in SceneTree stays strictly <= 28 (%d <= 28)" % total_tree_voices, total_tree_voices <= 28)
 
 	music.queue_free()
+	storm_ambience.queue_free()
+	forest_ambience.queue_free()
 
 
 func _check(label: String, ok: bool) -> void:
