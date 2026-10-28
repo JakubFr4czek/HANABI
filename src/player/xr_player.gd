@@ -28,6 +28,8 @@ var hurt_feedback := HurtFeedback.new()
 ## instead of the training-room element color cycler.
 var run_element_mode := false
 
+var dominant_hand: String = "right"
+
 var _was_pressed := {}
 
 const VIEW_SETTINGS_PATH := "user://hanabi_vr.cfg"
@@ -96,7 +98,7 @@ func _process(delta: float) -> void:
 		or _pressed_once("ax_l", left_controller.is_button_pressed("ax_button"))
 	if ax_pressed:
 		if run_element_mode or right_holder.held != null or left_holder.held != null:
-			ability_1_requested.emit(_ability_direction(right_controller))
+			ability_1_requested.emit(_ability_direction(get_dominant_controller()))
 		else:
 			reset_requested.emit()
 
@@ -108,7 +110,7 @@ func _process(delta: float) -> void:
 	elif by_l and left_holder.held != null:
 		ability_2_requested.emit(_ability_direction(left_controller))
 	elif run_element_mode and (by_r or by_l) and (right_holder.held != null or left_holder.held != null):
-		ability_2_requested.emit(_ability_direction(right_controller))
+		ability_2_requested.emit(_ability_direction(get_dominant_controller()))
 
 	for c in [left_controller, right_controller]:
 		var holder := left_holder if c == left_controller else right_holder
@@ -134,14 +136,15 @@ func _ability_direction(_controller: XRController3D) -> Vector3:
 
 
 ## B/Y without grip: tap = toggle_attacks_requested, hold = recenter, hold B +
-## right stick up/down = eye height.
+## turn stick up/down = eye height.
 func _step_view_button(c: XRController3D, gripping: bool, delta: float) -> void:
 	var key := String(c.name)
 	var down := c.is_button_pressed("by_button") and not gripping
 	if down:
 		var t: float = _by_time.get(key, 0.0) + delta
 		_by_time[key] = t
-		if c == right_controller:
+		var turn_c := get_offhand_controller() if dominant_hand == "left" else right_controller
+		if c == turn_c:
 			var stick := c.get_vector2("primary").y
 			if absf(stick) > 0.55:
 				adjust_height(signf(stick) * HEIGHT_RATE * delta)
@@ -169,7 +172,7 @@ func recenter_view() -> void:
 
 
 func adjust_height(delta_m: float) -> void:
-	height_offset = clampf(height_offset + delta_m, -HEIGHT_LIMIT, HEIGHT_LIMIT)
+	height_offset = clampf(height_offset + delta_m, -HEIGHT_LIMIT, 0.80)
 	_apply_height()
 
 
@@ -180,15 +183,24 @@ func _apply_height() -> void:
 
 
 func _load_view_settings() -> void:
-	var cfg := ConfigFile.new()
-	if cfg.load(VIEW_SETTINGS_PATH) == OK:
-		height_offset = clampf(float(cfg.get_value("view", "height_offset", 0.0)), -HEIGHT_LIMIT, HEIGHT_LIMIT)
+	if VrComfortSettings:
+		VrComfortSettings.load_settings()
+		height_offset = VrComfortSettings.height_offset
+		VrComfortSettings.apply_to_player(self)
+	else:
+		var cfg := ConfigFile.new()
+		if cfg.load(VIEW_SETTINGS_PATH) == OK:
+			height_offset = clampf(float(cfg.get_value("view", "height_offset", 0.0)), -HEIGHT_LIMIT, 0.80)
 
 
 func _save_view_settings() -> void:
-	var cfg := ConfigFile.new()
-	cfg.set_value("view", "height_offset", height_offset)
-	cfg.save(VIEW_SETTINGS_PATH)
+	if VrComfortSettings:
+		VrComfortSettings.height_offset = height_offset
+		VrComfortSettings.save_settings()
+	else:
+		var cfg := ConfigFile.new()
+		cfg.set_value("view", "height_offset", height_offset)
+		cfg.save(VIEW_SETTINGS_PATH)
 	GameEvents.log_event("xr_height_offset", {"meters": snappedf(height_offset, 0.01)})
 
 
@@ -203,6 +215,57 @@ static func next_element(current: String) -> String:
 	return Elements.ALL[(i + 1) % Elements.ALL.size()]
 
 
+## Dominant-hand helpers for combat and comfort settings
+func get_dominant_holder() -> WeaponHolder:
+	return left_holder if dominant_hand == "left" else right_holder
+
+
+func get_offhand_holder() -> WeaponHolder:
+	return right_holder if dominant_hand == "left" else left_holder
+
+
+func get_dominant_controller() -> XRController3D:
+	return left_controller if dominant_hand == "left" else right_controller
+
+
+func get_offhand_controller() -> XRController3D:
+	return right_controller if dominant_hand == "left" else left_controller
+
+
+func _get_movement_direct() -> Node:
+	return find_child("*MovementDirect*", true, false)
+
+
+func _get_movement_turn() -> Node:
+	return find_child("*MovementTurn*", true, false)
+
+
+func _get_vignette() -> Node:
+	return find_child("*Vignette*", true, false)
+
+
+func set_dominant_hand(hand: String) -> void:
+	var h := hand.to_lower()
+	if h != "left" and h != "right":
+		return
+	dominant_hand = h
+	var direct := _get_movement_direct()
+	var turn := _get_movement_turn()
+	if direct and turn:
+		if dominant_hand == "left":
+			# Left-dominant: move with right stick, turn with left stick
+			if direct.get_parent() != right_controller and right_controller != null:
+				direct.reparent(right_controller)
+			if turn.get_parent() != left_controller and left_controller != null:
+				turn.reparent(left_controller)
+		else:
+			# Right-dominant: move with left stick, turn with right stick
+			if direct.get_parent() != left_controller and left_controller != null:
+				direct.reparent(left_controller)
+			if turn.get_parent() != right_controller and right_controller != null:
+				turn.reparent(right_controller)
+
+
 ## Scripted rig moves (run intro hover, respawn on the seal): XR Tools'
 ## PlayerBody applies gravity to the origin every physics frame, so it
 ## would pull a hover back down. Locking only freezes the body and the
@@ -214,25 +277,29 @@ func set_rig_locked(locked: bool) -> void:
 		body.set("enabled", not locked)
 		if not locked:
 			body.set("velocity", Vector3.ZERO)
-	for path in ["XROrigin3D/LeftHand/MovementDirect", "XROrigin3D/RightHand/MovementTurn"]:
-		var provider := get_node_or_null(path)
-		if provider:
-			provider.set("enabled", not locked)
+	var direct := _get_movement_direct()
+	if direct:
+		direct.set("enabled", not locked)
+	var turn := _get_movement_turn()
+	if turn:
+		turn.set("enabled", not locked)
 
 
 ## Smooth-locomotion and snap-turn providers on/off (the pause menu turns them
 ## off so a paused player cannot walk or turn away from the panel).
 func set_locomotion_enabled(enabled: bool) -> void:
-	for path in ["XROrigin3D/LeftHand/MovementDirect", "XROrigin3D/RightHand/MovementTurn"]:
-		var provider := get_node_or_null(path)
-		if provider:
-			provider.set("enabled", enabled)
+	var direct := _get_movement_direct()
+	if direct:
+		direct.set("enabled", enabled)
+	var turn := _get_movement_turn()
+	if turn:
+		turn.set("enabled", enabled)
 
 
 ## Scales the smooth-locomotion top speed (1.0 = XR Tools default); used by
 ## Abyssal Sea's ink speed boost.
 func set_move_speed_scale(scale: float) -> void:
-	var direct := get_node_or_null("XROrigin3D/LeftHand/MovementDirect")
+	var direct := _get_movement_direct()
 	if direct == null:
 		return
 	if _base_move_speed < 0.0:
@@ -241,7 +308,7 @@ func set_move_speed_scale(scale: float) -> void:
 
 
 func get_move_speed() -> float:
-	var direct := get_node_or_null("XROrigin3D/LeftHand/MovementDirect")
+	var direct := _get_movement_direct()
 	return float(direct.get("max_speed")) if direct else 0.0
 
 

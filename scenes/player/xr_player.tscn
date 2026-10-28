@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" path="res://addons/godot-xr-tools/functions/movement_turn.tscn" id="6_turn"]
 [ext_resource type="PackedScene" path="res://addons/godot-xr-tools/player/player_body.tscn" id="7_body"]
 [ext_resource type="Script" path="res://src/player/weapon_holder.gd" id="8_holder"]
+[ext_resource type="PackedScene" path="res://addons/godot-xr-tools/effects/vignette.tscn" id="9_vignette"]
 
 [node name="XRPlayer" type="Node3D"]
 script = ExtResource("1_player")
@@ -20,6 +21,8 @@ target_refresh_rate = 90.0
 [node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D" groups=["player_head"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
 near = 0.03
+
+[node name="Vignette" parent="XROrigin3D/XRCamera3D" instance=ExtResource("9_vignette")]
 
 [node name="LeftHand" type="XRController3D" parent="XROrigin3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 1.1, -0.3)

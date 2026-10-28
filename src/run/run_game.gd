@@ -470,8 +470,9 @@ func _begin_play_after_intro() -> void:
 			xr.set_rig_locked(true)
 			xr.global_transform = spawn.global_transform
 			xr.set_rig_locked(false)
-		if xr.right_holder and katana and not katana.is_held():
-			xr.right_holder.grab(katana)
+		var holder: WeaponHolder = xr.get_dominant_holder() if xr.has_method("get_dominant_holder") else xr.right_holder
+		if holder and katana and not katana.is_held():
+			holder.grab(katana)
 			katana.snap_to_hand()
 	wave_director.start_director()
 	GameEvents.log_event("run_started", {"high_score": high_score})

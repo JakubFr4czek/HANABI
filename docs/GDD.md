@@ -161,14 +161,13 @@ At the start of a run the player hovers about 0.5–1 m above the forest floor i
 - Does Meta offer TTS, or do we use Piper?
 - Which fields does the hackathon submission form require?
 
-## 14. VR Comfort & Accessibility (LATE)
-End of project, after core gameplay (roadmap phase 6). Do not implement during prototyping. `godot-xr-tools` already provides most of this.
+## 14. VR Comfort & Accessibility (Implemented - Zadanie 6)
+Accessible as tab 5 ("安" COMFORT) in the pause skill-tree menu, with automatic persistence to `user://hanabi_vr.cfg` (`[comfort]` & `[view]`):
 
-- **Turning:** smooth or snap, with an adjustable snap angle and smooth turn speed (`movement_turn`).
-- **Locomotion:** stick (smooth, `movement_direct`) or teleport (`function_teleport`). Teleport conflicts with fast survivor-style combat, so also offer a short dash/blink as the combat-friendly alternative.
-- **Vignette:** a comfort vignette while moving, with a toggle and a strength setting (`vignette`).
-- **Body:** player height and seated-mode calibration.
-- **Hands:** dominant-hand swap.
+- **Turning:** Snap turn (15°, 30°, 45°, 60°, 90°) or smooth turn (speeds 1.0–4.0 rad/s), configured on godot-xr-tools `movement_turn`.
+- **Vignette:** Tunnel vision comfort vignette (`addons/godot-xr-tools/effects/vignette.tscn`) active during movement/turning, with toggle and 4 strength presets (25%, 50%, 75%, 100%).
+- **Dominant Hand:** Right (standard) or Left (southpaw). Dynamic swapping reparents movement stick (`MovementDirect`) to offhand controller and turning stick (`MovementTurn`) to dominant controller, attaches diegetic wrist HUD kote plate to the offhand, and orients katana offerings / spawn to the dominant hand.
+- **Body & Seated Mode:** Standing or Seated mode (adds +0.35 m default calibration boost, adjustable ±5 cm steps from -0.45 m to +0.80 m), view recenter action (`XRServer.center_on_hmd`).
 
 ## 15. Cherry on top: calories (LATE, lowest priority)
 Only at the very end, after comfort and the demo. First thing to cut. Do not implement during prototyping. The number is an estimate, not a medical measure. Follow the premium art-direction rule: a quiet diegetic mark, no fitness-app UI.
