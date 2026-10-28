@@ -138,12 +138,13 @@ Zgłoszenie Jakuba (28 X): po odpaleniu menu czasem „przesuwało mnie w bok”
 - [ ] **lights** podczas fali z killami: zwykle **≤6** (limit pool 3 flash + światło sceny); alarm jeśli **>10** stale.
 - [ ] **audio~** skacze przy wielu killach, ale wraca < 20 po 2 s ciszy.
 
-## Boot splash (D7)
+## Boot splash (D7, filmy D7_fix1)
 
-- [ ] Start: czarny ekran z HANABI (boot splash, czysty czarny kadr), bez logo Godota.
-- [ ] Po starcie: fajerwerk u góry, biały napis HANABI pod nim (Cinzel, rozstrzelone litery), ~3 m przed oczami, na wysokości oczu; obraz się nie porusza z głową.
-- [ ] Fajerwerk bez obwódki/halo z tła; napis ostry (bez rozmycia przy dystansie).
-- [ ] Potem NANJO: nić spływa z góry w literę J, logo ostre, bez migotania.
+- [ ] Start: czarne tło, panel z filmem HANABI (fajerwerk, potem napis), nie logo Godota; ekran startowy silnika to klatka z filmu.
+- [ ] Panel ~3,5 m przed oczami, na wysokości oczu, 4,8 m szerokości (ok. 69° pola widzenia); nie porusza się z głową; po bokach czarna pustka.
+- [ ] Ostrość: film 1280x720 wyświetlony w panelu ~1000 px na Quest 3 (bez mory, bez zamglenia); fajerwerk bez poświaty od tła.
+- [ ] Dekodowanie Theora: płynne 30 fps, bez spadków przy starcie (HUD perf: fps ≥ 72 w pierwszych 9 s). Jeśli spadki: zapisać w docs, rozważyć jeszcze mniejszy film. Proxy na Macu (ffmpeg, sama dekompresja): 1080p ≈ 0,27 ms/klatkę, 720p ≈ 0,16 ms/klatkę; na goglach nie mierzono.
+- [ ] Przerwa 0,3 s czerni, potem NANJO: nić spływa z góry w literę J, logo ostre, bez migotania.
 - [ ] Trigger / A / X kończy splash od razu (krótki fade); intro nie startuje od razu i nie pomija się tym samym wciśnięciem.
 - [ ] Po splashu: las wychodzi z czerni płynnie (~0,6 s), intro seiza jak wcześniej.
 - [ ] Komfort: brak ruchu kamery, brak migotania, brak wejścia gracza ani wrogów w tle.
