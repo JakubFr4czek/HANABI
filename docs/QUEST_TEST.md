@@ -77,6 +77,16 @@ Zrzuty menu (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/sk
 - [ ] **lights** podczas fali z killami: zwykle **≤6** (limit pool 3 flash + światło sceny); alarm jeśli **>10** stale.
 - [ ] **audio~** skacze przy wielu killach, ale wraca < 20 po 2 s ciszy.
 
+## Boot splash (D7)
+
+- [ ] Start: czarny ekran z HANABI (boot splash, czysty czarny kadr), bez logo Godota.
+- [ ] Po starcie: fajerwerk u góry, biały napis HANABI pod nim (Cinzel, rozstrzelone litery), ~3 m przed oczami, na wysokości oczu; obraz się nie porusza z głową.
+- [ ] Fajerwerk bez obwódki/halo z tła; napis ostry (bez rozmycia przy dystansie).
+- [ ] Potem NANJO: nić spływa z góry w literę J, logo ostre, bez migotania.
+- [ ] Trigger / A / X kończy splash od razu (krótki fade); intro nie startuje od razu i nie pomija się tym samym wciśnięciem.
+- [ ] Po splashu: las wychodzi z czerni płynnie (~0,6 s), intro seiza jak wcześniej.
+- [ ] Komfort: brak ruchu kamery, brak migotania, brak wejścia gracza ani wrogów w tle.
+
 ## Po sesji
 
 - [ ] Zanotuj falę / liczbę wrogów przy najgorszym fps.

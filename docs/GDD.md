@@ -132,6 +132,18 @@ At the start of a run the player hovers about 0.5–1 m above the forest floor i
 - **Body:** no visible legs. The pose shows only as a shadow, or as a reflection in the water.
 - **Comfort:** linear motion, no sudden deceleration, horizon stable. Nothing takes over the camera beyond the vertical offset. A few seconds at most, and skippable (A/X).
 
+### Boot splash (D7)
+Played once per launch, before the run intro. The launch scene is `scenes/main.tscn` (sets `play_boot_splash`); tests and screenshot scenes that embed the run skip it.
+
+- **Desktop boot logo:** the engine splash is `assets/ui/splash/hanabi_splash_1920x1080.png` on pure black (`application/boot_splash`).
+- **VR / desktop board, HANABI:** on a black void (the forest, sky, rain and hands are culled, the environment is black) the firework `firework_transparent.png` (additive, blooms from 90% scale) sits above the wordmark "HANABI" (Cinzel, widely spaced). Timing: fade in 0.6 s, hold 2.5 s, fade out 0.6 s.
+- **Gap:** 0.3 s of black.
+- **NANJO studio logo:** `nanjo_logo_transparent.png` unveils from the top down (the thread drops into the J) over 0.8 s, holds 2.0 s, fades 0.8 s.
+- **Placement:** both boards stand world-locked 3 m ahead at eye height, yaw only (horizon level), never a camera child. No camera motion, no time-scale tricks.
+- **Hand-over:** a black veil on the camera fades out over 0.6 s while the intro starts, so the forest comes up from black.
+- **Skip:** trigger, A/X, Space, Enter, Esc or a mouse click fades both boards out in 0.4 s. The skip press cannot skip the intro: the intro only starts after the splash ends, and A/X skips the intro only from its own press.
+- **Limits:** the rain and forest ambience already start under the splash (audio, not visuals). The spawn, wave director and katana wait for the intro as before.
+
 ## 10. Audio
 - Sword swings, clashes and slices; thunder; wind; temple bell (bonshō); night ambience.
 - Music: dark Japanese style (shakuhachi, koto, taiko).
