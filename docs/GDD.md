@@ -17,7 +17,7 @@
 4. **The world is watching you.** Rare AI-"awakened" enemies that comment on and adapt to your playstyle (Meta AI, later phase).
 
 ## 3. Core loop
-Spawn at the opening ritual, then fight waves, collect soul drops, level up (a rank and a small heal, no choice), walk out to find hokora shrines in the forest and claim their Ofuda, spend Ofuda on the skill tree, fight stronger waves and bosses, die, see your score, and start a new run to beat your high score. Ofuda are the only currency and the skill tree is the only way to grow power (D1).
+Spawn at the opening ritual, then fight waves. Enemies drop soul orbs that give XP; every level gives one skill point (D12). Walk out to find hokora shrines in the forest, place a hand on the offering to light a choice of three yellow Ofuda, and slice one for a timed buff (speed, damage or healing). Spend skill points on the skill tree, fight stronger waves and bosses, die, see your score, and start a new run to beat your high score. Skill points are the only currency for power; a shrine buff lasts a minute and is never a permanent upgrade (D12).
 
 - Runs are endless; difficulty scales with time.
 - Death ends the run; the high score is saved locally.
@@ -36,7 +36,7 @@ Spawn at the opening ritual, then fight waves, collect soul drops, level up (a r
 - **Enemies:** active ragdolls (animation drives the body through forces). They stagger, react to hits and collapse.
 
 ## 5. Elements
-There are four elements. Each grants 2 active abilities mapped to the two face buttons (A/B on the sword hand), alters the blade (trail, emissive aura), and has a dedicated 5-node upgrade tree powered by collectible Ofuda currency. Full technical specification is in [`docs/ELEMENTS_PLAN.md`](ELEMENTS_PLAN.md).
+There are four elements. Each grants 2 active abilities mapped to the two face buttons (A/B on the sword hand), alters the blade (trail, emissive aura), and has a dedicated 5-node upgrade tree bought with skill points (D12). Full technical specification is in [`docs/ELEMENTS_PLAN.md`](ELEMENTS_PLAN.md).
 
 | Element | Color | Fantasy | Active Ability 1 (Button A) | Active Ability 2 (Button B) |
 |---|---|---|---|---|
@@ -55,12 +55,13 @@ There are four elements. Each grants 2 active abilities mapped to the two face b
 
 ## 6. Progression and UI
 - **Drops:**
-  - **Hitodama (Soul Orbs):** Grant XP and score, replenishing life and advancing player rank.
-  - **Ofuda (御札):** The one currency. Given only by a **hokora** (small roadside shrine) in the forest, 6 per shrine, one shrine about every 187 m of walking (roughly 60–90 s), rare on purpose and much rarer than the torii. Yōkai, elites and the Oni drop nothing. Claiming a shrine is walking up to it: the Ofuda rise from the offering table and drift to the player, the wrist tally (`札 × N`) counts them, and the shrine goes dark for the rest of the run.
-- **Level-up:** A rank (the XP curve is unchanged) and a small heal. No card choice, no slow motion, no upgrade pool: the skill tree is the only progression.
-- **VR Skill Tree Menu (No Card Slicing):** The legacy slow-motion card slicing mechanic is retired. Progression is spent in the 3D VR Skill Tree Menu, opened with the off-hand Menu button. With no Ofuda the menu says where to find them. Opening the menu cleanly pauses game time (`get_tree().paused = true`, `process_mode = PROCESS_MODE_ALWAYS` for XR tracking/hands/UI), allowing deliberate spending of Ofuda on 4 per-element trees (5 nodes each with prerequisites). Progress resets on death.
-- **HUD:** Minimal and diegetic: health as a glowing wrist charm, elemental ring gauge with remaining 20s imbue countdown, Ofuda tally, and engraved stats that appear when the wrist is raised toward the face. Nothing is mounted on the katana.
-- **End screen:** score, time survived, kills, build used, shrines visited and high score. The run-over plaque that restarts the run is a wooden **Restart Ema (絵馬)**, not a card, so it never reads as currency.
+  - **Hitodama (Soul Orbs):** Grant XP and score. Yōkai 24 XP, elites 48 XP, the Oni 64 XP (D12).
+  - **Hokora (shrine):** a rare roadside shrine in the forest (about one per 216 m of walking). It is not a drop: a shrine is lit until used. Place a hand on its offering table to open the choice (D12).
+- **Level-up:** every level gives **one skill point** (点) and a small heal. The XP threshold grows linearly (150 + 45 per level). The level-up has haptics and a brief flash on the wrist; no card choice, no slow motion, no time scale.
+- **Ofuda (御札), the yellow choice card:** the shrine offers three yellow talismans in front of the player. Slice one with the katana and it grants a buff. Speed +20 % for 60 s, damage +20 % for 60 s, or healing (35 % of max HP now, then 15 % over 10 s). Buffs of one kind refresh and do not stack, and max HP never grows. Opening it pauses the world exactly like the menu.
+- **VR Skill Tree Menu (No Card Slicing for Power):** Progression is spent in the 3D VR Skill Tree Menu, opened with the off-hand Menu button. With no points the menu says where they come from. Opening the menu cleanly pauses game time (`get_tree().paused = true`, `process_mode = PROCESS_MODE_ALWAYS` for XR tracking/hands/UI), allowing deliberate spending of points on 4 per-element trees (5 nodes each with prerequisites, costs 1/1/1/2/3). Progress resets on death.
+- **HUD:** Minimal and diegetic: health as a glowing wrist charm, elemental ring gauge with remaining 20s imbue countdown, level and XP, skill points, active buffs with timers, and engraved stats that appear when the wrist is raised toward the face. Nothing is mounted on the katana.
+- **End screen:** score, time survived, kills, level, build used, shrines visited and high score. The run-over plaque that restarts the run is a wooden **Restart Ema (絵馬)**, not a card, so it never reads as currency.
 
 ## 7. Enemies
 - **Basic yōkai:** swarm enemies, weak and numerous.
