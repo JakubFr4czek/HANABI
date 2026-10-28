@@ -390,8 +390,8 @@ func _test_readability() -> void:
 	# A reset lets the light drain for a moment: skip past it.
 	run.katana._fade_msec -= int(BladeBody.FADE_SECONDS * 1000.0) + 50
 	run.katana._update_blade_material()
-	_check("plain steel: the wrist strip is dimmed, crest shows the gate kanji, no count",
-		hud._strip_cache.get("lit") == 0.0 and hud.crest_label.text == "門" and hud.time_label.text == "")
+	_check("plain steel: the wrist shows no element arc, no kanji and no count",
+		hud._ring_cache.get("element_on") == 0.0 and hud.element_label.text == "" and hud.ability_a_label.text == "")
 	_check("plain steel: the blade has no element light", float(_blade_param("element_glow")) == 0.0)
 	var steel: ShaderMaterial = run.katana._get_blade_material()
 	_check("plain steel: no rim-light pass (no extra draw call)", steel.next_pass == null)
@@ -414,33 +414,35 @@ func _test_readability() -> void:
 			rim != null and float(rim.get_shader_parameter("rim_strength")) > 0.5
 			and rim.get_shader_parameter("rim_color") == Vector3(
 				BladeBody.RIM[el].color.r, BladeBody.RIM[el].color.g, BladeBody.RIM[el].color.b))
-		_check("%s: the wrist crest shows %s and both ability glyphs" % [el, Elements.build_label(el)],
-			hud.crest_label.text == Elements.build_label(el)
-			and hud.ability_label.text.contains(Elements.ability_glyph(el, 1))
-			and hud.ability_label.text.contains(Elements.ability_glyph(el, 2)))
+		_check("%s: the wrist shows %s and both ability glyphs" % [el, Elements.build_label(el)],
+			hud.element_label.text.begins_with(Elements.build_label(el))
+			and hud.ability_a_label.text == Elements.ability_glyph(el, 1)
+			and hud.ability_b_label.text == Elements.ability_glyph(el, 2))
 
-	# The numbers on the wrist follow the system: time arc, count, button rings.
+	# The numbers on the wrist follow the system: time arc, count, button glyphs.
 	elem_sys.reset()
 	elem_sys.imbue(Elements.STORM, 20.0)
 	elem_sys.element_time_remaining = 12.0
 	elem_sys.ability_1_cooldown = 0.0
 	elem_sys.ability_2_cooldown = elem_sys.ability_cooldown_total(2) * 0.5
 	await _frames(3)
-	_check("the crest arc shows the time left (12/20 = %.2f)" % float(hud._strip_cache.get("crest_ratio")),
-		absf(float(hud._strip_cache.get("crest_ratio")) - 0.6) < 0.02 and hud.time_label.text == "12")
-	_check("button A reads ready, button B half recharged (%.2f / %.2f)" % [float(hud._strip_cache.get("pip1_ratio")), float(hud._strip_cache.get("pip2_ratio"))],
-		float(hud._strip_cache.get("pip1_ratio")) >= 0.999 and absf(float(hud._strip_cache.get("pip2_ratio")) - 0.5) < 0.03)
+	var tint := Elements.accent_color(Elements.STORM).lightened(0.35)
+	_check("the element arc shows the time left (12/20 = %.2f)" % float(hud._ring_cache.get("element_fill")),
+		absf(float(hud._ring_cache.get("element_fill")) - 0.6) < 0.02 and hud.element_label.text == "%s 12" % Elements.build_label(Elements.STORM))
+	_check("button A reads ready, button B half recharged (A %.2f, B %.2f)" % [elem_sys.ability_ready_ratio(1), elem_sys.ability_ready_ratio(2)],
+		_rgb_close(hud.ability_a_label.modulate, DiegeticHud.ability_colour(tint, 1.0))
+		and _rgb_close(hud.ability_b_label.modulate, DiegeticHud.ability_colour(tint, 0.5)))
 	elem_sys.execute_ability_1(Vector3.FORWARD)
 	await _frames(3)
-	_check("firing A empties its ring", float(hud._strip_cache.get("pip1_ratio")) < 0.1)
+	_check("firing A dims its glyph until it recharges", _rgb_close(hud.ability_a_label.modulate, DiegeticHud.ability_colour(tint, 0.0)))
 
 	# The last 3 s: the blade and the crest beat together, on the imbue clock.
-	_check("no warning beat before the last 3 s", float(_blade_param("element_warn")) == 0.0 and float(hud._strip_cache.get("warn")) == 0.0)
+	_check("no warning beat before the last 3 s", float(_blade_param("element_warn")) == 0.0 and not hud._element_warn)
 	elem_sys.element_time_remaining = 2.6
 	elem_sys._physics_process(0.016)
 	await _frames(3)
 	_check("last 3 s: blade pulse on", float(_blade_param("element_warn")) == 1.0 and absf(float(_blade_param("element_left")) - elem_sys.element_time_remaining) < 0.2)
-	_check("last 3 s: the wrist crest beats too", float(hud._strip_cache.get("warn")) == 1.0)
+	_check("last 3 s: the wrist element figure beats too", hud._element_warn)
 	# Same-element top-up: the warning ends and a softer cue plays.
 	for p in Sfx._pool:
 		p.stop()
@@ -462,7 +464,11 @@ func _test_readability() -> void:
 	_check("expiry: then plain steel", float(_blade_param("element_glow")) == 0.0)
 	_check("expiry: the rim-light pass leaves the blade with the glow", steel.next_pass == null)
 	await _frames(3)
-	_check("expiry: the wrist strip dims again", hud._strip_cache.get("lit") == 0.0 and hud.time_label.text == "")
+	_check("expiry: the wrist element arc goes again", hud._ring_cache.get("element_on") == 0.0 and hud.element_label.text == "")
+
+
+func _rgb_close(c: Color, want: Color) -> bool:
+	return absf(c.r - want.r) < 0.01 and absf(c.g - want.g) < 0.01 and absf(c.b - want.b) < 0.01
 
 
 func _test_perf_limits() -> void:

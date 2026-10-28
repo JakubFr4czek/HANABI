@@ -499,6 +499,10 @@ func _handle_settings_action(key: String, pointer_id: String) -> void:
 				VrComfortSettings.adjust_height(VrComfortSettings.HEIGHT_STEP, player)
 			"height_reset":
 				VrComfortSettings.reset_height(player)
+			"weight_minus":
+				VrComfortSettings.adjust_body_weight(-VrComfortSettings.WEIGHT_STEP)
+			"weight_plus":
+				VrComfortSettings.adjust_body_weight(VrComfortSettings.WEIGHT_STEP)
 			"recenter":
 				if player is XRPlayer:
 					(player as XRPlayer).recenter_view()

@@ -111,6 +111,8 @@ const SETTINGS_RECTS := {
 		"height_plus": Rect2(1264.0, 680.0, 120.0, 50.0),
 		"height_reset": Rect2(1396.0, 680.0, 120.0, 50.0),
 		"recenter": Rect2(844.0, 748.0, 670.0, 50.0),
+		"weight_minus": Rect2(1000.0, 850.0, 120.0, 44.0),
+		"weight_plus": Rect2(1264.0, 850.0, 120.0, 44.0),
 	},
 	PAGE_ACCESS: {
 		"flash_100": Rect2(460.0, 384.0, 320.0, 56.0),
@@ -778,6 +780,7 @@ func _draw_move() -> void:
 	var walk := VrComfortSettings.walk_scale if VrComfortSettings else 1.0
 	var seated := VrComfortSettings.seated_mode if VrComfortSettings else false
 	var h_offset := VrComfortSettings.height_offset if VrComfortSettings else 0.0
+	var weight := VrComfortSettings.body_weight_kg if VrComfortSettings else 70.0
 
 	# Left column: vignette, then turning.
 	_box(Rect2(66.0, 268.0, 714.0, 270.0), LACQUER_RAISED, GILT_DIM, 2, 16)
@@ -834,6 +837,13 @@ func _draw_move() -> void:
 	_settings_button("height_reset", "RESET", false)
 	_settings_button("recenter", "◎ RECENTER HEADSET VIEW", false, Color(0.86, 0.45, 0.35))
 	_text("Also hold B/Y for 0.6 s with an empty hand.", Vector2(844.0, 818.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 666.0)
+	# Body weight for the kcal estimate on the wrist ring (D14).
+	_text("BODY WEIGHT", Vector2(844.0, 862.0), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 150.0, 600)
+	_settings_button("weight_minus", "-5 kg", false)
+	var w_box := Rect2(1132.0, 850.0, 120.0, 44.0)
+	_box(w_box, LACQUER_SUNK, GILT, 2, 10)
+	_text("%d kg" % roundi(weight), w_box.position + Vector2(0, 8), 24, PAPER, HORIZONTAL_ALIGNMENT_CENTER, w_box.size.x, 600)
+	_settings_button("weight_plus", "+5 kg", false)
 
 
 func _draw_access() -> void:

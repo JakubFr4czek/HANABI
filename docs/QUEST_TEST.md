@@ -11,7 +11,7 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 ## Run — pierwsze 3 minuty
 
 - [ ] Intro seiza: płynne zejście, katana po touchdown, skip nie psuje runu.
-- [ ] **Nadgarstek (§15):** HUD na dłoni, bez „pływającego pergaminu”; pierścień HP **tylko przy niskim HP**; tsuba XP czytelna.
+- [ ] **Nadgarstek (§15, D14):** HUD na nadgarstku z przezroczystym tłem (bez panelu); gładki pierścień HP (teal -> bursztyn -> czerwony + puls przy <25%), w środku animowany ogień i biały licznik kalorii (kcal); żywioł na cienkim zewnętrznym łuku; widoczny TYLKO przy geście spojrzenia na zegarek (dystans <0.35 m, kąt <45°, w polu widzenia, fade 0.15 s; zero draw calls przy opuszczonej ręce); brak clippingu z dłonią/rękawicą/kataną.
 - [ ] **Las CC0:** drzewa/torii do ~12 m; **za wielkim torii** tylko mgła (§14).
 - [ ] Hitodama: po killu lecą, spiralnie wciągane; zbieranie bez lag spike’a.
 - [ ] **Level-up (D12):** bez slow-mo i bez wyboru; haptyka obu dłoni, błysk na nadgarstku (~0.6 s), tekst „位 LV n · +1 点" przez 1.5 s.

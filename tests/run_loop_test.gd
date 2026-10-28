@@ -41,27 +41,28 @@ func _run_all() -> void:
 	_check("TrainingDummy is hidden and disabled in RunGame",
 		run.dummy == null or not run.dummy.visible)
 
-	# 1. Diegetic HUD check (no visible 2D CanvasLayer, tsuba ring + wrist charm present).
+	# 1. Diegetic HUD check (no visible 2D CanvasLayer; the wrist ring and readout present).
 	var any_2d_hud := false
 	for layer in player.find_children("*", "CanvasLayer", true, false):
 		if (layer as CanvasLayer).visible:
 			any_2d_hud = true
 	_check("No floating 2D screen-space UI is visible", not any_2d_hud)
-	_check("Diegetic HUD: nothing on the katana, wrist HP charm + label",
+	_check("Diegetic HUD: nothing on the katana, wrist HP ring + readout present",
 		run.diegetic_hud != null
 		and run.katana.get_node_or_null("TsubaXpRing") == null
 		and run.katana.get_node_or_null("TsubaXpRingFront") == null
-		and run.diegetic_hud.hp_charm_mesh != null
+		and run.diegetic_hud.ring != null
 		and run.diegetic_hud.wrist_label != null)
-	# Distance gate (XR raises the real wrist; desktop pins it to the camera,
-	# so move the unit away to prove the gate, then put it back).
-	var wrist_home: Vector3 = run.diegetic_hud.wrist_unit.position
-	run.diegetic_hud.wrist_unit.position = Vector3(0.0, 0.0, -2.0)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var hidden_far := not run.diegetic_hud.wrist_label.visible
-	run.diegetic_hud.wrist_unit.position = wrist_home
-	_check("Wrist readout hides when the wrist is far from the face", hidden_far)
+	# The readout is drawn only while the wrist is raised (XR: the gesture, see wrist_hud_test).
+	# Desktop stands in with H, so lowered it is hidden and held it shows.
+	var desktop := run.player as DesktopPlayer
+	var hidden_low := not run.diegetic_hud.wrist_face.visible
+	desktop.wrist_check = true
+	await _wait(0.3)
+	var shown_raised := run.diegetic_hud.wrist_face.visible
+	desktop.wrist_check = false
+	await _wait(0.3)
+	_check("Wrist readout is drawn only while the wrist is raised", hidden_low and shown_raised and not run.diegetic_hud.wrist_face.visible)
 
 	# 2. Wave director & yōkai walking from water onto the stone platform.
 	_check("Wave curve scales count, HP and speed with wave/time",
@@ -149,8 +150,8 @@ func _run_all() -> void:
 	_check("Level-up gives exactly one skill point (%d -> %d)" % [points_before, run.skill_points],
 		run.skill_points == points_before + 1)
 	var hud := run.diegetic_hud
-	_check("Level-up flashes the wrist charm and shows the new level on the readout",
-		hud._charm_energy() > hud._charm_base_energy + 0.5 and hud._level_text.contains("LV %d" % run.level))
+	_check("Level-up flashes the fire and shows the new level on the readout",
+		hud._level_flash > 0.0 and hud._level_text.contains("LV %d" % run.level))
 	_check("Level-up keeps playing: state PLAYING, no slow motion (scale %.2f)" % TimeController.time_scale,
 		run.state == RunGame.RunState.PLAYING and TimeController.time_scale > 0.95)
 	_check("Level-up presents no card: no votive plaque in the run",
@@ -169,8 +170,8 @@ func _run_all() -> void:
 	_check("Diegetic wrist shows score points and kill count separately",
 		run.diegetic_hud.wrist_label.text.contains("pt")
 		and run.diegetic_hud.wrist_label.text.contains("斬 7"))
-	_check("Wrist HP ring hidden until critical health",
-		run.diegetic_hud.wrist_hp_ring != null and not run.diegetic_hud.wrist_hp_ring.visible)
+	_check("Wrist HP ring does not pulse at healthy HP",
+		float(run.diegetic_hud._ring_cache.get("hp_pulse", 1.0)) == 0.0)
 
 	player.health.take_hit(999.0, Vector3.ZERO, {"attacker": "Yokai"})
 	await _wait(0.15)

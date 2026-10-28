@@ -67,12 +67,15 @@ func _ready() -> void:
 	await _frames(60)
 	_check("the damage buff runs after the cut (%.1f s)" % run.buffs.remaining(RunBuffs.Kind.DAMAGE),
 		run.buffs.is_active(RunBuffs.Kind.DAMAGE))
+	player.wrist_check = true
+	await _frames(20)
 	await _shot("04_buff_running_after_cut")
 
 	# 5. A level-up: the flash on the charm and the new level and point on the wrist.
 	run.add_xp(run.xp_to_next)
 	await _frames(6)
 	await _shot("05_level_up_flash")
+	player.wrist_check = false
 
 	# 6. The skill menu with the points, then with none (the hint line).
 	await _frames(100)
