@@ -647,3 +647,124 @@ Cele (z zadania Jakuba):
 - Koszty drzewka zostają **3/5/5/8/12**: przy tej gęstości kapliczek przelicznik wychodzi właśnie tu. Obniżenie kosztów albo zwiększenie wydajności za kapliczkę zmieniałoby tempo o ~2× i nie ma powodu.
 
 Testy, które to pilnują: `tests/skill_tree_data_test.gd` (`_test_balance_targets`) i `tests/hokora_test.gd` (`_test_density_along_a_walk`: 5–11 kapliczek na 1.5 km).
+
+---
+
+## D4 – cięcie jak masło (Tachi: finał każdego żywiołu)
+
+> Jakub: „finalna umiejętnosc dla danego zywiolu byla mozliwosc ciecia przeciwnikow jak masla… zeby zostawialo na nich slady w kolorze zywiolu i zeby sie rozpadali na czesci w miejscu gdzie zostali przecieci".
+
+### 1. Co to jest
+
+- **Ostatni węzeł (tier 5) każdego drzewka dostaje drugi efekt: 断ち (*tachi*, „przecinanie"), nazwany per żywioł:**
+  | Żywioł | Nazwa | Kanji | Co zostaje na wrogu |
+  |---|---|---|---|
+  | Sakura | **Hanadachi** | 花断ち | róż neon na przekroju |
+  | Storm | **Raidachi** | 雷断ち | elektryczny błękit, żarzenie z łukiem iskier |
+  | Ink | **Sumidachi** | 墨断ち | lśniąca czerń z indygo |
+  | Shadow | **Kagedachi** | 影断ち | ciemny fiolet |
+- **Dodany, nie zamieniony.** Istniejące efekty tier 5 (Kageyoshi, Ikazuchi, Abyssal Sea, Shadow Clones) mają testy i wpis w `ElementBalance` / `tools/balance_model.gd`, więc zostają. Węzeł ma teraz dwa efekty w jednym opisie. Koszt (12 Ofuda) bez zmian.
+- **Aktywacja: pasywna, w czasie imbue, bez nowego przycisku** (A/B zajęte). Działa tylko, gdy ostrze ma żywioł danej szkoły i węzeł jest odblokowany. Na zwykłej stali nic się nie dzieje.
+- **Reguła trafienia:** cięcie krawędzią (`strike == "edge"`, `edge_alignment ≥ 0.85`, ×1.0) z prędkością względną **≥ 8 m/s** (real). Słabsze cięcia i płaskie/grzbietowe trafienia zostają zwykłym trafieniem.
+- **Efekt na wrogach:**
+  - **Yōkai (swarm):** cięcie zabija i rozdziela ciało na dwie części w miejscu cięcia (przekrój + kawałki).
+  - **Elita:** dostaje dodatkowo 50 % max HP obrażeń. Rozcina się tylko przy zabiciu; inaczej zostaje rana (iskry, dźwięk, przekrój bez podziału).
+  - **Oni (boss):** nie rozpada się od jednego cięcia. Dostaje **ranę**: emisyjną szczelinę w kolorze żywiołu na korpusie (~2 s) i zwykłe obrażenie cięcia. Pełny podział dopiero przy killu (patrz §8, poza zakresem tej iteracji, jeśli nie zdążę).
+- **Cięcie nie zastępuje odcinania kończyn:** kawałki Kirisute mają pierwszeństwo, kończyna nie odlatuje osobno.
+
+### 2. Płaszczyzna cięcia (wzór i znak)
+
+Dane z trafienia (`HeldWeapon._handle_hit`, bez nowych rachunków):
+
+- `P` = punkt kontaktu ostrza w chwili uderzenia (`hit.point`).
+- `m` = jednostkowy kierunek ruchu ostrza względem celu (`hit.direction` = znormalizowane `v_ostrza − v_celu`).
+- `a` = jednostkowa oś ostrza od jelca do czubka (`BladeBody.get_blade_axis()`, w świecie).
+- **`n = normalize(m × a)`**. Płaszczyzna: `{x : n · (x − P) = 0}`. Zawiera `m` i `a`, czyli cięcie idzie wzdłuż długości ostrza i w kierunku ruchu, tak jak tnie prawdziwy miecz.
+- **Znak:** strona **górna** = `n · (x − P) > 0`, strona **dolna** = `< 0`. Kawałek górny dostaje impuls `+n`, dolny `−n`. Oba dostają wspólny składnik `+0.8 m/s · m` (ostrze niesie je dalej).
+- Kontrola w teście: `n·m ≈ 0`, `n·a ≈ 0`, `|n| = 1`.
+
+### 3. Technika cięcia siatki
+
+- **Stan obecny:** `SeveredLimb` odcina kończynę przez kopię części, a nie przez przecięcie. Kirisute to **prawdziwe cięcie siatki** płaszczyzną.
+- **Geometria jest wypukła.** Ciało wroga to prymitywy (`box`, `capsule`, `sphere`, `yokai.gd::_define_parts`). Połowa wypukłej bryły też jest wypukła, więc przekrój to **jeden wielokąt** na część. Cap jest prosty do zbudowania i zamknięty.
+- **Własny slicer w GDScript** (`src/enemies/mesh_slicer.gd`, `class_name MeshSlicer`, funkcje statyczne), bez addonu (zero ryzyka licencyjnego, zero obciążenia wersji Quest):
+  1. Sutherland–Hodgman na każdym trójkącie: nowe wierzchołki na płaszczyźnie, z interpolowanymi normalami i UV.
+  2. Krawędzie przecięcia łączone w zamknięte pętle po współrzędnych (kwantowanych).
+  3. Każda pętla triangulowana w 2D (`Geometry2D.triangulate_polygon`) i zorientowana do normalnej strony (winding zgodny z normalą wierzchołków, jak w prymitywach źródłowych).
+  4. UV przekroju: rzut planarny na płaszczyznę cięcia.
+- **Kawałek = jeden `MeshInstance3D`** z powierzchniami pogrupowanymi wg materiału: skóra (oryginalny `_skin`), przekrój (`cap`), dekoracje (maska, rogi, oczy, pasek) przypisane do strony wg środka ciężkości. Jeden kawałek to jeden draw call na materiał.
+- **Kolizja:** `ConvexPolygonShape3D` dla każdej połowy części, punkty przerzedzone do **≤ 32** (farthest-point sampling).
+- **Koszt:** liczone **raz**, w chwili cięcia. Alokacje tylko przy cięciu (nie co klatkę). Każda klatka aktualizuje tylko parametry materiału przekroju.
+
+### 4. Przekrój i ślad (materiał, nie kicz)
+
+- **Cap:** `StandardMaterial3D`, albedo ciemne (ciało, nie plama). Emisja w kolorze żywiołu (`Elements.color`), energia **2.4 → 0.35 w 1.6 s** (żarzenie gaśnie). Ink: albedo czarne, roughness 0.15 (połysk), indygo `Elements.accent_color(INK)` w emisji.
+- **Ślad na skórze:** iskry `SparkBurst` wzdłuż płaszczyzny w chwili cięcia (istniejący system, kolor żywiołu). Bez decala i bez dodatkowych świateł.
+- **Nie dodajemy OmniLight.** Świecenie przekroju jest emisją, zgodnie z zasadą „neon jako akcent".
+
+### 5. Fizyka rozpadu
+
+- Kawałki: `RigidBody3D`, masa = Σ(masa części × udział objętości), tłumienie jak u `SeveredLimb`.
+- **Kolizja: tylko z terenem** (`collision_layer = 0`, `collision_mask = 1`), jak u `SeveredLimb`. Kawałki **nie blokują ostrza, gracza ani innych wrogów**, więc ostrze przechodzi przez miejsce cięcia.
+- Impuls: `±n · 1.2 m/s + m · 0.8 m/s + 0.5 × prędkość rodzica + 1.0 m/s w górę`, obrót wokół osi cięcia.
+- **Rozpad w miejscu cięcia:** po ~2.6 s skala do zera w 0.8 s, a z miejsca przekroju wybuch płatków sakury (`SakuraScatter`, jak przy śmierci). Zniknięcie zawsze do 3.4 s.
+- **Ciało wroga:** `die()` (dusze, log, zabicie), potem ukrycie wszystkich części i dekoracji, bez płatków. `dissolve_finished` idzie przez `call_deferred`, bo recykling nie może usunąć węzła w trakcie jego własnego `receive_hit`.
+
+### 6. Wydajność Quest 3
+
+- **≤ 8 aktywnych kawałków** (najstarsze znikają pierwsze). **≤ 2 cięcia na klatkę**; trzecie w tej samej klatce to zwykłe trafienie bez podziału.
+- Convex ≤ 32 wierzchołków na połowę części.
+- **Draw calls:** kawałek = 1 `MeshInstance3D` z N powierzchniami (≈ 2–6). Oryginał jest ukryty (0 draw). Pomiar w `quest_perf_test` podczas fali cięć: ≤ 345 i headroom ≥ 30, jak w E3.6.
+- Brak puli kawałków: cięcia są rzadkie, a alokacja jest jednorazowa. Jeśli pomiar pokaże problem, dojdzie pula.
+
+### 7. Chwyt (hand priority, GDD §4)
+
+Cięcie **nie może szarpnąć katany ani wyrwać jej z ręki**:
+1. Kawałki nie mają kolizji z ostrzem (layer 0), a części ciała zostają ukryte bez kolizji. Od następnej klatki ostrze nie ma czego przecinać i idzie za ręką.
+2. Opór cięcia jak przy odcięciu kończyny: `_apply_cut_resistance(..., 0.25)`.
+3. Test: po cięciu katana zostaje w ręce, `grip_error ≤ break_distance + 0.05`, `is_held()`.
+
+### 8. Interakcje
+
+- **Oni:** rana zamiast podziału (opisane w §1). Pełny podział przy killu to osobna praca (`RunOniBoss` ma inną ścieżkę śmierci); zapisana jako następny krok, nie w tej iteracji, chyba że czas pozwoli.
+- **Elita:** +50 % max HP, rozcięcie tylko przy zabiciu (§1).
+- **Słaba fala trafień:** progi są progami prędkości, nie liczbą trafień. Dwa mocne cięcia w krótkim czasie na jednego wroga = jedno zabicie i jeden podział.
+- **Pauza:** kawałki zamrażają się jak reszta świata (`process_mode` jak u `SeveredLimb`). Pauza nie zmienia kształtu przekroju.
+
+### 9. Ryzyka i plan awaryjny
+
+- **Slicer za wolny na Quest (GDScript):** pomiar w teście (ms na cięcie). Fallback, jeśli nie zmieści się w budżecie: pre-pocięte warianty części (6 płaszczyzn bazowych na prymityw) z wyborem najbliższej płaszczyzny normalnej do `n`. Najpierw próbujemy prawdziwego cięcia, jak zapisał Jakub.
+- **Płaszczyzna mija ciało** (cięcie tylko na brzegu) → brak ≥ 2 kawałków → zwykłe trafienie, bez podziału (test).
+- **Cięcie zgubi dekorację** (maska, róg): dekoracja jest przypisana do strony wg środka; przy dużym cięciu może przeciąć się na granicy, co akceptujemy (bez sliceowania dekoracji).
+
+### 10. Dane do testów (krytyczne, szybkie, bez czasu rzeczywistego)
+
+- **`tests/dismember_test.tscn` (rozszerzony, nie nowy suite):**
+  - Slicer: sześcian i kapsuła pocięte płaszczyzną → 2 zamknięte siatki (każda krawędź w dwóch trójkątach), suma objętości ≈ oryginał (±5 %), przekrój ma powierzchnię `cap` z materiałem żywiołu, `n·m ≈ 0`, `n·a ≈ 0`.
+  - Gating: bez węzła tier 5 → zwykłe trafienie; węzeł + imbue + mocne cięcie (≥ 8 m/s) → ≥ 2 kawałki; słabe cięcie (3 m/s) → nic; plain steel → nic.
+  - Limit: 20 cięć po kolei → kawałków ≤ 8, najstarsze zwolnione.
+  - Chwyt: po cięciu `katana.is_held()` i `grip_error ≤ break_distance + 0.05`.
+- **`tests/skill_tree_data_test.tscn`:** każdy tier 5 ma efekt `kirisute` z właściwą nazwą; efekt czyta się przez `effect_value`.
+- **`tests/quest_perf_test.tscn` (rozszerzony):** fala 8 cięć w jednej klatce budżetu: draw calls ≤ 345 i headroom ≥ 30, czas klatki w limicie, bez świateł.
+- **Screenshoty:** `tests/element_abilities_screenshots.tscn` (rozszerzony): rozcięty wróg w każdym żywiole, kawałki na ziemi, moment cięcia w zwolnieniu.
+
+### 11. Krok po kroku (odhaczane w miarę postępu)
+
+- [x] **D4.0 Plan** (ten commit).
+- [ ] **D4.1 `MeshSlicer`:** płaszczyzna, sutherland-hodgman, pętle, cap, testy zamkniętości i objętości.
+- [ ] **D4.2 Drzewko:** efekt `kirisute` na 4 węzłach tier 5 (nazwy, opisy, `ElementBalance`), testy drzewka. Przy okazji poprawka opisu Kageyoshi: opis mówi „120 dmg", a stała to 100 (`KAGEYOSHI_DAMAGE`). Ujednolicam do stałej.
+- [ ] **D4.3 Gating:** `HeldWeapon` oznacza trafienie flagą `kirisute` i wektorem `blade_axis`, gdy ostrze ma imbue z węzłem tier 5 i trafienie spełnia progi.
+- [ ] **D4.4 Yōkai:** podział (zabicie, elita, rana), limit kawałków, ukrycie ciała, odroczony zwrot do puli.
+- [ ] **D4.5 Oni:** rana (szczelina w kolorze żywiołu, ~2 s).
+- [ ] **D4.6 Materiały:** cap per żywioł, żarzenie, ślad iskier.
+- [ ] **D4.7 Testy i perf:** `dismember_test`, `skill_tree_data_test`, `quest_perf_test` rozszerzone; pełny zestaw headless przechodzi.
+- [ ] **D4.8 Screenshoty i ocena:** rozcięty wróg ×4 żywioły, kawałki, moment cięcia; surowa ocena i poprawki.
+- [ ] **D4.9 Docs:** GDD §5 (jedno zdanie o tachi), QUEST_TEST checklist, README.
+
+### 12. Decyzje podjęte bez pytania (do przeglądu)
+
+- Nazwy: Hanadachi / Raidachi / Sumidachi / Kagedachi (rodzina „tachi", nasza nazwa, bez cudzej IP).
+- Pasywny efekt w czasie imbue zamiast aktywacji, bo A/B są zajęte, a cięcie jest już aktem fizycznym.
+- Kirisute dodane do tier 5, a nie zamieniające istniejące efekty (koszt testów i balansu).
+- Elita: rozcięcie tylko przy zabiciu, bo „zabija każdy kawałek" z elitą (ok. 2.35× HP) byłoby zbyt tanie.
+- Własny slicer, nie addon: prymitywy są wypukłe, a addon dodałby licencję i zależność.
