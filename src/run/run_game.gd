@@ -861,11 +861,11 @@ func _build_end_screen(summary: Dictionary) -> void:
 	# begin a fresh run. It is not Ofuda and never reads as currency (D1).
 	restart_ema = VotiveTablet.new()
 	restart_ema.setup({
-		"header": "絵馬 · NEW RUN",
+		"header": "絵馬",
 		"kanji": "再",
 		"title": "RUN AGAIN",
 		"subtitle": "Slice to begin anew",
-		"color": Color(0.95, 0.52, 0.28),
+		"color": Color(0.78, 0.4, 0.22),
 		"material": "wood",
 	}, 0)
 	var r_pos := frame.origin + (-frame.basis.z) * 1.14 + frame.basis.x * 0.38
