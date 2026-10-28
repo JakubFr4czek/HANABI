@@ -292,10 +292,8 @@ func _check_run(run: RunGame, dt: float) -> void:
 	# one that never started while the run plays is the bug.
 	if _held("director", playing and not run.wave_director.started_this_run, 1.0, dt):
 		report("director_idle", "run is PLAYING but the wave director never started")
-	if _held("levelup", run.state == RunGame.RunState.LEVEL_UP and run.active_ofuda.is_empty(), 1.0, dt):
-		report("levelup_no_choices", "LEVEL_UP with no talismans to choose from")
-	if _held("norestart", run.state == RunGame.RunState.GAME_OVER and not is_instance_valid(run.restart_ofuda), 5.0, dt):
-		report("no_restart", "GAME_OVER for 5 s without a restart talisman")
+	if _held("norestart", run.state == RunGame.RunState.GAME_OVER and not is_instance_valid(run.restart_ema), 5.0, dt):
+		report("no_restart", "GAME_OVER for 5 s without a restart ema")
 	var health := run._player_health()
 	if health:
 		if is_nan(health.hp) or health.hp < 0.0 or health.hp > health.max_hp + 0.01:

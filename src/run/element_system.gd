@@ -54,7 +54,7 @@ var kagemusha_time_remaining: float = 0.0
 var kagemusha_hits_remaining: int = ElementBalance.KAGEMUSHA_HITS
 var kagemusha_decoy: Node3D = null
 ## Skill-tree runtime state (E2c): Ikazuchi lightning barriers, the Abyssal
-## ink ward, pending Shadow Clone mirrors and the backstab Ofuda throttle.
+## ink ward and pending Shadow Clone mirrors.
 var _barriers: Array[Dictionary] = []
 var abyssal_ward_time: float = 0.0
 ## Abyssal Sea: true while the player stands in one of their own ink pools.
@@ -66,7 +66,6 @@ var _abyssal_ward_cooldown: float = 0.0
 const ABYSSAL_WARD_TIME := 0.5
 const ABYSSAL_WARD_REARM := 4.0
 var shadow_clone_charges: int = 0
-var _backstab_cooldown: float = 0.0
 
 
 ## Upgraded parameter [param key] for [param element] from the skill tree,
@@ -164,7 +163,6 @@ func reset() -> void:
 	abyssal_in_ink = false
 	_abyssal_ward_cooldown = 0.0
 	shadow_clone_charges = 0
-	_backstab_cooldown = 0.0
 	_clear_runtime_vfx()
 	if weapon:
 		weapon.set_element(Elements.NONE)
@@ -587,7 +585,6 @@ func _physics_process(delta: float) -> void:
 		if element_time_remaining <= 0.0:
 			_expire_element()
 
-	_backstab_cooldown = maxf(0.0, _backstab_cooldown - delta)
 	_update_barriers(delta)
 	_update_abyssal_ward(delta)
 
@@ -720,8 +717,8 @@ func on_blade_hit(hit: Dictionary) -> void:
 				hit["damage"] = float(hit.get("damage", 0.0)) * dragon
 				effect_triggered.emit("dragon_calligraphy", {"point": point})
 		elif current_element == Elements.SHADOW and struck:
-			# Backstab Execution: a strike from behind cuts far deeper and
-			# the yōkai's talisman drops as bonus Ofuda (throttled).
+			# Backstab Execution: a strike from behind cuts far deeper (D1: the
+			# bonus Ofuda is gone, Ofuda come from hokora shrines only).
 			var mult := float(_fx(Elements.SHADOW, "backstab_multiplier", 1.0))
 			if mult > 1.0:
 				var fwd := Vector3(sin(struck._facing_yaw), 0.0, cos(struck._facing_yaw))
@@ -730,9 +727,6 @@ func on_blade_hit(hit: Dictionary) -> void:
 				if to_player.length_squared() > 0.01 and fwd.dot(to_player.normalized()) < -0.2:
 					hit["damage"] = float(hit.get("damage", 0.0)) * mult
 					effect_triggered.emit("backstab", {"point": point})
-					if _backstab_cooldown <= 0.0 and run_game:
-						run_game.add_ofuda(int(_fx(Elements.SHADOW, "backstab_ofuda", 0)))
-						_backstab_cooldown = ElementBalance.BACKSTAB_OFUDA_THROTTLE
 		# Shadow Clones: the first cut after Yami-watari is mirrored onto
 		# the nearest other yōkai by two fleeting silhouettes.
 		if shadow_clone_charges > 0 and struck:

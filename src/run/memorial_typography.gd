@@ -15,7 +15,7 @@ static func engraving_font() -> Font:
 
 
 static func stele_label(text: String, size: int, pixel_size: float, color: Color, pos: Vector3) -> Label3D:
-	var lbl := OfudaTalisman.make_label(text, engraving_font(), size, pixel_size, color, pos)
+	var lbl := VotiveTablet.make_label(text, engraving_font(), size, pixel_size, color, pos)
 	lbl.outline_size = 8
 	lbl.outline_modulate = Color(0.02, 0.01, 0.02, 0.92)
 	lbl.modulate = color

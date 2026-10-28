@@ -1,25 +1,28 @@
-class_name OfudaTalisman
+class_name VotiveTablet
 extends Node3D
-## Floating paper talisman (Ofuda, docs/GDD.md §6, NIGHT_PLAN.md §1).
+## A sliceable votive plaque (絵馬 ema, docs/ELEMENTS_PLAN.md, D1). Used for the one
+## thing a player cuts on the run-over screen: the Restart. It was a paper Ofuda
+## card before D1 (level-up choices, which are gone); it is now wood, so it can
+## never be mistaken for the Ofuda currency.
 ##
-## Hovers in front of the player during a slow-motion level-up (or as the
-## Restart talisman on the run-over screen). Slicing it with the katana splits
-## it in two glowing halves (preserving the inscribed kanji & text on each half)
-## and selects the upgrade.
+## Slicing it with the katana splits it in two halves (keeping the inscribed text
+## on each) and emits [signal sliced].
 
-signal sliced(ofuda: OfudaTalisman, upgrade: Dictionary)
+signal sliced(tablet: VotiveTablet, entry: Dictionary)
 
 const SHADER := preload("res://src/shaders/ofuda.gdshader")
+## Paper colour of the plaque when its "material" is "wood" (the shader's sRGB uniform).
+const WOOD_COLOR := Color(0.27, 0.17, 0.1)
 const WIDTH := 0.26
 const HEIGHT := 0.56
 
-var upgrade: Dictionary = {}
+var entry: Dictionary = {}
 var index := 0
 var is_sliced := false
 var is_dismissed := false
 
-## Cards drift in from the fog and cannot be cut until settled: a swing that is
-## still going when the level-up hits must not pick one by accident.
+## The plaque drifts in from the fog and cannot be cut until settled: a swing
+## that is still going when it lands must not cut it by accident.
 const ARM_TIME := 0.8
 const ARRIVE_DEPTH := 0.55
 const MIN_SLICE_SPEED := 1.6
@@ -48,21 +51,25 @@ var _prev_blade_tips := {}  # weapon -> Vector3
 var _prev_blade_starts := {}  # weapon -> Vector3
 
 
-func setup(p_upgrade: Dictionary, p_index: int = 0) -> void:
-	upgrade = p_upgrade.duplicate()
+## [param p_entry] keys: header, kanji, title, subtitle, color, and material
+## ("wood" gives the plaque its wooden paper colour).
+func setup(p_entry: Dictionary, p_index: int = 0) -> void:
+	entry = p_entry.duplicate()
 	index = p_index
 	_phase = float(p_index) * 1.35
 
 
 func _ready() -> void:
-	add_to_group("ofuda_talismans")
+	add_to_group("votive_tablets")
 	add_child(_card_root)
 
 	var quad := QuadMesh.new()
 	quad.size = Vector2(WIDTH, HEIGHT)
 	_mat.shader = SHADER
-	var accent: Color = upgrade.get("color", Color(1.0, 0.32, 0.24))
+	var accent: Color = entry.get("color", Color(1.0, 0.32, 0.24))
 	_mat.set_shader_parameter("accent_color", accent)
+	if String(entry.get("material", "")) == "wood":
+		_mat.set_shader_parameter("paper_color", WOOD_COLOR)
 	_mesh_inst.mesh = quad
 	_mesh_inst.material_override = _mat
 	_mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -79,22 +86,21 @@ func _build_labels(accent: Color) -> void:
 		"Hiragino Mincho ProN", "YuMincho", "Songti SC", "Noto Serif CJK JP", "Hiragino Sans", "Arial Unicode MS"
 	])
 
-	var stack_num := int(upgrade.get("next_stack", 1))
-	var header_text: String = String(upgrade.get("header", "御札 · TIER %d" % stack_num))
+	var header_text: String = String(entry.get("header", "絵馬"))
 	_header_lbl = make_label(header_text, sys_font, 26, 0.0011, Color(0.88, 0.78, 0.56), Vector3(0, 0.21, 0.004))
 	_card_root.add_child(_header_lbl)
 
-	var kanji_str := String(upgrade.get("kanji", "斬"))
+	var kanji_str := String(entry.get("kanji", "斬"))
 	var kanji_col := Color(accent.r * 1.45 + 0.18, accent.g * 1.45 + 0.18, accent.b * 1.45 + 0.18, 1.0)
 	_kanji_lbl = make_label(kanji_str, sys_font, 114, 0.00145, kanji_col, Vector3(0, 0.068, 0.005))
 	_card_root.add_child(_kanji_lbl)
 
-	var title_str := String(upgrade.get("title", "UPGRADE"))
+	var title_str := String(entry.get("title", ""))
 	_title_lbl = make_label(title_str, sys_font, 30, 0.00092, Color(0.97, 0.96, 0.99), Vector3(0, -0.092, 0.004))
 	_fit_to_card(_title_lbl)
 	_card_root.add_child(_title_lbl)
 
-	var sub_str := String(upgrade.get("subtitle", ""))
+	var sub_str := String(entry.get("subtitle", ""))
 	_sub_lbl = make_label(sub_str, sys_font, 24, 0.00082, Color(0.84, 0.88, 0.96), Vector3(0, -0.158, 0.004))
 	_fit_to_card(_sub_lbl)
 	_sub_lbl.vertical_alignment = VERTICAL_ALIGNMENT_TOP
@@ -130,11 +136,11 @@ static func make_label(txt: String, font: Font, fsize: int, psize: float, col: C
 
 func _build_collider() -> void:
 	# Layer 4 (bit 8 = enemy_body) so HeldWeapon contacts report hits on it.
-	_body.name = "OfudaBody"
+	_body.name = "TabletBody"
 	_body.collision_layer = 0  # layer 8 once armed
 	_body.collision_mask = 0
 	_body.set_meta("hit_receiver", self)
-	_body.set_meta("body_part", "ofuda")
+	_body.set_meta("body_part", "tablet")
 	_body.set_meta("zone", "torso")
 	var cs := CollisionShape3D.new()
 	var box := BoxShape3D.new()
@@ -144,7 +150,7 @@ func _build_collider() -> void:
 	_card_root.add_child(_body)
 
 
-## Called when HeldWeapon's contact solver hits this Ofuda.
+## Called when HeldWeapon's contact solver hits this plaque.
 func receive_hit(_part: Node, hit: Dictionary) -> Dictionary:
 	hit["damage"] = 0.0
 	if not is_ready_to_cut():
@@ -165,20 +171,20 @@ func is_ready_to_cut() -> bool:
 	return _armed and _blade_clear
 
 
-## Slice this Ofuda in half and emit [signal sliced].
+## Slice this plaque in half and emit [signal sliced].
 func slice(cut_point: Vector3 = Vector3.ZERO, cut_dir: Vector3 = Vector3.RIGHT) -> void:
 	if is_sliced or is_dismissed:
 		return
 	is_sliced = true
 	_body.collision_layer = 0
 	var world_pt := cut_point if cut_point != Vector3.ZERO else global_position
-	var accent: Color = upgrade.get("color", Color(1.0, 0.35, 0.25))
+	var accent: Color = entry.get("color", Color(1.0, 0.35, 0.25))
 	Sfx.play_at("ofuda_slice", world_pt, -2.0, 3.5)
 	Sfx.play_at("cut", world_pt, 0.5)
 	Sfx.play_at("blade_ring", world_pt, -3.0)
 	if is_inside_tree() and get_tree().current_scene:
 		SparkBurst.spawn(get_tree().current_scene, world_pt, cut_dir, accent * 1.45, 22, 3.4)
-		var elem := String(upgrade.get("element", Elements.NONE))
+		var elem := String(entry.get("element", Elements.NONE))
 		if elem != Elements.NONE:
 			ElementFirework.spawn(get_tree().current_scene, world_pt, elem, 0.75)
 
@@ -220,10 +226,10 @@ func slice(cut_point: Vector3 = Vector3.ZERO, cut_dir: Vector3 = Vector3.RIGHT) 
 	_half_vel_up = Vector3(side_push.x * 0.45, 0.52, side_push.z * 0.20)
 	_half_vel_down = Vector3(-side_push.x * 0.38, -0.48, -side_push.z * 0.20)
 
-	sliced.emit(self, upgrade)
+	sliced.emit(self, entry)
 
 
-## Fade out without being chosen (when a sibling Ofuda was sliced).
+## Fade out without being sliced (the run was reset under it).
 func dismiss() -> void:
 	if is_sliced or is_dismissed:
 		return
@@ -233,7 +239,7 @@ func dismiss() -> void:
 
 func _physics_process(_delta: float) -> void:
 	# Advance in real time so animations and blade-slice detection work smoothly
-	# during level-up slow motion.
+	# during the run-over slow motion.
 	var dt := TimeController.real_tick()
 	_clock += dt
 
@@ -302,7 +308,7 @@ func _check_blade_slice(real_dt: float) -> void:
 			continue
 		var tip_speed := tip.distance_to(prev_tip) / maxf(real_dt, 1e-4)
 		var speed := maxf(weapon.measured_tip_speed, tip_speed)
-		# Check if the blade segment [start, tip] passes through the Ofuda's local rectangle.
+		# Check if the blade segment [start, tip] passes through the plaque's local rectangle.
 		var inv := _card_root.global_transform.affine_inverse()
 		var local_a := inv * start
 		var local_b := inv * tip
@@ -314,7 +320,7 @@ func _check_blade_slice(real_dt: float) -> void:
 		var hit_point := Vector3.INF
 		for closest in candidates:
 			# A fast VR cut is judged by the swept blade with a small hand-tracking
-			# allowance around the narrow paper, not a single-frame point sample.
+			# allowance around the narrow plaque, not a single-frame point sample.
 			if absf(closest.x) <= WIDTH * 0.90 and absf(closest.y) <= HEIGHT * 0.58 and absf(closest.z) <= 0.16:
 				hit_point = closest
 				break
