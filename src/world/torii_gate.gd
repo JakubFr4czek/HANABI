@@ -675,6 +675,8 @@ func trigger_cross(body: Node = null) -> void:
 	_imbue_target(body)
 	gate_crossed.emit(element, self)
 	GameEvents.log_event("torii_gate_crossed", {"element": element, "position": global_position})
+	if Sfx:
+		Sfx.play_at("bonsho_gate", global_position + Vector3(0.0, 2.5, 0.0), -4.0, 14.0, 1.15)
 
 
 var target_element_system: ElementSystem = null
