@@ -173,6 +173,7 @@ func _run_all() -> void:
 	_check("Wrist HP ring does not pulse at healthy HP",
 		float(run.diegetic_hud._ring_cache.get("hp_pulse", 1.0)) == 0.0)
 
+	run.calorie_meter.kcal = 45.8
 	player.health.take_hit(999.0, Vector3.ZERO, {"attacker": "Yokai"})
 	await _wait(0.15)
 	_check("Lethal hit ends the run (GAME_OVER) without auto-reviving",
@@ -189,6 +190,8 @@ func _run_all() -> void:
 		lists_build = lists_build and stele_text.contains(Elements.build_label(run.element_system.current_element))
 	_check("Memorial stele lists element BUILD (GDD §6 end screen): %s" % stele_text.replace("\n", " | "),
 		lists_build)
+	_check("Memorial stele lists burned calories (45 kcal, GDD §15): %s" % stele_text.replace("\n", " | "),
+		stele_text.contains("45 kcal"))
 
 	var saved_best := run.high_score
 	# Slice the Restart Ema with a katana swing to start a fresh run.
