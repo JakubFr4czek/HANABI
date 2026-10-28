@@ -64,9 +64,9 @@ const NODES: Array[Dictionary] = [
 	{
 		"id": "senbonzakura_kageyoshi", "element": Elements.SAKURA, "tier": 5,
 		"kanji": "景厳", "title": "SENBONZAKURA KAGEYOSHI",
-		"subtitle": "Senbonzakura during Hanamai detonates the orbit (120 dmg)",
+		"subtitle": "Kageyoshi burst (100 dmg) · Hanadachi: cuts split yōkai",
 		"cost": 12, "requires_all": ["life_bloom"], "requires_any": [],
-		"effects": {"kageyoshi_burst_damage": ElementBalance.KAGEYOSHI_DAMAGE},
+		"effects": {"kageyoshi_burst_damage": ElementBalance.KAGEYOSHI_DAMAGE, "kirisute": true},
 	},
 	# --- Storm (雷) ----------------------------------------------------------
 	{
@@ -100,9 +100,9 @@ const NODES: Array[Dictionary] = [
 	{
 		"id": "ikazuchi_avatar", "element": Elements.STORM, "tier": 5,
 		"kanji": "雷神", "title": "IKAZUCHI AVATAR",
-		"subtitle": "Shiden leaves a 4 s lightning barrier",
+		"subtitle": "Shiden barrier 4 s · Raidachi: cuts split yōkai",
 		"cost": 12, "requires_all": ["overcharge"], "requires_any": [],
-		"effects": {"shiden_barrier_duration": ElementBalance.IKAZUCHI_DURATION, "shiden_barrier_damage": ElementBalance.IKAZUCHI_DAMAGE},
+		"effects": {"shiden_barrier_duration": ElementBalance.IKAZUCHI_DURATION, "shiden_barrier_damage": ElementBalance.IKAZUCHI_DAMAGE, "kirisute": true},
 	},
 	# --- Ink (墨) ------------------------------------------------------------
 	{
@@ -136,9 +136,9 @@ const NODES: Array[Dictionary] = [
 	{
 		"id": "abyssal_sea", "element": Elements.INK, "tier": 5,
 		"kanji": "墨海", "title": "ABYSSAL SEA",
-		"subtitle": "Your ink grants +20% speed and a damage ward",
+		"subtitle": "Abyssal ward +20% speed · Sumidachi: cuts split yōkai",
 		"cost": 12, "requires_all": ["dragon_calligraphy"], "requires_any": [],
-		"effects": {"abyssal_speed_multiplier": ElementBalance.ABYSSAL_SPEED_MULTIPLIER},
+		"effects": {"abyssal_speed_multiplier": ElementBalance.ABYSSAL_SPEED_MULTIPLIER, "kirisute": true},
 	},
 	# --- Shadow (影) ----------------------------------------------------------
 	{
@@ -172,9 +172,9 @@ const NODES: Array[Dictionary] = [
 	{
 		"id": "shadow_clones", "element": Elements.SHADOW, "tier": 5,
 		"kanji": "影分身", "title": "SHADOW CLONES",
-		"subtitle": "Yami-watari: next cut is mirrored on 2 nearby yōkai",
+		"subtitle": "Mirrored cuts · Kagedachi: cuts split yōkai",
 		"cost": 12, "requires_all": ["backstab_execution"], "requires_any": [],
-		"effects": {"shadow_clone_count": ElementBalance.SHADOW_CLONES},
+		"effects": {"shadow_clone_count": ElementBalance.SHADOW_CLONES, "kirisute": true},
 	},
 ]
 

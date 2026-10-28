@@ -24,6 +24,7 @@ func _run_all() -> void:
 	_test_data_shape()
 	_test_purchase_rules()
 	_test_balance_targets()
+	_test_kirisute_finishers()
 
 	var katana: HeldWeapon = KATANA_SCENE.instantiate()
 	add_child(katana)
@@ -165,6 +166,36 @@ func _test_purchase_rules() -> void:
 
 	tree.reset()
 	_check("Per-run reset clears every unlock", tree.unlocked_count() == 0 and not tree.is_unlocked("petal_sense"))
+
+
+## D4: each school's tier-5 node carries its Kirisute finisher, and only that
+## node does. A tier-4 node or another school's finisher grants nothing.
+func _test_kirisute_finishers() -> void:
+	var names := {}
+	for element in Elements.COMBAT_ELEMENTS:
+		var tree := SkillTreeData.new()
+		var tier5 := ""
+		var tier4_ok := true
+		for n: Dictionary in SkillTreeData.nodes_for_element(element):
+			var tier := int(n.tier)
+			if tier == 5:
+				tier5 = String(n.id)
+			elif tier < 5:
+				tier4_ok = tier4_ok and tree.try_unlock(String(n.id), 1000).get("ok", false)
+		var before := tree.has_effect(element, "kirisute")
+		var verdict := tree.try_unlock(tier5, 1000)
+		var after: bool = tree.has_effect(element, "kirisute") and bool(tree.effect_value(element, "kirisute", false))
+		var finisher := Elements.kirisute_name(element)
+		names[finisher] = true
+		_check("%s: tier 4 and the rest of the tree leave the finisher off, and the tier-5 node turns it on" % element,
+			tier4_ok and not before and bool(verdict.get("ok", false)) and after)
+		var other := SkillTreeData.new()
+		var other_element := Elements.SAKURA if element != Elements.SAKURA else Elements.STORM
+		for n: Dictionary in SkillTreeData.nodes_for_element(other_element):
+			other.try_unlock(String(n.id), 1000)
+		_check("%s: another school's full tree, finisher included, does not grant %s" % [element, finisher],
+			other.has_effect(other_element, "kirisute") and not other.has_effect(element, "kirisute"))
+	_check("each school has its own finisher name (%s)" % ", ".join(names.keys()), names.size() == Elements.COMBAT_ELEMENTS.size() and not names.has(""))
 
 
 func _test_unlock_changes_abilities(elem_sys: ElementSystem, tree: SkillTreeData, katana: HeldWeapon) -> void:

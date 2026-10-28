@@ -751,8 +751,8 @@ Cięcie **nie może szarpnąć katany ani wyrwać jej z ręki**:
 ### 11. Krok po kroku (odhaczane w miarę postępu)
 
 - [x] **D4.0 Plan** (ten commit).
-- [ ] **D4.1 `MeshSlicer`:** płaszczyzna, sutherland-hodgman, pętle, cap, testy zamkniętości i objętości.
-- [ ] **D4.2 Drzewko:** efekt `kirisute` na 4 węzłach tier 5 (nazwy, opisy, `ElementBalance`), testy drzewka. Przy okazji poprawka opisu Kageyoshi: opis mówi „120 dmg", a stała to 100 (`KAGEYOSHI_DAMAGE`). Ujednolicam do stałej.
+- [x] **D4.1 `MeshSlicer`:** płaszczyzna, sutherland-hodgman, pętle, cap, testy zamkniętości i objętości.
+- [x] **D4.2 Drzewko:** efekt `kirisute` na 4 węzłach tier 5 (nazwy, opisy, `ElementBalance`), testy drzewka. Przy okazji poprawka opisu Kageyoshi: opis mówi „120 dmg", a stała to 100 (`KAGEYOSHI_DAMAGE`). Ujednolicam do stałej.
 - [ ] **D4.3 Gating:** `HeldWeapon` oznacza trafienie flagą `kirisute` i wektorem `blade_axis`, gdy ostrze ma imbue z węzłem tier 5 i trafienie spełnia progi.
 - [ ] **D4.4 Yōkai:** podział (zabicie, elita, rana), limit kawałków, ukrycie ciała, odroczony zwrot do puli.
 - [ ] **D4.5 Oni:** rana (szczelina w kolorze żywiołu, ~2 s).
