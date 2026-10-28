@@ -393,6 +393,8 @@ func _test_readability() -> void:
 	_check("plain steel: the wrist strip is dimmed, crest shows the gate kanji, no count",
 		hud._strip_cache.get("lit") == 0.0 and hud.crest_label.text == "門" and hud.time_label.text == "")
 	_check("plain steel: the blade has no element light", float(_blade_param("element_glow")) == 0.0)
+	var steel: ShaderMaterial = run.katana._get_blade_material()
+	_check("plain steel: no rim-light pass (no extra draw call)", steel.next_pass == null)
 
 	# Every element: blade kind/colour, crest kanji, ability glyphs, the imbue cue.
 	for el in Elements.COMBAT_ELEMENTS:
@@ -402,11 +404,16 @@ func _test_readability() -> void:
 		elem_sys.imbue(el, 20.0)
 		_check("%s: a cue plays when the blade takes the element" % el, _playing_cue("imbue_" + el))
 		await _frames(3)
-		var c := Elements.accent_color(el)
+		var c := BladeBody.glow_color(el)
 		var bc: Vector3 = _blade_param("element_color")
 		_check("%s: the blade lights up in its own colour and kind" % el,
 			float(_blade_param("element_glow")) > 0.5 and int(_blade_param("element_kind")) == run.katana.KIND[el]
 			and absf(bc.x - c.r) < 0.01 and absf(bc.z - c.b) < 0.01)
+		var rim: ShaderMaterial = steel.next_pass as ShaderMaterial
+		_check("%s: the rim-light pass is on the blade, in the school's colour, as strong as its glow" % el,
+			rim != null and float(rim.get_shader_parameter("rim_strength")) > 0.5
+			and rim.get_shader_parameter("rim_color") == Vector3(
+				BladeBody.RIM[el].color.r, BladeBody.RIM[el].color.g, BladeBody.RIM[el].color.b))
 		_check("%s: the wrist crest shows %s and both ability glyphs" % [el, Elements.build_label(el)],
 			hud.crest_label.text == Elements.build_label(el)
 			and hud.ability_label.text.contains(Elements.ability_glyph(el, 1))
@@ -453,6 +460,7 @@ func _test_readability() -> void:
 	run.katana._fade_msec -= int(BladeBody.FADE_SECONDS * 1000.0) + 50
 	run.katana._update_blade_material()
 	_check("expiry: then plain steel", float(_blade_param("element_glow")) == 0.0)
+	_check("expiry: the rim-light pass leaves the blade with the glow", steel.next_pass == null)
 	await _frames(3)
 	_check("expiry: the wrist strip dims again", hud._strip_cache.get("lit") == 0.0 and hud.time_label.text == "")
 

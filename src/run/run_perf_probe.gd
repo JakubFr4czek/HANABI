@@ -21,6 +21,11 @@ static func estimate_scene_cost(root: Node) -> Dictionary:
 			continue
 		draws += 1
 		prims += _mesh_primitives((mi as MeshInstance3D).mesh)
+		# A material's next_pass draws the mesh again (the blade's rim light).
+		var pass_mat: Material = (mi as MeshInstance3D).get_active_material(0)
+		while pass_mat and pass_mat.next_pass:
+			draws += 1
+			pass_mat = pass_mat.next_pass
 	for mmi in root.find_children("*", "MultiMeshInstance3D", true, false):
 		var inst := mmi as MultiMeshInstance3D
 		if not inst.is_visible_in_tree():
