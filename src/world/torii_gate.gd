@@ -57,7 +57,6 @@ const PLAYER_BODY_LAYER: int = XRPlayer.COLLISION_LAYER_BODY
 var _gate_mesh: MeshInstance3D
 var _stone_mesh: MeshInstance3D
 var _lantern_core: MeshInstance3D
-var _lantern_frame: MeshInstance3D
 var _halo_mesh: MeshInstance3D
 var _crossing_area: Area3D
 var _static_body: StaticBody3D
@@ -183,14 +182,13 @@ func _build_components() -> void:
 
 	_lantern_core = MeshInstance3D.new()
 	_lantern_core.name = "LanternCore"
-	var box := BoxMesh.new()
-	box.size = Vector3(0.18, 0.26, 0.18)
-	_lantern_core.mesh = box
+	_lantern_core.mesh = _lantern_mesh()
 	_lantern_core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_lantern_mat = StandardMaterial3D.new()
 	_lantern_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_lantern_mat.albedo_texture = _paper_texture()
 	_lantern_mat.emission_texture = _paper_texture()
+	_lantern_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_lantern_core.material_override = _lantern_mat
 	lantern_anchor.add_child(_lantern_core)
 
@@ -420,22 +418,77 @@ func _add_octagonal_plinth(st: SurfaceTool, base_center: Vector3, radius: float,
 
 
 static var _paper: ImageTexture
+static var _lantern_mesh_cache: ArrayMesh
 
 
 ## Andon paper: pale, a little brighter in the middle, in a dark timber frame
 ## (top, bottom, sides, one cross rib). Shared by every gate.
+## Paper of a hexagonal andon: six panels (16 px each) with dark ribs between
+## them, soft light towards the middle of each panel, dark bands top and bottom.
 static func _paper_texture() -> ImageTexture:
 	if _paper == null:
-		var w := 32
+		var w := 96
 		var h := 64
 		var img := Image.create(w, h, false, Image.FORMAT_RGB8)
 		for y in h:
 			for x in w:
-				var c := 0.78 + 0.22 * (1.0 - absf(x - w * 0.5 + 0.5) / (w * 0.5)) * (1.0 - absf(y - h * 0.5 + 0.5) / (h * 0.5))
-				var frame := x < 2 or x >= w - 2 or y < 4 or y >= h - 4 or (y >= h / 2 - 1 and y <= h / 2)
-				img.set_pixel(x, y, Color(0.05, 0.04, 0.04) if frame else Color(c, c, c))
+				var px := float(x % 16) / 16.0
+				var across := 1.0 - absf(px - 0.5) * 2.0
+				var down := 1.0 - absf(float(y) - h * 0.5) / (h * 0.5)
+				var c := 0.62 + 0.38 * across * (0.55 + 0.45 * down)
+				var rib := x % 16 < 2
+				var band := y < 6 or y >= h - 6
+				img.set_pixel(x, y, Color(0.05, 0.04, 0.04) if (rib or band) else Color(c, c, c))
 		_paper = ImageTexture.create_from_image(img)
 	return _paper
+
+
+## One-surface hexagonal paper lantern: a slightly tapered body, a hexagonal roof
+## with an overhang and a dark base. A single draw call (the old box was a flat
+## square at 6 m). UV rows 0..6/64 and 58/64..1 are the dark bands of the texture.
+static func _lantern_mesh() -> ArrayMesh:
+	if _lantern_mesh_cache != null:
+		return _lantern_mesh_cache
+	const SIDES := 6
+	const R_BOTTOM := 0.095
+	const R_TOP := 0.112
+	const Y_BOTTOM := -0.115
+	const Y_TOP := 0.115
+	const ROOF_R := 0.185
+	const ROOF_PEAK := 0.215
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in SIDES:
+		var a0 := TAU * float(i) / SIDES
+		var a1 := TAU * float(i + 1) / SIDES
+		var u0 := float(i) / SIDES
+		var u1 := float(i + 1) / SIDES
+		var b0 := Vector3(cos(a0) * R_BOTTOM, Y_BOTTOM, sin(a0) * R_BOTTOM)
+		var b1 := Vector3(cos(a1) * R_BOTTOM, Y_BOTTOM, sin(a1) * R_BOTTOM)
+		var t0 := Vector3(cos(a0) * R_TOP, Y_TOP, sin(a0) * R_TOP)
+		var t1 := Vector3(cos(a1) * R_TOP, Y_TOP, sin(a1) * R_TOP)
+		_lantern_quad(st, [b0, b1, t1, t0], [Vector2(u0, 0.92), Vector2(u1, 0.92), Vector2(u1, 0.08), Vector2(u0, 0.08)])
+		# Roof: an overhanging underside, then the pitched hexagonal cap.
+		var o0 := Vector3(cos(a0) * ROOF_R, Y_TOP, sin(a0) * ROOF_R)
+		var o1 := Vector3(cos(a1) * ROOF_R, Y_TOP, sin(a1) * ROOF_R)
+		var dark := Vector2(u0, 0.02)
+		_lantern_quad(st, [t0, t1, o1, o0], [dark, dark, dark, dark])
+		var peak := Vector3(0.0, ROOF_PEAK, 0.0)
+		for v: Vector3 in [o0, o1, peak]:
+			st.set_uv(dark)
+			st.add_vertex(v)
+		# Base plate.
+		for v: Vector3 in [b1, b0, Vector3(0.0, Y_BOTTOM, 0.0)]:
+			st.set_uv(Vector2(u0, 0.98))
+			st.add_vertex(v)
+	_lantern_mesh_cache = st.commit()
+	return _lantern_mesh_cache
+
+
+static func _lantern_quad(st: SurfaceTool, v: Array, uv: Array) -> void:
+	for i in [0, 1, 2, 0, 2, 3]:
+		st.set_uv(uv[i])
+		st.add_vertex(v[i])
 
 
 func _apply_element_style() -> void:

@@ -975,7 +975,7 @@ func _spawn_ink_tendril(from: Vector3, to: Vector3) -> void:
 		from.lerp(to, 0.45) + Vector3.UP * 0.55,
 		to,
 	]
-	_spawn_lightning(points, Color(0.24, 0.28, 0.52), 0.40, 0.014)
+	_spawn_lightning(points, Color(0.24, 0.28, 0.52), 0.40, 0.014, false)
 
 
 func _spawn_shadow_decoy(at: Vector3) -> void:
@@ -1032,10 +1032,13 @@ func _spawn_shadow_trace(from: Vector3, to: Vector3) -> void:
 	if dir.length_squared() < 0.01:
 		return
 	var points: Array[Vector3] = [from, from.lerp(to, 0.5) + Vector3.UP * 0.18, to]
-	_spawn_lightning(points, Color(0.58, 0.16, 1.2), 0.30, 0.018)
+	_spawn_lightning(points, Color(0.58, 0.16, 1.2), 0.30, 0.018, false)
 
 
-func _spawn_lightning(points: Array[Vector3], color: Color, lifetime: float, width: float = 0.010) -> void:
+## [param electric] gives the bolt a deep saturated blue outline (Storm); without
+## it the outline is just the tint (the Ink tendrils).
+func _spawn_lightning(points: Array[Vector3], color: Color, lifetime: float, width: float = 0.010,
+		electric: bool = true) -> void:
 	if points.size() < 2:
 		return
 	var edges: Array = []
@@ -1057,9 +1060,17 @@ func _spawn_lightning(points: Array[Vector3], color: Color, lifetime: float, wid
 			edges.append([previous, next])
 			previous = next
 
-	_spawn_lightning_layer(edges, color * 0.42, lifetime, width * 2.5, 0.38, 0.24, false)
-	var core := Color(0.72 + color.r * 0.12, 0.82 + color.g * 0.10, 1.02 + color.b * 0.08)
-	_spawn_lightning_layer(edges, core, lifetime, width * 0.72, 0.88, 0.95, true)
+	if electric:
+		# A saturated outline mixed (not added) over the pale fog keeps its hue and
+		# contrasts with the near-white core; a pastel halo would wash into the mist.
+		var halo := Color(color.r * 0.30, color.g * 0.62, minf(color.b * 1.3, 1.4))
+		_spawn_lightning_layer(edges, halo, lifetime, width * 3.0, 0.62, 0.6, false)
+		var spark_core := Color(0.78 + color.r * 0.10, 0.90 + color.g * 0.06, 1.08)
+		_spawn_lightning_layer(edges, spark_core, lifetime, width * 0.62, 0.92, 1.1, true)
+	else:
+		_spawn_lightning_layer(edges, color * 0.42, lifetime, width * 2.5, 0.38, 0.24, false)
+		var core := Color(0.72 + color.r * 0.12, 0.82 + color.g * 0.10, 1.02 + color.b * 0.08)
+		_spawn_lightning_layer(edges, core, lifetime, width * 0.72, 0.88, 0.95, true)
 
 
 func _spawn_lightning_layer(edges: Array, color: Color, lifetime: float, width: float,
