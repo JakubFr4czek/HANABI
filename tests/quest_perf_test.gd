@@ -28,9 +28,8 @@ func _run_all() -> void:
 	run.upgrade_stacks["storm_chain"] = 1
 	run.upgrade_stacks["sakura_petals"] = 1
 	run.upgrade_stacks["ink_pool"] = 1
-	run.element_system.apply_upgrade("storm_chain", run.upgrade_stacks)
-	run.element_system.apply_upgrade("sakura_petals", run.upgrade_stacks)
-	run.element_system.apply_upgrade("ink_pool", run.upgrade_stacks)
+	# Element cards retired (E2b): imbue via the Torii-gate path for VFX load.
+	run.element_system.imbue(Elements.STORM)
 	run.element_system.debug_release_petals(Vector3.FORWARD)
 	await _frames(8)
 	if VfxPool:

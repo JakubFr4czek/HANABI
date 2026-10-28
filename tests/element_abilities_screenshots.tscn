@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://element_abilities_shots"]
+
+[ext_resource type="Script" path="res://tests/element_abilities_screenshots.gd" id="1"]
+
+[node name="ElementAbilitiesScreenshots" type="Node"]
+script = ExtResource("1")

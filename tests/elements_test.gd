@@ -178,7 +178,7 @@ func _test_shadow() -> void:
 	await _frames(3)
 	_check("Shadow performs a short bounded combat blink",
 		blinked and player.global_position.distance_to(before_blink) > 1.0
-		and player.global_position.distance_to(before_blink) < 3.5)
+		and player.global_position.distance_to(before_blink) < 3.1)
 	_check("Blink darkness confuses nearby enemies",
 		confused.is_confused() and not run.element_system._darkness_areas.is_empty())
 	var gy := run.forest_world.height_at(player.global_position.x, player.global_position.z)

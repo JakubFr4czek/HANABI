@@ -38,6 +38,7 @@ func _run_all() -> void:
 	run.wave_director.clear_enemies()
 	await _frames(4)
 
+	await _test_single_press()
 	await _test_plain_steel()
 	await _test_sakura_abilities()
 	await _test_storm_abilities()
@@ -49,6 +50,39 @@ func _run_all() -> void:
 	await _test_perf_limits()
 
 	run.queue_free()
+
+
+func _test_single_press() -> void:
+	# Regression (E2b review): one physical press = exactly one ability call.
+	elem_sys.reset()
+	run.state = RunGame.RunState.PLAYING
+	_empty_hits = 0
+	var cb := func(type: String, _data: Dictionary) -> void:
+		if type == "empty_steel":
+			_empty_hits += 1
+	elem_sys.effect_triggered.connect(cb)
+
+	# One simulated Desktop InputEventKey J through the real input pipeline:
+	# only the DesktopPlayer signal path may fire (run_game has no J/K handler).
+	var ev := InputEventKey.new()
+	ev.physical_keycode = KEY_J
+	ev.pressed = true
+	Input.parse_input_event(ev)
+	await _frames(3)
+	_check("Single J press = exactly one Ability 1 call (one empty_steel)", _empty_hits == 1)
+
+	var ev2 := InputEventKey.new()
+	ev2.physical_keycode = KEY_K
+	ev2.pressed = true
+	Input.parse_input_event(ev2)
+	await _frames(3)
+	_check("Single K press = exactly one Ability 2 call (one empty_steel)", _empty_hits == 2)
+
+	# VR: the legacy duplicate signal must be gone from XRPlayer.
+	var xr_signals: Array = load("res://src/player/xr_player.gd").get_script_signal_list().map(func(s: Dictionary) -> String: return String(s.name))
+	_check("XRPlayer has no duplicate element_ability_requested signal", not xr_signals.has("element_ability_requested"))
+	_check("XRPlayer exposes exactly one Ability 2 signal", xr_signals.has("ability_2_requested"))
+	elem_sys.effect_triggered.disconnect(cb)
 
 
 func _test_plain_steel() -> void:

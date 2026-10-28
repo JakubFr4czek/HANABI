@@ -40,8 +40,6 @@ var weapon: HeldWeapon
 var current_element: String = Elements.NONE
 var element_time_remaining: float = 0.0
 var is_fade_warning: bool = false
-var active_elements: Array[String] = []
-var stacks: Dictionary = {}
 
 var ability_1_cooldown: float = 0.0
 var ability_2_cooldown: float = 0.0
@@ -88,8 +86,6 @@ func reset() -> void:
 	current_element = Elements.NONE
 	element_time_remaining = 0.0
 	is_fade_warning = false
-	active_elements.clear()
-	stacks.clear()
 	storm_charge = 0.0
 	ability_1_cooldown = 0.0
 	ability_2_cooldown = 0.0
@@ -99,13 +95,6 @@ func reset() -> void:
 	_clear_runtime_vfx()
 	if weapon:
 		weapon.set_element(Elements.NONE)
-
-
-## Compatibility hook for upgrading stacks (per-run skill tree integration)
-func apply_upgrade(id: String, all_stacks: Dictionary = {}) -> void:
-	stacks = all_stacks.duplicate()
-	var element := UpgradePool.element_for_upgrade(id)
-	effect_triggered.emit("upgrade", {"id": id, "element": element})
 
 
 ## Imbues the weapon with an element for [param duration] seconds (from a Torii gate).
@@ -122,9 +111,6 @@ func imbue(element_name: String, duration: float = ELEMENT_DURATION) -> void:
 	current_element = element_name
 	element_time_remaining = duration if element_name != Elements.NONE else 0.0
 	is_fade_warning = false
-	active_elements.clear()
-	if element_name != Elements.NONE:
-		active_elements.append(element_name)
 	ability_1_cooldown = 0.0
 	ability_2_cooldown = 0.0
 	if weapon:
@@ -137,7 +123,6 @@ func _expire_element() -> void:
 	current_element = Elements.NONE
 	element_time_remaining = 0.0
 	is_fade_warning = false
-	active_elements.clear()
 	if weapon:
 		weapon.set_element(Elements.NONE)
 	# NOTE: Active transient effects (hanamai, ink pools, decoy) finish naturally!
