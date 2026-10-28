@@ -83,6 +83,28 @@ func _run_all() -> void:
 	_check("Forest uses shader baked-look instead of per-chunk LightmapGI",
 		run.forest_world.uses_shader_baked_look())
 
+	# E2d: the skill-tree menu open on top of the same stressed scene stays in budget.
+	var menu := run.pause_controller.menu
+	run.pause_controller.open()
+	var feet := player.global_position
+	menu.update_pointer("mouse", feet + Vector3(0.0, 1.65, 0.0), -menu.global_basis.z, false, false)
+	await _frames(6)
+	var menu_draws := 0
+	for mi in menu.find_children("*", "MeshInstance3D", true, false):
+		if (mi as MeshInstance3D).is_visible_in_tree():
+			menu_draws += 1
+	var open_est := RunPerfProbe.estimate_scene_cost(run)
+	var open_lights := RunPerfProbe.count_dynamic_lights(run)
+	var open_voices := RunPerfProbe.count_audio_voices(run)
+	_check("Menu open: the panel and pointers add at most 6 draw calls (%d)" % menu_draws, menu_draws >= 1 and menu_draws <= 6)
+	_check("Menu open: draw calls still under Quest budget (%d <= %d)" % [open_est.draw_calls, RunPerfBudget.MAX_DRAW_CALLS],
+		open_est.draw_calls <= RunPerfBudget.MAX_DRAW_CALLS)
+	_check("Menu open: no extra lights (%d <= %d) and voices stay bounded (%d <= %d)" % [open_lights, RunPerfBudget.MAX_DYNAMIC_LIGHTS, open_voices, RunPerfBudget.MAX_AUDIO_VOICES],
+		open_lights <= RunPerfBudget.MAX_DYNAMIC_LIGHTS and open_voices <= RunPerfBudget.MAX_AUDIO_VOICES)
+	_check("Menu open: its viewport updates on change only, not every frame",
+		menu._viewport.render_target_update_mode != SubViewport.UPDATE_ALWAYS)
+	run.pause_controller.close()
+
 	run.queue_free()
 
 

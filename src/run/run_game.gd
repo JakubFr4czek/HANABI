@@ -1039,6 +1039,12 @@ func _player_health() -> PlayerHealth:
 func _clear_frame(frame: Transform3D, spots: Array[Vector3]) -> Transform3D:
 	if forest_world == null:
 		return frame
+	var space := get_world_3d().direct_space_state
+	var probe := SphereShape3D.new()
+	probe.radius = 0.32
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = probe
+	query.collision_mask = UiPlacement.STATIC_MASK
 	var best_f := frame
 	var best_push := INF
 	const ANGLES: Array[int] = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8, -8, 9]
@@ -1052,6 +1058,11 @@ func _clear_frame(frame: Transform3D, spots: Array[Vector3]) -> Transform3D:
 			var p := f.origin + f.basis.x * spot.x + fwd * -spot.z
 			var push_len := forest_world.trunk_push(p, fwd, 0.85).length()
 			total_push += push_len
+			# Registered trunks are not everything: torii gates and walls
+			# count too (physics, at the height the card hangs).
+			query.transform = Transform3D(Basis.IDENTITY, Vector3(p.x, f.origin.y - 0.2, p.z))
+			if not space.intersect_shape(query, 1).is_empty():
+				total_push += 1.0
 			if total_push > best_push:
 				break
 		if total_push < 0.001:

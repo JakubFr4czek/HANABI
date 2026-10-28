@@ -8,7 +8,7 @@ extends RefCounted
 ## space ahead is free; when an obstacle is closer it pulls the panel in front
 ## of it (obstacle distance minus [constant WALL_MARGIN], never nearer than
 ## [constant MIN_DISTANCE]), scaling it down so it keeps its apparent size. If
-## no distance works it turns the panel up to 75° either way to find free air.
+## no distance works it turns the panel up to 50° either way to find free air (any more and it would leave the field of view).
 ## Every candidate is verified against static world, trunks, gates, boulders
 ## and yōkai bodies: a box the size of the (scaled) panel, [constant CLEARANCE_DEPTH]
 ## thick, must be empty, and nine sight lines from the eyes to the panel's
@@ -18,6 +18,9 @@ extends RefCounted
 
 ## Environment (1), standing yōkai (2), fallen yōkai (8), trunks/gates/boulders (64).
 const MASK := 1 | 2 | 8 | 64
+## The same without yōkai: set pieces that never move (level-up talismans, the
+## memorial stele), so a passing enemy does not make them swing around.
+const STATIC_MASK := 1 | 64
 const DEFAULT_DISTANCE := 1.1
 const MIN_DISTANCE := 0.65
 const WALL_MARGIN := 0.2
@@ -27,7 +30,7 @@ const CLEARANCE_DEPTH := 0.4
 ## touches a trunk or pillar passing by.
 const SIDE_MARGIN := 0.1
 const DISTANCE_STEP := 0.05
-const YAW_OFFSETS_DEG: Array[float] = [0.0, 25.0, -25.0, 50.0, -50.0, 75.0, -75.0]
+const YAW_OFFSETS_DEG: Array[float] = [0.0, 25.0, -25.0, 50.0, -50.0]
 
 
 ## Panel pose for a viewer at [param head] facing [param heading] (flat, any

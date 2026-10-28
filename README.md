@@ -88,10 +88,13 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/quest_perf_test.tscn -- --
 $GODOT --headless --path . --fixed-fps 90 res://tests/vfx_polish_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/vfx_pool_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/skill_tree_data_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/vr_menu_pause_test.tscn -- --xr-sim     # needs --xr-sim: real XRPlayer on fake tracking
+$GODOT --headless --path . --fixed-fps 90 res://tests/ui_clipping_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/ofuda_drop_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/audio_sfx_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/quest_perf_overlay_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/yokai_approach_test.tscn -- --desktop
+# Everything at once, 4 at a time (~1 min): tools/run_tests.sh [jobs] [name-regex]
 # Diagnostics: 40 s of sparring stats per difficulty, block traces
 $GODOT --headless --path . --fixed-fps 90 res://tests/diag/diag_spar.tscn -- --desktop normal
 ```
