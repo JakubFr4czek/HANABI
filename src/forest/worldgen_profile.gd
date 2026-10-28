@@ -113,8 +113,8 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(0.2, 4.0, 0.05) var fog_curve := 1.0
 ## Dusk palette: rose and blue, mixed by dusk_mix (0 = night blue, 1 = dusk rose).
 ## fog, ambient and moon colours all follow the mix (see fog_color()).
-@export var dusk_pink := Color(0.66, 0.5, 0.64)
-@export var night_blue := Color(0.42, 0.48, 0.64)
+@export var dusk_pink := Color(0.42, 0.24, 0.38)
+@export var night_blue := Color(0.2, 0.25, 0.38)
 @export_range(0.0, 1.0, 0.01) var dusk_mix := 0.3
 @export_range(0.0, 2.0, 0.01) var ambient_energy := 0.55
 @export_range(0.0, 3.0, 0.01) var moon_energy := 0.5
@@ -124,7 +124,7 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export var volumetric_fog := false
 ## Cyan glow of the forest gates: the emission tint of the gate material.
 @export var torii_glow_color := Color(0.3, 0.9, 1.0)
-@export_range(0.0, 2.0, 0.01) var torii_glow_strength := 0.35
+@export_range(0.0, 2.0, 0.01) var torii_glow_strength := 0.12
 
 @export_group("Ground")
 @export_range(0.0, 1.0, 0.01) var ground_wetness := 0.3

@@ -18,6 +18,14 @@ const PRESET_FOLDER := "res://data/worldgen"
 		profile = value
 		if is_inside_tree():
 			regenerate()
+## Fog on or off in the preview. Off shows the whole ring (paths, gates, layout);
+## the game always has it on. Changing it does not regenerate the forest.
+@export var show_fog := true:
+	set(value):
+		show_fog = value
+		if environment_node != null:
+			WorldGenLook.apply_fog(environment_node.environment, active_profile())
+			environment_node.environment.fog_enabled = show_fog
 ## Orbit of the preview camera for screenshots (degrees per second; 0 = still).
 @export_range(0.0, 60.0, 0.5) var orbit_speed := 0.0
 @export_range(6.0, 60.0, 0.5) var orbit_radius := 16.0
@@ -88,6 +96,7 @@ func regenerate() -> Dictionary:
 	_ensure_nodes()
 	var active := active_profile()
 	WorldGenLook.apply_fog(environment_node.environment, active)
+	environment_node.environment.fog_enabled = show_fog
 	WorldGenLook.apply_light(environment_node.environment, active)
 	WorldGenLook.apply_moon(moon, active)
 	if forest != null:
