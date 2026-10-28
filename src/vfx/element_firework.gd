@@ -26,9 +26,12 @@ static func spawn(parent: Node, at: Vector3, element: String, scale: float = 1.0
 
 
 static func _fog_flash_ephemeral(parent: Node, at: Vector3, col: Color, vis: float) -> void:
+	var flash := VrComfortSettings.flash_scale()
+	if flash <= 0.0:
+		return
 	var lamp := OmniLight3D.new()
 	lamp.light_color = col.lerp(Color(1.0, 0.92, 0.95), 0.22)
-	lamp.light_energy = 2.4 * vis
+	lamp.light_energy = 2.4 * vis * flash
 	lamp.omni_range = 3.8 * vis
 	lamp.omni_attenuation = 1.35
 	lamp.shadow_enabled = false

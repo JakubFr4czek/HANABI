@@ -1,12 +1,14 @@
 extends Node
-## Central repository and manager for VR Comfort & Accessibility settings
-## (docs/GDD.md §14, docs/ELEMENTS_PLAN.md).
+## Central repository and manager for VR settings: comfort, accessibility and
+## audio (docs/GDD.md §14, docs/ELEMENTS_PLAN.md).
 ##
-## Persists to `user://hanabi_vr.cfg` and configures godot-xr-tools:
-## - Vignette toggle and strength (auto-vignette on movement/turn)
-## - Turning mode (snap vs smooth), snap angle, smooth turn speed
-## - Dominant-hand swap (katana hand, wrist HUD side, stick assignment)
-## - Seated-mode height calibration and eye height offset
+## Persists to `user://hanabi_vr.cfg`. Every save re-reads the file first and
+## keeps the sections it does not own, so the pages never erase each other:
+## - [view] eye height; [comfort] vignette, turning, dominant hand, seated, walk pace
+## - [audio] Master / Music / SFX / Ambience volume, 0–100 % in 10 % steps
+## - [access] lightning and firework flash strength, haptic strength
+## It configures godot-xr-tools, the AudioServer buses (through [Sfx]) and the
+## effects that read [method flash_scale] and [method haptic_amplitude].
 
 signal settings_changed
 
@@ -15,6 +17,12 @@ const SETTINGS_PATH := "user://hanabi_vr.cfg"
 const SNAP_ANGLES: Array[float] = [15.0, 30.0, 45.0, 60.0, 90.0]
 const SMOOTH_SPEEDS: Array[float] = [1.0, 1.5, 2.0, 3.0, 4.0]
 const VIGNETTE_STRENGTHS: Array[float] = [0.25, 0.50, 0.75, 1.00]
+## Walking pace on top of the XR Tools default: slow / normal / fast.
+const WALK_SCALES: Array[float] = [0.7, 1.0, 1.3]
+const FLASH_LEVELS: Array[int] = [100, 50, 0]
+const HAPTIC_LEVELS: Array[int] = [0, 50, 100]
+const AUDIO_KEYS: Array[String] = ["master", "music", "sfx", "ambience"]
+const VOLUME_STEP := 10
 
 const HEIGHT_MIN := -0.45
 const HEIGHT_MAX := 0.80
@@ -26,10 +34,15 @@ var vignette_strength: float = 0.50
 var snap_turning: bool = true
 var snap_angle: float = 45.0
 var smooth_turn_speed: float = 2.0
+var walk_scale: float = 1.0
 var dominant_hand: String = "right"
 var seated_mode: bool = false
 var seated_height: float = 0.35
 var height_offset: float = 0.0
+## Volumes in percent per bus key (AUDIO_KEYS).
+var audio_percent: Dictionary = {"master": 100, "music": 100, "sfx": 100, "ambience": 100}
+var flash_percent: int = 100
+var haptic_percent: int = 100
 
 static var instance: VrComfortSettings = null
 
@@ -46,6 +59,7 @@ func _ready() -> void:
 func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
+		apply_audio()
 		return
 
 	if cfg.has_section("view"):
@@ -57,6 +71,7 @@ func load_settings() -> void:
 		snap_turning = bool(cfg.get_value("comfort", "snap_turning", snap_turning))
 		snap_angle = float(cfg.get_value("comfort", "snap_angle", snap_angle))
 		smooth_turn_speed = float(cfg.get_value("comfort", "smooth_turn_speed", smooth_turn_speed))
+		walk_scale = _snap_to(float(cfg.get_value("comfort", "walk_scale", walk_scale)), WALK_SCALES)
 		dominant_hand = String(cfg.get_value("comfort", "dominant_hand", dominant_hand)).to_lower()
 		if dominant_hand != "left" and dominant_hand != "right":
 			dominant_hand = "right"
@@ -65,10 +80,20 @@ func load_settings() -> void:
 		if cfg.has_section_key("comfort", "height_offset"):
 			height_offset = clampf(float(cfg.get_value("comfort", "height_offset", height_offset)), HEIGHT_MIN, HEIGHT_MAX)
 
+	if cfg.has_section("audio"):
+		for key in AUDIO_KEYS:
+			audio_percent[key] = _snap_percent(cfg.get_value("audio", key, audio_percent[key]))
+
+	if cfg.has_section("access"):
+		flash_percent = int(_snap_to(float(cfg.get_value("access", "flash_percent", flash_percent)), FLASH_LEVELS))
+		haptic_percent = int(_snap_to(float(cfg.get_value("access", "haptic_percent", haptic_percent)), HAPTIC_LEVELS))
+	apply_audio()
+
 
 func save_settings() -> void:
+	# Keep the sections this call does not write (audio, access, other pages).
 	var cfg := ConfigFile.new()
-	# Backward compatibility with existing view settings
+	cfg.load(SETTINGS_PATH)
 	cfg.set_value("view", "height_offset", height_offset)
 
 	cfg.set_value("comfort", "vignette_enabled", vignette_enabled)
@@ -76,10 +101,16 @@ func save_settings() -> void:
 	cfg.set_value("comfort", "snap_turning", snap_turning)
 	cfg.set_value("comfort", "snap_angle", snap_angle)
 	cfg.set_value("comfort", "smooth_turn_speed", smooth_turn_speed)
+	cfg.set_value("comfort", "walk_scale", walk_scale)
 	cfg.set_value("comfort", "dominant_hand", dominant_hand)
 	cfg.set_value("comfort", "seated_mode", seated_mode)
 	cfg.set_value("comfort", "seated_height", seated_height)
 	cfg.set_value("comfort", "height_offset", height_offset)
+
+	for key in AUDIO_KEYS:
+		cfg.set_value("audio", key, audio_percent[key])
+	cfg.set_value("access", "flash_percent", flash_percent)
+	cfg.set_value("access", "haptic_percent", haptic_percent)
 
 	var err := cfg.save(SETTINGS_PATH)
 	if err == OK:
@@ -89,9 +120,13 @@ func save_settings() -> void:
 			"snap_turning": snap_turning,
 			"snap_angle": snap_angle,
 			"smooth_turn_speed": smooth_turn_speed,
+			"walk_scale": walk_scale,
 			"dominant_hand": dominant_hand,
 			"seated_mode": seated_mode,
 			"height_offset": snappedf(height_offset, 0.01),
+			"audio": audio_percent,
+			"flash_percent": flash_percent,
+			"haptic_percent": haptic_percent,
 		})
 	settings_changed.emit()
 
@@ -114,6 +149,8 @@ func apply_to_player(player: Node3D) -> void:
 	# Dominant hand & locomotion assignment
 	if player.has_method("set_dominant_hand"):
 		player.set_dominant_hand(dominant_hand)
+	if player.has_method("set_walk_scale"):
+		player.set_walk_scale(walk_scale)
 
 	# Movement turn settings
 	var turn: Node = null
@@ -152,6 +189,61 @@ func apply_to_player(player: Node3D) -> void:
 			vignette.set("radius", 1.0)
 			if mesh:
 				mesh.set("visible", false)
+
+
+## Pushes the four volumes to the buses. Master and SFX are plain bus levels;
+## Music and Ambience keep their slow-mo and pause ducks on top (see [Sfx]).
+func apply_audio() -> void:
+	if Sfx == null:
+		return
+	Sfx.set_bus_levels(
+		audio_percent["master"] / 100.0,
+		audio_percent["music"] / 100.0,
+		audio_percent["sfx"] / 100.0,
+		audio_percent["ambience"] / 100.0)
+
+
+## Flash strength for the scene-wide lightning light and the firework lamps:
+## 1.0 full, 0.5 softened, 0.0 none. Thunder and the bolt itself are unaffected.
+func flash_scale() -> float:
+	return flash_percent / 100.0
+
+
+## Haptic amplitude after the player's strength setting (0 = no vibration).
+func haptic_amplitude(amplitude: float) -> float:
+	return amplitude * haptic_percent / 100.0
+
+
+func set_volume_percent(key: String, percent: int) -> void:
+	if not audio_percent.has(key):
+		return
+	audio_percent[key] = _snap_percent(percent)
+	apply_audio()
+	save_settings()
+
+
+## One 10 % step up (+1) or down (-1) on a bus.
+func step_volume(key: String, direction: int) -> void:
+	if not audio_percent.has(key):
+		return
+	set_volume_percent(key, int(audio_percent[key]) + direction * VOLUME_STEP)
+
+
+func set_flash_percent(percent: int) -> void:
+	flash_percent = int(_snap_to(float(percent), FLASH_LEVELS))
+	save_settings()
+
+
+func set_haptic_percent(percent: int) -> void:
+	haptic_percent = int(_snap_to(float(percent), HAPTIC_LEVELS))
+	save_settings()
+
+
+func set_walk_scale(pace: float, player: Node3D = null) -> void:
+	walk_scale = _snap_to(pace, WALK_SCALES)
+	if player:
+		apply_to_player(player)
+	save_settings()
 
 
 func set_vignette_enabled(enabled: bool, player: Node3D = null) -> void:
@@ -227,16 +319,36 @@ func reset_height(player: Node3D = null) -> void:
 		apply_to_player(player)
 	save_settings()
 
+
 func reset_to_defaults(player: Node3D = null) -> void:
 	vignette_enabled = true
 	vignette_strength = 0.50
 	snap_turning = true
 	snap_angle = 45.0
 	smooth_turn_speed = 2.0
+	walk_scale = 1.0
 	dominant_hand = "right"
 	seated_mode = false
 	seated_height = 0.35
 	height_offset = 0.0
+	for key in AUDIO_KEYS:
+		audio_percent[key] = 100
+	flash_percent = 100
+	haptic_percent = 100
+	apply_audio()
 	if player:
 		apply_to_player(player)
 	save_settings()
+
+
+static func _snap_percent(v: Variant) -> int:
+	return clampi(roundi(float(v) / VOLUME_STEP) * VOLUME_STEP, 0, 100)
+
+
+## The entry of [param levels] nearest to [param v].
+static func _snap_to(v: float, levels: Array) -> float:
+	var best := float(levels[0])
+	for level in levels:
+		if absf(float(level) - v) < absf(best - v):
+			best = float(level)
+	return best
