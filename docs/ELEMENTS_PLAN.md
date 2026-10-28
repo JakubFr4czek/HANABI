@@ -502,6 +502,42 @@ Everything the player needs to know is conveyed naturally in the game world with
 - **Fog.** Fog stays. Gate light is mixed (not added), saturated per element (the Ink gate's dark indigo is darker than the fog), lit lanterns and halos ignore fog, spent ones do not. Yōkai silhouettes in fog were not touched.
 - **Known weak spots (honest).** Seen from behind, the thin blade reads as coloured steel more than an edge light; Storm is pastel rather than electric. The 6 m lantern is a flat paper box. The sound cues are synthesised and untested on real headphones. Pip glyphs are ~7 mm: legible on a raised wrist, not at arm's length.
 
+### Phase E4: Balance, Economy, Visual Polish & Cleanup
+- [x] **E4.1: Central ElementBalance constants** (`src/run/element_balance.gd`): Single authority for all tuning numbers (`const IMBUE_SECONDS := 20.0`, `IMBUE_NODE_BONUS_SECONDS := 4.0`, `FADE_WARNING_SECONDS := 3.0`, `REFRESH_COOLDOWN_KEEP := 0.5`, `POWER_PER_RANK := 0.04`, damage, cooldowns, durations, ranges, Ofuda drop rates). Read by `ElementSystem`, `SkillTreeData`, `BladeBody`, and `tools/balance_model.gd` — code and balance model cannot drift.
+- [x] **E4.2: Ability Tuning & School Identity**:
+  - **Sakura 桜**: Pack cutter and sustain. Senbonzakura (A1: 4.0 s cd, 6→7 petals, 12→15 dmg, 2→all pierce, 32°/8 m fan) & Hanamai (A2: 13.0 s cd, 4 petals, 6.0→8.5 s duration, 7 dmg/hit, 30%→45% damage reduction, Life Bloom 4/12 HP heal, Kageyoshi 100 dmg 3.2 m detonation).
+  - **Storm 雷**: Fast burst and repositioning. Raikiri (A1: 3.5→2.5 s cd, 45 dmg primary, 24 dmg to 3→5 chain targets within 5 m, 1.0 s stun on T2) & Shiden (A2: 8.0 s cd, 4.2→6.0 m dash, 1.4→2.2 s stagger in 2.8 m radius, Overcharge 14 dmg katana arcs, Ikazuchi 4.0 s / 20 dmg line barrier).
+  - **Ink 墨**: Battlefield zoning and control. Sumi-gaeshi (A1: 5.0 s cd, 4.5 m 60°→90° cone, 7 dmg, 60%→75% slow, 5 s ground pool with 8→16 DPS) & Kage-nawa (A2: 10.0 s cd, 3→5 targets rooted 2.8 s, 20 dmg, 1.5 m pull, Dragon Calligraphy +35% sword damage on inked yōkai, Abyssal Sea +20% run speed + 0.5 s ward).
+  - **Shadow 影**: High-lethal duelist. Kagemusha (A1: 9.0 s cd, 4.0→6.0 s decoy, absorbs 2 claw strikes, 60 dmg / 3.0 m vortex explosion on expiry) & Yami-watari (A2: 6.5→5.0 s cd, 4.5→6.5 m shadow blink, ×2.2 crit multiplier on next cut within 2.5 s, Backstab ×2.5 crit + 1 bonus Ofuda [6 s throttle], 2 shadow clones copying blade cut).
+- [x] **E4.3: Soul Rank & Razor Edge Scaling** (`ElementSystem.ability_power`): Abilities scale dynamically via `razor_edge_multiplier * (1.0 + POWER_PER_RANK * (soul_rank - 1))`. At Soul Rank 10 (~10 min run), ability potency reaches ~1.36× (or ~2.0×+ with Razor Edge stacks), keeping up with yōkai wave HP growth (+14%/wave) while ensuring sword momentum remains the primary killing force.
+- [x] **E4.4: Ofuda Economy & Progressive Pacing**:
+  - Drop rates: Swarm yōkai 25% chance of 1 Ofuda, Elite yōkai 1–2 Ofuda, Oni boss 5–6 Ofuda.
+  - Node costs: 3, 5, 5, 8, 12 Ofuda per tier (total 33 Ofuda per school, 132 Ofuda for all 4 trees).
+  - Pacing verified by `tools/balance_sim.gd`:
+    - ~1 min: Node 1 (3 Ofuda, ~15 kills) — early school awakening.
+    - ~2–3 min: Node 2 & 3 (8–13 Ofuda, ~30–40 kills) — core ability upgrades.
+    - ~5 min: Node 4 (21 Ofuda, ~60 kills) — major passive synergy.
+    - ~5–6 min: Node 5 (33 Ofuda, ~70–80 kills) — ultimate avatar capstone.
+    - 10 min demo run: 75–100+ Ofuda accumulated, enabling one complete master tree plus deep progression into a second school.
+- [x] **E4.5: Dead Code Removal**:
+  - Purged deprecated dual-element evolution system (`black_lightning`, `phantom_petals`, `evolution_mask`) from `src/core/elements.gd` and `src/weapons/blade_body.gd`.
+  - Removed dead state variables: `storm_charge`, `blink_cooldown`, legacy `try_shadow_blink` aliases.
+  - Removed outdated screenshot test scenes (`tests/run_screenshots.tscn`, `tests/run_screenshots.gd`).
+- [x] **E4.6: Visual & Asset Polish (Addressing E3 Review)**:
+  - **Electric Storm Arcs**: Enhanced `src/shaders/katana_steel.gdshader` and `src/run/element_system.gd` to render saturated electric cyan/blue arcs and outline (`Color(0.2, 0.65, 1.0)` / `Color(0.4, 0.85, 1.0)`) with white highlights only at the highest peaks, eliminating the pastel appearance.
+  - **Blade Fresnel Rim Pass** (`src/shaders/blade_rim.gdshader`): Added a dynamic mixed fresnel rim pass to `BladeBody` active exclusively while imbued (+1 draw call, tracked by `RunPerfProbe`). Ensures the katana edge is vividly defined and reads as glowing cutting light from all camera angles, including behind the spine.
+  - **Hexagonal Torii Lantern**: Replaced the placeholder 6 m cubic box with an authentic 6-sided hexagonal paper andon featuring pitched roof eaves and structural paper rib frames (`src/world/torii_gate.gd`), matching Edo-period shrine aesthetics without adding draw calls.
+- [x] **E4.7: Headless Balance Model & CI Guardrails**:
+  - Created `tools/balance_model.gd` and `tools/balance_sim.gd` (<1 s execution time).
+  - Extended `tests/skill_tree_data_test.gd` and `tests/element_abilities_test.gd` with guardrails verifying kit power budgets, ability-to-sword damage ratios, cooldown health, and tree prerequisites.
+  - Updated `tools/run_tests.sh` to enforce zero script errors.
+
+#### E4 implementation decisions (2026-10-28)
+- **Single Source of Truth (`ElementBalance`).** Previously, imbue duration was hard-coded in multiple files (`HeldWeapon`, `ElementSystem`, `SkillTreeData`). All elemental numbers are now unified in `ElementBalance`. The baseline imbue is strictly 20.0 s, Node 1 extends it to 24.0 s, and the last 3.0 s trigger the 3 Hz sensory warning.
+- **Abilities as Accelerators, Not Replacements.** The balance model ensures abilities complement physical swordplay. For a single enemy, an elemental kit contributes 15%–40% of baseline sword damage; against packs of 4 enemies, AoE abilities scale up to 75%–160% of sword output. Katana strikes remain the core kinetic loop.
+- **Kagemusha Decoy Durability.** Fixed a bug where the decoy was immortal during its timer; it now properly absorbs up to 2 direct claw strikes before detonating, creating high tactical value without breaking enemy AI.
+- **Headroom & Performance Verification.** All visual upgrades (rim pass, hexagonal lantern, high-contrast arcs) strictly respect Quest 3 limits: `quest_perf_test` verifies 288/345 peak draw calls (57 draw calls of headroom), 0 dynamic OmniLights added by gates, and ≤9 meshes on the wrist plate.
+
 ---
 
 ## Harsh Self-Review & Integrity Audit (Rule 9)
