@@ -57,7 +57,16 @@ static func make_oni_profile(max_hp: float) -> EnemyProfile:
 	p.getup_time = 1.55
 	p.counter_window = 1.65
 	p.counter_multiplier = 1.65
-	p.tactics = {"kind": "oni"}
+	p.tactics = {
+		"kind": "oni",
+		"attacks": true,
+		"track_player": true,
+		"leash_radius": 80.0,
+		"engage_distance": 2.2,
+		"min_distance": 1.4,
+		"block_time": 0.6,
+		"interrupt_damage": 30.0,
+	}
 	return p
 
 
@@ -67,7 +76,10 @@ static func oni_difficulty() -> DuelistDifficulty:
 	d.combo_chance = 0.42
 	d.block_chance = 0.38
 	d.riposte_chance = 0.32
-	d.move_speed = 0.92
+	d.move_speed = 1.15
+	d.reaction_time = 0.12
+	d.anticipation = 0.65
+	d.guard_strength = 0.70
 	return d
 
 

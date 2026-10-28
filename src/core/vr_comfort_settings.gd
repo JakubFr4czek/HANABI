@@ -1,6 +1,6 @@
 extends Node
-## Central repository and manager for VR settings: comfort, accessibility and
-## audio (docs/GDD.md §14, docs/ELEMENTS_PLAN.md).
+## Central repository and manager for VR settings: comfort, accessibility,
+## audio and Meta AI boss (docs/GDD.md §8, §14, docs/ELEMENTS_PLAN.md).
 ##
 ## Persists to `user://hanabi_vr.cfg`. Every save re-reads the file first and
 ## keeps the sections it does not own, so the pages never erase each other:
@@ -8,6 +8,7 @@ extends Node
 ## - [audio] Master / Music / SFX / Ambience volume, 0–100 % in 10 % steps
 ## - [access] lightning and firework flash strength, haptic strength
 ## - [body] body weight for the calorie estimate (D14), 40–150 kg in 5 kg steps
+## - [meta_ai] enabled (bool), api_key (masked in UI/logs), model, language (D15)
 ## It configures godot-xr-tools, the AudioServer buses (through [Sfx]) and the
 ## effects that read [method flash_scale] and [method haptic_amplitude].
 
@@ -49,6 +50,12 @@ var flash_percent: int = 100
 var haptic_percent: int = 100
 ## Body weight (kg) for the kcal estimate on the wrist ring (D14). An estimate, not a measure.
 var body_weight_kg: float = 70.0
+
+## Meta AI configuration (D15):
+var ai_boss_enabled: bool = true
+var meta_api_key: String = ""
+var ai_model: String = "muse-spark-1.3"
+var ai_language: String = "pl"
 
 static var instance: VrComfortSettings = null
 
@@ -96,6 +103,13 @@ func load_settings() -> void:
 
 	if cfg.has_section("body"):
 		body_weight_kg = clampf(float(cfg.get_value("body", "weight_kg", body_weight_kg)), WEIGHT_MIN, WEIGHT_MAX)
+
+	if cfg.has_section("meta_ai"):
+		ai_boss_enabled = bool(cfg.get_value("meta_ai", "enabled", ai_boss_enabled))
+		meta_api_key = String(cfg.get_value("meta_ai", "api_key", meta_api_key))
+		ai_model = String(cfg.get_value("meta_ai", "model", ai_model))
+		ai_language = String(cfg.get_value("meta_ai", "language", ai_language))
+
 	apply_audio()
 
 
@@ -122,6 +136,11 @@ func save_settings() -> void:
 	cfg.set_value("access", "haptic_percent", haptic_percent)
 	cfg.set_value("body", "weight_kg", body_weight_kg)
 
+	cfg.set_value("meta_ai", "enabled", ai_boss_enabled)
+	cfg.set_value("meta_ai", "api_key", meta_api_key)
+	cfg.set_value("meta_ai", "model", ai_model)
+	cfg.set_value("meta_ai", "language", ai_language)
+
 	var err := cfg.save(SETTINGS_PATH)
 	if err == OK:
 		GameEvents.log_event("vr_comfort_saved", {
@@ -138,8 +157,65 @@ func save_settings() -> void:
 			"flash_percent": flash_percent,
 			"haptic_percent": haptic_percent,
 			"body_weight_kg": body_weight_kg,
+			"ai_boss_enabled": ai_boss_enabled,
+			"ai_has_key": get_effective_meta_api_key() != "",
 		})
 	settings_changed.emit()
+
+
+## Resolves the effective Meta API key following the hierarchy:
+## 1. Field in Settings (if set)
+## 2. File on disk (secrets/meta_api_key.txt)
+## 3. Empty string (offline fallback)
+func get_effective_meta_api_key() -> String:
+	if meta_api_key.strip_edges() != "":
+		return meta_api_key.strip_edges()
+	for path in ["res://secrets/meta_api_key.txt", "secrets/meta_api_key.txt"]:
+		if FileAccess.file_exists(path):
+			var f := FileAccess.open(path, FileAccess.READ)
+			if f:
+				var content := f.get_as_text().strip_edges()
+				f.close()
+				for line in content.split("\n"):
+					line = line.strip_edges()
+					if line == "" or line.begins_with("#"):
+						continue
+					if line.begins_with("META_API_KEY="):
+						return line.substr("META_API_KEY=".length()).strip_edges()
+					return line
+	return ""
+
+
+## Returns true if AI boss is enabled and a valid API key is present.
+func is_meta_ai_active() -> bool:
+	return ai_boss_enabled and get_effective_meta_api_key() != ""
+
+
+## Returns masked representation of the active API key for UI display (e.g. ●●●●●●●●).
+func get_masked_api_key() -> String:
+	var key := get_effective_meta_api_key()
+	if key == "":
+		return ""
+	if key.length() <= 8:
+		return "●●●●●●●●"
+	return key.substr(0, 4) + "••••••••" + key.substr(key.length() - 4)
+
+
+func set_ai_boss_enabled(enabled: bool) -> void:
+	ai_boss_enabled = enabled
+	save_settings()
+
+
+func set_meta_api_key(key: String) -> void:
+	meta_api_key = key.strip_edges()
+	save_settings()
+
+
+func set_ai_language(lang: String) -> void:
+	var l := lang.to_lower()
+	if l == "pl" or l == "en":
+		ai_language = l
+		save_settings()
 
 
 ## Applies current settings to an [XRPlayer] instance and XR Tools environment.
@@ -351,6 +427,7 @@ func reset_to_defaults(player: Node3D = null) -> void:
 		audio_percent[key] = 100
 	flash_percent = 100
 	haptic_percent = 100
+	ai_boss_enabled = true
 	apply_audio()
 	if player:
 		apply_to_player(player)
