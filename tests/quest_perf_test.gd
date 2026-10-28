@@ -118,7 +118,59 @@ func _run_all() -> void:
 	_check("Gate lights are one quad each, no OmniLight3D (%d lit gates)" % gate_halos,
 		run.find_children("*", "OmniLight3D", true, false).filter(func(n): return n.get_parent() is ToriiGate or n.get_parent().get_parent() is ToriiGate).is_empty())
 
+	# D4: a wave of Kirisute splits (two a frame, eight yōkai) stays in budget. The pieces
+	# are bounded and each one's surfaces count as draw calls.
+	run.ofuda_count = 1000
+	for node: Dictionary in SkillTreeData.nodes_for_element(Elements.SAKURA):
+		run.unlock_skill(String(node.id))
+	run.element_system.imbue(Elements.SAKURA)
+	# Only the wave is on the field, so the count is the wave's own cost. The pieces are
+	# children of the scene, not of the run, so the estimate reads the whole scene.
+	run.wave_director.clear_enemies()
+	await _frames(4)
+	var wave: Array[Yokai] = []
+	for i in 8:
+		var at := Vector3(sin(i * 0.8) * 6.0, 0.0, -4.0 + cos(i * 0.8) * 2.0)
+		at.y = float(run.wave_director.ground_height.call(at.x, at.z))
+		var y := run.wave_director.spawn_enemy_at(at, player.global_position)
+		y.configure_kind(Yokai.Kind.SWARM, Elements.NONE, 900.0)
+		wave.append(y)
+	await _frames(20)
+	var standing: int = RunPerfProbe.estimate_scene_cost(self).draw_calls
+	var wave_draws := 0
+	var wave_ms := 0.0
+	var wave_pieces := 0
+	for pair in 4:
+		for k in 2:
+			_split_hit(wave[pair * 2 + k])
+		await _frames(1)
+		wave_draws = maxi(wave_draws, RunPerfProbe.estimate_scene_cost(self).draw_calls)
+		wave_ms = maxf(wave_ms, RunPerfProbe.rendering_info().process_ms)
+		wave_pieces = maxi(wave_pieces, KirisuteChunk._alive.size())
+	var wave_killed := 0
+	for y: Yokai in wave:
+		wave_killed += int(y.is_dead)
+	var budget_draws := RunPerfBudget.MAX_DRAW_CALLS
+	print("PERF wave standing=%d peak=%d (eight yōkai standing before the cuts)" % [standing, wave_draws])
+	_check("the Kirisute wave kills 8 yōkai and splits them (%d dead)" % wave_killed, wave_killed == 8)
+	_check("a wave of splits stays under the Quest draw budget (est %d <= %d, headroom %d)" % [wave_draws, budget_draws, budget_draws - wave_draws],
+		wave_draws <= budget_draws and budget_draws - wave_draws >= 30)
+	_check("pieces stay within the budget at peak (%d <= %d)" % [wave_pieces, ElementBalance.KIRISUTE_MAX_PIECES],
+		wave_pieces > 0 and wave_pieces <= ElementBalance.KIRISUTE_MAX_PIECES)
+	_check("frame process time stays under budget during the wave (%.2f ms <= %.1f ms)" % [wave_ms, RunPerfBudget.MAX_PROCESS_MS],
+		wave_ms <= RunPerfBudget.MAX_PROCESS_MS)
+
 	run.queue_free()
+
+
+## A clean, fast edge hit on a yōkai's chest, as HeldWeapon reports it for a Kirisute cut.
+func _split_hit(y: Yokai) -> void:
+	var part: RagdollPart = y.parts["chest"]
+	var hit := {"attacker": "katana", "element": Elements.SAKURA, "part": "chest", "zone": "torso",
+		"speed": 12.0, "strike": "edge", "edge_alignment": 1.0, "base_damage": 40.0,
+		"point": part.global_position, "direction": Vector3.RIGHT, "power": 1.0, "impulse": 18.0,
+		"knockback": Vector3.RIGHT * 18.0, "kirisute_offer": true, "blade_axis": Vector3.UP}
+	y.receive_hit(part, hit)
 
 
 func _check(label: String, ok: bool) -> void:
