@@ -63,7 +63,10 @@ func _run_all() -> void:
 	await _test_menu_carries_the_blade_state()
 	await _test_world_stands_still_rig_keeps_going()
 	await _test_pointers_buy_only_through_run_game()
-	await _test_comfort_settings_tab()
+	await _test_settings_tab()
+	await _test_audio_settings()
+	await _test_access_and_pace()
+	await _test_controls_page_matches_action_map()
 	await _test_slow_motion_survives_pause()
 	await _test_refused_states()
 	await _test_music_ducking()
@@ -285,59 +288,92 @@ func _test_pointers_buy_only_through_run_game() -> void:
 	run.element_system.reset()
 
 
-# --- 4b. VR Comfort settings ------------------------------------------------------------
+# --- 4b. SETTINGS tab (comfort, audio, access, controls) ----------------------------------
 
-func _test_comfort_settings_tab() -> void:
-	# Backup existing hanabi_vr.cfg if it exists
-	var original_cfg_content := ""
-	var had_original_cfg := FileAccess.file_exists(VrComfortSettings.SETTINGS_PATH)
-	if had_original_cfg:
+## Settings the tests change are saved to the player's real hanabi_vr.cfg: keep
+## a copy and put it back, so a test run never leaves the headset tuned.
+func _backup_settings_file() -> Dictionary:
+	var had := FileAccess.file_exists(VrComfortSettings.SETTINGS_PATH)
+	var content := ""
+	if had:
 		var fa := FileAccess.open(VrComfortSettings.SETTINGS_PATH, FileAccess.READ)
 		if fa:
-			original_cfg_content = fa.get_as_text()
+			content = fa.get_as_text()
 			fa.close()
+	return {"had": had, "content": content}
 
+
+func _restore_settings_file(backup: Dictionary) -> void:
+	if backup.had:
+		var fw := FileAccess.open(VrComfortSettings.SETTINGS_PATH, FileAccess.WRITE)
+		if fw:
+			fw.store_string(backup.content)
+			fw.close()
+	else:
+		DirAccess.remove_absolute(VrComfortSettings.SETTINGS_PATH)
+	VrComfortSettings.load_settings()
+	VrComfortSettings.apply_to_player(xr)
+
+
+## Opens the menu on the SETTINGS tab; returns the canvas.
+func _open_settings() -> SkillTreeCanvas:
 	VrComfortSettings.reset_to_defaults(xr)
 	await _tap_menu_button()
-	_check("the menu opens for comfort checks", ctl.is_open)
 	var c: SkillTreeCanvas = menu.canvas
-
-	# Click Comfort tab (tab index 4)
 	await _click("left", c.tab_rect(4).get_center())
-	_check("clicking tab 4 switches to comfort settings", c.is_comfort_tab)
+	return c
+
+
+func _click_page(key: String) -> void:
+	await _click("left", (SkillTreeCanvas.SUBNAV_RECTS[key] as Rect2).get_center())
+
+
+func _test_settings_tab() -> void:
+	var backup := _backup_settings_file()
+	var c := await _open_settings()
+	_check("clicking tab 4 switches to settings", c.is_settings_tab)
+	_check("the settings tab opens on AUDIO", c.settings_page == SkillTreeCanvas.PAGE_AUDIO)
+	# The settings tab is part of the pause: the run clock stands still while it is open.
+	var t_run := run.run_time
+	await _frames(30)
+	_check("the settings tab keeps the world paused (run clock %.3f -> %.3f)" % [t_run, run.run_time],
+		get_tree().paused and is_equal_approx(run.run_time, t_run))
 
 	# 1. Vignette toggle & strength
-	await _click("left", c.comfort_rect("vignette_off").get_center())
+	await _click_page("page_move")
+	_check("the MOVEMENT page is showing", c.settings_page == SkillTreeCanvas.PAGE_MOVE)
+	await _click("left", c.settings_rect("vignette_off").get_center())
 	_check("clicking DISABLED turns vignette off", not VrComfortSettings.vignette_enabled)
 	var vig: Node = xr._get_vignette()
 	var vig_mesh: Node = vig.get_node_or_null("Mesh") if vig else null
 	_check("vignette node disabled auto_adjust", vig != null and not bool(vig.get("auto_adjust")))
 	_check("vignette mesh hidden when disabled", vig_mesh != null and not bool(vig_mesh.get("visible")))
 
-	await _click("left", c.comfort_rect("vignette_on").get_center())
+	await _click("left", c.settings_rect("vignette_on").get_center())
 	_check("clicking ENABLED turns vignette on", VrComfortSettings.vignette_enabled)
 	_check("vignette node enabled auto_adjust", vig != null and bool(vig.get("auto_adjust")))
 	_check("vignette mesh shown when enabled", vig_mesh != null and bool(vig_mesh.get("visible")))
 
-	await _click("left", c.comfort_rect("vignette_75").get_center())
+	await _click("left", c.settings_rect("vignette_75").get_center())
 	_check("clicking 75% sets strength to 0.75", absf(VrComfortSettings.vignette_strength - 0.75) < 0.01)
 
-	# 2. Turning mode & settings
+	# 2. Turning mode, speeds and walking pace
 	var turn: Node = xr._get_movement_turn()
-	await _click("right", c.comfort_rect("turn_smooth").get_center())
+	await _click("right", c.settings_rect("turn_smooth").get_center())
 	_check("clicking SMOOTH sets smooth turn mode", not VrComfortSettings.snap_turning and int(turn.get("turn_mode")) == 2)
 
-	await _click("right", c.comfort_rect("smooth_30").get_center())
+	await _click("right", c.settings_rect("smooth_30").get_center())
 	_check("clicking 3.0 sets smooth speed to 3.0", absf(VrComfortSettings.smooth_turn_speed - 3.0) < 0.01 and absf(float(turn.get("smooth_turn_speed")) - 3.0) < 0.01)
 
-	await _click("right", c.comfort_rect("turn_snap").get_center())
+	await _click("right", c.settings_rect("turn_snap").get_center())
 	_check("clicking SNAP sets snap turn mode", VrComfortSettings.snap_turning and int(turn.get("turn_mode")) == 1)
 
-	await _click("right", c.comfort_rect("snap_60").get_center())
+	await _click("right", c.settings_rect("snap_60").get_center())
 	_check("clicking 60° sets snap angle to 60.0", absf(VrComfortSettings.snap_angle - 60.0) < 0.01 and absf(float(turn.get("step_turn_angle")) - 60.0) < 0.01)
 
-	# 3. Dominant-hand swap
-	await _click("left", c.comfort_rect("hand_left").get_center())
+	# 3. Dominant hand: the swap is on CONTROLS, where the diagram follows it.
+	await _click_page("page_controls")
+	await _click("left", c.settings_rect("hand_left").get_center())
 	_check("dominant hand swapped to left", VrComfortSettings.dominant_hand == "left" and xr.dominant_hand == "left")
 	_check("left holder is now dominant weapon hand", xr.get_dominant_holder() == xr.left_holder)
 	_check("movement direct reparented to right controller", xr._get_movement_direct().get_parent() == xr.right_controller)
@@ -346,7 +382,7 @@ func _test_comfort_settings_tab() -> void:
 	if run.diegetic_hud and run.diegetic_hud.wrist_unit:
 		_check("wrist HUD plate moved to off-hand (right controller)", run.diegetic_hud.wrist_unit.get_parent() == xr.right_controller)
 
-	await _click("left", c.comfort_rect("hand_right").get_center())
+	await _click("left", c.settings_rect("hand_right").get_center())
 	_check("dominant hand swapped back to right", VrComfortSettings.dominant_hand == "right" and xr.dominant_hand == "right")
 	_check("right holder is dominant weapon hand", xr.get_dominant_holder() == xr.right_holder)
 	_check("movement direct back on left controller", xr._get_movement_direct().get_parent() == xr.left_controller)
@@ -356,20 +392,21 @@ func _test_comfort_settings_tab() -> void:
 		_check("wrist HUD plate back on left controller", run.diegetic_hud.wrist_unit.get_parent() == xr.left_controller)
 
 	# 4. Seated mode & height
-	await _click("right", c.comfort_rect("seated_on").get_center())
+	await _click_page("page_move")
+	await _click("right", c.settings_rect("seated_on").get_center())
 	_check("seated mode enabled", VrComfortSettings.seated_mode and VrComfortSettings.height_offset >= 0.20)
 	var body_h: float = float(xr._body().get("player_height_offset"))
 	_check("player body height offset applied (%.2f m)" % body_h, absf(body_h - VrComfortSettings.height_offset) < 0.01)
 	await _frames(8)
 
 	var h_before := VrComfortSettings.height_offset
-	await _click("right", c.comfort_rect("height_plus").get_center())
+	await _click("right", c.settings_rect("height_plus").get_center())
 	_check("height plus adjusts by +5 cm (%.2f -> %.2f)" % [h_before, VrComfortSettings.height_offset], absf(VrComfortSettings.height_offset - (h_before + 0.05)) < 0.01)
 
-	await _click("right", c.comfort_rect("seated_off").get_center())
+	await _click("right", c.settings_rect("seated_off").get_center())
 	_check("standing mode restored", not VrComfortSettings.seated_mode)
 
-	await _click("right", c.comfort_rect("height_reset").get_center())
+	await _click("right", c.settings_rect("height_reset").get_center())
 	_check("height reset to 0.00 m", absf(VrComfortSettings.height_offset) < 0.01)
 
 	# 5. Persistence verification
@@ -381,24 +418,190 @@ func _test_comfort_settings_tab() -> void:
 	_check("snap_angle saved in cfg", absf(float(cfg.get_value("comfort", "snap_angle", 0.0)) - 60.0) < 0.01)
 	_check("dominant_hand saved in cfg", String(cfg.get_value("comfort", "dominant_hand", "")) == "right")
 
-	# 6. Switch back to skill tree tab
+	# 6. Back to the element tabs; the pause ends with the menu.
 	await _click("left", c.tab_rect(0).get_center())
-	_check("clicking tab 0 returns to Sakura tree", not c.is_comfort_tab and c.element == Elements.SAKURA)
+	_check("clicking tab 0 returns to Sakura tree", not c.is_settings_tab and c.element == Elements.SAKURA)
 
 	await _release_triggers()
 	await _tap_menu_button()
-	_check("the menu closes cleanly after comfort checks", not ctl.is_open)
+	_check("the menu closes cleanly after settings checks", not ctl.is_open and not get_tree().paused)
+	_restore_settings_file(backup)
 
-	# Restore original config file and settings
-	if had_original_cfg:
-		var fw := FileAccess.open(VrComfortSettings.SETTINGS_PATH, FileAccess.WRITE)
-		if fw:
-			fw.store_string(original_cfg_content)
-			fw.close()
-	else:
-		DirAccess.remove_absolute(VrComfortSettings.SETTINGS_PATH)
+
+func _test_audio_settings() -> void:
+	var backup := _backup_settings_file()
+	var c := await _open_settings()
+	await _click_page("page_audio")
+	var master := AudioServer.get_bus_index("Master")
+	var music := AudioServer.get_bus_index(Sfx.MUSIC_BUS)
+	var world := AudioServer.get_bus_index(Sfx.WORLD_BUS)
+	var ambience := AudioServer.get_bus_index(Sfx.AMBIENCE_BUS)
+
+	await _click("left", c.settings_rect("vol_music_dn").get_center())
+	_check("MUSIC down steps to 90%% (%d)" % VrComfortSettings.audio_percent["music"], VrComfortSettings.audio_percent["music"] == 90)
+	for _i in 5:
+		await _click("left", c.settings_rect("vol_master_dn").get_center())
+	_check("MASTER five steps down reaches 50%% (%d)" % VrComfortSettings.audio_percent["master"], VrComfortSettings.audio_percent["master"] == 50)
+	for _i in 2:
+		await _click("left", c.settings_rect("vol_sfx_dn").get_center())
+	await _click("left", c.settings_rect("vol_ambience_dn").get_center())
+	await _frames(40)  # the pause duck fades in over 0.25 s
+	# While the menu is open the pause duck (-8 dB on Music) still applies on top of the volume.
+	_check("MUSIC bus reads 90%% and the pause duck (%.2f dB, want %.2f)" % [AudioServer.get_bus_volume_db(music), linear_to_db(0.9) - 8.0],
+		absf(AudioServer.get_bus_volume_db(music) - (linear_to_db(0.9) - 8.0)) < 0.3)
+
+	# Bounds and 10 % snapping, without the pointer.
+	VrComfortSettings.set_volume_percent("sfx", 150)
+	_check("SFX above 100%% stops at 100%% (%d)" % VrComfortSettings.audio_percent["sfx"], VrComfortSettings.audio_percent["sfx"] == 100)
+	VrComfortSettings.set_volume_percent("ambience", -30)
+	_check("Ambience below 0%% stops at 0%% (%d)" % VrComfortSettings.audio_percent["ambience"], VrComfortSettings.audio_percent["ambience"] == 0)
+	VrComfortSettings.set_volume_percent("ambience", 90)
+	VrComfortSettings.set_volume_percent("sfx", 80)
+	_check("the buses follow the values (SFX %.2f dB)" % AudioServer.get_bus_volume_db(world), absf(AudioServer.get_bus_volume_db(world) - linear_to_db(0.8)) < 0.3)
+
+	await _release_triggers()
+	await _tap_menu_button()
+	await _frames(40)
+	_check("closing the menu leaves the chosen levels (Master %.2f, Music %.2f, SFX %.2f, Ambience %.2f dB)" % [
+			AudioServer.get_bus_volume_db(master), AudioServer.get_bus_volume_db(music),
+			AudioServer.get_bus_volume_db(world), AudioServer.get_bus_volume_db(ambience)],
+		absf(AudioServer.get_bus_volume_db(master) - linear_to_db(0.5)) < 0.3
+		and absf(AudioServer.get_bus_volume_db(music) - linear_to_db(0.9)) < 0.3
+		and absf(AudioServer.get_bus_volume_db(world) - linear_to_db(0.8)) < 0.3
+		and absf(AudioServer.get_bus_volume_db(ambience) - linear_to_db(0.9)) < 0.3)
+
+	# Survives a save and a reload: forget the values in memory, then load the file.
+	var cfg := ConfigFile.new()
+	cfg.load(VrComfortSettings.SETTINGS_PATH)
+	_check("the [audio] section is saved (master %s, music %s, sfx %s, ambience %s)" % [
+			cfg.get_value("audio", "master"), cfg.get_value("audio", "music"),
+			cfg.get_value("audio", "sfx"), cfg.get_value("audio", "ambience")],
+		int(cfg.get_value("audio", "master", -1)) == 50 and int(cfg.get_value("audio", "music", -1)) == 90
+		and int(cfg.get_value("audio", "sfx", -1)) == 80 and int(cfg.get_value("audio", "ambience", -1)) == 90)
+	for key in VrComfortSettings.AUDIO_KEYS:
+		VrComfortSettings.audio_percent[key] = 100
+	VrComfortSettings.apply_audio()
 	VrComfortSettings.load_settings()
-	VrComfortSettings.apply_to_player(xr)
+	_check("loading the file restores the volumes (master %d, music %d, sfx %d, ambience %d)" % [
+			VrComfortSettings.audio_percent["master"], VrComfortSettings.audio_percent["music"],
+			VrComfortSettings.audio_percent["sfx"], VrComfortSettings.audio_percent["ambience"]],
+		VrComfortSettings.audio_percent == {"master": 50, "music": 90, "sfx": 80, "ambience": 90}
+		and absf(AudioServer.get_bus_volume_db(music) - linear_to_db(0.9)) < 0.3)
+	_restore_settings_file(backup)
+
+
+func _test_access_and_pace() -> void:
+	var backup := _backup_settings_file()
+	var c := await _open_settings()
+
+	# Photosensitivity: OFF drops the firework lamp and keeps the sparks.
+	await _click_page("page_access")
+	await _click("left", c.settings_rect("flash_50").get_center())
+	_check("SOFT 50 %% stores a flash scale of 0.5 (%.2f)" % VrComfortSettings.flash_scale(), absf(VrComfortSettings.flash_scale() - 0.5) < 0.001)
+	await _click("left", c.settings_rect("flash_100").get_center())
+	await _frames(40)  # earlier lamps fade within 0.16 s
+	var lamps := func() -> int: return run.find_children("FireworkFlash", "OmniLight3D", true, false).size()
+	var before: int = lamps.call()
+	VfxPool.spawn_firework_flash(run, xr.feet_position() + Vector3(0.0, 2.0, -3.0), Color(1.0, 0.5, 0.6), 1.0)
+	_check("FULL flash keeps the firework lamp (%d new)" % (int(lamps.call()) - before), int(lamps.call()) == before + 1)
+	await _click("left", c.settings_rect("flash_0").get_center())
+	await _frames(40)
+	before = lamps.call()
+	VfxPool.spawn_firework_flash(run, xr.feet_position() + Vector3(0.0, 2.0, -3.0), Color(1.0, 0.5, 0.6), 1.0)
+	_check("OFF flash drops the lamp and keeps the sparks (%d new)" % (int(lamps.call()) - before), int(lamps.call()) == before)
+
+	# Haptics: the strength scales every pulse; OFF is silent.
+	await _click("left", c.settings_rect("haptic_50").get_center())
+	xr.right_holder.pulse(1.0, 0.05)
+	_check("HALF 50 %% sends half the amplitude (%.2f)" % xr.right_holder.last_pulse_amplitude, absf(xr.right_holder.last_pulse_amplitude - 0.5) < 0.001)
+	await _click("left", c.settings_rect("haptic_0").get_center())
+	xr.right_holder.pulse(1.0, 0.05)
+	_check("OFF sends no vibration (%.2f)" % xr.right_holder.last_pulse_amplitude, xr.right_holder.last_pulse_amplitude == 0.0)
+	await _click("left", c.settings_rect("haptic_100").get_center())
+	await _click("left", c.settings_rect("haptic_test").get_center())
+	_check("TEST pulses the katana hand at full strength (%.2f)" % xr.right_holder.last_pulse_amplitude, absf(xr.right_holder.last_pulse_amplitude - 0.6) < 0.001)
+
+	# Walking pace stacks with the ink boost and is saved.
+	await _click_page("page_move")
+	await _click("left", c.settings_rect("walk_normal").get_center())
+	var base := xr.get_move_speed()
+	await _click("left", c.settings_rect("walk_fast").get_center())
+	_check("FAST walks at 1.3x the default pace (%.2f -> %.2f)" % [base, xr.get_move_speed()], absf(xr.get_move_speed() - base * 1.3) < 0.01)
+	run.apply_locomotion_speed(1.2)
+	_check("the ink boost stacks on top of the pace (%.2f)" % xr.get_move_speed(), absf(xr.get_move_speed() - base * 1.3 * 1.2) < 0.01)
+	run.apply_locomotion_speed(1.0)
+	await _click("left", c.settings_rect("walk_slow").get_center())
+	_check("SLOW walks at 0.7x (%.2f)" % xr.get_move_speed(), absf(xr.get_move_speed() - base * 0.7) < 0.01)
+	var cfg := ConfigFile.new()
+	cfg.load(VrComfortSettings.SETTINGS_PATH)
+	_check("the pace and the access levels are saved", absf(float(cfg.get_value("comfort", "walk_scale", 0.0)) - 0.7) < 0.001
+		and int(cfg.get_value("access", "flash_percent", -1)) == 0 and int(cfg.get_value("access", "haptic_percent", -1)) == 100)
+
+	await _release_triggers()
+	await _tap_menu_button()
+	_restore_settings_file(backup)
+	await _frames(5)
+
+
+func _test_controls_page_matches_action_map() -> void:
+	var backup := _backup_settings_file()
+	var c := await _open_settings()
+	await _click_page("page_controls")
+	await _frames(2)
+
+	# Expected: every binding and action name of the Quest profile in the action map.
+	var expected_bindings := {}
+	var expected_actions := {}
+	for b: Dictionary in ControlsMap.bindings():
+		expected_bindings[b.path] = true
+		expected_actions[b.action] = true
+	var drawn_bindings := {}
+	for p in c.drawn_bindings:
+		drawn_bindings[p] = true
+	var drawn_actions := {}
+	for a in c.drawn_actions:
+		drawn_actions[a] = true
+	_check("the controls page draws every binding of the action map (%d of %d)" % [drawn_bindings.size(), expected_bindings.size()],
+		_same_keys(expected_bindings, drawn_bindings) and not expected_bindings.is_empty())
+	_check("and every action by name (%d of %d)" % [drawn_actions.size(), expected_actions.size()],
+		_same_keys(expected_actions, drawn_actions))
+	_check("nothing in the action map is left unplaced (%s)" % [ControlsMap.layout("right").unmapped], ControlsMap.layout("right").unmapped.is_empty())
+	var game_uses := ["ax_button", "by_button", "trigger", "grip", "primary", "menu_button"]
+	var missing: Array[String] = []
+	for n in game_uses:
+		if not drawn_actions.has(n):
+			missing.append(n)
+	_check("the buttons the game reads are all drawn (missing %s)" % [missing], missing.is_empty())
+	_check("the Meta button is drawn and marked as the system's", c.drawn_callouts.any(
+		func(d: Dictionary) -> bool: return d.slot == "top_button" and d.side == "right" and String(d.title).begins_with("META")))
+
+	# Dominant hand: the drawing follows the swap.
+	await _click("left", c.settings_rect("hand_left").get_center())
+	await _frames(2)
+	var roles: Dictionary = ControlsMap.layout(VrComfortSettings.dominant_hand).roles
+	_check("swapped: the katana is in the left hand, the wrist HUD on the right (katana %s, HUD %s)" % [roles.katana, roles.hud],
+		roles.katana == "left" and roles.hud == "right")
+	_check("swapped: the drawn right stick walks (%s)" % _drawn_callout("right", "stick"), _drawn_callout("right", "stick").begins_with("Walk"))
+	_check("swapped: the drawn left stick turns (%s)" % _drawn_callout("left", "stick"), _drawn_callout("left", "stick").begins_with("Turn"))
+	await _click("left", c.settings_rect("hand_right").get_center())
+	await _frames(2)
+	_check("back to right: the drawn right stick turns again (%s)" % _drawn_callout("right", "stick"), _drawn_callout("right", "stick").begins_with("Turn"))
+
+	await _release_triggers()
+	await _tap_menu_button()
+	_restore_settings_file(backup)
+
+
+## The body text of the drawn callout for [param side] and [param slot] ("" if none).
+func _drawn_callout(side: String, slot: String) -> String:
+	for d: Dictionary in menu.canvas.drawn_callouts:
+		if d.side == side and d.slot == slot:
+			return String(d.body)
+	return ""
+
+
+func _same_keys(a: Dictionary, b: Dictionary) -> bool:
+	return a.size() == b.size() and a.keys().all(func(k: Variant) -> bool: return b.has(k))
 
 
 # --- 5. Slow-mo state survives ---------------------------------------------------------
@@ -547,7 +750,7 @@ func _tap_menu_button() -> void:
 ## Aims a hand at canvas pixel [param px] of the open panel.
 func _aim(side: String, px: Vector2) -> void:
 	var c := xr.left_controller if side == "left" else xr.right_controller
-	for _i in 10:
+	for _i in 30:
 		var target := menu.canvas_to_world(px)
 		var head := _camera().global_position
 		var sign_x := -1.0 if side == "left" else 1.0
@@ -558,7 +761,8 @@ func _aim(side: String, px: Vector2) -> void:
 		await _frames(2)
 		if c:
 			var hit := menu.ray_to_canvas(c.global_position, -c.global_basis.z)
-			if not hit.is_empty() and (hit.canvas as Vector2).distance_to(px) < 22.0:
+			# Settle on the target, not at its rim: a 50 px button leaves no room for drift.
+			if not hit.is_empty() and (hit.canvas as Vector2).distance_to(px) < 6.0:
 				break
 
 
