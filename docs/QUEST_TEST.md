@@ -76,6 +76,8 @@ Zrzuty menu (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/sk
 
 - [ ] Las rysuje się z `default_profile` (lub presetu z `project.godot`) bez skoków klatek przy przejściu między chunkami (zrzut: ~80–120 ms na nowy chunk to znany koszt, zob. docs/WORLDGEN_TOOL.md).
 - [ ] Ścieżka jest czytelna jako kamienna wstęga, nie wchodzi w pnie; bramy mają czerwony korpus z delikatną cyjanową poświatą.
+- [ ] **Ścieżka widoczna od razu w VR** z spawnu (0,0,1.8) i 20 m dalej, w nocy i mgle, bez szukania wzrokiem. Pulpitowy test renderu tego nie zastępuje (zob. docs/WORLDGEN_TOOL.md, „Ścieżka w grze”).
+- [ ] Tōrō przy ścieżce (co ok. 15–25 m) są widoczne jako kamienie z ciepłą, słabą poświatą, słabszą od bram.
 - [ ] Mgła zaczyna się około 3,5 m i jest pełna przy 11 m; krawędź chunków nie jest widoczna.
 - [ ] Zmierzch: róż i błękit mieszają się bez skoku; nie ma lawendowej mgły.
 - [ ] Sakura (focal) jest jedna co kilka chunków i czytelna z daleka.
