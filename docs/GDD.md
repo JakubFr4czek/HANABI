@@ -180,13 +180,15 @@ Played once per launch, before the run intro. The launch scene is `scenes/main.t
 - Does Meta offer TTS, or do we use Piper?
 - Which fields does the hackathon submission form require?
 
-## 14. VR Comfort & Accessibility (Implemented - Zadanie 6)
-Accessible as tab 5 ("安" COMFORT) in the pause skill-tree menu, with automatic persistence to `user://hanabi_vr.cfg` (`[comfort]` & `[view]`):
+## 14. VR Comfort, Accessibility & Settings (Implemented - Zadanie 6, D3)
+The 安 tab of the pause menu is **SETTINGS** (labels in English, like the rest of the menu). It has four pages behind one sub-tab row; the tree is untouched, and the tab keeps the world paused like the tree does. Everything saves at once to `user://hanabi_vr.cfg`; each save keeps the other sections.
 
-- **Turning:** Snap turn (15°, 30°, 45°, 60°, 90°) or smooth turn (speeds 1.0–4.0 rad/s), configured on godot-xr-tools `movement_turn`.
-- **Vignette:** Tunnel vision comfort vignette (`addons/godot-xr-tools/effects/vignette.tscn`) active during movement/turning, with toggle and 4 strength presets (25%, 50%, 75%, 100%).
-- **Dominant Hand:** Right (standard) or Left (southpaw). Dynamic swapping reparents movement stick (`MovementDirect`) to offhand controller and turning stick (`MovementTurn`) to dominant controller, attaches diegetic wrist HUD kote plate to the offhand, and orients katana offerings / spawn to the dominant hand.
-- **Body & Seated Mode:** Standing or Seated mode (adds +0.35 m default calibration boost, adjustable ±5 cm steps from -0.45 m to +0.80 m), view recenter action (`XRServer.center_on_hmd`).
+- **AUDIO** `[audio]`: Master, Music, SFX and Ambience, 0–100 % in 10 % steps, on the buses (Master, World, Music, Ambience). Music and Ambience keep their slow-mo and pause ducks on top of the chosen level. SFX plays a cue as it changes.
+- **MOVEMENT** `[comfort]`: vignette on/off and four strengths; snap (15–90°) or smooth turn (1.0–4.0); walking pace SLOW ×0.7 / NORMAL / FAST ×1.3, which stacks with the ink boost; seated mode and eye height (±5 cm, reset).
+- **ACCESS** `[access]`: lightning and firework flash FULL 100 % / SOFT 50 % / OFF 0 % (the scene-wide light and the firework lamps; the bolt and the thunder stay). Haptic strength OFF / HALF 50 % / FULL 100 % for every pulse, with a TEST pulse on the katana hand.
+- **CONTROLS**: the dominant-hand switch and both Quest 3 controllers, drawn from the project's own OpenXR action map (`openxr_action_map.tres`, profile `oculus/touch_controller`) by `ControlsMap`. Nothing is typed in by hand except what each input does. The katana hand, the walking stick, the turning stick and the wrist HUD follow the dominant-hand setting. Touch sensors, tracking poses and haptic output are listed as footnotes; the Meta button is marked as the system's.
+- **Dominant hand:** Right (standard) or Left (southpaw). Switching reparents the movement stick (`MovementDirect`) to the off-hand and the turning stick (`MovementTurn`) to the dominant hand, moves the wrist HUD plate to the off-hand and puts the katana in the dominant hand.
+- **Skipped on purpose (D3):** teleport locomotion (needs its own provider and a second stick mode that competes with the katana grip and the B/Y keys, not cheap); a text-size slider (every canvas size is fixed, and scaling it risks overflow in the tree); subtitles (the game has no speech to caption).
 
 ## 15. Cherry on top: calories (LATE, lowest priority)
 Only at the very end, after comfort and the demo. First thing to cut. Do not implement during prototyping. The number is an estimate, not a medical measure. Follow the premium art-direction rule: a quiet diegetic mark, no fitness-app UI.
