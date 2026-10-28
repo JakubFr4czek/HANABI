@@ -341,7 +341,7 @@ func _update_label_visibility() -> void:
 		(l as Label3D).outline_modulate.a = 0.95 * a
 
 
-func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, wave: int, score: int, kills: int, run_seconds: float, active_element: String) -> void:
+func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, wave: int, score: int, kills: int, run_seconds: float, active_element: String, ofuda_count: int = 0) -> void:
 	var hp_ratio := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
 	var critical := hp_ratio <= HP_RING_CRITICAL_RATIO
 
@@ -374,5 +374,6 @@ func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, 
 		xp_bar.scale.x = maxf(r, 0.001)
 		xp_bar.position.x = _xp_bar_left + _xp_bar_width * r * 0.5
 	if wrist_label:
-		# Engraved readout in the game's voice: rank, wave, kills, score.
-		wrist_label.text = "位 %d · 波 %d · 斬 %d\n%d pt" % [level, wave, kills, score]
+		# Engraved readout in the game's voice: rank, wave, kills, score,
+		# and the spendable Ofuda tally (E2c, plan section (f)).
+		wrist_label.text = "位 %d · 波 %d · 斬 %d\n%d pt · 札×%d" % [level, wave, kills, score, ofuda_count]
