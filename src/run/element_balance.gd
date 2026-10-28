@@ -115,6 +115,24 @@ const DECOY_EXPLOSION_RADIUS := 3.0
 const BACKSTAB_MULTIPLIER := 3.0           # was 2.5 + a bonus Ofuda (D1: Ofuda come from hokora only)
 const SHADOW_CLONES := 2
 
+# --- Kirisute / tachi (D4): the tier-5 finisher of every school ---------------------
+## Real m/s of the blade relative to the yōkai at contact for a cut to split it.
+const KIRISUTE_MIN_SPEED := 8.0
+## Cosine of the edge against the motion (1 = edge square on): only clean cuts split.
+const KIRISUTE_MIN_ALIGNMENT := 0.85
+## An elite takes this share of its max HP extra; it splits only when that kills it.
+const KIRISUTE_ELITE_FRACTION := 0.5
+## Pieces alive at once (the oldest dissolves first) and cuts that may split in one physics frame.
+const KIRISUTE_MAX_PIECES := 8
+const KIRISUTE_CUTS_PER_FRAME := 2
+## Seconds a piece lies before it dissolves into petals; its cut glows at full
+## strength for a moment and then fades over KIRISUTE_CAP_FADE_SECONDS.
+const KIRISUTE_PIECE_SECONDS := 2.6
+const KIRISUTE_DISSOLVE_SECONDS := 0.8
+const KIRISUTE_CAP_FADE_SECONDS := 1.6
+## An Oni takes a glowing wound instead of splitting; it stays open this long.
+const KIRISUTE_WOUND_SECONDS := 2.0
+
 # --- Ofuda economy (D1): the only currency the trees are bought with ----------------
 ## Ofuda come from hokora shrines in the forest and from nothing else: yōkai,
 ## elites and the Oni drop none (docs/ELEMENTS_PLAN.md, D1).
