@@ -1,9 +1,18 @@
 class_name RunOniBoss
 extends TrainingDummy
-## Periodic Oni boss for survival runs (docs/GDD.md §7, NIGHT_PLAN.md §4).
-## DuelistBrain parryable combos; permanent death. Demon flesh + mask, not wood dummy.
+## Periodic Oni boss for survival runs (docs/GDD.md §7, §8, Zadanie D15).
+##
+## AI-controlled demonic warlord (~2.7m tall) wielding a heavy spiked Kanabō.
+## Features:
+## - Scaled body proportions (~2.7m tall) with matching physical hitboxes.
+## - Active pursuit and 3 telegraphed attacks (Overhead Slam, Cleave Sweep, Demon Lunge).
+## - AI-controlled via [OniBossBrain] with Meta Model API (Muse Spark / Llama) and local fallback.
+## - 3D billboard speech bubble for atmospheric Polish/English combat lines.
+## - Permanent defeat upon deplete, dropping storm fireworks and emitting [signal boss_defeated].
 
 signal boss_defeated(oni: RunOniBoss, hit: Dictionary)
+
+const ONI_SCALE := 1.50
 
 const ONI_MASK_GLB := preload("res://assets/models/enemies/oni_mask_run.glb")
 const ONI_MASK_NRM := preload("res://assets/models/enemies/oni_mask_run_normal.png")
@@ -24,11 +33,48 @@ var _robe := ShaderMaterial.new()
 static var _cached_body_mesh: Mesh
 static var _cached_kanabo_mesh: Mesh
 
+var speech_bubble: OniSpeechBubble
+
+
+func _define_parts() -> Dictionary:
+	var s_scale := ONI_SCALE
+	var d := {
+		"pelvis": {"shape": "box", "size": Vector3(0.30, 0.18, 0.18) * s_scale, "pos": Vector3(0, 0.98 * s_scale, 0), "mass": 24.0, "zone": "torso"},
+		"chest": {"shape": "box", "size": Vector3(0.36, 0.44, 0.21) * s_scale, "pos": Vector3(0, 1.31 * s_scale, 0), "mass": 36.0, "zone": "torso",
+			"parent": "pelvis", "joint": Vector3(0, 1.08 * s_scale, 0), "max_torque": 1200.0,
+			"limits": {"x": Vector2(-25, 45), "y": Vector2(-35, 35), "z": Vector2(-25, 25)}},
+		"head": {"shape": "sphere", "radius": 0.115 * s_scale, "pos": Vector3(0, 1.67 * s_scale, 0), "mass": 10.0, "zone": "head",
+			"parent": "chest", "joint": Vector3(0, 1.54 * s_scale, 0), "max_torque": 250.0,
+			"limits": {"x": Vector2(-40, 40), "y": Vector2(-60, 60), "z": Vector2(-30, 30)}},
+	}
+	# Left side is +X (dummy faces +Z). Right side mirrors y/z limits.
+	for side in ["l", "r"]:
+		var s := 1.0 if side == "l" else -1.0
+		d["upper_arm_" + side] = {"shape": "capsule", "radius": 0.05 * s_scale, "height": 0.32 * s_scale, "pos": Vector3(0.25 * s * s_scale, 1.33 * s_scale, 0),
+			"mass": 5.5, "zone": "limb", "parent": "chest", "joint": Vector3(0.25 * s * s_scale, 1.49 * s_scale, 0), "max_torque": 500.0,
+			"limits": {"x": Vector2(-150, 60), "y": Vector2(-70, 70), "z": _mirror(Vector2(-20, 110), s)}}
+		d["lower_arm_" + side] = {"shape": "capsule", "radius": 0.045 * s_scale, "height": 0.30 * s_scale, "pos": Vector3(0.25 * s * s_scale, 1.03 * s_scale, 0),
+			"mass": 3.5, "zone": "limb", "parent": "upper_arm_" + side, "joint": Vector3(0.25 * s * s_scale, 1.18 * s_scale, 0), "max_torque": 300.0,
+			"limits": {"x": Vector2(-150, 5), "y": Vector2(-60, 60), "z": Vector2(-5, 5)}}
+		d["upper_leg_" + side] = {"shape": "capsule", "radius": 0.07 * s_scale, "height": 0.44 * s_scale, "pos": Vector3(0.1 * s * s_scale, 0.69 * s_scale, 0),
+			"mass": 16.0, "zone": "limb", "parent": "pelvis", "joint": Vector3(0.1 * s * s_scale, 0.90 * s_scale, 0), "max_torque": 1000.0,
+			"limits": {"x": Vector2(-100, 35), "y": Vector2(-35, 35), "z": _mirror(Vector2(-15, 55), s)}}
+		d["lower_leg_" + side] = {"shape": "capsule", "radius": 0.055 * s_scale, "height": 0.44 * s_scale, "pos": Vector3(0.1 * s * s_scale, 0.27 * s_scale, 0),
+			"mass": 10.0, "zone": "limb", "parent": "upper_leg_" + side, "joint": Vector3(0.1 * s * s_scale, 0.48 * s_scale, 0), "max_torque": 800.0,
+			"limits": {"x": Vector2(-3, 140), "y": Vector2(-3, 3), "z": Vector2(-3, 3)},
+			"friction": 0.25,
+			"extra_shapes": [{"shape": "box", "size": Vector3(0.10, 0.06, 0.24) * s_scale, "offset": Vector3(0, -0.24 * s_scale, 0.05 * s_scale)}]}
+	return d
+
 
 func _ready() -> void:
 	add_to_group("oni_boss")
 	add_to_group("enemies")
-	scale = Vector3(1.28, 1.28, 1.28)
+	scale = Vector3.ONE  # Clean 1:1 scale; physical parts are scaled in _define_parts
+	max_anchor_lead = 0.6
+	anchor_stiffness = 3.5
+	anchor_gain = 0.08
+
 	_flesh.shader = WET_SURFACE_SHADER
 	_flesh.set_shader_parameter("base_color", Color(0.11, 0.04, 0.05))
 	_flesh.set_shader_parameter("roughness_dry", 0.62)
@@ -39,6 +85,7 @@ func _ready() -> void:
 	_flesh.set_shader_parameter("fog_rim", 1.35)
 	_flesh.set_shader_parameter("emission_tint", Color(0.55, 0.08, 0.06))
 	_flesh.set_shader_parameter("flash_color", Color(1.2, 0.22, 0.1))
+
 	_armor.shader = WET_SURFACE_SHADER
 	_armor.set_shader_parameter("base_color", Color(0.38, 0.03, 0.05))
 	_armor.set_shader_parameter("roughness_dry", 0.48)
@@ -47,6 +94,7 @@ func _ready() -> void:
 	_armor.set_shader_parameter("fill", 1.85)
 	_armor.set_shader_parameter("fog_rim", 1.1)
 	_armor.set_shader_parameter("emission_tint", Color(0.42, 0.05, 0.04))
+
 	_robe.shader = WET_SURFACE_SHADER
 	_robe.set_shader_parameter("base_color", Color(0.08, 0.05, 0.07))
 	_robe.set_shader_parameter("roughness_dry", 0.72)
@@ -55,9 +103,8 @@ func _ready() -> void:
 	_robe.set_shader_parameter("fill", 1.65)
 	_robe.set_shader_parameter("fog_rim", 1.25)
 	_robe.set_shader_parameter("procedural_ao", 0.55)
+
 	_mask.shader = WET_SURFACE_SHADER
-	# Aged bone like the swarm masks, a touch lighter so the boss still
-	# reads first — not a white signal plate.
 	_mask.set_shader_parameter("base_color", Color(0.52, 0.46, 0.38))
 	_mask.set_shader_parameter("roughness_dry", 0.58)
 	_mask.set_shader_parameter("roughness_wet", 0.22)
@@ -69,22 +116,48 @@ func _ready() -> void:
 	_mask.set_shader_parameter("normal_depth", 1.35)
 	_mask.set_shader_parameter("procedural_ao", 0.42)
 	_mask.set_shader_parameter("emission_tint", Color(0.35, 0.32, 0.28))
+
+	# Attach specialized Oni AI brain before super._ready()
+	if brain == null:
+		brain = OniBossBrain.new()
+		brain.name = "Brain"
+		add_child(brain)
+
 	super._ready()
+
 	_apply_oni_visuals()
-	_eyes.emission = Color(2.2, 0.42, 0.15)
-	_eyes.emission_energy_multiplier = 2.1
+	_eyes.emission = Color(2.5, 0.42, 0.15)
+	_eyes.emission_energy_multiplier = 2.4
 	_sash.albedo_color = Color(0.48, 0.04, 0.06)
 	_sash.emission_enabled = true
 	_sash.emission = Color(0.62, 0.08, 0.05)
 	_sash.emission_energy_multiplier = 0.42
 	set_attacks_enabled(true)
 	_attach_oni_rim_light()
-	GameEvents.log_event("oni_spawned", {"hp": hp})
+	_attach_speech_bubble()
+
+	GameEvents.log_event("oni_spawned", {"hp": hp, "height": get_boss_height()})
+
+
+func _attach_speech_bubble() -> void:
+	if speech_bubble != null:
+		return
+	speech_bubble = OniSpeechBubble.new()
+	speech_bubble.name = "SpeechBubble"
+	speech_bubble.position = Vector3(0.0, 2.95, 0.0)
+	add_child(speech_bubble)
+
+	if brain is OniBossBrain:
+		var oni_brain := brain as OniBossBrain
+		oni_brain.speech_requested.connect(func(text: String): speech_bubble.show_speech(text))
 
 
 func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	_update_oni_readability()
+	if speech_bubble and parts.has("head"):
+		var head_part := parts["head"] as RagdollPart
+		speech_bubble.global_position = head_part.global_position + Vector3(0.0, 0.48, 0.0)
 
 
 func _update_oni_readability() -> void:
@@ -98,8 +171,8 @@ func _update_oni_readability() -> void:
 		var active := d < 14.0
 		_rim.visible = active
 		if active:
-			_rim.light_energy = lerpf(0.38, 1.05, near)
-			_rim.omni_range = lerpf(2.2, 3.2, near)
+			_rim.light_energy = lerpf(0.45, 1.25, near)
+			_rim.omni_range = lerpf(3.0, 4.2, near)
 		else:
 			_rim.light_energy = 0.0
 	_mask.set_shader_parameter("fill", lerpf(2.35, 3.25, near))
@@ -114,10 +187,10 @@ func _attach_oni_rim_light() -> void:
 	var lamp := OmniLight3D.new()
 	lamp.name = "OniRimLight"
 	lamp.light_color = Color(1.0, 0.32, 0.12)
-	lamp.light_energy = 0.42
-	lamp.omni_range = 2.6
+	lamp.light_energy = 0.55
+	lamp.omni_range = 3.6
 	lamp.shadow_enabled = false
-	lamp.position = Vector3(0.0, 1.35, 0.25)
+	lamp.position = Vector3(0.0, 2.05, 0.35)
 	add_child(lamp)
 
 
@@ -125,6 +198,9 @@ func equip_sword() -> void:
 	super.equip_sword()
 	if sword:
 		sword.visible = false
+		sword.blade_start = Vector3(0, 0, -0.18)
+		sword.blade_tip = Vector3(0, 0, -1.45)
+		sword.mass = 3.8
 	_attach_kanabo_visual()
 
 
@@ -156,8 +232,8 @@ func _attach_oni_body_shell(pelvis: RagdollPart) -> void:
 	shell.name = "OniBodyShell"
 	var mesh := _oni_body_mesh()
 	shell.mesh = mesh if mesh else BoxMesh.new()
-	shell.position = Vector3(0.0, 0.04, 0.0)
-	shell.scale = Vector3(1.14, 1.12, 1.1)
+	shell.position = Vector3(0.0, 0.06, 0.0)
+	shell.scale = Vector3(1.55, 1.52, 1.48)
 	shell.material_override = _armor
 	pelvis.add_child(shell)
 
@@ -173,9 +249,9 @@ func _attach_kanabo_visual() -> void:
 	club.name = "OniKanaboVisual"
 	var mesh := _oni_kanabo_mesh()
 	club.mesh = mesh if mesh else CylinderMesh.new()
-	club.position = Vector3(0.08, -0.22, 0.12)
+	club.position = Vector3(0.12, -0.32, 0.18)
 	club.rotation = Vector3(deg_to_rad(-78.0), deg_to_rad(12.0), deg_to_rad(6.0))
-	club.scale = Vector3(1.15, 1.15, 1.15)
+	club.scale = Vector3(1.45, 1.45, 1.45)
 	var mat := ShaderMaterial.new()
 	mat.shader = WET_SURFACE_SHADER
 	mat.set_shader_parameter("base_color", Color(0.22, 0.20, 0.21))
@@ -223,27 +299,27 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 	mask_mi.name = "OniMask"
 	var mesh := _oni_mask_mesh()
 	mask_mi.mesh = mesh if mesh else _fallback_mask_mesh()
-	mask_mi.position = Vector3(0.0, 0.02, 0.12)
-	mask_mi.scale = Vector3(1.14, 1.18, 1.08)
+	mask_mi.position = Vector3(0.0, 0.03, 0.16)
+	mask_mi.scale = Vector3(1.52, 1.56, 1.44)
 	mask_mi.material_override = _mask
 	var eye_l := MeshInstance3D.new()
 	var eye_m := SphereMesh.new()
-	eye_m.radius = 0.018
-	eye_m.height = 0.036
+	eye_m.radius = 0.026
+	eye_m.height = 0.052
 	eye_l.mesh = eye_m
 	var eye_mat := StandardMaterial3D.new()
 	eye_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	eye_mat.albedo_color = Color(2.5, 0.35, 0.08)
+	eye_mat.albedo_color = Color(2.8, 0.40, 0.10)
 	eye_mat.emission_enabled = true
-	eye_mat.emission = Color(2.8, 0.45, 0.1)
-	eye_mat.emission_energy_multiplier = 2.4
+	eye_mat.emission = Color(3.0, 0.50, 0.12)
+	eye_mat.emission_energy_multiplier = 2.6
 	eye_l.material_override = eye_mat
 	for sx in [-1.0, 1.0]:
 		var e := eye_l.duplicate() as MeshInstance3D
-		e.position = Vector3(0.055 * sx, 0.02, 0.14)
+		e.position = Vector3(0.075 * sx, 0.03, 0.18)
 		mask_mi.add_child(e)
-	# Bigger, hotter points than a yōkai's: the Oni is read first in the fog.
-	EyeGlow.attach(mask_mi, Vector3(0.0, 0.02, 0.14), Color(1.0, 0.36, 0.08), 0.11, 0.075)
+	# Glowing ocular cavities reading sharply in fog
+	EyeGlow.attach(mask_mi, Vector3(0.0, 0.03, 0.18), Color(1.0, 0.36, 0.08), 0.15, 0.10)
 	head.add_child(mask_mi)
 
 
@@ -262,8 +338,13 @@ static func _oni_mask_mesh() -> Mesh:
 
 static func _fallback_mask_mesh() -> Mesh:
 	var m := BoxMesh.new()
-	m.size = Vector3(0.26, 0.30, 0.065)
+	m.size = Vector3(0.38, 0.44, 0.09)
 	return m
+
+
+## Returns total calculated height in meters from ground to top of horns.
+func get_boss_height() -> float:
+	return 2.82
 
 
 func _allow_revive_after_knockout() -> bool:
@@ -278,9 +359,7 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	return result
 
 
-## Kirisute (D4 §8): the Oni does not come apart from one cut. A clean cut leaves a
-## glowing wound in the school's colour, along the blade's line on the body, which
-## closes over ~2 s. At most [constant MAX_WOUNDS] stay open; the oldest closes first.
+## Kirisute (D4 §8): clean cuts leave glowing element wounds that close over ~2 s.
 func _open_wound(part: RagdollPart, hit: Dictionary) -> void:
 	var scene := get_tree().current_scene if is_inside_tree() else null
 	if scene == null:
@@ -297,7 +376,7 @@ func _open_wound(part: RagdollPart, hit: Dictionary) -> void:
 	along = along.normalized()
 	var slit := MeshInstance3D.new()
 	var quad := QuadMesh.new()
-	quad.size = Vector2(0.26, 0.016)
+	quad.size = Vector2(0.38, 0.024)
 	slit.mesh = quad
 	var glow := StandardMaterial3D.new()
 	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -308,7 +387,6 @@ func _open_wound(part: RagdollPart, hit: Dictionary) -> void:
 	glow.emission_energy_multiplier = 2.0
 	slit.material_override = glow
 	part.add_child(slit)
-	# The quad lies flat on the skin: its width runs along the blade, its normal points out.
 	slit.global_transform = Transform3D(Basis(along, radial.cross(along), radial), point + radial * 0.005)
 	_wounds.append(slit)
 	while _wounds.size() > MAX_WOUNDS:
@@ -328,9 +406,24 @@ func _on_permanent_defeat() -> void:
 	if sword:
 		sword.attacking = false
 	var chest := parts.get("chest") as RagdollPart if parts.has("chest") else null
-	var pos := chest.global_position if chest else global_position + Vector3(0, 1.2, 0)
+	var pos := chest.global_position if chest else global_position + Vector3(0, 1.8, 0)
 	if is_inside_tree() and get_tree().current_scene:
 		ElementFirework.spawn(get_tree().current_scene, pos, Elements.STORM, 1.45)
 	GameEvents.log_event("oni_defeated", {"hp": 0.0})
 	boss_defeated.emit(self, _last_hit)
 	call_deferred("queue_free")
+
+func head_part() -> RagdollPart:
+	return parts.get("head") as RagdollPart
+
+func play_attack(attack_type: String = "vertical") -> void:
+	if brain is DuelistBrain:
+		var d_brain := brain as DuelistBrain
+		d_brain.force_attack(attack_type)
+
+
+func is_attacking() -> bool:
+	if brain is DuelistBrain:
+		var d_brain := brain as DuelistBrain
+		return d_brain.state == DuelistBrain.State.ATTACK
+	return false
