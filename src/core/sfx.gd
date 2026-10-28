@@ -168,50 +168,38 @@ func _update_slow_mo_audio(_force: bool = false) -> void:
 	var bus := AudioServer.get_bus_index(AMBIENCE_BUS)
 	if bus < 0:
 		return
-	var in_slow := TimeController and TimeController.time_scale < 0.95
-	var target_duck := -6.0 if in_slow else 0.0
-	_slow_duck_db = move_toward(_slow_duck_db, target_duck, 0.5)
-
-	# Ambience bus low-pass for slow-mo muffling.
-	if in_slow and _ambience_lowpass_idx < 0:
+	var slow := TimeController.is_active("slow_motion")
+	if _ambience_lowpass_idx < 0:
 		var lp := AudioEffectLowPassFilter.new()
-		lp.cutoff_hz = 1200.0
+		lp.cutoff_hz = 20500.0
+		lp.resonance = 0.5
 		AudioServer.add_bus_effect(bus, lp)
 		_ambience_lowpass_idx = AudioServer.get_bus_effect_count(bus) - 1
-	elif not in_slow and _ambience_lowpass_idx >= 0:
-		AudioServer.remove_bus_effect(bus, _ambience_lowpass_idx)
-		_ambience_lowpass_idx = -1
-
+	var lp_fx := AudioServer.get_bus_effect(bus, _ambience_lowpass_idx) as AudioEffectLowPassFilter
+	if lp_fx:
+		lp_fx.cutoff_hz = 900.0 if slow else 20500.0
+	_slow_duck_db = -10.0 if slow else 0.0
 	_apply_bus_levels()
 
 
+## Composes the slow-mo duck and the pause duck on the Music / Ambience buses.
 func _apply_bus_levels() -> void:
 	var amb := AudioServer.get_bus_index(AMBIENCE_BUS)
 	if amb >= 0:
-		var duck := _slow_duck_db + PAUSE_AMBIENCE_DUCK_DB * _pause_amount
-		AudioServer.set_bus_volume_db(amb, _ambience_base_db + duck)
-
+		AudioServer.set_bus_volume_db(amb, _ambience_base_db + _slow_duck_db + PAUSE_AMBIENCE_DUCK_DB * _pause_amount)
 	var mus := AudioServer.get_bus_index(MUSIC_BUS)
 	if mus >= 0:
-		var duck := _slow_duck_db * 0.5 + PAUSE_MUSIC_DUCK_DB * _pause_amount
-		AudioServer.set_bus_volume_db(mus, _music_base_db + duck)
-
-		# Pause lowpass on Music bus (E3 (e)(3)): 20500 Hz -> 750 Hz.
-		if _pause_amount > 0.001 and _music_lowpass_idx < 0:
+		AudioServer.set_bus_volume_db(mus, _music_base_db + _slow_duck_db + PAUSE_MUSIC_DUCK_DB * _pause_amount)
+		if _music_lowpass_idx < 0:
 			var lp := AudioEffectLowPassFilter.new()
 			lp.cutoff_hz = 20500.0
 			lp.resonance = 1.0
 			AudioServer.add_bus_effect(mus, lp)
 			_music_lowpass_idx = AudioServer.get_bus_effect_count(mus) - 1
-		elif _pause_amount <= 0.001 and _music_lowpass_idx >= 0:
-			AudioServer.remove_bus_effect(mus, _music_lowpass_idx)
-			_music_lowpass_idx = -1
-
-		if _music_lowpass_idx >= 0:
-			var lp_fx := AudioServer.get_bus_effect(mus, _music_lowpass_idx) as AudioEffectLowPassFilter
-			if lp_fx:
-				# Log-space blend so the sweep sounds even.
-				lp_fx.cutoff_hz = exp(lerpf(log(20500.0), log(PAUSE_LOWPASS_HZ), _pause_amount))
+		var lp_fx := AudioServer.get_bus_effect(mus, _music_lowpass_idx) as AudioEffectLowPassFilter
+		if lp_fx:
+			# Log-space blend so the sweep sounds even.
+			lp_fx.cutoff_hz = exp(lerpf(log(20500.0), log(PAUSE_LOWPASS_HZ), _pause_amount))
 
 
 ## Pause menu atmosphere: Music through a 750 Hz low-pass at -8 dB, Ambience
