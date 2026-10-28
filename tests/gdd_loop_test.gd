@@ -52,7 +52,7 @@ func _run_all() -> void:
 	# E2c: progression lives in the per-element Ofuda skill trees. Unlocking
 	# Sakura nodes must not unlock another element's nodes, and a master
 	# node stays locked until its whole prerequisite chain is bought.
-	run.add_ofuda(24)
+	run.add_points(24)
 	var s1: Dictionary = run.unlock_skill("petal_sense")
 	var s2: Dictionary = run.unlock_skill("razor_petals")
 	_check("Skill tree unlocks the Sakura chain with Ofuda",

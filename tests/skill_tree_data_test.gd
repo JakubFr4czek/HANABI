@@ -1,7 +1,7 @@
 extends Node
 ## Headless verification for E2c (docs/ELEMENTS_PLAN.md Phase E2c):
-## - Skill tree data: 4 elements x 5 nodes, costs 3/5/5/8/12 (33 per tree)
-## - Cannot unlock without the prerequisite or without enough Ofuda
+## - Skill tree data: 4 elements x 5 nodes, costs 1/1/1/2/3 skill points (8 per tree, D12)
+## - Cannot unlock without the prerequisite or without enough points
 ## - Node 4 accepts Node 2 OR Node 3; Node 5 needs Node 4
 ## - An unlock measurably changes the ability (petal count, cooldown,
 ##   imbue duration, damage reduction) through ElementSystem
@@ -60,14 +60,14 @@ func _test_data_shape() -> void:
 			for req: String in n.get("requires_any", []):
 				if String(SkillTreeData.node_by_id(req).get("element", "")) != element:
 					shape_ok = false
-		if costs != [3, 5, 5, 8, 12]:
+		if costs != [1, 1, 1, 2, 3]:
 			shape_ok = false
-	_check("Each element has 5 nodes costing 3/5/5/8/12 with same-element prerequisites", shape_ok)
+	_check("Each element has 5 nodes costing 1/1/1/2/3 with same-element prerequisites", shape_ok)
 	var totals_ok := true
 	for element: String in Elements.COMBAT_ELEMENTS:
-		if SkillTreeData.tree_cost(element) != 33:
+		if SkillTreeData.tree_cost(element) != 8:
 			totals_ok = false
-	_check("Full tree costs 33 Ofuda per element", totals_ok)
+	_check("Full tree costs 8 skill points per element", totals_ok)
 
 
 ## E4 guardrails: the progression curve and the school identities that
@@ -75,10 +75,10 @@ func _test_data_shape() -> void:
 ## (tools/balance_model.gd, ~1 s). A later tweak that breaks the feel of a
 ## 5–10 minute demo run fails here instead of in a headset.
 func _test_balance_targets() -> void:
-	# D1 (docs/ELEMENTS_PLAN.md, "Krok 3: balans"): Ofuda come only from hokora
-	# shrines, one per ~215 m of walking, 6 each. The targets are the ones set for
-	# the demo: 5–7 nodes by minute 8 for an average player, the master technique
-	# (node 5, 33 Ofuda) reachable on a good run in about 7–10 minutes.
+	# D12 (docs/ELEMENTS_PLAN.md, section D12, ETAP 3): XP from kills, one skill point
+	# per level, shrines about one per 216 m of walking. The targets: 5–7 nodes by
+	# minute 8 for an average player, and the master technique (node 5, 8 points for
+	# the whole school) reachable on a good run in about 6–10 minutes.
 	var order := BalanceModel.full_order(Elements.SAKURA)
 	var costs: Array[int] = BalanceModel.cumulative_costs(order)
 	var avg: Dictionary = BalanceModel.economy("average", 600.0)
@@ -86,17 +86,19 @@ func _test_balance_targets() -> void:
 	var good: Dictionary = BalanceModel.economy("skilled", 600.0)
 	var first: float = BalanceModel.time_to_afford(avg.timeline, costs[0])
 	_check("average player buys the first node inside the first minute (%.0f s)" % first, first > 0.0 and first <= 60.0)
-	var at8: int = int(avg.timeline[mini(48, avg.timeline.size() - 1)].ofuda)
-	_check("Ofuda earned by minute 8 (average): 18–30 (%d)" % at8, at8 >= 18 and at8 <= 30)
+	var at8: int = int(avg.timeline[mini(48, avg.timeline.size() - 1)].points)
+	_check("Skill points earned by minute 8 (average): 5–7 (%d)" % at8, at8 >= 5 and at8 <= 7)
 	var nodes8: int = BalanceModel.nodes_for_budget(at8)
 	_check("average player owns 5–7 nodes at minute 8 (%d)" % nodes8, nodes8 >= 5 and nodes8 <= 7)
 	var master: float = BalanceModel.time_to_afford(good.timeline, costs[4])
 	_check("the master technique is reachable on a good run in 6–10 minutes (%.0f s)" % master,
 		master >= 360.0 and master <= 600.0)
-	var careful_nodes := BalanceModel.nodes_for_budget(int(careful.timeline[mini(36, careful.timeline.size() - 1)].ofuda))
+	var careful_nodes := BalanceModel.nodes_for_budget(int(careful.timeline[mini(36, careful.timeline.size() - 1)].points))
 	_check("even a careful player owns 3+ nodes by minute 6 (%d)" % careful_nodes, careful_nodes >= 3)
-	_check("shrines stay rare: one per ~215 m, 6 Ofuda each (spacing %.0f m)" % BalanceModel.hokora_spacing(),
-		absf(BalanceModel.hokora_spacing() - 215.0) < 5.0 and ElementBalance.OFUDA_PER_HOKORA == 6)
+	_check("shrines stay rare: one per ~216 m of walking (spacing %.0f m)" % BalanceModel.hokora_spacing(),
+		absf(BalanceModel.hokora_spacing() - 216.0) < 5.0)
+	_check("XP per kill: yōkai 24, elite 48, Oni 64 (D12)",
+		ElementBalance.XP_YOKAI == 24 and ElementBalance.XP_ELITE == 48 and ElementBalance.XP_ONI == 64)
 
 	# Each school adds something real, none of them dwarfs the sword.
 	var identity_ok := true
@@ -132,18 +134,18 @@ func _test_purchase_rules() -> void:
 		not no_prereq.get("ok", true) and no_prereq.get("reason") == SkillTreeData.REASON_PREREQUISITE
 		and not tree.is_unlocked("razor_petals"))
 
-	var poor: Dictionary = tree.try_unlock("petal_sense", 2)
-	_check("Cannot unlock without enough Ofuda (needs 3, has 2)",
-		not poor.get("ok", true) and poor.get("reason") == SkillTreeData.REASON_OFUDA
+	var poor: Dictionary = tree.try_unlock("petal_sense", 0)
+	_check("Cannot unlock without enough skill points (needs 1, has 0)",
+		not poor.get("ok", true) and poor.get("reason") == SkillTreeData.REASON_POINTS
 		and not tree.is_unlocked("petal_sense"))
 
 	var unknown: Dictionary = tree.try_unlock("not_a_node", 99)
 	_check("Unknown node id is rejected",
 		not unknown.get("ok", true) and unknown.get("reason") == SkillTreeData.REASON_UNKNOWN_NODE)
 
-	var bought: Dictionary = tree.try_unlock("petal_sense", 3)
-	_check("Node 1 unlocks with exactly its cost in Ofuda",
-		bought.get("ok", false) and int(bought.get("cost", 0)) == 3 and tree.is_unlocked("petal_sense"))
+	var bought: Dictionary = tree.try_unlock("petal_sense", 1)
+	_check("Node 1 unlocks with exactly its cost in skill points",
+		bought.get("ok", false) and int(bought.get("cost", 0)) == 1 and tree.is_unlocked("petal_sense"))
 
 	var again: Dictionary = tree.try_unlock("petal_sense", 99)
 	_check("Unlocking the same node twice is rejected",

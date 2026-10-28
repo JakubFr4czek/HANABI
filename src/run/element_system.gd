@@ -94,7 +94,7 @@ func kirisute_ready() -> bool:
 func ability_power() -> float:
 	if run_game == null:
 		return 1.0
-	var blade := run_game.katana.damage_multiplier if run_game.katana else 1.0
+	var blade := run_game.katana.damage_multiplier * run_game.katana.outgoing_scale if run_game.katana else 1.0
 	return blade * (1.0 + ElementBalance.POWER_PER_RANK * float(maxi(run_game.level - 1, 0)))
 
 

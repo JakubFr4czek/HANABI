@@ -104,7 +104,7 @@ func _wrist_shots() -> void:
 	player.hand_offset = Vector3(0.18, -0.14, 0.0)
 	run.kills = 12
 	run.score = 740
-	run.ofuda_count = 7
+	run.skill_points = 7
 	run._refresh_hud()
 	run.element_system.reset()
 	await _frames(20)
@@ -130,7 +130,7 @@ func _wrist_shots() -> void:
 
 
 func _menu_shots() -> void:
-	run.ofuda_count = 9
+	run.skill_points = 9
 	run.element_system.imbue(Elements.INK, 20.0)
 	run.element_system.element_time_remaining = 11.0
 	run.element_system.ability_2_cooldown = 3.0

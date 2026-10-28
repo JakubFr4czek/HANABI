@@ -1,7 +1,8 @@
 class_name PauseController
 extends Node
 ## Opens and closes the skill-tree menu and owns the pause around it
-## (docs/ELEMENTS_PLAN.md (e), Phase E2d).
+## (docs/ELEMENTS_PLAN.md (e), Phase E2d). The same pause holds the world while the
+## yellow Ofuda choice of a shrine is open (D12, [ShrineOffering]).
 ##
 ## Pausing is get_tree().paused, never Engine.time_scale = 0: the XR rig, the
 ## hands, the pointer and the menu keep processing (process_mode ALWAYS) so the
@@ -28,6 +29,8 @@ var player: Node3D
 var katana: HeldWeapon
 var menu: SkillTreeMenu
 var is_open := false
+## True while a shrine's yellow Ofuda choice holds the world (D12).
+var offering_open := false
 ## The pose the last open used (UiPlacement.place result).
 var last_pose: Dictionary = {}
 
@@ -56,9 +59,9 @@ func setup(game: RunGame, p_player: Node3D, p_katana: HeldWeapon) -> void:
 		game.run_ended.connect(_on_run_ended)
 
 
-## Menus open only mid-fight: not in the intro, on a level-up choice or after death.
+## Menus open only mid-fight: not in the intro, during a shrine choice or after death.
 func can_open() -> bool:
-	return run_game != null and run_game.state == RunGame.RunState.PLAYING and not is_open
+	return run_game != null and run_game.state == RunGame.RunState.PLAYING and not is_open and not offering_open
 
 
 func toggle() -> void:
@@ -74,12 +77,7 @@ func open() -> void:
 	var pose := _compute_pose()
 	last_pose = pose
 	is_open = true
-	TimeController.suspend()
-	get_tree().paused = true
-	_freeze_katana()
-	_freeze_emitters()
-	_set_locomotion(false)
-	Sfx.set_pause_ducking(true)
+	_hold_world()
 	var blade_el := Elements.NONE
 	var blade_left := 0.0
 	if run_game.element_system:
@@ -87,7 +85,7 @@ func open() -> void:
 		blade_left = run_game.element_system.element_time_remaining
 	menu.open(run_game, pose, blade_el, blade_left, _hint_text())
 	Sfx.play_at("ofuda_slice", pose.transform.origin, -12.0, 4.0, 0.85)
-	GameEvents.log_event("skill_menu_opened", {"ofuda": run_game.ofuda_count, "blocked": bool(pose.blocked), "distance": snappedf(float(pose.distance), 0.01)})
+	GameEvents.log_event("skill_menu_opened", {"points": run_game.skill_points, "blocked": bool(pose.blocked), "distance": snappedf(float(pose.distance), 0.01)})
 	opened.emit()
 
 
@@ -96,15 +94,50 @@ func close() -> void:
 		return
 	is_open = false
 	menu.close()
+	_release_world()
+	Sfx.play_at("ofuda_slice", _head_position(), -14.0, 4.0, 0.7)
+	GameEvents.log_event("skill_menu_closed", {})
+	closed.emit()
+
+
+## The world stops for a shrine's Ofuda choice, exactly as for the menu (D12).
+## False when the menu or another choice already holds it, or the run is not playing.
+func hold_for_offering() -> bool:
+	if is_open or offering_open or run_game == null or run_game.state != RunGame.RunState.PLAYING:
+		return false
+	offering_open = true
+	_hold_world()
+	if katana:
+		katana.combat_blocked = true
+	return true
+
+
+func release_from_offering() -> void:
+	if not offering_open:
+		return
+	offering_open = false
+	if katana:
+		katana.combat_blocked = false
+	_release_world()
+
+
+## The pause itself, shared by the menu and the shrine choice.
+func _hold_world() -> void:
+	TimeController.suspend()
+	get_tree().paused = true
+	_freeze_katana()
+	_freeze_emitters()
+	_set_locomotion(false)
+	Sfx.set_pause_ducking(true)
+
+
+func _release_world() -> void:
 	_set_locomotion(true)
 	_thaw_emitters()
 	_thaw_katana()
 	get_tree().paused = false
 	TimeController.resume()
 	Sfx.set_pause_ducking(false)
-	Sfx.play_at("ofuda_slice", _head_position(), -14.0, 4.0, 0.7)
-	GameEvents.log_event("skill_menu_closed", {})
-	closed.emit()
 
 
 func _on_run_ended(_summary: Dictionary) -> void:
@@ -131,13 +164,16 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(_delta: float) -> void:
-	if not is_open:
+	if not is_open and not offering_open:
 		return
 	if run_game.state != RunGame.RunState.PLAYING:
 		close()
+		release_from_offering()
 		return
+	# The blade rides the hand while the world is held, for the choice too (D12).
 	_follow_katana()
-	_feed_pointers()
+	if is_open:
+		_feed_pointers()
 
 
 # --- Placement ---------------------------------------------------------------------

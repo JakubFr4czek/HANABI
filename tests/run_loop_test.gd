@@ -140,11 +140,14 @@ func _run_all() -> void:
 	# running at full speed and no votive plaque or card appears.
 	player.health.hp = 40.0
 	var level_before := run.level
+	var points_before := run.skill_points
 	run.add_xp(run.xp_to_next)
 	await _wait(0.1)
 	_check("Level-up raises the rank (%d -> %d) and heals %d HP (hp %.0f)" % [
 		level_before, run.level, int(RunGame.LEVEL_UP_HEAL_HP), player.health.hp],
 		run.level == level_before + 1 and absf(player.health.hp - (40.0 + RunGame.LEVEL_UP_HEAL_HP)) < 0.5)
+	_check("Level-up gives exactly one skill point (%d -> %d)" % [points_before, run.skill_points],
+		run.skill_points == points_before + 1)
 	_check("Level-up keeps playing: state PLAYING, no slow motion (scale %.2f)" % TimeController.time_scale,
 		run.state == RunGame.RunState.PLAYING and TimeController.time_scale > 0.95)
 	_check("Level-up presents no card: no votive plaque in the run",
@@ -157,6 +160,8 @@ func _run_all() -> void:
 	run.element_system.imbue(Elements.STORM)
 	run.kills = 7
 	run.score = run.compute_score()
+	# The level-up readout ("LV n · +1 点") holds for 1.5 s; this check reads the normal readout.
+	run.diegetic_hud._level_text_left = 0.0
 	run._refresh_hud()
 	_check("Diegetic wrist shows score points and kill count separately",
 		run.diegetic_hud.wrist_label.text.contains("pt")

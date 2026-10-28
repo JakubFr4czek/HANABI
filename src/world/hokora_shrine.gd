@@ -1,16 +1,20 @@
 class_name HokoraShrine
 extends Node3D
-## Hokora: a small roadside shrine and the only source of Ofuda (docs/ELEMENTS_PLAN.md, D1).
+## Hokora: a small roadside shrine and the source of the yellow Ofuda choice
+## (docs/ELEMENTS_PLAN.md, D1 and D12).
 ##
-## Lit until the player has claimed it once; a claimed shrine goes dark for the
-## rest of the run and never pays again. Its lantern is the unshaded halo of the
-## torii gates (it reads through the milk fog) and a suzu bell rings when the
-## player comes near. No lights: the Quest 3 light budget is untouched.
+## Lit until the player has used it: a hand on the offering table opens the choice
+## (see [method is_touched_by]). A used shrine goes dark for the rest of the run;
+## an unused one stays lit and waits. Its lantern is the unshaded halo of the torii
+## gates (it reads through the milk fog) and a suzu bell rings when the player comes
+## near, and when a touch is accepted or refused. No lights: the Quest 3 light budget
+## is untouched.
 ##
 ## The model is procedural and lives under the "ModelSlot" node. D5 replaces its
 ## children with a real asset; nothing else in this script changes.
 
-signal claimed(shrine: HokoraShrine, ofuda: int)
+## Seconds after a refused touch before the same hand can try again (no bell spam).
+const REFUSE_COOLDOWN := 1.5
 
 const HALO_SHADER := preload("res://src/shaders/torii_lantern_halo.gdshader")
 const GLOW_LIT := Color(1.0, 0.5, 0.2)
@@ -27,6 +31,8 @@ const SUZU_INTERVAL := 6.0
 ## Which forest slot this shrine belongs to (set by HokoraManager).
 var slot := Vector2i.ZERO
 var lit := true
+## Counts down after a refused touch; the shrine ignores touches until it reaches 0.
+var touch_cooldown := 0.0
 
 var _halo: MeshInstance3D
 var _halo_mat: ShaderMaterial
@@ -44,24 +50,41 @@ func _ready() -> void:
 	_apply_lit()
 
 
-## Offering table, world space: where the Ofuda rise from when claimed.
+## Offering table, world space: where a hand has to reach to open the choice.
 func altar_position() -> Vector3:
 	return global_transform * ALTAR_LOCAL
 
 
-## Claims the shrine when the player's feet are inside the claim radius.
-## Returns true exactly once per shrine.
-func try_claim(player_pos: Vector3) -> bool:
-	if not lit:
+## True when [param hand] reaches the offering table and the player stands close enough
+## (D12). A lit shrine that refused a touch a moment ago ignores the hand until its
+## cooldown runs out. Nothing here changes state: [RunGame] decides what the touch does.
+func is_touched_by(hand: Vector3, player_pos: Vector3) -> bool:
+	if not lit or touch_cooldown > 0.0:
 		return false
-	var d := player_pos - altar_position()
-	if Vector2(d.x, d.z).length() > ElementBalance.HOKORA_CLAIM_RADIUS or absf(d.y) > 2.0:
+	var altar := altar_position()
+	if hand.distance_to(altar) > ElementBalance.HOKORA_HAND_RADIUS:
 		return false
-	set_lit(false)
+	var d := player_pos - altar
+	return Vector2(d.x, d.z).length() <= ElementBalance.HOKORA_TOUCH_RADIUS and absf(d.y) <= 2.0
+
+
+## The touch was accepted: the bell answers, the shrine waits for the choice.
+func ring_accepted() -> void:
 	if Sfx:
 		Sfx.play_at("hokora_suzu", altar_position(), -2.0, 12.0, 1.15)
-	claimed.emit(self, ElementBalance.OFUDA_PER_HOKORA)
-	return true
+
+
+## The touch was refused (a yōkai close by, or no room for the cards): a quiet bell
+## and a short cooldown. The shrine stays lit.
+func refuse() -> void:
+	touch_cooldown = REFUSE_COOLDOWN
+	if Sfx:
+		Sfx.play_at("hokora_suzu", altar_position(), -12.0, 10.0, 0.95)
+
+
+## The choice was taken: the shrine goes dark for the rest of the run.
+func consume() -> void:
+	set_lit(false)
 
 
 func set_lit(value: bool) -> void:
@@ -73,6 +96,7 @@ func set_lit(value: bool) -> void:
 ## suzu rings when the player comes near (not while the shrine is dark).
 func step(delta: float, player_pos: Vector3) -> void:
 	_clock += delta
+	touch_cooldown = maxf(touch_cooldown - delta, 0.0)
 	if _halo == null:
 		return
 	if lit:

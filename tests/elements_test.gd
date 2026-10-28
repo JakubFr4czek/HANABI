@@ -41,9 +41,9 @@ func _run_all() -> void:
 func _test_level_up_is_rank_only() -> void:
 	# D1: a level-up is a rank and a heal. There is no upgrade pool and no card
 	# choice; elements come from Torii gates, power from the Ofuda tree only.
-	_check("Upgrade pool and level-up cards are gone (no upgrade_pool.gd, no ofuda_talisman.gd)",
+	_check("Upgrade pool is gone and a level-up opens no card choice (D12: only a shrine offers cards)",
 		not ResourceLoader.exists("res://src/run/upgrade_pool.gd")
-		and not ResourceLoader.exists("res://src/run/ofuda_talisman.gd"))
+		and not run.has_method("_present_level_up") and not run.shrine_offering.is_open())
 	run.katana.set_element(Elements.NONE)
 	run.element_system.reset()
 	var level0 := run.level
@@ -152,13 +152,13 @@ func _test_sakura() -> void:
 	player.health.hp = 60.0
 	run.element_system.on_enemy_died(petal_target)
 	_check("Sakura kill without the Life Bloom node does not heal", player.health.hp == 60.0)
-	run.add_ofuda(20)
+	run.add_points(20)
 	var u1: Dictionary = run.unlock_skill("petal_sense")
 	var u2: Dictionary = run.unlock_skill("razor_petals")
 	var u4: Dictionary = run.unlock_skill("life_bloom")
 	var chain_cost := _node_cost("petal_sense") + _node_cost("razor_petals") + _node_cost("life_bloom")
 	_check("Life Bloom chain unlocks with Ofuda (%d札)" % chain_cost,
-		u1.get("ok", false) and u2.get("ok", false) and u4.get("ok", false) and run.ofuda_count == 20 - chain_cost)
+		u1.get("ok", false) and u2.get("ok", false) and u4.get("ok", false) and run.skill_points == 20 - chain_cost)
 	run.element_system.on_enemy_died(petal_target)
 	_check("Life Bloom restores %.0f HP on a Sakura kill (60 -> %.1f)" % [ElementBalance.LIFE_BLOOM_HEAL_KILL, player.health.hp],
 		is_equal_approx(player.health.hp, 60.0 + ElementBalance.LIFE_BLOOM_HEAL_KILL))

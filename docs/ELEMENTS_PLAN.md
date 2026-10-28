@@ -862,7 +862,21 @@ Zrzuty (`element_abilities_screenshots`, sekcja Kirisute). Ocena surowa:
 
 Model `tools/balance_model.gd` liczy XP z kills (wszystkie trzy typy), poziomy i punkty, plus uptime buffów z odwiedzin kapliczek. Wynik: `tools/balance_sim.tscn`.
 
-_(tabela wyników: wpisana po ETAP 3, patrz sekcja „Realizacja")_
+Symulacja `tools/balance_sim.tscn` (720 s, `tools/balance_model.gd`, ten sam model fal co D1). Trzy profile: careful, average (cel), skilled (dobry run).
+
+| profil | 2 min | 4 min | 6 min | 8 min | 10 min | 12 min | finał (8 pkt, drzewo jednej szkoły) |
+|---|---|---|---|---|---|---|---|
+| careful (2.2 m/s × 0.45 marszu) | LV3 · 2 pkt | LV4 · 3 | LV5 · 4 | LV5 · 4 (4 węzły) | LV6 · 5 | LV6 · 5 | nie w 12 min |
+| **average** (2.6 m/s × 0.6, cel) | LV3 · 2 | LV5 · 4 | LV6 · 5 | **LV7 · 6 (6 węzłów)** | LV7 · 6 | LV8 · 7 | nie w 12 min |
+| skilled, dobry run (3.0 m/s × 0.75) | LV4 · 3 | LV6 · 5 | LV7 · 6 | LV8 · 7 | LV9 · 8 | LV10 · 9 | **8:50** |
+
+- **Cel „5–7 węzłów w 8 min” (średni): 6 ✓.** Pierwszy punkt po ~40 s (150 XP to ~6 zabójstw).
+- **Cel „finał osiągalny w dobrym runie, 8–10 min”: 8:50 ✓.** Średni gracz dostaje finał po ~11–12 min, czyli poza celem o minutę. To świadomie: finał jest nagrodą za dobry run.
+- Zabójstwa w 12 min: careful 47, average 67 (22 elity), skilled 90 (30 elit). Krzywa XP została w liczbach z D1 tam, gdzie to możliwe: tempo walki się nie zmieniło, zmienił się tylko próg poziomu i to, co daje poziom.
+- **Uptime buffów** (udział czasu z jakimkolwiek buffem, suma okien 60 s): careful 33 %, average 50 %, skilled 67 %. To górna granica przy wyborze **tego samego** buffa przy każdej kapliczce. Przy równym rozkładzie trzech rodzajów każdy rodzaj działa ok. 1/3 tego czasu (17–22 %). **Dźwignia, gdyby playtest pokazał za mocne buffy:** `BUFF_SECONDS` (60 s) albo odstęp kapliczek (`HOKORA_SPAWN_RADIUS`, slot).
+- Wartości buffów (Eepy 13:48) bez zmian: +20 % szybkość 60 s, +20 % obrażenia 60 s, leczenie 35 % + 15 % przez 10 s. Symulacja ich nie zmienia; liczy tylko tempo.
+
+Testy pilnujące liczb: `tests/skill_tree_data_test.gd` (`_test_balance_targets`: 5–7 pkt w min 8, 3+ węzły w min 6 przy careful, master w 6–10 min na skilled) i `tests/hokora_test.gd` (gęstość kapliczek na 1.5 km: 5–11).
 
 ### 7. Interakcje
 
@@ -885,15 +899,15 @@ _(tabela wyników: wpisana po ETAP 3, patrz sekcja „Realizacja")_
 ### 10. Plan kroków (odhaczane)
 
 - [x] **D12.1 Diagnoza i plan (ten dokument), GDD §3/§6.**
-- [ ] **D12.2 Punkty z poziomów:** `skill_points`, koszty 1/1/1/2/3, `REASON_POINTS`, teksty drzewka, HUD linia 2, haptyka + błysk level-up.
-- [ ] **D12.3 XP per typ wroga:** `ElementBalance.XP_*`, elita 48, Oni 64, nowa krzywa progu `150 + 45(L−1)`.
-- [ ] **D12.4 Usunięcie ofudy-waluty:** `OfudaPickup`, `ofuda_count`, `add_ofuda`, auto-claim, `OFUDA_PER_HOKORA`.
-- [ ] **D12.5 Gest kapliczki:** `HokoraShrine.touch`, `_used` per slot, odmowa w walce i bez miejsca, E na desktopie.
-- [ ] **D12.6 Pauza wyboru:** `PauseController` z `hold_world/release_world` (wspólne z menu), `combat_blocked` w `HeldWeapon`.
-- [ ] **D12.7 Karty:** `OfudaTalisman` (żółty papier, ciemne napisy), układ i walidacja wolnego miejsca.
-- [ ] **D12.8 Buffy:** `RunBuffs`, mnożniki w `apply_locomotion_speed`, `outgoing_scale`, leczenie i regen, HUD buffów.
-- [ ] **D12.9 Testy:** rozszerzenie `hokora_test`, `skill_tree_data_test`, `vr_menu_pause_test`, `run_loop_test`, `element_abilities_test`; nowy test wizualny na `run.tscn`.
-- [ ] **D12.10 Balans:** `tools/balance_model.gd` (XP, poziomy, punkty, buffy), `balance_sim`, wynik w sekcji 6.
+- [x] **D12.2 Punkty z poziomów:** `skill_points`, koszty 1/1/1/2/3, `REASON_POINTS`, teksty drzewka, HUD linia 2, haptyka + błysk level-up.
+- [x] **D12.3 XP per typ wroga:** `ElementBalance.XP_*`, elita 48, Oni 64, nowa krzywa progu `150 + 45(L−1)`.
+- [x] **D12.4 Usunięcie ofudy-waluty:** `OfudaPickup`, `ofuda_count`, `add_ofuda`, auto-claim, `OFUDA_PER_HOKORA`.
+- [x] **D12.5 Gest kapliczki:** `HokoraShrine.touch`, `_used` per slot, odmowa w walce i bez miejsca, E na desktopie.
+- [x] **D12.6 Pauza wyboru:** `PauseController` z `hold_world/release_world` (wspólne z menu), `combat_blocked` w `HeldWeapon`.
+- [x] **D12.7 Karty:** `OfudaTalisman` (żółty papier, ciemne napisy), układ i walidacja wolnego miejsca.
+- [x] **D12.8 Buffy:** `RunBuffs`, mnożniki w `apply_locomotion_speed`, `outgoing_scale`, leczenie i regen, HUD buffów.
+- [x] **D12.9 Testy:** rozszerzenie `hokora_test`, `skill_tree_data_test`, `vr_menu_pause_test`, `run_loop_test`, `element_abilities_test`; nowy test wizualny na `run.tscn`.
+- [x] **D12.10 Balans:** `tools/balance_model.gd` (XP, poziomy, punkty, buffy), `balance_sim`, wynik w sekcji 6.
 - [ ] **D12.11 Screenshoty i ocena surowa:** HUD XP/poziom, level-up, kapliczka z żółtymi ofudami i wyborem, aktywny buff.
 
 ### 11. Decyzje podjęte bez pytania (do przeglądu)

@@ -148,7 +148,7 @@ func _test_kirisute() -> void:
 	_check("imbued without the tier-5 finisher: no split (%d pieces)" % _chunk_count(), _chunk_count() == 0 and not katana.kirisute_ready)
 
 	# Unlock the Sakura tree (Hanadachi sits on tier 5).
-	run.ofuda_count = 1000
+	run.skill_points = 1000
 	for node: Dictionary in SkillTreeData.nodes_for_element(Elements.SAKURA):
 		run.unlock_skill(String(node.id))
 	elem.imbue(Elements.SAKURA)

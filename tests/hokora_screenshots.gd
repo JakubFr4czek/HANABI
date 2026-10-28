@@ -1,7 +1,7 @@
 extends Node
-## D1 screenshots: the hokora shrine far out in the fog, up close, the moment the
-## Ofuda rise off the altar, and the skill menu with the wallet and the empty
-## hint. Windowed (needs rendering):
+## D1/D12 screenshots: the hokora shrine far out in the fog, up close, the hand on the
+## altar, the three yellow Ofuda of the choice, the buff after the cut, the level-up
+## flash and the skill menu with the points and the empty hint. Windowed (needs rendering):
 ##   godot --path . --fixed-fps 90 res://tests/hokora_screenshots.tscn -- --desktop --shots /tmp/hanabi_d1
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
@@ -47,30 +47,46 @@ func _ready() -> void:
 	await _frames(40)
 	await _shot("01_shrine_close")
 
-	# 3. The claim: step up to the altar (inside the 1.4 m claim radius), then back
-	# off to 2.4 m so the Ofuda in the air around the altar are in frame.
-	_stand_facing(altar, altar - dir * 1.1)
-	await _frames(2)
-	_stand_facing(altar, altar - dir * 2.4)
-	await _frames(8)
-	await _shot("02_claim_ofuda_rise")
-	await _frames(120)
-	_check("claim paid 6 (wallet %d)" % run.ofuda_count, run.ofuda_count == ElementBalance.OFUDA_PER_HOKORA)
-	await _shot("03_after_claim_tally")
+	# 3. The touch: a hand on the offering table (desktop: E) opens the yellow choice.
+	# Stand 1.6 m off the altar so the three cards hang in frame at the right distance.
+	_stand_facing(altar, altar - dir * 1.6)
+	await _frames(20)
+	run.reach_for_offering()
+	await _frames(6)
+	await _shot("02_touch_cards_rising")
+	await _frames(90)
+	await _shot("03_choice_three_yellow_ofuda")
 
-	# 4. The skill menu with the wallet, then with an empty wallet (the hint line).
+	# 4. The cut: slice the damage card. The world resumes and the wrist shows the buff.
+	var damage_card: OfudaTalisman = null
+	for c in get_tree().get_nodes_in_group("ofuda_talismans"):
+		if int((c as OfudaTalisman).entry.get("kind", -1)) == RunBuffs.Kind.DAMAGE:
+			damage_card = c
+	if damage_card:
+		damage_card.slice(damage_card.global_position, Vector3.RIGHT)
+	await _frames(60)
+	_check("the damage buff runs after the cut (%.1f s)" % run.buffs.remaining(RunBuffs.Kind.DAMAGE),
+		run.buffs.is_active(RunBuffs.Kind.DAMAGE))
+	await _shot("04_buff_running_after_cut")
+
+	# 5. A level-up: the flash on the charm and the new level and point on the wrist.
+	run.add_xp(run.xp_to_next)
+	await _frames(6)
+	await _shot("05_level_up_flash")
+
+	# 6. The skill menu with the points, then with none (the hint line).
+	await _frames(100)
 	run.pause_controller.open()
 	await _frames(12)
-	await _shot("04_menu_wallet")
+	await _shot("06_menu_points")
 	run.pause_controller.close()
 	await _frames(10)
-	run.add_ofuda(-run.ofuda_count)
+	run.add_points(-run.skill_points)
 	run.pause_controller.open()
 	await _frames(12)
-	await _shot("05_menu_empty_wallet_hint")
+	await _shot("07_menu_no_points_hint")
 	run.pause_controller.close()
 	get_tree().quit(0)
-
 
 ## Tries 22, 18 and 14 m out, fanned ±18° around the walk-in line, and takes the
 ## first spot whose sight line to the lantern is free of trunks.
