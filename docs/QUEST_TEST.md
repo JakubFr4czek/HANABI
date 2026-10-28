@@ -99,6 +99,26 @@ Zrzuty menu (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/sk
 
 Zrzuty (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/skill_menu_screenshots.tscn -- --desktop --shots /tmp/hanabi_d3` (`canvas_07` … `canvas_11`).
 
+## D3_fix1 — otwarcie menu nie przesuwa gracza
+
+Zgłoszenie Jakuba (28 X): po odpaleniu menu czasem „przesuwało mnie w bok”, jakby w świecie gry.
+
+**Przyczyna (potwierdzona testem):** menu zatrzymuje providery ruchu (`MovementDirect`, `MovementTurn`), ale nie ciało gracza (`XRToolsPlayerBody`). Rig ma `PROCESS_MODE_ALWAYS`, więc ciało dalej wykonuje krok fizyki podczas pauzy i całkuje ostatnią prędkość z tłumieniem. Origin jedzie razem z nim: przy otwarciu w pełnym kroku (drążek wychylony) rig zjeżdżał ~0,57 m, przy strafe + snap turn ~0,51 m, i zostawał przesunięty po zamknięciu. Pauza miała zerowe wejście, ale zerowanie prędkości nigdy nie nastąpiło.
+
+**Sprawdzone i odrzucone:**
+- *Drążek i przycisk menu na tym samym kontrolerze:* drążek jest ignorowany w pauzie; zjazd trwa też przy drążku w spoczynku.
+- *Recenter:* nie jest wywoływany przez otwarcie (tylko przytrzymanie MENU 1 s albo B 0,6 s, a przy trzymanej katanie B nie działa).
+- *Panel kolizją z ciałem:* panel nie ma żadnego `CollisionObject3D`; `UiPlacement` tylko czyta świat. Test to sprawdza.
+- *Ruch fizyczny głowy (roomscale):* ciało podąża za głową, a origin nie jest przesuwany (czytane z `XRToolsPlayerBody._physics_process`).
+- *Desktop:* `DesktopPlayer` już zeruje prędkość przy `get_tree().paused`; błąd był tylko w XR.
+
+**Naprawa** (`src/player/xr_player.gd`, `set_locomotion_enabled`): przy wyłączeniu lokomocji (otwarcie menu) zerujemy prędkość ciała i parkujemy je flagą `enabled` (ta sama ścieżka co zawieszenie w intro). Ciało nie wykonuje kroku fizyki, origin stoi, a po zamknięciu nie ma pędu do zaaplikowania. `Engine.time_scale` bez zmian.
+
+**Test** (`tests/vr_menu_pause_test.gd`, „2b”, 16 sprawdzeń): menu otwierane przyciskiem Left Menu przy wychylonym drążku, przy trwającym snap turn (strafe + obrót, ~180° w klatkach przed naciśnięciem) i przy prędkości ~2–3 m/s. Pozycja i rotacja origin oraz ciała są porównywane z pozą w chwili otwarcia (1 mm, 0,1°): po 45 klatkach w pauzie, przy zamknięciu i 30 klatek po zamknięciu. Test sprawdza też, że panel nie ma ciała kolizyjnego. Na kodzie sprzed naprawy 6 z 16 sprawdzeń failuje (zjazd 0,57 m / 0,51 m); po naprawie wszystkie przechodzą, a prędkość po zamknięciu wynosi 0,00 m/s.
+
+- [ ] Na goglach: idź drążkiem i naciśnij MENU w biegu. Po zamknięciu stoisz tam, gdzie stałeś w chwili otwarcia; nic nie ślizga się w pauzie ani po zamknięciu.
+- [ ] Ten sam test z obrotem snap w trakcie otwarcia: brak przeskoku po zamknięciu.
+
 ## Perf HUD (F3 / `--perf-hud`)
 
 - [ ] FPS nie spada poniżej **65** w szczyt fali (krótkie spadki OK).
