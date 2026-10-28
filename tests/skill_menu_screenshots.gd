@@ -85,6 +85,12 @@ func _ready() -> void:
 	await _frames(14)
 	await _shot("05_shadow_unlocked_flash")
 
+	# Comfort settings tab
+	menu.select_comfort()
+	_aim(menu, SkillTreeCanvas.comfort_rect("turn_snap").get_center())
+	await _frames(14)
+	await _shot("07_comfort_settings_tab")
+
 	run.pause_controller.close()
 
 	# Nose to bark: no clear spot, so the panel is drawn on top of the trunk.
@@ -125,7 +131,10 @@ func _frames(n: int) -> void:
 
 
 func _shot(name: String) -> void:
-	await RenderingServer.frame_post_draw
+	if DisplayServer.get_name() != "headless":
+		await RenderingServer.frame_post_draw
+	else:
+		await _frames(2)
 	var img := get_viewport().get_texture().get_image()
 	if img and not img.is_empty():
 		img.save_png(out_dir.path_join(name + ".png"))

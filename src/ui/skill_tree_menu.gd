@@ -132,6 +132,7 @@ func open(game: RunGame, pose: Dictionary, blade_element: String, blade_seconds:
 	canvas.abilities = _ability_status(game)
 	canvas.hint_text = hint
 	canvas.status_text = ""
+	canvas.is_comfort_tab = false
 	if Elements.COMBAT_ELEMENTS.has(blade_element):
 		canvas.element = blade_element
 	elif not Elements.COMBAT_ELEMENTS.has(canvas.element):
@@ -353,7 +354,11 @@ func _buzz(id: String, amplitude: float, seconds: float) -> void:
 func _activate(target: Dictionary, pointer_id: String) -> void:
 	match String(target.kind):
 		"tab":
-			select_element(Elements.COMBAT_ELEMENTS[int(target.key)])
+			var k := int(target.key)
+			if k == 4:
+				select_comfort()
+			else:
+				select_element(Elements.COMBAT_ELEMENTS[k])
 			_buzz(pointer_id, 0.3, 0.03)
 		"node":
 			select_node(String(target.key))
@@ -362,9 +367,19 @@ func _activate(target: Dictionary, pointer_id: String) -> void:
 			unlock_selected(pointer_id)
 		"close":
 			close_requested.emit()
+		"comfort":
+			_handle_comfort_action(String(target.key), pointer_id)
+
+
+func select_comfort() -> void:
+	canvas.is_comfort_tab = true
+	canvas.status_text = ""
+	Sfx.play_at("ofuda_slice", global_position, -17.0, 4.0, 1.25)
+	_redraw_now()
 
 
 func select_element(el: String) -> void:
+	canvas.is_comfort_tab = false
 	if not Elements.COMBAT_ELEMENTS.has(el):
 		return
 	canvas.element = el
@@ -417,3 +432,67 @@ static func reason_text(reason: String) -> String:
 		SkillTreeData.REASON_ALREADY_UNLOCKED:
 			return "Already part of your school."
 	return ""
+
+
+func _handle_comfort_action(key: String, pointer_id: String) -> void:
+	var player: Node3D = run_game.player if run_game else null
+	if VrComfortSettings:
+		match key:
+			"vignette_on":
+				VrComfortSettings.set_vignette_enabled(true, player)
+			"vignette_off":
+				VrComfortSettings.set_vignette_enabled(false, player)
+			"vignette_25":
+				VrComfortSettings.set_vignette_strength(0.25, player)
+			"vignette_50":
+				VrComfortSettings.set_vignette_strength(0.50, player)
+			"vignette_75":
+				VrComfortSettings.set_vignette_strength(0.75, player)
+			"vignette_100":
+				VrComfortSettings.set_vignette_strength(1.00, player)
+			"turn_snap":
+				VrComfortSettings.set_snap_turning(true, player)
+			"turn_smooth":
+				VrComfortSettings.set_snap_turning(false, player)
+			"snap_15":
+				VrComfortSettings.set_snap_angle(15.0, player)
+			"snap_30":
+				VrComfortSettings.set_snap_angle(30.0, player)
+			"snap_45":
+				VrComfortSettings.set_snap_angle(45.0, player)
+			"snap_60":
+				VrComfortSettings.set_snap_angle(60.0, player)
+			"snap_90":
+				VrComfortSettings.set_snap_angle(90.0, player)
+			"smooth_10":
+				VrComfortSettings.set_smooth_turn_speed(1.0, player)
+			"smooth_15":
+				VrComfortSettings.set_smooth_turn_speed(1.5, player)
+			"smooth_20":
+				VrComfortSettings.set_smooth_turn_speed(2.0, player)
+			"smooth_30":
+				VrComfortSettings.set_smooth_turn_speed(3.0, player)
+			"smooth_40":
+				VrComfortSettings.set_smooth_turn_speed(4.0, player)
+			"hand_right":
+				VrComfortSettings.set_dominant_hand("right", player)
+			"hand_left":
+				VrComfortSettings.set_dominant_hand("left", player)
+			"seated_off":
+				VrComfortSettings.set_seated_mode(false, player)
+			"seated_on":
+				VrComfortSettings.set_seated_mode(true, player)
+			"height_minus":
+				VrComfortSettings.adjust_height(-VrComfortSettings.HEIGHT_STEP, player)
+			"height_plus":
+				VrComfortSettings.adjust_height(VrComfortSettings.HEIGHT_STEP, player)
+			"height_reset":
+				VrComfortSettings.reset_height(player)
+			"recenter":
+				if player is XRPlayer:
+					(player as XRPlayer).recenter_view()
+				else:
+					XRServer.center_on_hmd(XRServer.RESET_BUT_KEEP_TILT, true)
+	Sfx.play_at("ofuda_slice", global_position, -16.0, 4.0, 1.1)
+	_buzz(pointer_id, 0.35, 0.04)
+	_redraw_now()

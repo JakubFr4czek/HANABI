@@ -46,9 +46,39 @@ static func accent_of(el: String) -> Color:
 
 
 # --- Layout ---------------------------------------------------------------------
-const TAB_SIZE := Vector2(352.0, 84.0)
-const TAB_GAP := 20.0
+const TAB_SIZE := Vector2(280.0, 84.0)
+const TAB_GAP := 17.0
 const TAB_ORIGIN := Vector2(66.0, 120.0)
+
+const COMFORT_ACCENT := Color(0.82, 0.76, 0.60)
+const COMFORT_RECTS := {
+	"vignette_on": Rect2(230.0, 324.0, 160.0, 50.0),
+	"vignette_off": Rect2(410.0, 324.0, 160.0, 50.0),
+	"vignette_25": Rect2(230.0, 400.0, 110.0, 46.0),
+	"vignette_50": Rect2(352.0, 400.0, 110.0, 46.0),
+	"vignette_75": Rect2(474.0, 400.0, 110.0, 46.0),
+	"vignette_100": Rect2(596.0, 400.0, 110.0, 46.0),
+	"turn_snap": Rect2(230.0, 598.0, 160.0, 50.0),
+	"turn_smooth": Rect2(410.0, 598.0, 160.0, 50.0),
+	"snap_15": Rect2(230.0, 668.0, 85.0, 46.0),
+	"snap_30": Rect2(325.0, 668.0, 85.0, 46.0),
+	"snap_45": Rect2(420.0, 668.0, 85.0, 46.0),
+	"snap_60": Rect2(515.0, 668.0, 85.0, 46.0),
+	"snap_90": Rect2(610.0, 668.0, 85.0, 46.0),
+	"smooth_10": Rect2(230.0, 738.0, 85.0, 46.0),
+	"smooth_15": Rect2(325.0, 738.0, 85.0, 46.0),
+	"smooth_20": Rect2(420.0, 738.0, 85.0, 46.0),
+	"smooth_30": Rect2(515.0, 738.0, 85.0, 46.0),
+	"smooth_40": Rect2(610.0, 738.0, 85.0, 46.0),
+	"hand_right": Rect2(840.0, 324.0, 320.0, 54.0),
+	"hand_left": Rect2(1180.0, 324.0, 320.0, 54.0),
+	"seated_off": Rect2(1010.0, 598.0, 180.0, 50.0),
+	"seated_on": Rect2(1210.0, 598.0, 180.0, 50.0),
+	"height_minus": Rect2(1010.0, 664.0, 85.0, 52.0),
+	"height_plus": Rect2(1260.0, 664.0, 85.0, 52.0),
+	"height_reset": Rect2(1360.0, 664.0, 100.0, 52.0),
+	"recenter": Rect2(1010.0, 738.0, 450.0, 50.0),
+}
 const NODE_SIZE := Vector2(340.0, 120.0)
 const TREE_COLUMN := {1: 500.0, 2: 270.0, 3: 730.0, 4: 500.0, 5: 500.0}
 const TREE_ROW := {1: 340.0, 2: 504.0, 3: 504.0, 4: 668.0, 5: 832.0}
@@ -64,6 +94,7 @@ var tree: SkillTreeData
 var balance := 0
 ## Selected tab (an element id) and the node shown in the detail pane.
 var element := Elements.SAKURA
+var is_comfort_tab := false
 var selected_id := ""
 ## {"kind": "tab"|"node"|"unlock"|"close", "key": int|String} or empty.
 var hover: Dictionary = {}
@@ -168,12 +199,25 @@ func node_rect(node: Dictionary) -> Rect2:
 
 
 ## What lies under canvas point [param p]: {"kind", "key"} or {}.
+static func comfort_rect(key: String) -> Rect2:
+	return COMFORT_RECTS.get(key, Rect2())
+
+
+func _comfort_hit_test(p: Vector2) -> Dictionary:
+	for key: String in COMFORT_RECTS:
+		if (COMFORT_RECTS[key] as Rect2).has_point(p):
+			return {"kind": "comfort", "key": key}
+	return {}
+
+
 func hit_test(p: Vector2) -> Dictionary:
 	if CLOSE_RECT.has_point(p):
 		return {"kind": "close", "key": ""}
-	for i in Elements.COMBAT_ELEMENTS.size():
+	for i in 5:
 		if tab_rect(i).has_point(p):
 			return {"kind": "tab", "key": i}
+	if is_comfort_tab:
+		return _comfort_hit_test(p)
 	for n: Dictionary in nodes():
 		if node_rect(n).has_point(p):
 			return {"kind": "node", "key": String(n.id)}
@@ -207,8 +251,11 @@ func _draw() -> void:
 	_draw_backdrop()
 	_draw_header()
 	_draw_tabs()
-	_draw_tree()
-	_draw_detail()
+	if is_comfort_tab:
+		_draw_comfort()
+	else:
+		_draw_tree()
+		_draw_detail()
 	_draw_footer()
 
 
@@ -281,10 +328,16 @@ func _draw_backdrop() -> void:
 
 
 func _draw_header() -> void:
-	_text("術", Vector2(62, 22), 74, GILT)
-	_text("ELEMENTAL ARTS", Vector2(150, 22), 40, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 650)
-	_text("一時停止", Vector2(580, 32), 24, GILT)
-	_text("Spend Ofuda to deepen the school on your blade", Vector2(152, 68), 26, DIM)
+	if is_comfort_tab:
+		_text("安", Vector2(62, 22), 74, GILT)
+		_text("COMFORT & ACCESSIBILITY", Vector2(150, 22), 38, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 650)
+		_text("快適設定", Vector2(760, 32), 24, GILT)
+		_text("Vignette, snap/smooth turning, dominant hand, and seated height", Vector2(152, 68), 26, DIM)
+	else:
+		_text("術", Vector2(62, 22), 74, GILT)
+		_text("ELEMENTAL ARTS", Vector2(150, 22), 40, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 650)
+		_text("一時停止", Vector2(580, 32), 24, GILT)
+		_text("Spend Ofuda to deepen the school on your blade", Vector2(152, 68), 26, DIM)
 	# Ofuda balance plaque.
 	_box(BALANCE_RECT, LACQUER_SUNK, Color(CINNABAR, 0.85), 2, 12)
 	_text("OFUDA", Vector2(BALANCE_RECT.position.x + 22, BALANCE_RECT.position.y + 10), 20, DIM)
@@ -298,12 +351,12 @@ func _draw_header() -> void:
 
 
 func _draw_tabs() -> void:
-	for i in Elements.COMBAT_ELEMENTS.size():
-		var el: String = Elements.COMBAT_ELEMENTS[i]
+	for i in 5:
 		var r := tab_rect(i)
-		var accent := accent_of(el)
-		var active := el == element
+		var is_comfort := (i == 4)
+		var active := is_comfort_tab if is_comfort else (not is_comfort_tab and Elements.COMBAT_ELEMENTS[i] == element)
 		var hot := String(hover.get("kind", "")) == "tab" and int(hover.get("key", -1)) == i
+		var accent := COMFORT_ACCENT if is_comfort else accent_of(Elements.COMBAT_ELEMENTS[i])
 		var bg := LACQUER_RAISED
 		if active:
 			bg = Color(accent.r * 0.20, accent.g * 0.20, accent.b * 0.20, 0.98)
@@ -311,24 +364,30 @@ func _draw_tabs() -> void:
 			bg = Color(0.11, 0.105, 0.14, 0.98)
 		var border := Color(accent, 0.95) if active else (Color(GILT, 0.8) if hot else GILT_DIM)
 		_box(r, bg, border, 3 if active else 2, 14)
-		_text(Elements.build_label(el), r.position + Vector2(18, 4), 62, accent if active or hot else Color(accent, 0.75))
-		_text(String(ELEMENT_TITLE[el]), r.position + Vector2(98, 10), 32, PAPER if active else DIM)
-		# Progress pips.
-		var owned := owned_count(el)
-		for k in 5:
-			var c := r.position + Vector2(104 + float(k) * 24.0, 58)
-			if k < owned:
-				draw_circle(c, 7.0, accent)
-			else:
-				draw_arc(c, 6.5, 0.0, TAU, 20, Color(DIM, 0.7), 1.8, true)
-		# "On the blade now" marker.
-		if el == blade_element:
-			var m := r.position + Vector2(r.size.x - 22, 22)
-			draw_circle(m, 8.0, accent)
-			draw_arc(m, 13.0, 0.0, TAU, 28, Color(accent, 0.5), 2.0, true)
-			_text("BLADE", r.position + Vector2(r.size.x - 108, 52), 20, Color(accent, 0.95), HORIZONTAL_ALIGNMENT_RIGHT, 86)
+		if is_comfort:
+			_text("安", r.position + Vector2(16, 4), 62, accent if active or hot else Color(accent, 0.75))
+			_text("COMFORT", r.position + Vector2(86, 12), 30, PAPER if active else DIM)
+			_text("VR CONFIG", r.position + Vector2(88, 54), 18, Color(accent, 0.9) if active else Color(DIM, 0.8))
+		else:
+			var el: String = Elements.COMBAT_ELEMENTS[i]
+			_text(Elements.build_label(el), r.position + Vector2(16, 4), 62, accent if active or hot else Color(accent, 0.75))
+			_text(String(ELEMENT_TITLE[el]), r.position + Vector2(86, 10), 30, PAPER if active else DIM)
+			# Progress pips.
+			var owned := owned_count(el)
+			for k in 5:
+				var c := r.position + Vector2(92 + float(k) * 22.0, 58)
+				if k < owned:
+					draw_circle(c, 6.5, accent)
+				else:
+					draw_arc(c, 6.0, 0.0, TAU, 20, Color(DIM, 0.7), 1.6, true)
+			# "On the blade now" marker.
+			if el == blade_element:
+				var m := r.position + Vector2(r.size.x - 18, 18)
+				draw_circle(m, 7.0, accent)
+				draw_arc(m, 11.0, 0.0, TAU, 24, Color(accent, 0.5), 1.8, true)
+				_text("BLADE", r.position + Vector2(r.size.x - 90, 50), 18, Color(accent, 0.95), HORIZONTAL_ALIGNMENT_RIGHT, 72)
 		if active:
-			draw_line(r.position + Vector2(18, r.size.y - 1), r.position + Vector2(r.size.x - 18, r.size.y - 1), accent, 4.0, true)
+			draw_line(r.position + Vector2(16, r.size.y - 1), r.position + Vector2(r.size.x - 16, r.size.y - 1), accent, 4.0, true)
 
 
 func _draw_tree() -> void:
@@ -562,3 +621,112 @@ func _draw_footer() -> void:
 			var state := "ready" if float(a.ratio) >= 0.999 else "%d s" % ceili(float(a.seconds))
 			parts.append("%s  %s %s  %s" % ["A" if i == 0 else "B", a.glyph, String(a.name).to_upper(), state])
 		_text("   ·   ".join(parts), Vector2(SIZE.x - 96 - 900, 954), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 900)
+
+
+func _draw_comfort() -> void:
+	var vig_en := VrComfortSettings.vignette_enabled if VrComfortSettings else true
+	var vig_st := VrComfortSettings.vignette_strength if VrComfortSettings else 0.50
+	var snap_en := VrComfortSettings.snap_turning if VrComfortSettings else true
+	var snap_deg := VrComfortSettings.snap_angle if VrComfortSettings else 45.0
+	var smooth_spd := VrComfortSettings.smooth_turn_speed if VrComfortSettings else 2.0
+	var hand := VrComfortSettings.dominant_hand if VrComfortSettings else "right"
+	var seated := VrComfortSettings.seated_mode if VrComfortSettings else false
+	var h_offset := VrComfortSettings.height_offset if VrComfortSettings else 0.0
+
+	# Left column: Card 1 (Vignette) & Card 2 (Turning)
+	# Card 1: Vignette
+	var r_vig := Rect2(66.0, 236.0, 714.0, 290.0)
+	_box(r_vig, LACQUER_RAISED, GILT_DIM, 2, 16)
+	_text("動的視野制限   COMFORT VIGNETTE", Vector2(86, 252), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 674, 600)
+	_text("Reduces peripheral vision during locomotion & turns to mitigate nausea.", Vector2(86, 284), 20, DIM, HORIZONTAL_ALIGNMENT_LEFT, 674)
+
+	_text("VIGNETTE:", Vector2(86, 336), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130, 600)
+	_draw_comfort_button("vignette_on", "ENABLED", vig_en, COMFORT_ACCENT)
+	_draw_comfort_button("vignette_off", "DISABLED", not vig_en, COMFORT_ACCENT)
+
+	_text("STRENGTH:", Vector2(86, 412), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130, 600)
+	_draw_comfort_button("vignette_25", "25%", vig_en and absf(vig_st - 0.25) < 0.12, COMFORT_ACCENT)
+	_draw_comfort_button("vignette_50", "50%", vig_en and absf(vig_st - 0.50) < 0.12, COMFORT_ACCENT)
+	_draw_comfort_button("vignette_75", "75%", vig_en and absf(vig_st - 0.75) < 0.12, COMFORT_ACCENT)
+	_draw_comfort_button("vignette_100", "100%", vig_en and absf(vig_st - 1.00) < 0.12, COMFORT_ACCENT)
+
+	var bar_track := Rect2(230, 472, 476, 12)
+	_box(bar_track, LACQUER_SUNK, GILT_DIM, 1, 6)
+	if vig_en:
+		var fill_w := clampf(vig_st * 476.0, 8.0, 476.0)
+		_box(Rect2(230, 472, fill_w, 12), COMFORT_ACCENT, COMFORT_ACCENT, 1, 6)
+
+	# Card 2: Turning
+	var r_turn := Rect2(66.0, 546.0, 714.0, 340.0)
+	_box(r_turn, LACQUER_RAISED, GILT_DIM, 2, 16)
+	_text("視点回転方式   TURNING MODE", Vector2(86, 562), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 674, 600)
+
+	_text("MODE:", Vector2(86, 610), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130, 600)
+	_draw_comfort_button("turn_snap", "SNAP TURN", snap_en, COMFORT_ACCENT)
+	_draw_comfort_button("turn_smooth", "SMOOTH TURN", not snap_en, COMFORT_ACCENT)
+
+	_text("SNAP ANGLE:", Vector2(86, 678), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130, 600)
+	_draw_comfort_button("snap_15", "15°", snap_en and absf(snap_deg - 15.0) < 1.0, COMFORT_ACCENT)
+	_draw_comfort_button("snap_30", "30°", snap_en and absf(snap_deg - 30.0) < 1.0, COMFORT_ACCENT)
+	_draw_comfort_button("snap_45", "45°", snap_en and absf(snap_deg - 45.0) < 1.0, COMFORT_ACCENT)
+	_draw_comfort_button("snap_60", "60°", snap_en and absf(snap_deg - 60.0) < 1.0, COMFORT_ACCENT)
+	_draw_comfort_button("snap_90", "90°", snap_en and absf(snap_deg - 90.0) < 1.0, COMFORT_ACCENT)
+
+	_text("SMOOTH SPD:", Vector2(86, 748), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 130, 600)
+	_draw_comfort_button("smooth_10", "1.0", not snap_en and absf(smooth_spd - 1.0) < 0.2, COMFORT_ACCENT)
+	_draw_comfort_button("smooth_15", "1.5", not snap_en and absf(smooth_spd - 1.5) < 0.2, COMFORT_ACCENT)
+	_draw_comfort_button("smooth_20", "2.0", not snap_en and absf(smooth_spd - 2.0) < 0.2, COMFORT_ACCENT)
+	_draw_comfort_button("smooth_30", "3.0", not snap_en and absf(smooth_spd - 3.0) < 0.2, COMFORT_ACCENT)
+	_draw_comfort_button("smooth_40", "4.0", not snap_en and absf(smooth_spd - 4.0) < 0.2, COMFORT_ACCENT)
+	_text("Snap turning recommended for comfortable VR orientation.", Vector2(86, 816), 18, DIM)
+
+	# Right column: Card 3 (Dominant Hand) & Card 4 (Seated Mode & Height)
+	# Card 3: Dominant Hand
+	var r_hand := Rect2(820.0, 236.0, 714.0, 290.0)
+	_box(r_hand, LACQUER_RAISED, GILT_DIM, 2, 16)
+	_text("利き手設定   DOMINANT HAND", Vector2(840, 252), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 674, 600)
+	_text("Controls primary weapon hand, wrist HUD side, and stick assignment.", Vector2(840, 284), 20, DIM, HORIZONTAL_ALIGNMENT_LEFT, 674)
+	_draw_comfort_button("hand_right", "RIGHT HAND (Standard)", hand == "right", COMFORT_ACCENT)
+	_draw_comfort_button("hand_left", "LEFT HAND (Southpaw)", hand == "left", COMFORT_ACCENT)
+
+	var info_box := Rect2(840, 396, 674, 110)
+	_box(info_box, LACQUER_SUNK, GILT_DIM, 1, 10)
+	_text("• Katana spawns and grips in dominant hand", Vector2(856, 410), 20, PAPER)
+	_text("• Locomotion stick placed on off-hand; turning on dominant stick", Vector2(856, 440), 20, PAPER)
+	_text("• Diegetic wrist bracer plate sits on off-hand forearm", Vector2(856, 470), 20, PAPER)
+
+	# Card 4: Seated Mode & Height
+	var r_body := Rect2(820.0, 546.0, 714.0, 340.0)
+	_box(r_body, LACQUER_RAISED, GILT_DIM, 2, 16)
+	_text("姿勢と視点高さ   SEATED MODE & EYE HEIGHT", Vector2(840, 562), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 674, 600)
+
+	_text("POSTURE:", Vector2(840, 610), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 150, 600)
+	_draw_comfort_button("seated_off", "STANDING", not seated, COMFORT_ACCENT)
+	_draw_comfort_button("seated_on", "SEATED MODE", seated, COMFORT_ACCENT)
+
+	_text("EYE OFFSET:", Vector2(840, 678), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 150, 600)
+	_draw_comfort_button("height_minus", "− 5 cm", false, COMFORT_ACCENT)
+	var r_box := Rect2(1105, 664, 145, 52)
+	_box(r_box, LACQUER_SUNK, GILT, 2, 10)
+	var sign_str := "+" if h_offset >= 0.0 else ""
+	_text("%s%.2f m" % [sign_str, h_offset], r_box.position + Vector2(0, 10), 24, PAPER, HORIZONTAL_ALIGNMENT_CENTER, r_box.size.x, 600)
+	_draw_comfort_button("height_plus", "+ 5 cm", false, COMFORT_ACCENT)
+	_draw_comfort_button("height_reset", "RESET", false, COMFORT_ACCENT)
+
+	_draw_comfort_button("recenter", "◎ RECENTER HEADSET VIEW (OR HOLD LEFT MENU 1s)", false, Color(0.86, 0.45, 0.35))
+	_text("Configuration auto-saved to user://hanabi_vr.cfg", Vector2(840, 816), 18, DIM)
+
+
+func _draw_comfort_button(key: String, label: String, is_active: bool, accent: Color) -> void:
+	var r: Rect2 = COMFORT_RECTS.get(key, Rect2())
+	if r.size == Vector2.ZERO:
+		return
+	var hot := String(hover.get("kind", "")) == "comfort" and String(hover.get("key", "")) == key
+	var bg := Color(accent.r * 0.28, accent.g * 0.28, accent.b * 0.28, 0.98) if is_active else (Color(0.12, 0.115, 0.16, 0.98) if hot else LACQUER_SUNK)
+	var border := Color(accent, 0.95) if is_active else (Color(GILT, 0.85) if hot else GILT_DIM)
+	var text_col := PAPER if is_active else (Color(PAPER, 0.95) if hot else DIM)
+	_box(r, bg, border, 2 if (is_active or hot) else 1, 10)
+	var fsize := 22
+	if r.size.x < 100:
+		fsize = 20
+	_text(label, r.position + Vector2(0, (r.size.y - float(fsize)) * 0.5 - 2), fsize, text_col, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 600 if is_active else 500)

@@ -63,6 +63,7 @@ func _run_all() -> void:
 	await _test_menu_carries_the_blade_state()
 	await _test_world_stands_still_rig_keeps_going()
 	await _test_pointers_buy_only_through_run_game()
+	await _test_comfort_settings_tab()
 	await _test_slow_motion_survives_pause()
 	await _test_refused_states()
 	await _test_music_ducking()
@@ -284,6 +285,97 @@ func _test_pointers_buy_only_through_run_game() -> void:
 	run.element_system.reset()
 
 
+# --- 4b. VR Comfort settings ------------------------------------------------------------
+
+func _test_comfort_settings_tab() -> void:
+	VrComfortSettings.reset_to_defaults(xr)
+	await _tap_menu_button()
+	_check("the menu opens for comfort checks", ctl.is_open)
+	var c: SkillTreeCanvas = menu.canvas
+
+	# Click Comfort tab (tab index 4)
+	await _click("left", c.tab_rect(4).get_center())
+	_check("clicking tab 4 switches to comfort settings", c.is_comfort_tab)
+
+	# 1. Vignette toggle & strength
+	await _click("left", c.comfort_rect("vignette_off").get_center())
+	_check("clicking DISABLED turns vignette off", not VrComfortSettings.vignette_enabled)
+	var vig: Node = xr._get_vignette()
+	_check("vignette node disabled auto_adjust", vig != null and not bool(vig.get("auto_adjust")))
+
+	await _click("left", c.comfort_rect("vignette_on").get_center())
+	_check("clicking ENABLED turns vignette on", VrComfortSettings.vignette_enabled)
+	_check("vignette node enabled auto_adjust", vig != null and bool(vig.get("auto_adjust")))
+
+	await _click("left", c.comfort_rect("vignette_75").get_center())
+	_check("clicking 75% sets strength to 0.75", absf(VrComfortSettings.vignette_strength - 0.75) < 0.01)
+
+	# 2. Turning mode & settings
+	var turn: Node = xr._get_movement_turn()
+	await _click("right", c.comfort_rect("turn_smooth").get_center())
+	_check("clicking SMOOTH sets smooth turn mode", not VrComfortSettings.snap_turning and int(turn.get("turn_mode")) == 2)
+
+	await _click("right", c.comfort_rect("smooth_30").get_center())
+	_check("clicking 3.0 sets smooth speed to 3.0", absf(VrComfortSettings.smooth_turn_speed - 3.0) < 0.01 and absf(float(turn.get("smooth_turn_speed")) - 3.0) < 0.01)
+
+	await _click("right", c.comfort_rect("turn_snap").get_center())
+	_check("clicking SNAP sets snap turn mode", VrComfortSettings.snap_turning and int(turn.get("turn_mode")) == 1)
+
+	await _click("right", c.comfort_rect("snap_60").get_center())
+	_check("clicking 60° sets snap angle to 60.0", absf(VrComfortSettings.snap_angle - 60.0) < 0.01 and absf(float(turn.get("step_turn_angle")) - 60.0) < 0.01)
+
+	# 3. Dominant-hand swap
+	await _click("left", c.comfort_rect("hand_left").get_center())
+	_check("dominant hand swapped to left", VrComfortSettings.dominant_hand == "left" and xr.dominant_hand == "left")
+	_check("left holder is now dominant weapon hand", xr.get_dominant_holder() == xr.left_holder)
+	_check("movement direct reparented to right controller", xr._get_movement_direct().get_parent() == xr.right_controller)
+	_check("movement turn reparented to left controller", xr._get_movement_turn().get_parent() == xr.left_controller)
+	if run.diegetic_hud and run.diegetic_hud.wrist_unit:
+		_check("wrist HUD plate moved to off-hand (right controller)", run.diegetic_hud.wrist_unit.get_parent() == xr.right_controller)
+
+	await _click("left", c.comfort_rect("hand_right").get_center())
+	_check("dominant hand swapped back to right", VrComfortSettings.dominant_hand == "right" and xr.dominant_hand == "right")
+	_check("right holder is dominant weapon hand", xr.get_dominant_holder() == xr.right_holder)
+	_check("movement direct back on left controller", xr._get_movement_direct().get_parent() == xr.left_controller)
+	_check("movement turn back on right controller", xr._get_movement_turn().get_parent() == xr.right_controller)
+	if run.diegetic_hud and run.diegetic_hud.wrist_unit:
+		_check("wrist HUD plate back on left controller", run.diegetic_hud.wrist_unit.get_parent() == xr.left_controller)
+
+	# 4. Seated mode & height
+	await _click("right", c.comfort_rect("seated_on").get_center())
+	_check("seated mode enabled", VrComfortSettings.seated_mode and VrComfortSettings.height_offset >= 0.20)
+	var body_h: float = float(xr._body().get("player_height_offset"))
+	_check("player body height offset applied (%.2f m)" % body_h, absf(body_h - VrComfortSettings.height_offset) < 0.01)
+	await _frames(8)
+
+	var h_before := VrComfortSettings.height_offset
+	await _click("right", c.comfort_rect("height_plus").get_center())
+	_check("height plus adjusts by +5 cm (%.2f -> %.2f)" % [h_before, VrComfortSettings.height_offset], absf(VrComfortSettings.height_offset - (h_before + 0.05)) < 0.01)
+
+	await _click("right", c.comfort_rect("seated_off").get_center())
+	_check("standing mode restored", not VrComfortSettings.seated_mode)
+
+	await _click("right", c.comfort_rect("height_reset").get_center())
+	_check("height reset to 0.00 m", absf(VrComfortSettings.height_offset) < 0.01)
+
+	# 5. Persistence verification
+	var cfg := ConfigFile.new()
+	var err := cfg.load(VrComfortSettings.SETTINGS_PATH)
+	_check("user://hanabi_vr.cfg loaded successfully", err == OK)
+	_check("vignette_enabled saved in cfg", cfg.get_value("comfort", "vignette_enabled", false) == true)
+	_check("vignette_strength saved in cfg", absf(float(cfg.get_value("comfort", "vignette_strength", 0.0)) - 0.75) < 0.01)
+	_check("snap_angle saved in cfg", absf(float(cfg.get_value("comfort", "snap_angle", 0.0)) - 60.0) < 0.01)
+	_check("dominant_hand saved in cfg", String(cfg.get_value("comfort", "dominant_hand", "")) == "right")
+
+	# 6. Switch back to skill tree tab
+	await _click("left", c.tab_rect(0).get_center())
+	_check("clicking tab 0 returns to Sakura tree", not c.is_comfort_tab and c.element == Elements.SAKURA)
+
+	await _release_triggers()
+	await _tap_menu_button()
+	_check("the menu closes cleanly after comfort checks", not ctl.is_open)
+
+
 # --- 5. Slow-mo state survives ---------------------------------------------------------
 
 func _test_slow_motion_survives_pause() -> void:
@@ -429,17 +521,24 @@ func _tap_menu_button() -> void:
 
 ## Aims a hand at canvas pixel [param px] of the open panel.
 func _aim(side: String, px: Vector2) -> void:
-	var target := menu.canvas_to_world(px)
-	var head := _camera().global_position
-	var sign_x := -1.0 if side == "left" else 1.0
-	var hand_world := head + Vector3(0.22 * sign_x, -0.35, 0.0) + (target - head).normalized() * 0.35
-	var basis := Basis.looking_at((target - hand_world).normalized(), Vector3.UP)
-	var local := origin.global_transform.affine_inverse() * Transform3D(basis, hand_world)
-	sim.set_hand(side, local)
-	await _frames(4)
+	var c := xr.left_controller if side == "left" else xr.right_controller
+	for _i in 10:
+		var target := menu.canvas_to_world(px)
+		var head := _camera().global_position
+		var sign_x := -1.0 if side == "left" else 1.0
+		var hand_world := head + Vector3(0.22 * sign_x, -0.35, 0.0) + (target - head).normalized() * 0.35
+		var basis := Basis.looking_at((target - hand_world).normalized(), Vector3.UP)
+		var local := origin.global_transform.affine_inverse() * Transform3D(basis, hand_world)
+		sim.set_hand(side, local)
+		await _frames(2)
+		if c:
+			var hit := menu.ray_to_canvas(c.global_position, -c.global_basis.z)
+			if not hit.is_empty() and (hit.canvas as Vector2).distance_to(px) < 22.0:
+				break
 
 
 func _click(side: String, px: Vector2) -> void:
+	sim.set_trigger(side, 0.0)
 	await _aim(side, px)
 	if OS.get_cmdline_user_args().has("--debug-click"):
 		print("    click %s at %s hover %s ray %s" % [side, px, menu.pointer_hover(side), menu.ray_to_canvas(xr.left_controller.global_position if side == "left" else xr.right_controller.global_position, -(xr.left_controller if side == "left" else xr.right_controller).global_basis.z)])
