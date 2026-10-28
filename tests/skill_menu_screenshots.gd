@@ -46,6 +46,7 @@ func _ready() -> void:
 	var fwd := player.get_look_direction()
 	run.wave_director.spawn_enemy_at(stand + fwd * 4.5 + Vector3(1.4, 0, 0), stand)
 	run.wave_director.spawn_enemy_at(stand + fwd * 6.5 + Vector3(-1.8, 0, 0), stand)
+	player.hand_offset = Vector3(0.55, -0.45, 0.0)  # sword out of the panel's way
 	await _frames(60)
 
 	await _shot("00_forest_before_menu")
@@ -84,6 +85,17 @@ func _ready() -> void:
 	await _frames(14)
 	await _shot("05_shadow_unlocked_flash")
 
+	run.pause_controller.close()
+
+	# Nose to bark: no clear spot, so the panel is drawn on top of the trunk.
+	var close_stand := tree_pos + dir * (trunk.z + 0.45)
+	close_stand.y = run.forest_world.height_at(close_stand.x, close_stand.z)
+	player.teleport(close_stand, yaw)
+	await _frames(40)
+	run.pause_controller.open()
+	await _frames(12)
+	await _shot("06_nose_to_bark_on_top_fallback")
+	print("nose-to-bark: blocked=%s distance=%.2f yaw_offset=%.0f" % [run.pause_controller.last_pose.blocked, run.pause_controller.last_pose.distance, run.pause_controller.last_pose.yaw_offset_deg])
 	run.pause_controller.close()
 	run.queue_free()
 	get_tree().quit(0)

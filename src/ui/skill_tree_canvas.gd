@@ -430,7 +430,7 @@ func _draw_node(n: Dictionary, accent: Color) -> void:
 			_text("札 × %d" % cost, r.position + Vector2(116, 80), 28, FAINT)
 			_draw_lock(r.position + Vector2(218, 97))
 	# Role caption above the plaque.
-	_text(String(ROLE_CAPTION[int(n.tier)]), r.position + Vector2(6, -26), 20, FAINT)
+	_text(String(ROLE_CAPTION[int(n.tier)]), r.position + Vector2(6, -27), 22, Color(FAINT, 1.0).lightened(0.12))
 	# Unlock flash.
 	if _flash_t >= 0.0 and _flash_id == id:
 		var k := _flash_t / 0.9
@@ -462,7 +462,7 @@ func _draw_detail() -> void:
 	var kanji_size := mini(92, int(172.0 / float(maxi(kanji.length(), 1))))
 	_text(kanji, Vector2(x, r.position.y + 22 + (92 - kanji_size) * 0.5), kanji_size, accent)
 	_text("TIER %d  ·  %s" % [int(n.tier), String(ROLE_CAPTION[int(n.tier)])],
-			Vector2(x + 190, r.position.y + 20), 21, DIM)
+			Vector2(x + 190, r.position.y + 18), 22, DIM)
 	var head_w := w - 190.0
 	_wrapped(String(n.title), Vector2(x + 190, r.position.y + 52), _fit(String(n.title), head_w, 36, 650, 22), PAPER,
 			head_w, 2, HORIZONTAL_ALIGNMENT_LEFT, 650)
@@ -544,11 +544,11 @@ func _draw_unlock_button(id: String, accent: Color) -> void:
 
 func _draw_footer() -> void:
 	draw_line(Vector2(66, 918), Vector2(SIZE.x - 66, 918), GILT_DIM, 1.5, true)
-	_text(hint_text, Vector2(70, 938), 24, DIM, HORIZONTAL_ALIGNMENT_LEFT, 880.0)
+	_text(hint_text, Vector2(70, 936), 25, DIM, HORIZONTAL_ALIGNMENT_LEFT, 880.0)
 	var blade := "BLADE  ·  PLAIN STEEL"
 	var col := DIM
 	if blade_element != Elements.NONE:
 		blade = "BLADE  ·  %s %s  ·  %d s" % [Elements.build_label(blade_element),
 				String(ELEMENT_TITLE.get(blade_element, "")), ceili(blade_seconds)]
 		col = accent_of(blade_element)
-	_text(blade, Vector2(SIZE.x - 70 - 560, 938), 24, col, HORIZONTAL_ALIGNMENT_RIGHT, 560)
+	_text(blade, Vector2(SIZE.x - 70 - 560, 936), 25, col, HORIZONTAL_ALIGNMENT_RIGHT, 560)
