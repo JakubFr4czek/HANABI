@@ -173,7 +173,7 @@ func _test_placement_clear_of_colliders() -> void:
 
 
 ## The balance model assumes a shrine about every 215 m of walking
-## (ElementBalance.HOKORA_SLOT_*). Walk 1.5 km in a straight line, 30 m a step, and
+## (WorldGenProfile shrine_slot_*). Walk 1.5 km in a straight line, 30 m a step, and
 ## count the distinct shrines met: the design says about 8, and it must stay rare.
 func _test_density_along_a_walk() -> void:
 	run.start_run()

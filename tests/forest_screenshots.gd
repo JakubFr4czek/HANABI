@@ -113,7 +113,7 @@ func _ready() -> void:
 func _find_best_sakura_view_angle(run: RunGame, sakura: Vector3, dist: float) -> float:
 	var normal_trees: Array[Vector3] = []
 	for chunk in run.forest_world.get_children():
-		var trees := chunk.get_node_or_null("Trees") as MultiMeshInstance3D
+		var trees := chunk.get_node_or_null("Trees0") as MultiMeshInstance3D
 		if trees and trees.multimesh:
 			for i in trees.multimesh.instance_count:
 				var tp: Vector3 = trees.global_transform * trees.multimesh.get_instance_transform(i).origin
@@ -145,7 +145,7 @@ func _nearest_drawn_tree(run: RunGame, from: Vector3) -> Vector3:
 	var best := Vector3.INF
 	var best_d := INF
 	for chunk in run.forest_world.get_children():
-		var trees := chunk.get_node_or_null("Trees") as MultiMeshInstance3D
+		var trees := chunk.get_node_or_null("Trees0") as MultiMeshInstance3D
 		if trees == null or trees.multimesh == null:
 			continue
 		var mm := trees.multimesh
@@ -163,7 +163,7 @@ func _debug_roots(run: RunGame, trunk_pos: Vector3) -> void:
 	var best_xf := Transform3D.IDENTITY
 	var best_mm: MultiMesh = null
 	for chunk in run.forest_world.get_children():
-		var trees := chunk.get_node_or_null("Trees") as MultiMeshInstance3D
+		var trees := chunk.get_node_or_null("Trees0") as MultiMeshInstance3D
 		if trees == null or trees.multimesh == null:
 			continue
 		var mm := trees.multimesh

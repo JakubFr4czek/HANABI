@@ -29,12 +29,12 @@ func _run() -> void:
 	# The forest is walkable, so these are measured from the camera: props and
 	# ground dissolve before the 14 m edge of the loaded 3×3 chunk ring.
 	_check("Forest props fade out inside the loaded chunk ring (view end %.1f m)" % ForestWorld.VIEW_RANGE_END,
-		ForestWorld.VIEW_RANGE_END <= ForestWorld.CHUNK_SIZE * 0.5)
+		ForestWorld.VIEW_RANGE_END <= WorldGenProfile.load_active().chunk_size * 0.5)
 	var mat := run.forest_world._ground_mat as ShaderMaterial
 	_check("Ground is not cut away under props inside the loaded ring (fade from %.0f m)" % float(mat.get_shader_parameter("fog_fade_start")),
-		float(mat.get_shader_parameter("fog_fade_start")) > ForestWorld.CHUNK_SIZE)
-	_check("Forest starts close enough to read as a forest (props from %.1f m)" % ForestWorld.PROP_CLEARING_RADIUS,
-		ForestWorld.PROP_CLEARING_RADIUS < 9.0)
+		float(mat.get_shader_parameter("fog_fade_start")) > WorldGenProfile.load_active().chunk_size)
+	_check("Forest starts close enough to read as a forest (props from %.1f m)" % WorldGenProfile.load_active().prop_clearing_radius,
+		WorldGenProfile.load_active().prop_clearing_radius < 9.0)
 	run.queue_free()
 
 

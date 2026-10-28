@@ -2,50 +2,27 @@ class_name ForestWorld
 extends Node3D
 ## Endless forest illusion around the run shrine (docs/NIGHT_PLAN.md §3, GDD §9).
 ## Rolling hills from FastNoiseLite, props via shared MultiMeshes (trees, torii,
-## lanterns, rocks). Chunks recycle with the player, who can walk out of the
+## lanterns, boulders). Chunks recycle with the player, who can walk out of the
 ## shrine clearing into the forest: every chunk carries a terrain collider, and
 ## view ranges / ground fade are measured from the camera so fog swallows the
 ## chunk edges wherever the player stands.
+##
+## Every generation number lives in the WorldGenProfile (src/forest/,
+## docs/WORLDGEN_TOOL.md). What stays here is geometry: crown clumps, root
+## ribbons, gate frames. The same profile and seed give the same forest.
 
-const CHUNK_SIZE := 28.0
-const CHUNK_RADIUS := 1
-## The run spawns in a small glade of the forest itself (no dojo disc): trees
-## stand a few metres away and the ground starts rolling soon after.
-const CLEARING_RADIUS := 5.2
-const PROP_CLEARING_RADIUS := 3.4
-const CLEARING_HEIGHT := 0.0
-## Broad, sparse hills and valleys over ~75 m. Mostly flat ground with an
-## occasional big swell — never a washboard.
-const HILL_AMPLITUDE := 4.6
-## A gentle roll on top, over ~20 m.
-const BUMP_AMPLITUDE := 0.18
-const TERRAIN_RES := 41
-## Chunks are 28 m and the 3×3 ring keeps >= 14 m loaded around the player;
-## everything is fully fogged by VIEW_RANGE_END (RunGame.RUN_FOG_END <= it).
+## Chunk ring: the loaded ring must keep >= 14 m around the player, and
+## everything is fully fogged by VIEW_RANGE_END (the profile's fog_end <= it).
 const VIEW_RANGE_END := 14.0
-## The ground no longer discards itself near the player: hills cut away under
-## their trees left props floating. Depth fog alone dissolves them.
-const GROUND_FADE_START := 60.0
-const GROUND_FADE_END := 70.0
 ## Shader layer -> Poly Haven texture set in assets/textures/forest_ground/.
 const GROUND_LAYERS := {"soil": "forrest_ground_01", "grass": "leafy_grass", "stone": "rocky_trail"}
 const SHAFT_SHADER := preload("res://src/shaders/moon_shaft.gdshader")
-const MAX_SHAFTS_PER_CHUNK := 5
-const SHAFT_LENGTH := 15.0
 const GROUND_SHADER := preload("res://src/shaders/forest_ground.gdshader")
 const WET_SHADER := preload("res://src/shaders/wet_surface.gdshader")
-const TORII_SCENE := preload("res://assets/models/environment/forest_quaternius/torii_gate_polyfork.glb")
-## Grab3D CC0 cherry tree, crown simplified, scaled to a tall shrine cedar.
-const TREE_SCENE := preload("res://assets/models/environment/forest_trees/cherry_forest.gltf")
 const TREE_DIFFUSE := preload("res://src/shaders/forest_diffuse.gdshader")
 const TREE_ALBEDO := preload("res://assets/models/environment/forest_trees/cherry_forest_albedo.jpg")
 const TREE_NORMAL := preload("res://assets/models/environment/forest_trees/cherry_forest_normal.jpg")
 const SAKURA_TREE_SHADER := preload("res://src/shaders/sakura_tree.gdshader")
-## A few rare emissive pink sakura trees as focal points in the forest (GDD §9).
-## Roughly 1 chunk in 5-6 holds one majestic sakura tree.
-const SAKURA_CHUNK_CHANCE := 0.18
-const SAKURA_DRAW_RADIUS := 14.0
-const SAKURA_SCALE_BOOST := 1.2
 const TORII_MESH_SCALE := 0.42
 ## Trunks and gate pillars collide on their own layer: the player walks into
 ## them, yōkai ragdolls do not (their limbs snag and topple them); yōkai steer
@@ -54,26 +31,37 @@ const TRUNK_LAYER := 64
 const TRUNK_CELL := 3.0
 ## Trees per chunk side on the jittered grid (28 m / 9 ≈ 3.1 m spacing).
 const TREE_GRID := 9
-## Fog is solid by RUN_FOG_END. Trees past this are the fog's color already,
-## so they are not drawn; the mesh is a real tree and drawing every chunk
-## would blow the Quest primitive cap.
-const TREE_DRAW_RADIUS := 11.0
-## Past the old 9.5 m line every second tree is skipped (stable per-tree hash,
-## so walking does not shimmer): far trunks still read through the fog at a
-## fraction of the Quest triangle cost.
-const TREE_FAR_KEEP := 0.5
-const TREE_FAR_START := 9.5
-const MAX_TREES_PER_CHUNK := TREE_GRID * TREE_GRID
-## Full-size gates met now and then in the fog (GDD §9). About one chunk in
-## three holds gates (same chunk set as before, so no new MultiMesh draw
-## calls); a chosen chunk holds a small group instead of a lone gate.
-const MAX_TORII_PER_CHUNK := 3
-const TORII_CHUNK_CHANCE := 0.34
-const TORII_GROUP_KEEP := 0.75
-const TORII_HEIGHT := Vector2(4.2, 6.2)
-const MAX_LANTERNS_PER_CHUNK := 5
-const MAX_ROCKS_PER_CHUNK := 4
+## Gate candidates keep this far from a live gameplay gate (ToriiManager).
+const GATE_CLEAR_OF_LIVE_GATE := 3.5
+## Senbon rows: axis threshold and the spacing from the corridor noise.
+const SENBON_AXIS_THRESHOLD := 0.72
+const CORRIDOR_SCALE := 1.7
+## Kinds seed the per-chunk streams. Trees use 0, gates 1, lanterns 2,
+## undergrowth 3 + its index in the profile.
+const KIND_TREE := 0
+const KIND_TORII := 1
+const KIND_LANTERN := 2
+const KIND_UNDERGROWTH := 3
+## Lantern parts (size, centre) shared by the mesh and its collider.
+const LANTERN_PARTS := [
+	[Vector3(0.22, 0.42, 0.22), Vector3(0.0, 0.21, 0.0)],
+	[Vector3(0.34, 0.28, 0.34), Vector3(0.0, 0.56, 0.0)],
+	[Vector3(0.4, 0.08, 0.4), Vector3(0.0, 0.76, 0.0)],
+]
+## Trunk hull top (mesh space): above the reach of a raised blade. The
+## trunk is hulled in slices this tall (overlapping a little), so the
+## hull follows the taper and flare instead of bridging them.
+const TRUNK_HULL_TOP := 4.4
+const TRUNK_SLICE := 1.1
+## Tree-spot bucket size for mound queries (the 1.6 m mound radius fits).
+const MOUND_CELL := 4.0
+## Blend of the hills into the glade, relative to clearing_radius.
+const HILL_BLEND_START := 1.5
+## Soil heaped against the trunk, relative to clearing_radius.
+const MOUND_FADE_START := 1.2
+const MOUND_FADE_END := 2.2
 
+var profile: WorldGenProfile
 var follow: Node3D
 ## Unit vector toward the moon (RunGame sets it from the Moon light).
 var moon_direction := Vector3(0.25, 0.9, 0.35).normalized()
@@ -84,7 +72,8 @@ var center_chunk := Vector2i.ZERO
 var _chunks: Dictionary = {}
 ## Vector2i cell -> Array of Vector3(x, z, radius) for trunk_push().
 var _trunk_cells: Dictionary = {}
-## Chunk coord -> {spots: Array[Vector4], clearing: int}. Spots are world xz, scale, yaw.
+## Chunk coord -> {spots, ids, clearing, cells}. Spots are world xz, scale, yaw
+## (Vector4); ids are the profile tree-entry index of each spot.
 var _tree_spot_cache: Dictionary = {}
 var _spots_ready := false
 ## Trees reveal as the player approaches, not only at chunk borders.
@@ -94,27 +83,29 @@ var _bump_noise := FastNoiseLite.new()
 var _floor_noise := FastNoiseLite.new()
 var _scatter_noise := FastNoiseLite.new()
 var _corridor_noise := FastNoiseLite.new()
-var _tree_mesh: Mesh
-var _sakura_mesh: Mesh
+## Per profile tree entry: mesh, material, trunk hulls and chest radius.
+var _tree_meshes: Array[Mesh] = []
+var _tree_mats: Array[Material] = []
+var _tree_shapes: Array = []
+var _tree_chest: Array[float] = []
+## Per profile undergrowth entry: mesh, material and collider shape.
+var _under_meshes: Array[Mesh] = []
+var _under_mats: Array[Material] = []
+var _under_shapes: Array[ConvexPolygonShape3D] = []
 var _shaft_mesh: QuadMesh
 var _shaft_mat: ShaderMaterial
 var _torii_mesh: Mesh
 var _lantern_mesh: Mesh
-var _rock_mesh: Mesh
 ## Collision shapes measured from the meshes above (see _build_prop_shapes):
 ## convex hulls of the visible surface, shared by every instance and placed
 ## with the instance's own transform, so bodies and the blade stop where the
 ## object visibly ends.
-var _trunk_shapes: Array[ConvexPolygonShape3D] = []
 var _torii_shapes: Array[ConvexPolygonShape3D] = []
-var _rock_shape: ConvexPolygonShape3D
-var _trunk_chest_radius := 0.8
 var _ground_mat: ShaderMaterial
-var _tree_mat: ShaderMaterial
-var _sakura_mat: ShaderMaterial
 var _torii_mat: ShaderMaterial
 var _lantern_mat: ShaderMaterial
-var _rock_mat: ShaderMaterial
+var _tree_material_cache: ShaderMaterial = null
+var _rock_material_cache: ShaderMaterial = null
 var _lightmap_gi: LightmapGI
 var _static_gi := false
 var torii_manager: ToriiManager = null
@@ -133,33 +124,25 @@ func uses_shader_baked_look() -> bool:
 func setup(p_follow: Node3D, arena_lightmap: LightmapGI = null) -> void:
 	add_to_group("forest_world")
 	follow = p_follow
-	_tree_spot_cache.clear()
-	_spots_ready = false
-	_height_noise.seed = 0x464F52455354
-	_height_noise.frequency = 0.013
-	_height_noise.fractal_octaves = 3
-	_bump_noise.seed = 0x42554D50
-	_bump_noise.frequency = 0.05
-	_bump_noise.fractal_octaves = 1
-	# Roots and leaf pockets. Only the flats get them, so a steep hill stays walkable.
-	_floor_noise.seed = 0x464C4F4F52
-	_floor_noise.frequency = 0.38
-	_floor_noise.fractal_octaves = 2
-	_scatter_noise.seed = 0x534341545445
-	_scatter_noise.frequency = 0.11
-	_corridor_noise.seed = 0x53454E424F4E
-	_corridor_noise.frequency = 0.018
-	_spots_ready = true
-	_build_materials()
-	_build_meshes()
+	if profile == null:
+		profile = WorldGenProfile.load_active()
 	_lightmap_gi = arena_lightmap
 	_static_gi = _lightmap_gi != null
+	_apply_profile()
 	if torii_manager == null:
 		torii_manager = ToriiManager.new()
 		torii_manager.name = "ToriiManager"
 		add_child(torii_manager)
 	torii_manager.setup(self, follow, get_parent() as RunGame)
 	_rebuild_active_chunks()
+
+
+## Swaps the profile in place (the dock and the preview use this): meshes,
+## materials and noise are rebuilt and every chunk is generated again.
+func apply_profile(p_profile: WorldGenProfile) -> void:
+	profile = p_profile
+	_apply_profile()
+	reset()
 
 
 func reset() -> void:
@@ -176,6 +159,30 @@ func reset() -> void:
 		torii_manager.reset()
 	if follow:
 		_rebuild_active_chunks()
+
+
+## Noise, materials and meshes come from the profile. Called whenever it changes.
+func _apply_profile() -> void:
+	var seed_mix := profile.world_seed
+	_tree_spot_cache.clear()
+	_spots_ready = false
+	_height_noise.seed = 0x464F52455354 ^ seed_mix
+	_height_noise.frequency = profile.hill_frequency
+	_height_noise.fractal_octaves = profile.hill_octaves
+	_bump_noise.seed = 0x42554D50 ^ seed_mix
+	_bump_noise.frequency = profile.bump_frequency
+	_bump_noise.fractal_octaves = 1
+	# Roots and leaf pockets. Only the flats get them, so a steep hill stays walkable.
+	_floor_noise.seed = 0x464C4F4F52 ^ seed_mix
+	_floor_noise.frequency = profile.floor_frequency
+	_floor_noise.fractal_octaves = 2
+	_scatter_noise.seed = 0x534341545445 ^ seed_mix
+	_scatter_noise.frequency = 0.11
+	_corridor_noise.seed = 0x53454E424F4E ^ seed_mix
+	_corridor_noise.frequency = 0.018
+	_spots_ready = true
+	_build_materials()
+	_build_meshes()
 
 
 ## Where the player actually walks. Locomotion moves the XR origin/body, not
@@ -211,10 +218,10 @@ func height_at(wx: float, wz: float) -> float:
 
 
 ## Exact height of the rendered terrain mesh at (wx, wz): the mesh samples
-## height_at() on the global 0.7 m lattice and splits each quad the same way,
+## height_at() on the global lattice and splits each quad the same way,
 ## so this reproduces the visible ground instead of the analytic ideal.
 func _mesh_height(wx: float, wz: float) -> float:
-	var step := CHUNK_SIZE / float(TERRAIN_RES - 1)
+	var step := profile.chunk_size / float(profile.terrain_resolution - 1)
 	var fx := wx / step
 	var fz := wz / step
 	var ix := int(floor(fx))
@@ -245,40 +252,42 @@ func _mesh_min_height(wx: float, wz: float, radius: float) -> float:
 ## trunk can be sunk into soil that belongs to the ground.
 func _hill_height(wx: float, wz: float) -> float:
 	var d := Vector2(wx, wz).length()
-	if d < CLEARING_RADIUS - 1.2:
+	var clearing := profile.clearing_radius
+	if d < clearing - MOUND_FADE_START:
 		return CLEARING_HEIGHT
-	var blend := smoothstep(CLEARING_RADIUS - 1.5, CLEARING_RADIUS + 9.0, d)
-	var n := _height_noise.get_noise_2d(wx, wz) * HILL_AMPLITUDE
-	n += _bump_noise.get_noise_2d(wx, wz) * BUMP_AMPLITUDE
+	var blend := smoothstep(clearing - HILL_BLEND_START, clearing + profile.hill_blend_distance, d)
+	var n := _height_noise.get_noise_2d(wx, wz) * profile.hill_amplitude
+	n += _bump_noise.get_noise_2d(wx, wz) * profile.bump_amplitude
 	# Grade of the broad hill over a couple of metres. Pockets sit on the
 	# flats; a slope that is already near the walk limit does not get steeper.
 	var flat := _hill_flatness(wx, wz)
 	var pocket := _floor_noise.get_noise_2d(wx, wz)
 	var root := 1.0 - absf(_floor_noise.get_noise_2d(wx * 0.41 + 18.0, wz * 0.41))
-	n += (pocket * 0.15 + root * root * 0.10) * flat
+	n += (pocket * profile.pocket_amount + root * root * profile.root_amount) * flat
 	return lerpf(CLEARING_HEIGHT, CLEARING_HEIGHT + n, blend)
 
 
 func _hill_flatness(wx: float, wz: float) -> float:
 	var sx := _height_noise.get_noise_2d(wx + 1.2, wz) - _height_noise.get_noise_2d(wx - 1.2, wz)
 	var sz := _height_noise.get_noise_2d(wx, wz + 1.2) - _height_noise.get_noise_2d(wx, wz - 1.2)
-	var grade := clampf(Vector2(sx, sz).length() * HILL_AMPLITUDE / 2.4, 0.0, 1.0)
+	var grade := clampf(Vector2(sx, sz).length() * profile.hill_amplitude / 2.4, 0.0, 1.0)
 	return 1.0 - smoothstep(0.22, 0.48, grade)
 
 
 ## Soil heaped against the trunk. Same spots the trees use, so the mound and
 ## the mesh meet. Fades out in the level glade and on slopes that are already steep.
 func _root_mound(wx: float, wz: float) -> float:
+	var clearing := profile.clearing_radius
 	var d := Vector2(wx, wz).length()
-	if d < CLEARING_RADIUS - 1.2:
+	if d < clearing - MOUND_FADE_START:
 		return 0.0
-	var fade := smoothstep(CLEARING_RADIUS - 1.2, CLEARING_RADIUS + 2.2, d)
+	var fade := smoothstep(clearing - MOUND_FADE_START, clearing + MOUND_FADE_END, d)
 	var slope := _local_hill_slope(wx, wz)
 	# Chunks are centered on their origin, so a point just west of 0 still
 	# belongs to chunk 0. Search the round neighbourhood, not floor() — but
 	# only the 4 m buckets the 1.6 m mound radius can touch.
-	var cx := int(round(wx / CHUNK_SIZE))
-	var cz := int(round(wz / CHUNK_SIZE))
+	var cx := int(round(wx / profile.chunk_size))
+	var cz := int(round(wz / profile.chunk_size))
 	var best := 0.0
 	var lox := int(floor((wx - 1.7) / MOUND_CELL))
 	var hix := int(floor((wx + 1.7) / MOUND_CELL))
@@ -309,6 +318,10 @@ func _local_hill_slope(wx: float, wz: float) -> float:
 	return Vector2(dx, dz).length()
 
 
+## Glade height: flat ground, the spawn is level by construction.
+const CLEARING_HEIGHT := 0.0
+
+
 func props_in_clearing() -> int:
 	var count := 0
 	for key in _chunks:
@@ -318,8 +331,9 @@ func props_in_clearing() -> int:
 
 func _rebuild_active_chunks() -> void:
 	var wanted: Dictionary = {}
-	for ox in range(-CHUNK_RADIUS, CHUNK_RADIUS + 1):
-		for oz in range(-CHUNK_RADIUS, CHUNK_RADIUS + 1):
+	var radius := profile.chunk_radius
+	for ox in range(-radius, radius + 1):
+		for oz in range(-radius, radius + 1):
 			wanted[center_chunk + Vector2i(ox, oz)] = true
 	for key in _chunks.keys():
 		if not wanted.has(key):
@@ -336,7 +350,7 @@ func _rebuild_active_chunks() -> void:
 	# halo cached and drop everything further: roaming must not grow memory.
 	for key in _tree_spot_cache.keys():
 		var c: Vector2i = key
-		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > CHUNK_RADIUS + 1:
+		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 1:
 			_tree_spot_cache.erase(key)
 	if follow:
 		_last_tree_draw_pos = _anchor_position()
@@ -347,7 +361,7 @@ func _make_chunk(coord: Vector2i) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Chunk_%d_%d" % [coord.x, coord.y]
 	add_child(root)
-	root.position = Vector3(coord.x * CHUNK_SIZE, 0.0, coord.y * CHUNK_SIZE)
+	root.position = Vector3(coord.x * profile.chunk_size, 0.0, coord.y * profile.chunk_size)
 
 	var terrain := MeshInstance3D.new()
 	terrain.name = "Terrain"
@@ -361,43 +375,90 @@ func _make_chunk(coord: Vector2i) -> Node3D:
 
 	var clearing_props := 0
 	_collect_senbon_corridor(root, coord)
-	clearing_props += _populate_multimesh(root, "Trees", _tree_mesh, _tree_mat, MAX_TREES_PER_CHUNK, coord, 0)
-	clearing_props += _populate_multimesh(root, "Torii", _torii_mesh, _torii_mat, MAX_TORII_PER_CHUNK, coord, 1)
-	clearing_props += _populate_multimesh(root, "Lanterns", _lantern_mesh, _lantern_mat, MAX_LANTERNS_PER_CHUNK, coord, 2)
-	clearing_props += _populate_multimesh(root, "Rocks", _rock_mesh, _rock_mat, MAX_ROCKS_PER_CHUNK, coord, 3)
+	clearing_props += _populate_trees(root, coord)
+	clearing_props += _populate_props(root, "Torii", _torii_mesh, _torii_mat, _torii_spec(), coord, KIND_TORII)
+	clearing_props += _populate_props(root, "Lanterns", _lantern_mesh, _lantern_mat, _lantern_spec(), coord, KIND_LANTERN)
+	for u in profile.undergrowth.size():
+		var entry := profile.undergrowth[u]
+		clearing_props += _populate_props(root, "Undergrowth%d" % u, _under_meshes[u], _under_mats[u],
+			_undergrowth_spec(entry), coord, KIND_UNDERGROWTH + u, u)
 	_place_moon_shafts(root, coord)
 	root.set_meta("clearing_props", clearing_props)
 	return root
 
 
-func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material, max_count: int,
-		coord: Vector2i, kind: int) -> int:
-	if kind == 0:
-		return _populate_trees(root, coord)
+## Trees: the ordinary kinds share the chunk's trunks by weight, then each focal
+## kind (sakura) turns one of them into its focal tree. One MultiMesh per kind.
+func _populate_trees(root: Node3D, coord: Vector2i) -> int:
+	var packed := _tree_spots(coord)
+	var spots: Array = packed.spots
+	var ids: PackedInt32Array = packed.ids
+	var props: Array = root.get_meta("prop_world_positions", [])
+	var per_kind: Dictionary = {}
+	var ordinary_all: Array[Transform3D] = []
+	var focal_all: Array[Transform3D] = []
+	for i in spots.size():
+		var spot: Vector4 = spots[i]
+		var e: int = ids[i]
+		var entry := profile.trees[e]
+		var wx := spot.x
+		var wz := spot.y
+		var scale := spot.z
+		var yaw := spot.w
+		var reach := 2.1 * (entry.focal_scale_boost if entry.is_focal() else 1.0)
+		# Plant from the rendered mesh, sunk below the lowest ground in ribbon
+		# reach: on a slope the analytic height floats above the downhill
+		# mesh, which left roots standing in the air.
+		var base := _mesh_min_height(wx, wz, reach) - 0.05 * scale
+		# Lean with the hill, not the mound, so the roots lie on the slope
+		# instead of sticking out on the downhill side.
+		var up := Vector3.UP.lerp(_hill_normal(wx, wz), entry.hill_lean).normalized()
+		var basis := _basis_up(up, yaw, scale)
+		var xf := Transform3D(basis, Vector3(wx - root.position.x, base, wz - root.position.z))
+		if not per_kind.has(e):
+			per_kind[e] = [] as Array[Transform3D]
+		(per_kind[e] as Array).append(xf)
+		if entry.is_focal():
+			focal_all.append(xf)
+		else:
+			ordinary_all.append(xf)
+		props.append(Vector3(wx, base, wz))
+	root.set_meta("prop_world_positions", props)
+	root.set_meta("tree_local_xfs", ordinary_all)
+	root.set_meta("sakura_tree_local_xfs", focal_all)
+	for e in profile.trees.size():
+		if not per_kind.has(e):
+			continue
+		var xfs: Array[Transform3D] = per_kind[e]
+		var entry := profile.trees[e]
+		var label := ("Focal%d" if entry.is_focal() else "Trees%d") % e
+		root.set_meta("xfs_" + label, xfs)
+		_commit_multimesh(root, label, _tree_meshes[e], _tree_mats[e], xfs)
+		if entry.obstacle:
+			root.add_child(_build_tree_colliders(xfs, e, root))
+	return int(packed.clearing)
+
+
+## Scatter for gates, lanterns and boulders: one MultiMesh per kind, placed
+## with trunk and prop clearances from the spec (see _torii_spec and friends).
+func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spec: Dictionary,
+		coord: Vector2i, kind: int, undergrowth_index := -1) -> int:
 	var transforms: Array[Transform3D] = []
 	var clearing_hits := 0
 	# Deterministic per chunk and kind, so a recycled chunk grows back the same.
-	# (The old per-index LCG hash was correlated and lined trees up in rows.)
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([coord.x, coord.y, kind, 0x464F52])
+	rng.seed = hash([coord.x, coord.y, kind, 0x464F52]) ^ profile.world_seed
 	# Torii existence is a separate hash (not the rng stream), so grouping
 	# gates never moves trees or other props.
-	var torii_exists := kind != 1 or _hash01(_hash_coord(coord, 1, 77), 0) < TORII_CHUNK_CHANCE
+	var torii_exists := kind != KIND_TORII or _hash01(_hash_coord(coord, 1, 77) ^ profile.world_seed, 0) < profile.torii_chunk_chance
 	# Keep-out: trees first, then everything already placed — gates never grow
 	# through a trunk, lanterns and boulders keep their distance too. Neighbour
 	# chunks' spots are already cached (their meshes queried mounds), so gates
 	# near a border respect them too. Gates in one group stay close (they form
 	# corridors), so torii check trees wide but each other narrow.
-	var tree_keep: Array = []
-	for ox in range(-1, 2):
-		for oz in range(-1, 2):
-			var packed: Dictionary = _tree_spots(coord) if ox == 0 and oz == 0 \
-				else _tree_spot_cache.get(coord + Vector2i(ox, oz), {})
-			for s in packed.get("spots", []):
-				var spot: Vector4 = s
-				tree_keep.append(Vector3(spot.x, spot.y, 0.0))
+	var tree_keep := _tree_trunk_points(coord)
 	var placed: Array = []
-	for p in _scatter_points(rng, kind, max_count):
+	for p in _scatter_points(rng, kind, int(spec.max)):
 		var lx: float = p.x
 		var lz: float = p.y
 		var wx := root.position.x + lx
@@ -405,47 +466,37 @@ func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 		if _in_clearing(wx, wz):
 			clearing_hits += 1
 			continue
-		if torii_manager and torii_manager.is_near_gate(wx, wz, 3.5):
+		if torii_manager and torii_manager.is_near_gate(wx, wz, GATE_CLEAR_OF_LIVE_GATE):
 			continue
-		var density := _scatter_noise.get_noise_2d(wx * 0.09, wz * 0.09) * 0.5 + 0.5
-		if kind == 0:
-			# Clumps and thinner stands, never empty swaths.
-			if rng.randf() > lerpf(0.5, 0.97, density):
-				continue
-		elif kind == 1:
+		var density := _scatter_noise.get_noise_2d(wx * profile.density_frequency, wz * profile.density_frequency) * 0.5 + 0.5
+		if kind == KIND_TORII:
 			# Only chosen chunks hold gates; inside one, most candidates
 			# stay, so gates come in small groups for the same draw calls.
 			if not torii_exists:
 				continue
-			if rng.randf() > TORII_GROUP_KEEP:
+			if rng.randf() > profile.torii_group_keep:
 				continue
-		elif kind == 3:
-			if density < 0.56:
-				continue
-		elif density < 0.5:
+		elif density < float(spec.cluster):
 			continue
 		var hy := height_at(wx, wz)
-		var scale := rng.randf_range(0.85, 1.4)
-		if kind == 1:
-			scale = torii_scale_for_height(rng.randf_range(TORII_HEIGHT.x, TORII_HEIGHT.y))
-		elif kind == 2:
-			scale *= rng.randf_range(0.7, 0.95)
-		elif kind == 3:
-			scale *= rng.randf_range(1.0, 2.3)  # boulders, not pebbles
-		var tree_clear := 2.5 if kind == 1 else (1.0 if kind == 2 else 1.0 + scale * 0.5)
+		var scale := rng.randf_range(float(spec.scale_min), float(spec.scale_max))
+		if kind == KIND_TORII:
+			scale = torii_scale_for_height(rng.randf_range(profile.torii_height_min, profile.torii_height_max))
+		var grow := float(spec.grow)
+		var tree_clear := float(spec.tree_clear) + scale * grow
 		if _spot_blocked(tree_keep, wx, wz, tree_clear):
 			continue
-		var prop_clear := 1.5 if kind == 1 else (1.0 if kind == 2 else 1.0 + scale * 0.5)
+		var prop_clear := float(spec.prop_clear) + scale * grow
 		if _spot_blocked(placed, wx, wz, prop_clear):
 			continue
 		placed.append(Vector3(wx, wz, prop_clear * 0.5))
-		if kind == 1:
+		if kind == KIND_TORII:
 			# Gates stand upright: drop the whole frame below the lowest
 			# ground under its span so no leg floats downhill.
 			hy = _mesh_min_height(wx, wz, 2.0) - 0.05
-		elif kind == 3:
+		else:
 			# Boulders sit half-buried instead of balancing on the slope.
-			hy -= 0.15 * scale
+			hy -= float(spec.bury) * scale
 		var angle := rng.randf() * TAU
 		var basis := Basis.from_euler(Vector3(0.0, angle, 0.0)) * Basis.from_scale(Vector3.ONE * scale)
 		var xf := Transform3D(basis, Vector3(lx, hy, lz))
@@ -453,85 +504,128 @@ func _populate_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 		var props: Array = root.get_meta("prop_world_positions", [])
 		props.append(Vector3(wx, hy, wz))
 		root.set_meta("prop_world_positions", props)
-		if kind == 1:
+		if kind == KIND_TORII:
 			var gates: Array = root.get_meta("torii_world_positions", [])
 			gates.append(Vector3(wx, hy, wz))
 			root.set_meta("torii_world_positions", gates)
-	if kind == 1:
+	if kind == KIND_TORII:
 		# Senbon corridors ride the same MultiMesh (one draw call): a node per
 		# corridor cost a draw each against the Quest cap.
 		transforms.append_array(root.get_meta("senbon_pending", []))
 		root.set_meta("senbon_pending", [])
-	if kind == 0:
-		root.set_meta("tree_local_xfs", transforms)
 	if not transforms.is_empty():
 		_commit_multimesh(root, label, mesh, mat, transforms)
-		root.add_child(_build_trunk_colliders(transforms, kind, root))
+		if kind == KIND_TORII:
+			root.add_child(_build_torii_colliders(transforms, root))
+		elif kind == KIND_LANTERN:
+			root.add_child(_build_lantern_colliders(transforms, root))
+		elif spec.obstacle:
+			root.add_child(_build_undergrowth_colliders(transforms, undergrowth_index, root))
 	return clearing_hits
 
 
-## Same jitter and density as the old tree scatter, cached so the soil mound
-## and the mesh share one set of trunks.
-func _is_sakura_chunk(coord: Vector2i) -> bool:
-	return _hash01(_hash_coord(coord, 4, 101), 0) < SAKURA_CHUNK_CHANCE
+func _torii_spec() -> Dictionary:
+	return {
+		"max": profile.torii_max_per_chunk, "cluster": -1.0,
+		"scale_min": 0.0, "scale_max": 0.0, "grow": 0.0,
+		"tree_clear": profile.torii_tree_clearance, "prop_clear": profile.torii_prop_clearance,
+		"bury": 0.0, "obstacle": true,
+	}
 
 
-func _pick_sakura_spot(coord: Vector2i, spots: Array[Vector4]) -> int:
-	var chunk_center := Vector2(float(coord.x) * CHUNK_SIZE, float(coord.y) * CHUNK_SIZE)
-	var best_idx := 0
-	var best_score := -INF
-	for i in spots.size():
-		var s: Vector4 = spots[i]
-		var dist_to_center := Vector2(s.x - chunk_center.x, s.y - chunk_center.y).length()
-		var center_penalty := maxf(0.0, dist_to_center - (CHUNK_SIZE * 0.35)) * 0.3
-		var h := _hill_height(s.x, s.y)
-		var score := h - center_penalty
-		if score > best_score:
-			best_score = score
-			best_idx = i
-	return best_idx
+func _lantern_spec() -> Dictionary:
+	return {
+		"max": profile.lantern_max_per_chunk, "cluster": profile.lantern_cluster_threshold,
+		"scale_min": profile.lantern_scale_min, "scale_max": profile.lantern_scale_max, "grow": 0.0,
+		"tree_clear": profile.lantern_clearance, "prop_clear": profile.lantern_clearance,
+		"bury": 0.0, "obstacle": true,
+	}
 
 
+func _undergrowth_spec(entry: UndergrowthEntry) -> Dictionary:
+	return {
+		"max": entry.max_per_chunk, "cluster": entry.cluster_threshold,
+		"scale_min": entry.scale_min, "scale_max": entry.scale_max, "grow": 0.5,
+		"tree_clear": entry.clearance, "prop_clear": entry.clearance,
+		"bury": entry.bury, "obstacle": entry.obstacle,
+	}
+
+
+## Trunk spots of the 3×3 ring: the keep-out set for scattered props.
+func _tree_trunk_points(coord: Vector2i) -> Array:
+	var out: Array = []
+	for ox in range(-1, 2):
+		for oz in range(-1, 2):
+			var packed: Dictionary = _tree_spots(coord) if ox == 0 and oz == 0 \
+				else _tree_spot_cache.get(coord + Vector2i(ox, oz), {})
+			for s in packed.get("spots", []):
+				var spot: Vector4 = s
+				out.append(Vector3(spot.x, spot.y, 0.0))
+	return out
+
+
+## Tree spot set for a chunk, cached. Returns {spots, ids, clearing, cells}.
 func _tree_spots(coord: Vector2i) -> Dictionary:
 	if _tree_spot_cache.has(coord):
 		return _tree_spot_cache[coord]
 	var spots: Array[Vector4] = []
+	var ids := PackedInt32Array()
 	var clearing := 0
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([coord.x, coord.y, 0, 0x464F52])
-	var origin := Vector2(float(coord.x) * CHUNK_SIZE, float(coord.y) * CHUNK_SIZE)
-	# Crown spacing: no two trunks closer than TREE_MIN_DIST, including across
-	# the chunk border (already-built neighbours are in the cache; a neighbour
-	# built later avoids us the same way).
-	var halo: Array[Vector2] = []
+	rng.seed = hash([coord.x, coord.y, 0, 0x464F52]) ^ profile.world_seed
+	var origin := Vector2(float(coord.x) * profile.chunk_size, float(coord.y) * profile.chunk_size)
+	var ordinary := _ordinary_entries()
+	# Crown spacing: no two trunks closer than their kind's spacing, inside the
+	# chunk and against the halo (already-built neighbours are in the cache; a
+	# neighbour built later avoids us the same way).
+	var halo: Array[Vector3] = []
 	for ox in range(-1, 2):
 		for oz in range(-1, 2):
 			if ox == 0 and oz == 0:
 				continue
 			var packed: Dictionary = _tree_spot_cache.get(Vector2i(coord.x + ox, coord.y + oz), {})
-			for s in packed.get("spots", []):
-				var spot: Vector4 = s
-				halo.append(Vector2(spot.x, spot.y))
-	for p in _scatter_points(rng, 0, MAX_TREES_PER_CHUNK):
-		var wx := origin.x + p.x
-		var wz := origin.y + p.y
-		if _in_clearing(wx, wz):
-			clearing += 1
+			var n_spots: Array = packed.get("spots", [])
+			var n_ids: PackedInt32Array = packed.get("ids", PackedInt32Array())
+			for k in n_spots.size():
+				var spot: Vector4 = n_spots[k]
+				halo.append(Vector3(spot.x, spot.y, _spacing_of(n_ids[k])))
+	if not ordinary.is_empty():
+		for p in _scatter_points(rng, KIND_TREE, 0):
+			var wx := origin.x + p.x
+			var wz := origin.y + p.y
+			if _in_clearing(wx, wz):
+				clearing += 1
+				continue
+			if torii_manager and torii_manager.is_near_gate(wx, wz, GATE_CLEAR_OF_LIVE_GATE):
+				continue
+			var density := _scatter_noise.get_noise_2d(wx * profile.density_frequency, wz * profile.density_frequency) * 0.5 + 0.5
+			if rng.randf() > lerpf(profile.tree_keep_min, profile.tree_keep_max, density):
+				continue
+			var e := _pick_ordinary(rng, ordinary)
+			var entry := profile.trees[e]
+			if _too_close_to_trees(spots, ids, halo, wx, wz, entry.min_spacing):
+				continue
+			var scale := rng.randf_range(entry.scale_min, entry.scale_max)
+			var yaw := rng.randf() * TAU
+			spots.append(Vector4(wx, wz, scale, yaw if entry.random_yaw else 0.0))
+			ids.append(e)
+	# Focal kinds (sakura): one tree per chunk now and then, on the highest
+	# spot near the chunk's middle. Chance per focal kind from its own hash.
+	var focal_rank := 0
+	for e in profile.trees.size():
+		var entry := profile.trees[e]
+		if not entry.is_focal():
 			continue
-		if torii_manager and torii_manager.is_near_gate(wx, wz, 3.5):
+		var chance_hash := _hash01(_hash_coord(coord, 4 + focal_rank, 101) ^ profile.world_seed, 0)
+		focal_rank += 1
+		if chance_hash >= entry.focal_chance or spots.is_empty():
 			continue
-		var density := _scatter_noise.get_noise_2d(wx * 0.09, wz * 0.09) * 0.5 + 0.5
-		if rng.randf() > lerpf(0.5, 0.97, density):
+		var idx := _pick_focal_spot(coord, spots, ids)
+		if idx < 0:
 			continue
-		if _too_close_to_trees(spots, halo, wx, wz):
-			continue
-		spots.append(Vector4(wx, wz, rng.randf_range(0.85, 1.4), rng.randf() * TAU))
-	var sakura_idx := -1
-	if _is_sakura_chunk(coord) and not spots.is_empty():
-		sakura_idx = _pick_sakura_spot(coord, spots)
-		if sakura_idx >= 0 and sakura_idx < spots.size():
-			var s: Vector4 = spots[sakura_idx]
-			spots[sakura_idx] = Vector4(s.x, s.y, s.z * SAKURA_SCALE_BOOST, s.w)
+		var s: Vector4 = spots[idx]
+		spots[idx] = Vector4(s.x, s.y, s.z * entry.focal_scale_boost, s.w)
+		ids[idx] = e
 	# 4 m buckets so mound queries check a handful of trunks instead of the
 	# whole ±1-chunk neighbourhood on every height sample.
 	var cells := {}
@@ -541,25 +635,73 @@ func _tree_spots(coord: Vector2i) -> Dictionary:
 		if not cells.has(key):
 			cells[key] = []
 		(cells[key] as Array).append(spot)
-	var packed := {"spots": spots, "clearing": clearing, "cells": cells, "sakura_idx": sakura_idx}
+	var packed := {"spots": spots, "ids": ids, "clearing": clearing, "cells": cells}
 	_tree_spot_cache[coord] = packed
 	return packed
 
 
-## Minimum trunk-to-trunk distance, inside the chunk and against the halo.
-const TREE_MIN_DIST := 2.4
-## Tree-spot bucket size for mound queries (the 1.6 m mound radius fits).
-const MOUND_CELL := 4.0
+## Entry indices of the ordinary (non-focal, weighted) tree kinds.
+func _ordinary_entries() -> Array[int]:
+	var out: Array[int] = []
+	for e in profile.trees.size():
+		var entry := profile.trees[e]
+		if not entry.is_focal() and entry.weight > 0.0:
+			out.append(e)
+	return out
 
-func _too_close_to_trees(spots: Array[Vector4], halo: Array[Vector2], wx: float, wz: float) -> bool:
-	for s in spots:
-		var spot: Vector4 = s
-		if Vector2(wx - spot.x, wz - spot.y).length() < TREE_MIN_DIST:
+
+## Weighted pick among the ordinary kinds. One kind draws nothing from the
+## stream, so the single-kind forest keeps the same numbers.
+func _pick_ordinary(rng: RandomNumberGenerator, ordinary: Array[int]) -> int:
+	if ordinary.size() == 1:
+		return ordinary[0]
+	var total := 0.0
+	for e in ordinary:
+		total += profile.trees[e].weight
+	var r := rng.randf() * total
+	for e in ordinary:
+		r -= profile.trees[e].weight
+		if r <= 0.0:
+			return e
+	return ordinary[ordinary.size() - 1]
+
+
+func _spacing_of(entry_index: int) -> float:
+	if entry_index < 0 or entry_index >= profile.trees.size():
+		return 2.4
+	return profile.trees[entry_index].min_spacing
+
+
+## Minimum trunk-to-trunk distance, inside the chunk and against the halo.
+## A pair keeps the larger of the two kinds' spacing.
+func _too_close_to_trees(spots: Array[Vector4], ids: PackedInt32Array, halo: Array[Vector3],
+		wx: float, wz: float, spacing: float) -> bool:
+	for i in spots.size():
+		var spot: Vector4 = spots[i]
+		if Vector2(wx - spot.x, wz - spot.y).length() < maxf(spacing, _spacing_of(ids[i])):
 			return true
 	for h in halo:
-		if Vector2(wx - h.x, wz - h.y).length() < TREE_MIN_DIST:
+		if Vector2(wx - h.x, wz - h.y).length() < maxf(spacing, h.z):
 			return true
 	return false
+
+
+func _pick_focal_spot(coord: Vector2i, spots: Array[Vector4], ids: PackedInt32Array) -> int:
+	var chunk_center := Vector2(float(coord.x) * profile.chunk_size, float(coord.y) * profile.chunk_size)
+	var best_idx := -1
+	var best_score := -INF
+	for i in spots.size():
+		if profile.trees[ids[i]].is_focal():
+			continue
+		var s: Vector4 = spots[i]
+		var dist_to_center := Vector2(s.x - chunk_center.x, s.y - chunk_center.y).length()
+		var center_penalty := maxf(0.0, dist_to_center - (profile.chunk_size * 0.35)) * 0.3
+		var h := _hill_height(s.x, s.y)
+		var score := h - center_penalty
+		if score > best_score:
+			best_score = score
+			best_idx = i
+	return best_idx
 
 
 ## True when (wx, wz) intrudes on an occupied spot. Entries are Vector3
@@ -569,20 +711,39 @@ func suppress_props_near(wx: float, wz: float, radius: float) -> void:
 	for c in _tree_spot_cache.keys():
 		var packed: Dictionary = _tree_spot_cache[c]
 		var spots: Array[Vector4] = []
+		var ids := PackedInt32Array()
 		var changed := false
+		var old_ids: PackedInt32Array = packed.get("ids", PackedInt32Array())
+		var k := 0
 		for s in packed.get("spots", []):
 			var spot: Vector4 = s
 			if Vector2(spot.x - wx, spot.y - wz).length() >= radius:
 				spots.append(spot)
+				ids.append(old_ids[k])
 			else:
 				changed = true
+			k += 1
 		if changed:
 			packed["spots"] = spots
+			packed["ids"] = ids
+			packed["cells"] = _cells_of(spots)
 			_tree_spot_cache[c] = packed
 			affected_coords.append(c)
 	for c in affected_coords:
 		if _chunks.has(c):
 			_rebuild_chunk(c)
+
+
+func _cells_of(spots: Array[Vector4]) -> Dictionary:
+	var cells := {}
+	for s in spots:
+		var spot: Vector4 = s
+		var key := Vector2i(int(floor(spot.x / MOUND_CELL)), int(floor(spot.y / MOUND_CELL)))
+		if not cells.has(key):
+			cells[key] = []
+		(cells[key] as Array).append(spot)
+	return cells
+
 
 func _rebuild_chunk(coord: Vector2i) -> void:
 	if not _chunks.has(coord):
@@ -596,11 +757,11 @@ func _rebuild_chunk(coord: Vector2i) -> void:
 func is_clear_of_props(wx: float, wz: float, clearance: float) -> bool:
 	var cl_sq := clearance * clearance
 	var tree_cl_sq := (clearance + 0.35) * (clearance + 0.35)
-
-	var min_cx := int(round((wx - clearance - 0.35) / CHUNK_SIZE))
-	var max_cx := int(round((wx + clearance + 0.35) / CHUNK_SIZE))
-	var min_cz := int(round((wz - clearance - 0.35) / CHUNK_SIZE))
-	var max_cz := int(round((wz + clearance + 0.35) / CHUNK_SIZE))
+	var size := profile.chunk_size
+	var min_cx := int(round((wx - clearance - 0.35) / size))
+	var max_cx := int(round((wx + clearance + 0.35) / size))
+	var min_cz := int(round((wz - clearance - 0.35) / size))
+	var max_cz := int(round((wz + clearance + 0.35) / size))
 
 	for cx in range(min_cx, max_cx + 1):
 		for cz in range(min_cz, max_cz + 1):
@@ -633,46 +794,6 @@ func _spot_blocked(occupied: Array, wx: float, wz: float, clearance: float) -> b
 	return false
 
 
-func _populate_trees(root: Node3D, coord: Vector2i) -> int:
-	var packed := _tree_spots(coord)
-	var sakura_idx: int = packed.get("sakura_idx", -1)
-	var transforms: Array[Transform3D] = []
-	var sakura_transforms: Array[Transform3D] = []
-	var props: Array = root.get_meta("prop_world_positions", [])
-	for i in packed.spots.size():
-		var spot: Vector4 = packed.spots[i]
-		var wx := spot.x
-		var wz := spot.y
-		var scale := spot.z
-		var yaw := spot.w
-		# Plant from the rendered mesh, sunk below the lowest ground in ribbon
-		# reach: on a slope the analytic height floats above the downhill
-		# mesh, which left roots standing in the air.
-		var base := _mesh_min_height(wx, wz, 2.1 * (SAKURA_SCALE_BOOST if i == sakura_idx else 1.0)) - 0.05 * scale
-		# Lean with the hill, not the mound, so the roots lie on the slope
-		# instead of sticking out on the downhill side.
-		var up := Vector3.UP.lerp(_hill_normal(wx, wz), 0.72).normalized()
-		var basis := _basis_up(up, yaw, scale)
-		var xf := Transform3D(basis, Vector3(wx - root.position.x, base, wz - root.position.z))
-		if i == sakura_idx:
-			sakura_transforms.append(xf)
-		else:
-			transforms.append(xf)
-		props.append(Vector3(wx, base, wz))
-	root.set_meta("prop_world_positions", props)
-	root.set_meta("tree_local_xfs", transforms)
-	root.set_meta("sakura_tree_local_xfs", sakura_transforms)
-	if not transforms.is_empty():
-		_commit_multimesh(root, "Trees", _tree_mesh, _tree_mat, transforms)
-	if not sakura_transforms.is_empty():
-		_commit_multimesh(root, "SakuraTrees", _sakura_mesh, _sakura_mat, sakura_transforms)
-	var all_trees := transforms.duplicate()
-	all_trees.append_array(sakura_transforms)
-	if not all_trees.is_empty():
-		root.add_child(_build_trunk_colliders(all_trees, 0, root))
-	return int(packed.clearing)
-
-
 func _hill_normal(wx: float, wz: float) -> Vector3:
 	var e := 0.9
 	var dx := _hill_height(wx - e, wz) - _hill_height(wx + e, wz)
@@ -695,9 +816,9 @@ func _basis_up(up: Vector3, yaw: float, scale: float) -> Basis:
 ## even spacing reads as a natural stand, pure random leaves clumps and holes.
 func _scatter_points(rng: RandomNumberGenerator, kind: int, max_count: int) -> Array[Vector2]:
 	var pts: Array[Vector2] = []
-	var half := CHUNK_SIZE * 0.5
-	if kind == 0:
-		var cell := CHUNK_SIZE / float(TREE_GRID)
+	var half := profile.chunk_size * 0.5
+	if kind == KIND_TREE:
+		var cell := profile.chunk_size / float(TREE_GRID)
 		for cx in TREE_GRID:
 			for cz in TREE_GRID:
 				pts.append(Vector2(-half + (float(cx) + rng.randf_range(0.08, 0.92)) * cell,
@@ -712,23 +833,27 @@ func _scatter_points(rng: RandomNumberGenerator, kind: int, max_count: int) -> A
 ## the spawn glade so the run opens under a beam.
 func _place_moon_shafts(root: Node3D, coord: Vector2i) -> void:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([coord.x, coord.y, 0x4D4F4F4E])
+	rng.seed = hash([coord.x, coord.y, 0x4D4F4F4E]) ^ profile.world_seed
 	# Steeper than the real moon so beams drop between trunks instead of
 	# lying across the forest.
 	var axis := Vector3(moon_direction.x * 0.45, maxf(moon_direction.y, 0.55), moon_direction.z * 0.45).normalized()
 	var transforms: Array[Transform3D] = []
-	var count := rng.randi_range(2, MAX_SHAFTS_PER_CHUNK)
+	var size := profile.chunk_size
+	var most := profile.shafts_max_per_chunk
+	var count := rng.randi_range(mini(2, most), most) if most > 0 else 0
 	for i in count:
-		var lx := rng.randf_range(-CHUNK_SIZE * 0.5, CHUNK_SIZE * 0.5)
-		var lz := rng.randf_range(-CHUNK_SIZE * 0.5, CHUNK_SIZE * 0.5)
+		var lx := rng.randf_range(-size * 0.5, size * 0.5)
+		var lz := rng.randf_range(-size * 0.5, size * 0.5)
 		if coord == Vector2i.ZERO and i == 0:
 			lx = 1.2
 			lz = -1.6
 		var wx := root.position.x + lx
 		var wz := root.position.z + lz
 		var width := rng.randf_range(0.9, 2.1)
-		var basis := Basis(axis.cross(Vector3.FORWARD).normalized() * width, axis * SHAFT_LENGTH, Vector3.FORWARD)
+		var basis := Basis(axis.cross(Vector3.FORWARD).normalized() * width, axis * profile.shaft_length, Vector3.FORWARD)
 		transforms.append(Transform3D(basis, Vector3(lx, height_at(wx, wz) - 0.3, lz)))
+	if transforms.is_empty():
+		return
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = _shaft_mesh
@@ -742,177 +867,75 @@ func _place_moon_shafts(root: Node3D, coord: Vector2i) -> void:
 	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	# Vertices are rebuilt in the shader; give culling the full beam volume.
-	inst.custom_aabb = AABB(Vector3(-CHUNK_SIZE, -2.0, -CHUNK_SIZE), Vector3(CHUNK_SIZE * 2.0, SHAFT_LENGTH + 4.0, CHUNK_SIZE * 2.0))
+	inst.custom_aabb = AABB(Vector3(-size, -2.0, -size), Vector3(size * 2.0, profile.shaft_length + 4.0, size * 2.0))
 	root.add_child(inst)
 
 
-## Lantern parts (size, centre) shared by the mesh and its collider.
-const LANTERN_PARTS := [
-	[Vector3(0.22, 0.42, 0.22), Vector3(0.0, 0.21, 0.0)],
-	[Vector3(0.34, 0.28, 0.34), Vector3(0.0, 0.56, 0.0)],
-	[Vector3(0.4, 0.08, 0.4), Vector3(0.0, 0.76, 0.0)],
-]
-## Trunk hull top (mesh space): above the reach of a raised blade. The
-## trunk is hulled in slices this tall (overlapping a little), so the
-## hull follows the taper and flare instead of bridging them.
-const TRUNK_HULL_TOP := 4.4
-const TRUNK_SLICE := 1.1
-
-
-## Convex hulls of the props' own vertices. The old trunk tube was 0.42 m
-## while the bark stands ~0.75 m out at chest height, so hands, bodies and
-## the blade sank into every tree; gate pillars and the boulders and
-## lanterns (which had no collider at all) had the same problem.
-func _build_prop_shapes() -> void:
-	_trunk_shapes.clear()
-	var chest: Array[float] = []
-	if _tree_mesh:
-		var a := _tree_mesh.surface_get_arrays(0)
-		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-		var uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
-		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX] if a[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
-		var tris := PackedVector3Array()
-		var n := idx.size() if not idx.is_empty() else v.size()
-		for t in range(0, n - 2, 3):
-			var i0 := idx[t] if not idx.is_empty() else t
-			var i1 := idx[t + 1] if not idx.is_empty() else t + 1
-			var i2 := idx[t + 2] if not idx.is_empty() else t + 2
-			# Bark only: not the welded roots (UV.x > 1.5) or foliage
-			# (UV.y > 1.5), and only the trunk column below the boughs.
-			var uv_c := (uv[i0] + uv[i1] + uv[i2]) / 3.0
-			if uv_c.x > 1.5 or uv_c.y > 1.5:
-				continue
-			var c := (v[i0] + v[i1] + v[i2]) / 3.0
-			if Vector2(c.x, c.z).length() > 1.25 or c.y > TRUNK_HULL_TOP + 0.3:
-				continue
-			tris.append_array([v[i0], v[i1], v[i2]])
-			if c.y > 0.9 and c.y < 2.0:
-				chest.append(Vector2(c.x, c.z).length())
-		for pts in _slab_points(tris, 0.0, TRUNK_HULL_TOP, TRUNK_SLICE):
-			_trunk_shapes.append(_hull(pts))
-	if not chest.is_empty():
-		chest.sort()
-		_trunk_chest_radius = chest[int(chest.size() * 0.9)]
-	_torii_shapes.clear()
-	if _torii_mesh:
-		var ta := _torii_mesh.surface_get_arrays(0)
-		var tv: PackedVector3Array = ta[Mesh.ARRAY_VERTEX]
-		var ti: PackedInt32Array = ta[Mesh.ARRAY_INDEX] if ta[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
-		var box := _torii_mesh.get_aabb()
-		# The tie beam (nuki) starts ~60% up; below it the frame is just the
-		# two pillars, above it one block of beams.
-		var beam_y := box.position.y + box.size.y * 0.6
-		var left := PackedVector3Array()
-		var right := PackedVector3Array()
-		var n := ti.size() if not ti.is_empty() else tv.size()
-		for t in range(0, n - 2, 3):
-			var p0 := tv[ti[t] if not ti.is_empty() else t]
-			var p1 := tv[ti[t + 1] if not ti.is_empty() else t + 1]
-			var p2 := tv[ti[t + 2] if not ti.is_empty() else t + 2]
-			var cx := (p0.x + p1.x + p2.x) / 3.0
-			if cx < 0.0:
-				left.append_array([p0, p1, p2])
-			else:
-				right.append_array([p0, p1, p2])
-		var pillar_slice := (beam_y - box.position.y) / 3.0
-		for side in [left, right]:
-			for pts in _slab_points(side, box.position.y, beam_y, pillar_slice):
-				_torii_shapes.append(_hull(pts))
-		var all := left.duplicate()
-		all.append_array(right)
-		for pts in _slab_points(all, beam_y, box.end.y, box.end.y - beam_y):
-			_torii_shapes.append(_hull(pts))
-	if _rock_mesh:
-		_rock_shape = _hull(_rock_mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX])
-
-
-static func _hull(points: PackedVector3Array) -> ConvexPolygonShape3D:
-	var hull := ConvexPolygonShape3D.new()
-	hull.points = points
-	return hull
-
-
-## Cut the triangle soup [param tris] into horizontal slabs [y0, y1) of
-## [param slice] height and return each slab's points: the triangles clipped
-## to the slab, so a slab gets the exact cross-sections at its faces even
-## where the mesh has no vertex inside it (a decimated trunk, a gate pillar
-## that is one long quad). Empty or flat slabs are dropped.
-static func _slab_points(tris: PackedVector3Array, y0: float, y1: float, slice: float) -> Array[PackedVector3Array]:
-	var out: Array[PackedVector3Array] = []
-	var count := maxi(int(ceil((y1 - y0) / maxf(slice, 0.01) - 0.001)), 1)
-	for k in count:
-		var lo := y0 + slice * k
-		var hi := minf(lo + slice, y1)
-		var pts := PackedVector3Array()
-		for t in range(0, tris.size() - 2, 3):
-			var poly: Array[Vector3] = [tris[t], tris[t + 1], tris[t + 2]]
-			poly = _clip_y(poly, lo, true)
-			poly = _clip_y(poly, hi, false)
-			for p in poly:
-				pts.append(p)
-		var y_min := INF
-		var y_max := -INF
-		for p in pts:
-			y_min = minf(y_min, p.y)
-			y_max = maxf(y_max, p.y)
-		if pts.size() >= 4 and y_max - y_min > 0.01:
-			out.append(pts)
-	return out
-
-
-## Keep the part of [param poly] above (or below) the plane y = [param y].
-static func _clip_y(poly: Array[Vector3], y: float, keep_above: bool) -> Array[Vector3]:
-	var res: Array[Vector3] = []
-	if poly.is_empty():
-		return res
-	for i in poly.size():
-		var a := poly[i]
-		var b := poly[(i + 1) % poly.size()]
-		var a_in := a.y >= y if keep_above else a.y <= y
-		var b_in := b.y >= y if keep_above else b.y <= y
-		if a_in:
-			res.append(a)
-		if a_in != b_in and absf(b.y - a.y) > 1e-9:
-			res.append(a.lerp(b, (y - a.y) / (b.y - a.y)))
-	return res
-
-
-## Solid trunks, gate frames, lanterns and boulders, each on its measured
-## shape. The player and the blade stop on TRUNK_LAYER; yōkai ragdolls ignore
-## it (limbs snag and topple) and steer with trunk_push.
-func _build_trunk_colliders(transforms: Array[Transform3D], kind: int, root: Node3D) -> StaticBody3D:
+## Trunk collider bodies. The player and the blade stop on TRUNK_LAYER; yōkai
+## ragdolls ignore it (limbs snag and topple) and steer with trunk_push.
+func _new_collider(body_name: String, surface: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
-	body.name = ["TrunkColliders", "ToriiColliders", "LanternColliders", "RockColliders"][clampi(kind, 0, 3)]
+	body.name = body_name
 	body.collision_layer = TRUNK_LAYER
 	body.collision_mask = 0
 	# What the blade feels when it meets it (HeldWeapon reads this).
-	body.set_meta("env_surface", "wood" if kind <= 1 else "stone")
+	body.set_meta("env_surface", surface)
+	return body
+
+
+func _build_tree_colliders(xfs: Array[Transform3D], entry_index: int, root: Node3D) -> StaticBody3D:
+	var body := _new_collider("TrunkColliders%d" % entry_index, "wood")
+	var shapes: Array = _tree_shapes[entry_index]
+	var chest: float = _tree_chest[entry_index]
 	var registered: Array = root.get_meta("trunk_entries", [])
-	for xf in transforms:
+	for xf in xfs:
 		var s := xf.basis.get_scale().x
-		match kind:
-			0:
-				# Same transform as the drawn tree (lean with the hill, uniform
-				# scale), on the hull of the tree's own bark.
-				for shape in _trunk_shapes:
-					_add_shape(body, shape, xf)
-				registered.append(_remember_trunk(root.position + xf.origin, _trunk_chest_radius * s))
-			1:
-				for shape in _torii_shapes:
-					_add_shape(body, shape, xf)
-				var half_span := _torii_mesh.get_aabb().size.x * s * 0.36 if _torii_mesh else 1.5
-				var side := xf.basis.x.normalized()
-				for sgn in [-1.0, 1.0]:
-					registered.append(_remember_trunk(root.position + xf.origin + side * half_span * float(sgn), 0.1 * s))
-			2:
-				for part in LANTERN_PARTS:
-					var box := BoxShape3D.new()
-					box.size = part[0]
-					_add_shape(body, box, xf * Transform3D(Basis.IDENTITY, part[1]))
-				registered.append(_remember_trunk(root.position + xf.origin, 0.24 * s))
-			_:
-				_add_shape(body, _rock_shape, xf)
-				registered.append(_remember_trunk(root.position + xf.origin, 0.55 * s))
+		# Same transform as the drawn tree (lean with the hill, uniform
+		# scale), on the hull of the tree's own bark.
+		for shape in shapes:
+			_add_shape(body, shape, xf)
+		registered.append(_remember_trunk(root.position + xf.origin, chest * s))
+	root.set_meta("trunk_entries", registered)
+	return body
+
+
+func _build_torii_colliders(xfs: Array[Transform3D], root: Node3D) -> StaticBody3D:
+	var body := _new_collider("ToriiColliders", "wood")
+	var registered: Array = root.get_meta("trunk_entries", [])
+	var half_base := _torii_mesh.get_aabb().size.x if _torii_mesh else 1.5
+	for xf in xfs:
+		var s := xf.basis.get_scale().x
+		for shape in _torii_shapes:
+			_add_shape(body, shape, xf)
+		var half_span := half_base * s * 0.36
+		var side := xf.basis.x.normalized()
+		for sgn in [-1.0, 1.0]:
+			registered.append(_remember_trunk(root.position + xf.origin + side * half_span * float(sgn), 0.1 * s))
+	root.set_meta("trunk_entries", registered)
+	return body
+
+
+func _build_lantern_colliders(xfs: Array[Transform3D], root: Node3D) -> StaticBody3D:
+	var body := _new_collider("LanternColliders", "stone")
+	var registered: Array = root.get_meta("trunk_entries", [])
+	for xf in xfs:
+		var s := xf.basis.get_scale().x
+		for part in LANTERN_PARTS:
+			var box := BoxShape3D.new()
+			box.size = part[0]
+			_add_shape(body, box, xf * Transform3D(Basis.IDENTITY, part[1]))
+		registered.append(_remember_trunk(root.position + xf.origin, 0.24 * s))
+	root.set_meta("trunk_entries", registered)
+	return body
+
+
+func _build_undergrowth_colliders(xfs: Array[Transform3D], u: int, root: Node3D) -> StaticBody3D:
+	var body := _new_collider("RockColliders%d" % u, "stone")
+	var registered: Array = root.get_meta("trunk_entries", [])
+	for xf in xfs:
+		var s := xf.basis.get_scale().x
+		_add_shape(body, _under_shapes[u], xf)
+		registered.append(_remember_trunk(root.position + xf.origin, 0.55 * s))
 	root.set_meta("trunk_entries", registered)
 	return body
 
@@ -991,7 +1014,7 @@ func _commit_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 func _refresh_multimesh_transforms(mm_inst: MultiMeshInstance3D, transforms: Array[Transform3D]) -> void:
 	if not is_instance_valid(mm_inst) or mm_inst.multimesh == null:
 		return
-	if (mm_inst.name == "Trees" or mm_inst.name == "SakuraTrees") and follow:
+	if _is_tree_node(String(mm_inst.name)) and follow:
 		_refresh_tree_draw(_anchor_position())
 		return
 	var mm := mm_inst.multimesh
@@ -1000,15 +1023,26 @@ func _refresh_multimesh_transforms(mm_inst: MultiMeshInstance3D, transforms: Arr
 		mm.set_instance_transform(i, transforms[i])
 
 
+static func _is_tree_node(node_name: String) -> bool:
+	return node_name.begins_with("Trees") or node_name.begins_with("Focal")
+
+
 ## Trees past the fog are the fog. Keep their colliders; drop the draw.
 func _refresh_tree_draw(origin: Vector3) -> void:
-	var r2 := TREE_DRAW_RADIUS * TREE_DRAW_RADIUS
-	var sakura_r2 := SAKURA_DRAW_RADIUS * SAKURA_DRAW_RADIUS
+	var r2 := profile.tree_draw_radius * profile.tree_draw_radius
+	var focal_r2 := profile.focal_draw_radius * profile.focal_draw_radius
+	var far_start2 := profile.tree_far_start * profile.tree_far_start
 	for key in _chunks:
 		var chunk := _chunks[key] as Node3D
-		var inst := chunk.get_node_or_null("Trees") as MultiMeshInstance3D
-		if inst != null and inst.multimesh != null:
-			var all: Array = chunk.get_meta("tree_local_xfs", [])
+		for child in chunk.get_children():
+			if not (child is MultiMeshInstance3D) or not _is_tree_node(String(child.name)):
+				continue
+			var inst := child as MultiMeshInstance3D
+			if inst.multimesh == null:
+				continue
+			var label := String(inst.name)
+			var focal := label.begins_with("Focal")
+			var all: Array = chunk.get_meta("xfs_" + label, [])
 			var mm := inst.multimesh
 			var near: Array[Transform3D] = []
 			var base := chunk.position
@@ -1018,10 +1052,10 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 				var dx := base.x + placed.origin.x - origin.x
 				var dz := base.z + placed.origin.z - origin.z
 				var d2 := dx * dx + dz * dz
-				if d2 > r2:
+				if d2 > (focal_r2 if focal else r2):
 					idx += 1
 					continue
-				if d2 > TREE_FAR_START * TREE_FAR_START and _hash01(idx, 7) >= TREE_FAR_KEEP:
+				if not focal and d2 > far_start2 and _hash01(idx, 7) >= profile.tree_far_keep:
 					idx += 1
 					continue
 				near.append(placed)
@@ -1032,38 +1066,23 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 			for i in near.size():
 				mm.set_instance_transform(i, near[i])
 
-		var sakura_inst := chunk.get_node_or_null("SakuraTrees") as MultiMeshInstance3D
-		if sakura_inst != null and sakura_inst.multimesh != null:
-			var all_sakura: Array = chunk.get_meta("sakura_tree_local_xfs", [])
-			var mm_sakura := sakura_inst.multimesh
-			var near_sakura: Array[Transform3D] = []
-			var base := chunk.position
-			for xf in all_sakura:
-				var placed := xf as Transform3D
-				var dx := base.x + placed.origin.x - origin.x
-				var dz := base.z + placed.origin.z - origin.z
-				var d2 := dx * dx + dz * dz
-				if d2 <= sakura_r2:
-					near_sakura.append(placed)
-			mm_sakura.instance_count = near_sakura.size()
-			for i in near_sakura.size():
-				mm_sakura.set_instance_transform(i, near_sakura[i])
 
-
+## Senbon rows: short lines of gates in chunks where the corridor noise runs high.
 func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
-	var corridor_val := _corridor_noise.get_noise_2d(float(coord.x) * 1.7, float(coord.y) * 1.7)
-	if corridor_val < 0.64:
+	var corridor_val := _corridor_noise.get_noise_2d(float(coord.x) * CORRIDOR_SCALE, float(coord.y) * CORRIDOR_SCALE)
+	if corridor_val < profile.torii_row_threshold:
 		return
-	var axis_x := corridor_val > 0.72
-
+	var axis_x := corridor_val > SENBON_AXIS_THRESHOLD
+	var size := profile.chunk_size
 	var transforms: Array[Transform3D] = []
-	var gate_count := 4 + int((_hash01(_hash_coord(coord, 9, 0), 0) * 4.0))
-	var spacing := 4.2
+	var span := profile.torii_row_max - profile.torii_row_min + 1
+	var gate_count := profile.torii_row_min + int((_hash01(_hash_coord(coord, 9, 0), 0) * float(span)))
+	var spacing := profile.torii_row_spacing
 	var start := -spacing * float(gate_count - 1) * 0.5
 	for g in gate_count:
 		var along := start + float(g) * spacing
-		var lx := along if axis_x else -CHUNK_SIZE * 0.15
-		var lz := -CHUNK_SIZE * 0.15 if axis_x else along
+		var lx := along if axis_x else -size * 0.15
+		var lz := -size * 0.15 if axis_x else along
 		var wx := root.position.x + lx
 		var wz := root.position.z + lz
 		if _in_clearing(wx, wz, 0.35):
@@ -1076,7 +1095,7 @@ func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 					else _tree_spot_cache.get(coord + Vector2i(ox, oz), {})
 				for ts in packed.get("spots", []):
 					var tspot: Vector4 = ts
-					if Vector2(wx - tspot.x, wz - tspot.y).length() < 2.5:
+					if Vector2(wx - tspot.x, wz - tspot.y).length() < profile.torii_tree_clearance:
 						blocked = true
 						break
 				if blocked:
@@ -1103,17 +1122,19 @@ func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 func _build_terrain_mesh(coord: Vector2i) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var step := CHUNK_SIZE / float(TERRAIN_RES - 1)
-	for z in TERRAIN_RES - 1:
-		for x in TERRAIN_RES - 1:
-			var x0 := -CHUNK_SIZE * 0.5 + float(x) * step
-			var z0 := -CHUNK_SIZE * 0.5 + float(z) * step
+	var size := profile.chunk_size
+	var res := profile.terrain_resolution
+	var step := size / float(res - 1)
+	for z in res - 1:
+		for x in res - 1:
+			var x0 := -size * 0.5 + float(x) * step
+			var z0 := -size * 0.5 + float(z) * step
 			var x1 := x0 + step
 			var z1 := z0 + step
-			var wx0 := coord.x * CHUNK_SIZE + x0
-			var wz0 := coord.y * CHUNK_SIZE + z0
-			var wx1 := coord.x * CHUNK_SIZE + x1
-			var wz1 := coord.y * CHUNK_SIZE + z1
+			var wx0 := coord.x * size + x0
+			var wz0 := coord.y * size + z0
+			var wx1 := coord.x * size + x1
+			var wz1 := coord.y * size + z1
 			var p00 := Vector3(x0, height_at(wx0, wz0), z0)
 			var p10 := Vector3(x1, height_at(wx1, wz0), z0)
 			var p01 := Vector3(x0, height_at(wx0, wz1), z1)
@@ -1139,7 +1160,7 @@ func _build_terrain_collider(mesh: ArrayMesh) -> StaticBody3D:
 
 
 func _in_clearing(wx: float, wz: float, margin: float = 0.0) -> bool:
-	return Vector2(wx, wz).length() < PROP_CLEARING_RADIUS + margin
+	return Vector2(wx, wz).length() < profile.prop_clearing_radius + margin
 
 
 ## Instance scale that makes the shared gate mesh [param height] metres tall.
@@ -1190,36 +1211,18 @@ func _build_materials() -> void:
 	_ground_mat = ShaderMaterial.new()
 	_ground_mat.shader = GROUND_SHADER
 	_ground_mat.set_shader_parameter("fill", 0.0)
-	_ground_mat.set_shader_parameter("cavity_ao", 0.85)
+	_ground_mat.set_shader_parameter("cavity_ao", profile.ground_cavity_ao)
 	_ground_mat.set_shader_parameter("ambient_fill", 0.08)
-	_ground_mat.set_shader_parameter("normal_strength", 1.2)
+	_ground_mat.set_shader_parameter("normal_strength", profile.ground_normal_strength)
 	# Damp, not mirror-wet: wet normals over 1K scans sparkle white in VR.
-	_ground_mat.set_shader_parameter("wetness", 0.3)
-	_ground_mat.set_shader_parameter("roughness_wet", 0.72)
+	_ground_mat.set_shader_parameter("wetness", profile.ground_wetness)
+	_ground_mat.set_shader_parameter("roughness_wet", profile.ground_roughness_wet)
 	for layer in GROUND_LAYERS:
 		var dir := "res://assets/textures/forest_ground/%s/%s" % [GROUND_LAYERS[layer], GROUND_LAYERS[layer]]
 		_ground_mat.set_shader_parameter(layer + "_albedo", load(dir + "_diff_1k.jpg"))
 		_ground_mat.set_shader_parameter(layer + "_normal", load(dir + "_nor_gl_1k.jpg"))
-	_ground_mat.set_shader_parameter("fog_fade_start", GROUND_FADE_START)
-	_ground_mat.set_shader_parameter("fog_fade_end", GROUND_FADE_END)
-
-	_tree_mat = ShaderMaterial.new()
-	_tree_mat.shader = TREE_DIFFUSE
-	_tree_mat.set_shader_parameter("albedo_texture", TREE_ALBEDO)
-	_tree_mat.set_shader_parameter("normal_texture", TREE_NORMAL)
-
-	_sakura_mat = ShaderMaterial.new()
-	_sakura_mat.shader = SAKURA_TREE_SHADER
-	_sakura_mat.set_shader_parameter("albedo_texture", TREE_ALBEDO)
-	_sakura_mat.set_shader_parameter("normal_texture", TREE_NORMAL)
-	_sakura_mat.set_shader_parameter("bark_tint", Color(0.12, 0.09, 0.08))
-	_sakura_mat.set_shader_parameter("deep_plum_color", Color(0.11, 0.02, 0.07))
-	_sakura_mat.set_shader_parameter("mid_petal_color", Color(0.76, 0.28, 0.48))
-	_sakura_mat.set_shader_parameter("neon_pink_accent", Color(1.0, 0.30, 0.68))
-	_sakura_mat.set_shader_parameter("rim_glow_color", Color(0.96, 0.65, 0.98))
-	_sakura_mat.set_shader_parameter("stamen_color", Color(1.0, 0.88, 0.95))
-	_sakura_mat.set_shader_parameter("emission_strength", 1.35)
-	_sakura_mat.set_shader_parameter("neon_sparsity", 0.70)
+	_ground_mat.set_shader_parameter("fog_fade_start", profile.ground_fade_start)
+	_ground_mat.set_shader_parameter("fog_fade_end", profile.ground_fade_end)
 
 	_torii_mat = ShaderMaterial.new()
 	_torii_mat.shader = WET_SHADER
@@ -1245,21 +1248,10 @@ func _build_materials() -> void:
 	_lantern_mat.set_shader_parameter("fog_fill", 0.2)
 	_lantern_mat.set_shader_parameter("emission_tint", Color(0.04, 0.05, 0.06))
 
-	_rock_mat = ShaderMaterial.new()
-	_rock_mat.shader = WET_SHADER
-	_rock_mat.set_shader_parameter("base_color", Color(0.16, 0.16, 0.17))
-	_rock_mat.set_shader_parameter("roughness_dry", 0.92)
-	_rock_mat.set_shader_parameter("roughness_wet", 0.8)
-	_rock_mat.set_shader_parameter("wetness", 0.22)
-	_rock_mat.set_shader_parameter("waterline_y", -10.0)
-	_rock_mat.set_shader_parameter("fill", 0.28)
-	_rock_mat.set_shader_parameter("specular_scale", 0.0)
-	_rock_mat.set_shader_parameter("fog_fill", 0.18)
-
 
 ## No per-node visibility range: Godot measures it to the node origin, i.e. a
-## 28 m chunk's center, which culled every chunk but the one under the player
-## (and all its trees). Depth fog (RunGame.RUN_FOG_END) hides chunk edges.
+## chunk's centre, which culled every chunk but the one under the player
+## (and all its trees). Depth fog (the profile's fog_end) hides chunk edges.
 func _set_view_range(inst: GeometryInstance3D) -> void:
 	inst.visibility_range_begin = 0.0
 	inst.visibility_range_end = 0.0
@@ -1274,25 +1266,507 @@ func _build_meshes() -> void:
 	# Same grey as the fog, dim. A blue-white beam reads as a plastic tube.
 	_shaft_mat.set_shader_parameter("shaft_color", Color(0.62, 0.64, 0.66))
 	_shaft_mat.set_shader_parameter("intensity", 0.2)
-	var raw_scan := _merge_scene_meshes(TREE_SCENE, 1.0)
-	if raw_scan == null:
-		_tree_mesh = _build_tree_mesh()
-		_sakura_mesh = _tree_mesh
-	else:
-		_tree_mesh = _append_root_flare(_rebuild_crown(raw_scan, CROWN_CLUMPS, 7.3))
-		_sakura_mesh = _append_root_flare(_rebuild_crown(raw_scan, SAKURA_CLUMPS, 4.2))
+	_tree_meshes.clear()
+	_tree_mats.clear()
+	_tree_shapes.clear()
+	_tree_chest.clear()
+	for entry in profile.trees:
+		var mesh := _tree_mesh_for(entry)
+		var chest: Array = []
+		var hulls := _trunk_hulls(mesh, chest)
+		_tree_meshes.append(mesh)
+		_tree_mats.append(_sakura_material(entry) if entry.crown == TreeEntry.Crown.SAKURA else _tree_material())
+		_tree_shapes.append(hulls)
+		_tree_chest.append(float(chest[0]))
 	_torii_mesh = _build_torii_mesh()
 	_lantern_mesh = _build_lantern_mesh()
-	_rock_mesh = _extract_rock_mesh()
-	_build_prop_shapes()
+	_under_meshes.clear()
+	_under_mats.clear()
+	_under_shapes.clear()
+	for entry in profile.undergrowth:
+		var mesh := _undergrowth_mesh_for(entry)
+		_under_meshes.append(mesh)
+		_under_mats.append(_rock_material())
+		_under_shapes.append(_hull(mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]))
+	_torii_shapes = _torii_hulls()
 
 
-## The scanned crown was decimated leaf cards cut out of a blob atlas: after
-## the decimation the UV islands no longer matched the triangles, so seen from
-## below the canopy was a cloud of ragged, see-through shards. Keep the bark
-## (trunk and boughs, the atlas's bottom-left strip) and grow the crown again
-## as solid foliage clumps where the scan's leaf mass was (weighted k-means of
-## the scanned crown: centre, radius). ~1k triangles instead of ~5.3k.
+func _tree_material() -> ShaderMaterial:
+	if _tree_material_cache == null:
+		_tree_material_cache = ShaderMaterial.new()
+		_tree_material_cache.shader = TREE_DIFFUSE
+		_tree_material_cache.set_shader_parameter("albedo_texture", TREE_ALBEDO)
+		_tree_material_cache.set_shader_parameter("normal_texture", TREE_NORMAL)
+	return _tree_material_cache
+
+
+func _rock_material() -> ShaderMaterial:
+	if _rock_material_cache == null:
+		_rock_material_cache = ShaderMaterial.new()
+		_rock_material_cache.shader = WET_SHADER
+		_rock_material_cache.set_shader_parameter("base_color", Color(0.16, 0.16, 0.17))
+		_rock_material_cache.set_shader_parameter("roughness_dry", 0.92)
+		_rock_material_cache.set_shader_parameter("roughness_wet", 0.8)
+		_rock_material_cache.set_shader_parameter("wetness", 0.22)
+		_rock_material_cache.set_shader_parameter("waterline_y", -10.0)
+		_rock_material_cache.set_shader_parameter("fill", 0.28)
+		_rock_material_cache.set_shader_parameter("specular_scale", 0.0)
+		_rock_material_cache.set_shader_parameter("fog_fill", 0.18)
+	return _rock_material_cache
+
+
+## Neon sakura material from the entry's colours (GDD §9: over-the-top neon pink).
+func _sakura_material(entry: TreeEntry) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = SAKURA_TREE_SHADER
+	mat.set_shader_parameter("albedo_texture", TREE_ALBEDO)
+	mat.set_shader_parameter("normal_texture", TREE_NORMAL)
+	mat.set_shader_parameter("bark_tint", Color(0.12, 0.09, 0.08))
+	mat.set_shader_parameter("deep_plum_color", Color(0.11, 0.02, 0.07))
+	mat.set_shader_parameter("mid_petal_color", entry.petal_color)
+	mat.set_shader_parameter("neon_pink_accent", entry.neon_color)
+	mat.set_shader_parameter("rim_glow_color", entry.rim_color)
+	mat.set_shader_parameter("stamen_color", Color(1.0, 0.88, 0.95))
+	mat.set_shader_parameter("emission_strength", entry.emission)
+	mat.set_shader_parameter("neon_sparsity", entry.neon_sparsity)
+	return mat
+
+
+## The tree mesh for one entry: its scene with a rebuilt crown (CEDAR,
+## SAKURA) or as is (SCENE). Without a scene, the procedural cedar.
+func _tree_mesh_for(entry: TreeEntry) -> Mesh:
+	var raw: ArrayMesh = null
+	if entry.has_scene():
+		raw = _merge_scene_meshes(entry.scene, 1.0)
+	if raw == null:
+		return _build_tree_mesh()
+	match entry.crown:
+		TreeEntry.Crown.SAKURA:
+			return _append_root_flare(_rebuild_crown(raw, SAKURA_CLUMPS, 4.2))
+		TreeEntry.Crown.SCENE:
+			return raw
+	return _append_root_flare(_rebuild_crown(raw, CROWN_CLUMPS, 7.3))
+
+
+func _undergrowth_mesh_for(entry: UndergrowthEntry) -> Mesh:
+	if entry.source == UndergrowthEntry.Source.SCENE and entry.scene != null:
+		var merged := _merge_scene_meshes(entry.scene, 1.0)
+		if merged != null:
+			return merged
+	return _extract_rock_mesh()
+
+
+## Trunk hulls of a tree mesh, sliced on the bark (see TRUNK_HULL_TOP). A mesh
+## without bark UVs (imported assets) gets a plain column hull instead, so
+## the trunk still stops the body. Also returns the chest radius via [param chest].
+func _trunk_hulls(mesh: Mesh, chest: Array) -> Array:
+	var hulls: Array = []
+	var radii: Array[float] = []
+	var a := mesh.surface_get_arrays(0)
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV] if a[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
+	var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX] if a[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+	var tris := PackedVector3Array()
+	var n := idx.size() if not idx.is_empty() else v.size()
+	for t in range(0, n - 2, 3):
+		var i0 := idx[t] if not idx.is_empty() else t
+		var i1 := idx[t + 1] if not idx.is_empty() else t + 1
+		var i2 := idx[t + 2] if not idx.is_empty() else t + 2
+		# Bark only: not the welded roots (UV.x > 1.5) or foliage
+		# (UV.y > 1.5), and only the trunk column below the boughs.
+		var uv_c := (uv[i0] + uv[i1] + uv[i2]) / 3.0 if not uv.is_empty() else Vector2.ZERO
+		if uv_c.x > 1.5 or uv_c.y > 1.5:
+			continue
+		var c := (v[i0] + v[i1] + v[i2]) / 3.0
+		if Vector2(c.x, c.z).length() > 1.25 or c.y > TRUNK_HULL_TOP + 0.3:
+			continue
+		tris.append_array([v[i0], v[i1], v[i2]])
+		if c.y > 0.9 and c.y < 2.0:
+			radii.append(Vector2(c.x, c.z).length())
+	for pts in _slab_points(tris, 0.0, TRUNK_HULL_TOP, TRUNK_SLICE):
+		hulls.append(_hull(pts))
+	if radii.is_empty():
+		# No bark on this mesh: a column of the mesh's own footprint.
+		var column := PackedVector3Array()
+		for k in 8:
+			var ang := TAU * float(k) / 8.0
+			column.append(Vector3(cos(ang) * 0.5, 0.0, sin(ang) * 0.5))
+			column.append(Vector3(cos(ang) * 0.5, 4.4, sin(ang) * 0.5))
+		hulls.append(_hull(column))
+		chest.clear()
+		chest.append(0.5)
+	else:
+		radii.sort()
+		chest.clear()
+		chest.append(radii[int(radii.size() * 0.9)])
+	return hulls
+
+
+## Torii frame hulls: left and right pillars plus the beam block.
+func _torii_hulls() -> Array[ConvexPolygonShape3D]:
+	var out: Array[ConvexPolygonShape3D] = []
+	if _torii_mesh == null:
+		return out
+	var ta := _torii_mesh.surface_get_arrays(0)
+	var tv: PackedVector3Array = ta[Mesh.ARRAY_VERTEX]
+	var ti: PackedInt32Array = ta[Mesh.ARRAY_INDEX] if ta[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+	var box := _torii_mesh.get_aabb()
+	# The tie beam (nuki) starts ~60% up; below it the frame is just the
+	# two pillars, above it one block of beams.
+	var beam_y := box.position.y + box.size.y * 0.6
+	var left := PackedVector3Array()
+	var right := PackedVector3Array()
+	var n := ti.size() if not ti.is_empty() else tv.size()
+	for t in range(0, n - 2, 3):
+		var p0 := tv[ti[t] if not ti.is_empty() else t]
+		var p1 := tv[ti[t + 1] if not ti.is_empty() else t + 1]
+		var p2 := tv[ti[t + 2] if not ti.is_empty() else t + 2]
+		var cx := (p0.x + p1.x + p2.x) / 3.0
+		if cx < 0.0:
+			left.append_array([p0, p1, p2])
+		else:
+			right.append_array([p0, p1, p2])
+	var pillar_slice := (beam_y - box.position.y) / 3.0
+	for side in [left, right]:
+		for pts in _slab_points(side, box.position.y, beam_y, pillar_slice):
+			out.append(_hull(pts))
+	var all := left.duplicate()
+	all.append_array(right)
+	for pts in _slab_points(all, beam_y, box.end.y, box.end.y - beam_y):
+		out.append(_hull(pts))
+	return out
+
+
+static func _hull(points: PackedVector3Array) -> ConvexPolygonShape3D:
+	var hull := ConvexPolygonShape3D.new()
+	hull.points = points
+	return hull
+
+
+## Cut the triangle soup [param tris] into horizontal slabs [y0, y1) of
+## [param slice] height and return each slab's points: the triangles clipped
+## to the slab, so a slab gets the exact cross-sections at its faces even
+## where the mesh has no vertex inside it (a decimated trunk, a gate pillar
+## that is one long quad). Empty or flat slabs are dropped.
+static func _slab_points(tris: PackedVector3Array, y0: float, y1: float, slice: float) -> Array[PackedVector3Array]:
+	var out: Array[PackedVector3Array] = []
+	var count := maxi(int(ceil((y1 - y0) / maxf(slice, 0.01) - 0.001)), 1)
+	for k in count:
+		var lo := y0 + slice * k
+		var hi := minf(lo + slice, y1)
+		var pts := PackedVector3Array()
+		for t in range(0, tris.size() - 2, 3):
+			var poly: Array[Vector3] = [tris[t], tris[t + 1], tris[t + 2]]
+			poly = _clip_y(poly, lo, true)
+			poly = _clip_y(poly, hi, false)
+			for p in poly:
+				pts.append(p)
+		var y_min := INF
+		var y_max := -INF
+		for p in pts:
+			y_min = minf(y_min, p.y)
+			y_max = maxf(y_max, p.y)
+		if pts.size() >= 4 and y_max - y_min > 0.01:
+			out.append(pts)
+	return out
+
+
+## Keep the part of [param poly] above (or below) the plane y = [param y].
+static func _clip_y(poly: Array[Vector3], y: float, keep_above: bool) -> Array[Vector3]:
+	var res: Array[Vector3] = []
+	if poly.is_empty():
+		return res
+	for i in poly.size():
+		var a := poly[i]
+		var b := poly[(i + 1) % poly.size()]
+		var a_in := a.y >= y if keep_above else a.y <= y
+		var b_in := b.y >= y if keep_above else b.y <= y
+		if a_in:
+			res.append(a)
+		if a_in != b_in and absf(b.y - a.y) > 1e-9:
+			res.append(a.lerp(b, (y - a.y) / (b.y - a.y)))
+	return res
+
+
+## Roots and a flare welded onto the trunk mesh (same draw call). UV.x > 1
+## marks them for the root branch of the tree shader. They overlap the bark
+## and run out onto the soil mound so the trunk does not end in a cut circle.
+func _append_root_flare(mesh: Mesh) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.append_from(mesh, 0, Transform3D.IDENTITY)
+	var angles: Array[float] = [0.15, 1.05, 2.15, 3.25, 4.35, 5.35]
+	var lengths: Array[float] = [1.15, 0.9, 1.3, 0.85, 1.2, 1.0]
+	for i in angles.size():
+		_add_root_ribbon(st, angles[i], lengths[i])
+	_add_root_collar(st)
+	return st.commit()
+
+
+func _add_root_ribbon(st: SurfaceTool, angle: float, length: float) -> void:
+	var dir := Vector3(cos(angle), 0.0, sin(angle))
+	var side := Vector3(-dir.z, 0.0, dir.x)
+	# A root is a low ridge, not a flat fin: a raised spine with two skirts
+	# falling to the soil. It dives below the local ground plane before its
+	# tip, so on any slope the end is buried instead of hovering — the old
+	# long flat ribbons floated over the downhill side like a black star.
+	var frac: Array[float] = [0.0, 0.38, 0.72, 1.0]
+	var heights: Array[float] = [0.62, 0.30, 0.04, -0.30]
+	var half_w: Array[float] = [0.30, 0.21, 0.12, 0.045]
+	var skirt := 0.16
+	var ridge: Array[Vector3] = []
+	var left: Array[Vector3] = []
+	var right: Array[Vector3] = []
+	for k in 4:
+		var r := 0.78 + length * frac[k]
+		var c := dir * r + Vector3(0.0, heights[k], 0.0)
+		ridge.append(c)
+		left.append(c - side * half_w[k] + Vector3(0.0, -skirt, 0.0))
+		right.append(c + side * half_w[k] + Vector3(0.0, -skirt, 0.0))
+	for k in 3:
+		_add_root_quad(st, left[k], ridge[k], ridge[k + 1], left[k + 1], frac[k], frac[k + 1])
+		_add_root_quad(st, ridge[k], right[k], right[k + 1], ridge[k + 1], frac[k], frac[k + 1])
+
+
+func _add_root_quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, along0: float, along1: float) -> void:
+	var n := (b - a).cross(d - a).normalized()
+	if n.y < 0.0:
+		n = -n
+	_root_vert(st, a, n, along0)
+	_root_vert(st, b, n, along0)
+	_root_vert(st, c, n, along1)
+	_root_vert(st, a, n, along0)
+	_root_vert(st, c, n, along1)
+	_root_vert(st, d, n, along1)
+
+
+func _root_vert(st: SurfaceTool, p: Vector3, n: Vector3, along: float) -> void:
+	st.set_normal(n)
+	st.set_uv(Vector2(2.0 + along, 0.5))
+	st.add_vertex(p)
+
+
+## A low, lopsided heap of soil welded to the trunk. The inner ring climbs the
+## bark so the mesh's flat bottom never meets the ground as a cut circle.
+func _add_root_collar(st: SurfaceTool) -> void:
+	var segs := 12
+	var radii: Array[float] = [0.7, 1.1, 1.5]
+	var heights: Array[float] = [0.48, 0.16, -0.22]
+	var along: Array[float] = [0.0, 0.4, 0.92]
+	var ring: Array = []
+	for i in segs:
+		var row: Array[Vector3] = []
+		var ang := TAU * float(i) / float(segs)
+		var wobble := 0.78 + 0.44 * _apron_n(i)
+		for r in 3:
+			var spread := 0.0 if r == 0 else lerpf(0.35, 1.0, float(r) / 2.0)
+			var rad := radii[r] * lerpf(1.0, wobble, spread)
+			var y := heights[r] * (0.82 + 0.36 * _apron_n(i + r * 5 + 2))
+			row.append(Vector3(cos(ang) * rad, y, sin(ang) * rad))
+		ring.append(row)
+	for i in segs:
+		var a: Array[Vector3] = ring[i]
+		var b: Array[Vector3] = ring[(i + 1) % segs]
+		for r in 2:
+			_add_root_quad(st, a[r], b[r], b[r + 1], a[r + 1], along[r], along[r + 1])
+
+
+func _apron_n(i: int) -> float:
+	return float(absi(hash(i * 17 + 3)) % 1000) / 999.0
+
+
+## Japanese cedar (sugi) as in shrine forests: a tall straight trunk and dark
+## tiered canopy high overhead. In fog the forest reads through its trunks,
+## which fade with distance; the old low broadleaf canopies hung at head
+## height like floating boulders.
+func _build_tree_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var trunk := CylinderMesh.new()
+	trunk.top_radius = 0.16
+	trunk.bottom_radius = 0.42
+	trunk.height = 15.5
+	trunk.radial_segments = 7
+	trunk.rings = 1
+	trunk.cap_top = false
+	trunk.cap_bottom = false
+	st.append_from(trunk, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 7.6, 0.0)))
+	# Root flare so the trunk does not stab into the ground like a pole.
+	var flare := CylinderMesh.new()
+	flare.top_radius = 0.41
+	flare.bottom_radius = 0.78
+	flare.height = 0.9
+	flare.radial_segments = 7
+	flare.rings = 1
+	flare.cap_top = false
+	flare.cap_bottom = false
+	st.append_from(flare, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.3, 0.0)))
+	# Lowest boughs far overhead: the player walks among bare trunks.
+	var tiers := [[8.6, 2.6, 3.6], [11.0, 2.1, 3.2], [13.2, 1.5, 2.8], [15.0, 0.9, 2.2]]
+	for t in tiers:
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = float(t[1])
+		cone.height = float(t[2])
+		cone.radial_segments = 8
+		cone.rings = 1
+		cone.cap_bottom = true
+		st.append_from(cone, 0, Transform3D(Basis(Vector3.UP, float(t[0])), Vector3(0.0, float(t[0]) + float(t[2]) * 0.5, 0.0)))
+	st.generate_normals()
+	return st.commit()
+
+
+func _build_torii_mesh() -> ArrayMesh:
+	var merged: ArrayMesh = null
+	if profile.torii_scene != null:
+		merged = _merge_scene_meshes(profile.torii_scene, TORII_MESH_SCALE)
+	if merged:
+		return merged
+	return _box_mesh(Vector3(1.6, 1.5, 0.2), Vector3(0.0, 0.75, 0.0))
+
+
+func _build_lantern_mesh() -> ArrayMesh:
+	if profile.lantern_scene != null:
+		var merged := _merge_scene_meshes(profile.lantern_scene, 1.0)
+		if merged:
+			return merged
+	var parts: Array[Mesh] = []
+	for part in LANTERN_PARTS:
+		parts.append(_box_mesh(part[0], part[1]))
+	return _merge_meshes(parts)
+
+
+## The scanned rock_face_01 is ~20k triangles; dozens of MultiMesh copies blew
+## the Quest triangle budget. A noise-displaced low-poly boulder (~80 tris)
+## reads the same through rain and fog.
+func _extract_rock_mesh() -> Mesh:
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.5
+	sphere.height = 0.62
+	sphere.radial_segments = 9
+	sphere.rings = 5
+	var arrays := sphere.get_mesh_arrays()
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var noise := FastNoiseLite.new()
+	noise.seed = 0x524F434B
+	noise.frequency = 2.1
+	for i in verts.size():
+		var v := verts[i]
+		var bump := 1.0 + noise.get_noise_3dv(v * 1.7) * 0.32
+		verts[i] = Vector3(v.x * bump * 1.25, maxf(v.y * bump, -0.12), v.z * bump * 0.95)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	for i in idx.size():
+		st.add_vertex(verts[idx[i]])
+	st.generate_normals()
+	return st.commit()
+
+
+static func _merge_scene_meshes(scene: PackedScene, scale_factor: float) -> ArrayMesh:
+	var inst := scene.instantiate()
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var wrote := false
+	for mi in inst.find_children("*", "MeshInstance3D", true, false):
+		var mesh_i := mi as MeshInstance3D
+		var mesh := mesh_i.mesh
+		if mesh == null:
+			continue
+		var local := _accumulate_local_transform(mesh_i, inst)
+		var scaled := Transform3D(local.basis.scaled(Vector3.ONE * scale_factor), local.origin * scale_factor)
+		st.append_from(mesh, 0, scaled)
+		wrote = true
+	inst.free()
+	return st.commit() if wrote else null
+
+
+static func _accumulate_local_transform(node: Node3D, root: Node) -> Transform3D:
+	var xf := Transform3D.IDENTITY
+	var n: Node = node
+	while n != null and n != root:
+		if n is Node3D:
+			xf = (n as Node3D).transform * xf
+		n = n.get_parent()
+	return xf
+
+
+static func _box_mesh(size: Vector3, center: Vector3) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var c := center
+	var corners := [
+		Vector3(-hx, -hy, -hz) + c, Vector3(hx, -hy, -hz) + c, Vector3(hx, hy, -hz) + c, Vector3(-hx, hy, -hz) + c,
+		Vector3(-hx, -hy, hz) + c, Vector3(hx, -hy, hz) + c, Vector3(hx, hy, hz) + c, Vector3(-hx, hy, hz) + c,
+	]
+	var faces := [
+		[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2], [3, 2, 6, 7], [4, 5, 1, 0],
+	]
+	for f in faces:
+		var n: Vector3 = (corners[f[1]] - corners[f[0]]).cross(corners[f[3]] - corners[f[0]]).normalized()
+		st.set_normal(n)
+		st.add_vertex(corners[f[0]])
+		st.set_normal(n)
+		st.add_vertex(corners[f[1]])
+		st.set_normal(n)
+		st.add_vertex(corners[f[2]])
+		st.set_normal(n)
+		st.add_vertex(corners[f[0]])
+		st.set_normal(n)
+		st.add_vertex(corners[f[2]])
+		st.set_normal(n)
+		st.add_vertex(corners[f[3]])
+	return st.commit()
+
+
+static func _merge_meshes(parts: Array[Mesh]) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for mesh in parts:
+		st.append_from(mesh, 0, Transform3D.IDENTITY)
+	return st.commit()
+
+
+func total_prop_instances() -> int:
+	var total := 0
+	for key in _chunks:
+		var chunk := _chunks[key] as Node3D
+		for child in chunk.get_children():
+			if child is MultiMeshInstance3D:
+				total += (child as MultiMeshInstance3D).multimesh.instance_count
+	return total
+
+
+func nearest_prop_distance() -> float:
+	var best := INF
+	for key in _chunks:
+		var chunk := _chunks[key] as Node3D
+		for wp_v in chunk.get_meta("prop_world_positions", []):
+			var wp: Vector3 = wp_v
+			var flat := Vector2(wp.x, wp.z).length()
+			if flat < profile.prop_clearing_radius:
+				best = minf(best, flat)
+	return best
+
+
+## Chunk roots sit on coord * chunk_size (terrain spans ±half around them),
+## so the mapping rounds; floor() lagged a rebuild by half a chunk.
+func _world_to_chunk(pos: Vector3) -> Vector2i:
+	return Vector2i(int(round(pos.x / profile.chunk_size)), int(round(pos.z / profile.chunk_size)))
+
+
+static func _hash_coord(coord: Vector2i, kind: int, index: int) -> int:
+	return int(coord.x * 73856093 ^ coord.y * 19349663 ^ kind * 83492791 ^ index * 50331653) & 0x7fffffff
+
+
+static func _hash01(seed: int, channel: int) -> float:
+	return float((seed * 1103515245 + channel * 12345 + 12345) & 0x7fffffff) / float(0x7fffffff)
+
+
+## Clumps of the crown (centre, radius), the cedar and the sakura. Geometry, not profile.
 const SAKURA_CLUMPS := [
 	# Lower drooping/cascading blossom clusters (eye-level focal framing at 3.8 - 5.2 m height)
 	[Vector3(3.2, 4.4, 1.6), 2.1],
@@ -1454,274 +1928,3 @@ func _add_foliage_clump(st: SurfaceTool, center: Vector3, radius: float, noise: 
 	# the tool to indices and silently drops every bark triangle.
 	cst.deindex()
 	st.append_from(cst.commit(), 0, Transform3D.IDENTITY)
-
-
-## Roots and a flare welded onto the trunk mesh (same draw call). UV.x > 1
-## marks them for the root branch of the tree shader. They overlap the bark
-## and run out onto the soil mound so the trunk does not end in a cut circle.
-func _append_root_flare(mesh: Mesh) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.append_from(mesh, 0, Transform3D.IDENTITY)
-	var angles: Array[float] = [0.15, 1.05, 2.15, 3.25, 4.35, 5.35]
-	var lengths: Array[float] = [1.15, 0.9, 1.3, 0.85, 1.2, 1.0]
-	for i in angles.size():
-		_add_root_ribbon(st, angles[i], lengths[i])
-	_add_root_collar(st)
-	return st.commit()
-
-
-func _add_root_ribbon(st: SurfaceTool, angle: float, length: float) -> void:
-	var dir := Vector3(cos(angle), 0.0, sin(angle))
-	var side := Vector3(-dir.z, 0.0, dir.x)
-	# A root is a low ridge, not a flat fin: a raised spine with two skirts
-	# falling to the soil. It dives below the local ground plane before its
-	# tip, so on any slope the end is buried instead of hovering — the old
-	# long flat ribbons floated over the downhill side like a black star.
-	var frac: Array[float] = [0.0, 0.38, 0.72, 1.0]
-	var heights: Array[float] = [0.62, 0.30, 0.04, -0.30]
-	var half_w: Array[float] = [0.30, 0.21, 0.12, 0.045]
-	var skirt := 0.16
-	var ridge: Array[Vector3] = []
-	var left: Array[Vector3] = []
-	var right: Array[Vector3] = []
-	for k in 4:
-		var r := 0.78 + length * frac[k]
-		var c := dir * r + Vector3(0.0, heights[k], 0.0)
-		ridge.append(c)
-		left.append(c - side * half_w[k] + Vector3(0.0, -skirt, 0.0))
-		right.append(c + side * half_w[k] + Vector3(0.0, -skirt, 0.0))
-	for k in 3:
-		_add_root_quad(st, left[k], ridge[k], ridge[k + 1], left[k + 1], frac[k], frac[k + 1])
-		_add_root_quad(st, ridge[k], right[k], right[k + 1], ridge[k + 1], frac[k], frac[k + 1])
-
-
-func _add_root_quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, along0: float, along1: float) -> void:
-	var n := (b - a).cross(d - a).normalized()
-	if n.y < 0.0:
-		n = -n
-	_root_vert(st, a, n, along0)
-	_root_vert(st, b, n, along0)
-	_root_vert(st, c, n, along1)
-	_root_vert(st, a, n, along0)
-	_root_vert(st, c, n, along1)
-	_root_vert(st, d, n, along1)
-
-
-func _root_vert(st: SurfaceTool, p: Vector3, n: Vector3, along: float) -> void:
-	st.set_normal(n)
-	st.set_uv(Vector2(2.0 + along, 0.5))
-	st.add_vertex(p)
-
-
-## A low, lopsided heap of soil welded to the trunk. The inner ring climbs the
-## bark so the mesh's flat bottom never meets the ground as a cut circle.
-func _add_root_collar(st: SurfaceTool) -> void:
-	var segs := 12
-	var radii: Array[float] = [0.7, 1.1, 1.5]
-	var heights: Array[float] = [0.48, 0.16, -0.22]
-	var along: Array[float] = [0.0, 0.4, 0.92]
-	var ring: Array = []
-	for i in segs:
-		var row: Array[Vector3] = []
-		var ang := TAU * float(i) / float(segs)
-		var wobble := 0.78 + 0.44 * _apron_n(i)
-		for r in 3:
-			var spread := 0.0 if r == 0 else lerpf(0.35, 1.0, float(r) / 2.0)
-			var rad := radii[r] * lerpf(1.0, wobble, spread)
-			var y := heights[r] * (0.82 + 0.36 * _apron_n(i + r * 5 + 2))
-			row.append(Vector3(cos(ang) * rad, y, sin(ang) * rad))
-		ring.append(row)
-	for i in segs:
-		var a: Array[Vector3] = ring[i]
-		var b: Array[Vector3] = ring[(i + 1) % segs]
-		for r in 2:
-			_add_root_quad(st, a[r], b[r], b[r + 1], a[r + 1], along[r], along[r + 1])
-
-
-func _apron_n(i: int) -> float:
-	return float(absi(hash(i * 17 + 3)) % 1000) / 999.0
-
-
-## Japanese cedar (sugi) as in shrine forests: a tall straight trunk and dark
-## tiered canopy high overhead. In fog the forest reads through its trunks,
-## which fade with distance; the old low broadleaf canopies hung at head
-## height like floating boulders.
-func _build_tree_mesh() -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var trunk := CylinderMesh.new()
-	trunk.top_radius = 0.16
-	trunk.bottom_radius = 0.42
-	trunk.height = 15.5
-	trunk.radial_segments = 7
-	trunk.rings = 1
-	trunk.cap_top = false
-	trunk.cap_bottom = false
-	st.append_from(trunk, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 7.6, 0.0)))
-	# Root flare so the trunk does not stab into the ground like a pole.
-	var flare := CylinderMesh.new()
-	flare.top_radius = 0.41
-	flare.bottom_radius = 0.78
-	flare.height = 0.9
-	flare.radial_segments = 7
-	flare.rings = 1
-	flare.cap_top = false
-	flare.cap_bottom = false
-	st.append_from(flare, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.3, 0.0)))
-	# Lowest boughs far overhead: the player walks among bare trunks.
-	var tiers := [[8.6, 2.6, 3.6], [11.0, 2.1, 3.2], [13.2, 1.5, 2.8], [15.0, 0.9, 2.2]]
-	for t in tiers:
-		var cone := CylinderMesh.new()
-		cone.top_radius = 0.0
-		cone.bottom_radius = float(t[1])
-		cone.height = float(t[2])
-		cone.radial_segments = 8
-		cone.rings = 1
-		cone.cap_bottom = true
-		st.append_from(cone, 0, Transform3D(Basis(Vector3.UP, float(t[0])), Vector3(0.0, float(t[0]) + float(t[2]) * 0.5, 0.0)))
-	st.generate_normals()
-	return st.commit()
-
-func _build_torii_mesh() -> ArrayMesh:
-	var merged := _merge_scene_meshes(TORII_SCENE, TORII_MESH_SCALE)
-	if merged:
-		return merged
-	return _box_mesh(Vector3(1.6, 1.5, 0.2), Vector3(0.0, 0.75, 0.0))
-
-
-func _build_lantern_mesh() -> ArrayMesh:
-	var parts: Array[Mesh] = []
-	for part in LANTERN_PARTS:
-		parts.append(_box_mesh(part[0], part[1]))
-	return _merge_meshes(parts)
-
-
-## The scanned rock_face_01 is ~20k triangles; dozens of MultiMesh copies blew
-## the Quest triangle budget. A noise-displaced low-poly boulder (~80 tris)
-## reads the same through rain and fog.
-func _extract_rock_mesh() -> Mesh:
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.5
-	sphere.height = 0.62
-	sphere.radial_segments = 9
-	sphere.rings = 5
-	var arrays := sphere.get_mesh_arrays()
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var noise := FastNoiseLite.new()
-	noise.seed = 0x524F434B
-	noise.frequency = 2.1
-	for i in verts.size():
-		var v := verts[i]
-		var bump := 1.0 + noise.get_noise_3dv(v * 1.7) * 0.32
-		verts[i] = Vector3(v.x * bump * 1.25, maxf(v.y * bump, -0.12), v.z * bump * 0.95)
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-	for i in idx.size():
-		st.add_vertex(verts[idx[i]])
-	st.generate_normals()
-	return st.commit()
-
-
-static func _merge_scene_meshes(scene: PackedScene, scale_factor: float) -> ArrayMesh:
-	var inst := scene.instantiate()
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var wrote := false
-	for mi in inst.find_children("*", "MeshInstance3D", true, false):
-		var mesh_i := mi as MeshInstance3D
-		var mesh := mesh_i.mesh
-		if mesh == null:
-			continue
-		var local := _accumulate_local_transform(mesh_i, inst)
-		var scaled := Transform3D(local.basis.scaled(Vector3.ONE * scale_factor), local.origin * scale_factor)
-		st.append_from(mesh, 0, scaled)
-		wrote = true
-	inst.free()
-	return st.commit() if wrote else null
-
-
-static func _accumulate_local_transform(node: Node3D, root: Node) -> Transform3D:
-	var xf := Transform3D.IDENTITY
-	var n: Node = node
-	while n != null and n != root:
-		if n is Node3D:
-			xf = (n as Node3D).transform * xf
-		n = n.get_parent()
-	return xf
-
-
-static func _box_mesh(size: Vector3, center: Vector3) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var hx := size.x * 0.5
-	var hy := size.y * 0.5
-	var hz := size.z * 0.5
-	var c := center
-	var corners := [
-		Vector3(-hx, -hy, -hz) + c, Vector3(hx, -hy, -hz) + c, Vector3(hx, hy, -hz) + c, Vector3(-hx, hy, -hz) + c,
-		Vector3(-hx, -hy, hz) + c, Vector3(hx, -hy, hz) + c, Vector3(hx, hy, hz) + c, Vector3(-hx, hy, hz) + c,
-	]
-	var faces := [
-		[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2], [3, 2, 6, 7], [4, 5, 1, 0],
-	]
-	for f in faces:
-		var n: Vector3 = (corners[f[1]] - corners[f[0]]).cross(corners[f[3]] - corners[f[0]]).normalized()
-		st.set_normal(n)
-		st.add_vertex(corners[f[0]])
-		st.set_normal(n)
-		st.add_vertex(corners[f[1]])
-		st.set_normal(n)
-		st.add_vertex(corners[f[2]])
-		st.set_normal(n)
-		st.add_vertex(corners[f[0]])
-		st.set_normal(n)
-		st.add_vertex(corners[f[2]])
-		st.set_normal(n)
-		st.add_vertex(corners[f[3]])
-	return st.commit()
-
-
-static func _merge_meshes(parts: Array[Mesh]) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for mesh in parts:
-		st.append_from(mesh, 0, Transform3D.IDENTITY)
-	return st.commit()
-
-
-func total_prop_instances() -> int:
-	var total := 0
-	for key in _chunks:
-		var chunk := _chunks[key] as Node3D
-		for child in chunk.get_children():
-			if child is MultiMeshInstance3D:
-				total += (child as MultiMeshInstance3D).multimesh.instance_count
-	return total
-
-
-func nearest_prop_distance() -> float:
-	var best := INF
-	for key in _chunks:
-		var chunk := _chunks[key] as Node3D
-		for wp_v in chunk.get_meta("prop_world_positions", []):
-			var wp: Vector3 = wp_v
-			var flat := Vector2(wp.x, wp.z).length()
-			if flat < PROP_CLEARING_RADIUS:
-				best = minf(best, flat)
-	return best
-
-
-static func _world_to_chunk(pos: Vector3) -> Vector2i:
-	# Chunk roots sit on coord * CHUNK_SIZE (terrain spans ±half around them),
-	# so the mapping rounds; floor() lagged a rebuild by half a chunk.
-	return Vector2i(int(round(pos.x / CHUNK_SIZE)), int(round(pos.z / CHUNK_SIZE)))
-
-
-static func _hash_coord(coord: Vector2i, kind: int, index: int) -> int:
-	return int(coord.x * 73856093 ^ coord.y * 19349663 ^ kind * 83492791 ^ index * 50331653) & 0x7fffffff
-
-
-static func _hash01(seed: int, channel: int) -> float:
-	return float((seed * 1103515245 + channel * 12345 + 12345) & 0x7fffffff) / float(0x7fffffff)

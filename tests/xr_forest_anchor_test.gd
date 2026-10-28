@@ -65,7 +65,7 @@ func _run_all() -> void:
 func _drawn_trees(forest: ForestWorld) -> int:
 	var total := 0
 	for key in forest._chunks:
-		var inst := (forest._chunks[key] as Node3D).get_node_or_null("Trees") as MultiMeshInstance3D
+		var inst := (forest._chunks[key] as Node3D).get_node_or_null("Trees0") as MultiMeshInstance3D
 		if inst and inst.multimesh:
 			total += inst.multimesh.instance_count
 	return total
