@@ -45,6 +45,9 @@ var _by_used := {}
 var _menu_hold_time := 0.0
 var _menu_used := false
 var _base_move_speed := -1.0
+## Ink boost (RunGame) and the walking-pace setting, both multiplying the base speed.
+var _move_scale := 1.0
+var walk_scale := 1.0
 
 
 func _ready() -> void:
@@ -306,12 +309,24 @@ func set_locomotion_enabled(enabled: bool) -> void:
 ## Scales the smooth-locomotion top speed (1.0 = XR Tools default); used by
 ## Abyssal Sea's ink speed boost.
 func set_move_speed_scale(scale: float) -> void:
+	_move_scale = scale
+	_apply_move_speed()
+
+
+## The player's walking pace from Settings > MOVEMENT (1.0 = default). Stacks
+## with the ink boost, so the two never overwrite each other.
+func set_walk_scale(pace: float) -> void:
+	walk_scale = pace
+	_apply_move_speed()
+
+
+func _apply_move_speed() -> void:
 	var direct := _get_movement_direct()
 	if direct == null:
 		return
 	if _base_move_speed < 0.0:
 		_base_move_speed = float(direct.get("max_speed"))
-	direct.set("max_speed", _base_move_speed * scale)
+	direct.set("max_speed", _base_move_speed * walk_scale * _move_scale)
 
 
 func get_move_speed() -> float:

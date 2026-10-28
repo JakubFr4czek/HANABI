@@ -228,6 +228,22 @@ func _set_pause_amount(v: float) -> void:
 	_apply_bus_levels()
 
 
+## Player volumes (VrComfortSettings [audio]), linear 0..1 per bus. Music and
+## Ambience keep their slow-mo and pause ducks on top of these levels.
+func set_bus_levels(master: float, music: float, sfx: float, ambience: float) -> void:
+	AudioServer.set_bus_volume_db(0, _linear_db(master))
+	var world := AudioServer.get_bus_index(WORLD_BUS)
+	if world >= 0:
+		AudioServer.set_bus_volume_db(world, _linear_db(sfx))
+	_music_base_db = _linear_db(music)
+	_ambience_base_db = _linear_db(ambience)
+	_apply_bus_levels()
+
+
+static func _linear_db(v: float) -> float:
+	return linear_to_db(v) if v > 0.001 else -80.0
+
+
 func _setup_buses() -> void:
 	if AudioServer.get_bus_index(WORLD_BUS) < 0:
 		var i := AudioServer.bus_count

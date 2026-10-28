@@ -89,17 +89,20 @@ func trigger_strike(azimuth_rad: float = INF) -> void:
 func _set_flash(value: float) -> void:
 	current_intensity = value
 	_material.set_shader_parameter("intensity", value)
-	RenderingServer.global_shader_parameter_set("storm_flash", value)
+	# Photosensitivity setting (Settings > ACCESS) dims the scene-wide flash only;
+	# the bolt itself and the thunder stay.
+	var flash := value * VrComfortSettings.flash_scale()
+	RenderingServer.global_shader_parameter_set("storm_flash", flash)
 	if flash_light:
-		flash_light.visible = value > 0.01
-		flash_light.light_energy = value * 2.85
+		flash_light.visible = flash > 0.01
+		flash_light.light_energy = flash * 2.85
 	if world_environment:
-		world_environment.fog_light_color = base_fog_light_color.lerp(flash_fog_tint, value * 0.22)
+		world_environment.fog_light_color = base_fog_light_color.lerp(flash_fog_tint, flash * 0.22)
 		# A fog-colored background (run milk fog) has to flash with the fog or
 		# the two split apart.
 		if world_environment.background_mode == Environment.BG_COLOR:
 			world_environment.background_color = world_environment.fog_light_color
-		world_environment.ambient_light_energy = base_ambient_energy * (1.0 + value * 1.5)
+		world_environment.ambient_light_energy = base_ambient_energy * (1.0 + flash * 1.5)
 
 
 func _build_bolt_mesh(top: Vector3, bottom: Vector3, tangent: Vector3) -> void:
