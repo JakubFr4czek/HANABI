@@ -28,6 +28,8 @@ func _run_all() -> void:
 		_boards_placed(splash, cam))
 	_check("World is hidden while the boards play (splash layer only, black environment)",
 		cam.cull_mask == RunSplash.SPLASH_LAYER and cam.environment != null)
+	_check("Rain, forest wind and thunder are silent under the films (Ambience and World buses muted)",
+		_bus_muted(Sfx.AMBIENCE_BUS) and _bus_muted(Sfx.WORLD_BUS))
 	var clip_before := splash.clip_position()
 	await _frames(45)
 	_check("The film plays in stepped time: 45 frames at 90 fps is 0.5 s of film",
@@ -52,6 +54,8 @@ func _run_all() -> void:
 		and GameEvents.recent(20, "run_intro_started").size() == 1)
 	_check("World and camera are restored after the splash", cam.cull_mask != RunSplash.SPLASH_LAYER
 		and cam.environment == null)
+	_check("Ambience and World buses are back on once the intro starts",
+		not _bus_muted(Sfx.AMBIENCE_BUS) and not _bus_muted(Sfx.WORLD_BUS))
 	run.queue_free()
 	await _frames(2)
 
@@ -96,6 +100,11 @@ func _boards_placed(splash: RunSplash, cam: Camera3D) -> bool:
 	var locked := splash.get_parent() != cam and not cam.is_ancestor_of(splash)
 	var facing := splash.global_basis.z.dot(-flat.normalized()) > 0.99
 	return distance_ok and height_ok and locked and facing
+
+
+func _bus_muted(bus: StringName) -> bool:
+	var idx := AudioServer.get_bus_index(bus)
+	return idx >= 0 and AudioServer.is_bus_mute(idx)
 
 
 func _key(keycode: Key, pressed: bool) -> void:

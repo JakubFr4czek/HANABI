@@ -8,8 +8,9 @@ extends Node3D
 ## fixed panel, world-locked and yaw-only, about 3.5 m ahead at eye height. While
 ## a film plays the camera culls everything else and sees a black environment
 ## with no fog, glow or camera effects, so no forest, sky, rain or hands show
-## through. Time advances by the frame delta only; nothing here touches
-## Engine.time_scale.
+## through. The rain, forest wind and thunder buses are muted while the films
+## play, so the splash is silent until the intro. Time advances by the frame
+## delta only; nothing here touches Engine.time_scale.
 
 signal finished
 
@@ -100,6 +101,7 @@ func start() -> void:
 	_camera = get_viewport().get_camera_3d()
 	_place_board()
 	_hide_world()
+	_mute_world_audio(true)
 	_lock_rig(true)
 	_xr_was_down = _xr_down()
 	visible = true
@@ -194,6 +196,11 @@ func _show_phase() -> void:
 	_board_mat.albedo_color = Color(brightness, brightness, brightness)
 
 
+func _exit_tree() -> void:
+	if active:
+		_mute_world_audio(false)
+
+
 func _finish(skipped: bool) -> void:
 	active = false
 	set_process(false)
@@ -201,6 +208,7 @@ func _finish(skipped: bool) -> void:
 	_video.stop()
 	_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_restore_world()
+	_mute_world_audio(false)
 	_lock_rig(false)
 	GameEvents.log_event("boot_splash_finished", {"skipped": skipped})
 	_veil_from_black()
@@ -238,6 +246,15 @@ func _board_size() -> Vector2:
 		var frame_h := frame_w / view_aspect
 		width = minf(frame_w, frame_h * VIDEO_ASPECT)
 	return Vector2(width, width / VIDEO_ASPECT)
+
+
+## The Ambience (rain, forest wind) and World (thunder, impacts) buses are silent
+## under the films; they come back with the intro.
+func _mute_world_audio(muted: bool) -> void:
+	for bus in [Sfx.AMBIENCE_BUS, Sfx.WORLD_BUS]:
+		var idx := AudioServer.get_bus_index(bus)
+		if idx >= 0:
+			AudioServer.set_bus_mute(idx, muted)
 
 
 func _hide_world() -> void:

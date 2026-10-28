@@ -144,6 +144,7 @@ Zgłoszenie Jakuba (28 X): po odpaleniu menu czasem „przesuwało mnie w bok”
 - [ ] Panel ~3,5 m przed oczami, na wysokości oczu, 4,8 m szerokości (ok. 69° pola widzenia); nie porusza się z głową; po bokach czarna pustka.
 - [ ] Ostrość: film 1280x720 wyświetlony w panelu ~1000 px na Quest 3 (bez mory, bez zamglenia); fajerwerk bez poświaty od tła.
 - [ ] Dekodowanie Theora: płynne 30 fps, bez spadków przy starcie (HUD perf: fps ≥ 72 w pierwszych 9 s). Jeśli spadki: zapisać w docs, rozważyć jeszcze mniejszy film. Proxy na Macu (ffmpeg, sama dekompresja): 1080p ≈ 0,27 ms/klatkę, 720p ≈ 0,16 ms/klatkę; na goglach nie mierzono.
+- [ ] Cisza pod filmami (bez deszczu, wiatru i grzmotu); deszcz i wiatr wracają razem z intro.
 - [ ] Przerwa 0,3 s czerni, potem NANJO: nić spływa z góry w literę J, logo ostre, bez migotania.
 - [ ] Trigger / A / X kończy splash od razu (krótki fade); intro nie startuje od razu i nie pomija się tym samym wciśnięciem.
 - [ ] Po splashu: las wychodzi z czerni płynnie (~0,6 s), intro seiza jak wcześniej.
