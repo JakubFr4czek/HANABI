@@ -66,6 +66,17 @@ static func ability_glyph(element: String, slot: int) -> String:
 	return ""
 
 
+## Name of the school's finisher (D4, tier 5): the cut that splits a yōkai
+## along the blade's plane. 花断ち, 雷断ち, 墨断ち, 影断ち (tachi: to cut off).
+static func kirisute_name(element: String) -> String:
+	match element:
+		SAKURA: return "Hanadachi"
+		STORM: return "Raidachi"
+		INK: return "Sumidachi"
+		SHADOW: return "Kagedachi"
+	return ""
+
+
 ## Romanised ability name (menu footer, logs).
 static func ability_name(element: String, slot: int) -> String:
 	match element:
