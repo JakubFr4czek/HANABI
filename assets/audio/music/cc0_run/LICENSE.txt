@@ -5,12 +5,6 @@ CC0 run music & atmospheric instrument layers (commit to repo).
 - kamogawa_nightbreak.mp3 — Ruskerdax, OpenGameArt "Kamogawa Nightbreak" (CC0)
   https://opengameart.org/content/kamogawa-nightbreak
   (alternate; shipped loop uses orientalsomber.ogg)
-- taiko_layer.wav — Scott Harding's "Taiko", live performance by the Singapore Wind Symphony's Percussion Ensemble (Teohui, Wikimedia Commons)
-  https://commons.wikimedia.org/wiki/File:02_Taiko2_(short).oga
-  License: CC0 1.0 Universal (Public Domain Dedication)
-  Modifications: 24s seamless loop with crossfade.
-- shakuhachi_layer.wav — Traditional Honkyoku "Shika no Tōne" (鹿の遠音) performed on bamboo shakuhachi by Araki Kodō III (1879–1935)
-  https://commons.wikimedia.org/wiki/File:Shikanotoone_new.ogg
-  License: Public Domain (CC0 equivalent)
-  Modifications: extracted expressive 24s meditative passage with seamless loop crossfade.
-- shakuhachi_taiko_layer.wav — Balanced arrangement combining the CC0 taiko drum rhythm and the shakuhachi flute meditation into a seamless 24s musical layer for the Music bus.
+- shakuhachi_taiko_layer.wav — Balanced 24s loop for the Music bus, combining:
+  1. Taiko rhythm from Scott Harding's "Taiko", live performance by Singapore Wind Symphony Percussion Ensemble (Teohui, Wikimedia Commons, CC0 1.0 Universal, https://commons.wikimedia.org/wiki/File:02_Taiko2_(short).oga)
+  2. Bamboo shakuhachi meditation from Traditional Honkyoku "Shika no Tōne" (鹿の遠音) performed by Araki Kodō III (1879–1935, Wikimedia Commons, Public Domain, https://commons.wikimedia.org/wiki/File:Shikanotoone_new.ogg)
