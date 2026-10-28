@@ -46,6 +46,7 @@ func _run_all() -> void:
 	await _test_shadow_abilities()
 	await _test_cooldowns_and_refresh()
 	await _test_ongoing_completion_on_expiry()
+	await _test_balance_wiring()
 	await _test_pause_respect()
 	await _test_readability()
 	await _test_perf_limits()
@@ -220,7 +221,8 @@ func _test_shadow_abilities() -> void:
 	await _frames(4)
 	var hit := {"attacker": run.katana.weapon_name, "damage": 20.0, "point": player.global_position}
 	elem_sys.on_blade_hit(hit)
-	_check("Shadow Cleave buff amplified damage (+60%)", float(hit.damage) >= 32.0)
+	_check("Shadow Cleave buff amplified damage (x%.1f)" % ElementBalance.YAMI_CRIT_MULTIPLIER,
+		is_equal_approx(float(hit.damage), 20.0 * ElementBalance.YAMI_CRIT_MULTIPLIER))
 	_check("Shadow Cleave buff consumed on hit", elem_sys.shadow_cleave_buff_time == 0.0)
 
 
@@ -275,6 +277,78 @@ func _test_ongoing_completion_on_expiry() -> void:
 		run.katana._physics_process(0.1)
 
 	_check("Hanamai cleanly clears after its full 6.0s duration finishes", elem_sys._orbit_petals.size() == 0 and elem_sys.hanamai_time_remaining == 0.0)
+
+
+## E4: the numbers in ElementBalance are the numbers the abilities really use.
+func _test_balance_wiring() -> void:
+	elem_sys.reset()
+	var cooldown_ok := true
+	var table := {
+		Elements.SAKURA: [ElementBalance.SENBONZAKURA_COOLDOWN, ElementBalance.HANAMAI_COOLDOWN],
+		Elements.STORM: [ElementBalance.RAIKIRI_COOLDOWN, ElementBalance.SHIDEN_COOLDOWN],
+		Elements.INK: [ElementBalance.SUMI_COOLDOWN, ElementBalance.KAGE_NAWA_COOLDOWN],
+		Elements.SHADOW: [ElementBalance.KAGEMUSHA_COOLDOWN, ElementBalance.YAMI_COOLDOWN],
+	}
+	var enemy := run.wave_director.spawn_enemy_at(player.global_position + Vector3(0.0, 0.0, -3.0), player.global_position)
+	await _frames(3)
+	for school: String in table:
+		elem_sys.imbue(school)
+		elem_sys.execute_ability_1(Vector3.FORWARD)
+		elem_sys.execute_ability_2(Vector3.FORWARD)
+		cooldown_ok = cooldown_ok \
+			and absf(elem_sys.ability_1_cooldown - float(table[school][0])) < 0.01 \
+			and absf(elem_sys.ability_2_cooldown - float(table[school][1])) < 0.01 \
+			and absf(elem_sys.ability_cooldown_total(1) - float(table[school][0])) < 0.01
+	_check("Every school's two cooldowns are the ElementBalance values", cooldown_ok)
+
+	# Potency follows the run: Raikiri's primary hit grows with soul rank and Razor Edge.
+	elem_sys.reset()
+	run.state = RunGame.RunState.PLAYING
+	var rank_before := run.level
+	var blade_before := run.katana.damage_multiplier
+	enemy.hp = 5000.0
+	enemy.profile.max_hp = 5000.0
+	elem_sys.imbue(Elements.STORM)
+	run.level = 1
+	run.katana.damage_multiplier = 1.0
+	var hp0 := enemy.hp
+	elem_sys.execute_ability_1(Vector3.FORWARD)
+	var base_dmg := hp0 - enemy.hp
+	_check("Raikiri's primary hit at rank 1 is the base %.0f" % ElementBalance.RAIKIRI_PRIMARY_DAMAGE,
+		absf(base_dmg - ElementBalance.RAIKIRI_PRIMARY_DAMAGE) < 0.6)
+	run.level = 11
+	run.katana.damage_multiplier = 1.5
+	var expected_power := 1.5 * (1.0 + ElementBalance.POWER_PER_RANK * 10.0)
+	_check("ability_power follows soul rank and Razor Edge (%.2f)" % elem_sys.ability_power(),
+		absf(elem_sys.ability_power() - expected_power) < 0.001)
+	elem_sys.ability_1_cooldown = 0.0
+	var hp1 := enemy.hp
+	elem_sys.execute_ability_1(Vector3.FORWARD)
+	var strong := hp1 - enemy.hp
+	_check("the same Raikiri hits %.1fx harder at rank 11 with Razor Edge (%.1f -> %.1f)" % [expected_power, base_dmg, strong],
+		absf(strong - ElementBalance.RAIKIRI_PRIMARY_DAMAGE * expected_power) < 0.8)
+	run.level = rank_before
+	run.katana.damage_multiplier = blade_before
+
+	# The Kagemusha decoy takes exactly KAGEMUSHA_HITS claws, then dissolves.
+	elem_sys.reset()
+	elem_sys.imbue(Elements.SHADOW)
+	elem_sys.execute_ability_1(Vector3.FORWARD)
+	var decoy := elem_sys.kagemusha_decoy
+	_check("decoy lasts %.1f s or %d claws" % [ElementBalance.KAGEMUSHA_SECONDS, ElementBalance.KAGEMUSHA_HITS],
+		decoy != null and absf(elem_sys.kagemusha_time_remaining - ElementBalance.KAGEMUSHA_SECONDS) < 0.01
+		and elem_sys.kagemusha_hits_remaining == ElementBalance.KAGEMUSHA_HITS)
+	get_tree().call_group("element_system", "on_decoy_struck")
+	_check("after one claw the decoy still stands", is_instance_valid(elem_sys.kagemusha_decoy) and elem_sys.kagemusha_decoy != null)
+	get_tree().call_group("element_system", "on_decoy_struck")
+	await _frames(2)
+	_check("after the second claw the decoy is gone and enemies target the player again",
+		elem_sys.kagemusha_decoy == null and not is_instance_valid(decoy)
+		and get_tree().get_first_node_in_group("shadow_decoy") == null)
+	elem_sys.reset()
+	enemy.die()
+	run.wave_director.clear_enemies()
+	await _frames(2)
 
 
 func _test_pause_respect() -> void:

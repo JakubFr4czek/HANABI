@@ -49,10 +49,6 @@ static func _burst_color(element: String) -> Color:
 			return Color(1.35, 0.32, 0.72)
 		Elements.SHADOW:
 			return Color(0.72, 0.22, 1.35)
-		Elements.BLACK_LIGHTNING:
-			return Color(0.22, 0.38, 1.45)
-		Elements.PHANTOM_PETALS:
-			return Color(1.05, 0.28, 0.82)
 		_:
 			return Color(1.45, 0.38, 0.22)
 

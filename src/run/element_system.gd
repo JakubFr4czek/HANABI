@@ -15,22 +15,20 @@ const MAX_PETALS := 12
 const MAX_INK_POOLS := 6
 const MAX_TRANSIENT_MESHES := 18
 
-const ELEMENT_DURATION: float = 20.0
-const FADE_WARNING_TIME: float = 3.0
-
+## All numbers (imbue seconds, cooldowns, damage, ranges) live in [ElementBalance].
 ## Cooldowns per ability per element (seconds)
 const COOLDOWNS_ABILITY_1 := {
-	Elements.SAKURA: 4.0,   # Senbonzakura
-	Elements.STORM: 3.5,    # Raikiri
-	Elements.INK: 5.0,      # Sumi-gaeshi
-	Elements.SHADOW: 9.0,   # Kagemusha
+	Elements.SAKURA: ElementBalance.SENBONZAKURA_COOLDOWN,
+	Elements.STORM: ElementBalance.RAIKIRI_COOLDOWN,
+	Elements.INK: ElementBalance.SUMI_COOLDOWN,
+	Elements.SHADOW: ElementBalance.KAGEMUSHA_COOLDOWN,
 }
 
 const COOLDOWNS_ABILITY_2 := {
-	Elements.SAKURA: 12.0,  # Hanamai
-	Elements.STORM: 8.0,    # Shiden
-	Elements.INK: 10.0,     # Kage-nawa
-	Elements.SHADOW: 7.5,   # Yami-watari
+	Elements.SAKURA: ElementBalance.HANAMAI_COOLDOWN,
+	Elements.STORM: ElementBalance.SHIDEN_COOLDOWN,
+	Elements.INK: ElementBalance.KAGE_NAWA_COOLDOWN,
+	Elements.SHADOW: ElementBalance.YAMI_COOLDOWN,
 }
 
 var run_game: RunGame
@@ -43,7 +41,7 @@ var skill_tree: SkillTreeData = null
 var current_element: String = Elements.NONE
 var element_time_remaining: float = 0.0
 ## Length of the current imbue (the wrist arc is remaining / this).
-var imbue_total: float = ELEMENT_DURATION
+var imbue_total: float = ElementBalance.IMBUE_SECONDS
 var is_fade_warning: bool = false
 
 var ability_1_cooldown: float = 0.0
@@ -53,7 +51,7 @@ var ability_2_cooldown: float = 0.0
 var hanamai_time_remaining: float = 0.0
 var shadow_cleave_buff_time: float = 0.0
 var kagemusha_time_remaining: float = 0.0
-var kagemusha_hits_remaining: int = 2
+var kagemusha_hits_remaining: int = ElementBalance.KAGEMUSHA_HITS
 var kagemusha_decoy: Node3D = null
 ## Skill-tree runtime state (E2c): Ikazuchi lightning barriers, the Abyssal
 ## ink ward, pending Shadow Clone mirrors and the backstab Ofuda throttle.
@@ -83,6 +81,22 @@ func _has_node(node_id: String) -> bool:
 	return skill_tree != null and skill_tree.is_unlocked(node_id)
 
 
+## Potency of every direct ability hit: the Razor Edge multiplier of the blade
+## times a small bonus per soul rank ([constant ElementBalance.POWER_PER_RANK]),
+## so abilities keep pace with yōkai that grow tougher as the run goes on.
+## 1.0 outside a run (tests of the bare numbers).
+func ability_power() -> float:
+	if run_game == null:
+		return 1.0
+	var blade := run_game.katana.damage_multiplier if run_game.katana else 1.0
+	return blade * (1.0 + ElementBalance.POWER_PER_RANK * float(maxi(run_game.level - 1, 0)))
+
+
+## Single door for ability damage to a yōkai: scales [param amount] by [method ability_power].
+func _hit(enemy: Yokai, amount: float, element: String, point: Vector3, direction: Vector3) -> float:
+	return enemy.receive_element_damage(amount * ability_power(), element, point, direction)
+
+
 ## Full cooldown (seconds) of ability [param slot] (1 = A, 2 = B) on the
 ## current element, including skill-tree upgrades. 0 on plain steel.
 func ability_cooldown_total(slot: int) -> float:
@@ -109,12 +123,6 @@ func imbue_ratio() -> float:
 	if current_element == Elements.NONE:
 		return 0.0
 	return clampf(element_time_remaining / maxf(imbue_total, 0.01), 0.0, 1.0)
-
-## Backward compatibility aliases for legacy code and tests
-var storm_charge: float = 0.0
-var blink_cooldown: float:
-	get: return ability_2_cooldown
-	set(v): ability_2_cooldown = v
 
 var _petals: Array[Dictionary] = []
 var _orbit_petals: Array[MeshInstance3D] = []
@@ -147,7 +155,6 @@ func reset() -> void:
 	current_element = Elements.NONE
 	element_time_remaining = 0.0
 	is_fade_warning = false
-	storm_charge = 0.0
 	ability_1_cooldown = 0.0
 	ability_2_cooldown = 0.0
 	hanamai_time_remaining = 0.0
@@ -163,12 +170,12 @@ func reset() -> void:
 		weapon.set_element(Elements.NONE)
 
 
-## Effective imbue duration for [param element_name]: 24 s when that
-## element's Node 1 (school awakening) is unlocked, otherwise 20 s.
+## Effective imbue duration for [param element_name]: the 24 s of Node 1
+## (school awakening) when it is unlocked, otherwise [constant ElementBalance.IMBUE_SECONDS].
 func imbue_duration_for(element_name: String) -> float:
 	if element_name == Elements.NONE:
 		return 0.0
-	return float(_fx(element_name, "imbue_duration", ELEMENT_DURATION))
+	return float(_fx(element_name, "imbue_duration", ElementBalance.IMBUE_SECONDS))
 
 
 ## Imbues the weapon with an element (from a Torii gate). A negative
@@ -179,8 +186,8 @@ func imbue(element_name: String, duration: float = -1.0) -> void:
 	imbue_total = maxf(dur, 0.01)
 	if element_name == current_element and current_element != Elements.NONE:
 		element_time_remaining = dur
-		ability_1_cooldown *= 0.5
-		ability_2_cooldown *= 0.5
+		ability_1_cooldown *= ElementBalance.REFRESH_COOLDOWN_KEEP
+		ability_2_cooldown *= ElementBalance.REFRESH_COOLDOWN_KEEP
 		if weapon:
 			weapon.imbue_element(element_name, dur)
 		_play_imbue_cue(element_name, true)
@@ -298,21 +305,21 @@ func _trigger_empty_click() -> void:
 # --- Sakura Abilities ---------------------------------------------------------
 
 ## Ability 1 (Sakura): Senbonzakura (千本桜 / Thousand Petal Slash)
-## 6 crystalline glass petals outward in forward fan (32° spread), 16 dmg each,
-## pierces 2 yōkai. Tree: Petal Sense 20 dmg; Razor Petals 8 petals, pierces
-## all; Kageyoshi detonates an active Hanamai orbit for 80 dmg around the player.
+## 6 crystalline glass petals outward in forward fan (32° spread), 12 dmg each,
+## pierces 2 yōkai. Tree: Petal Sense 15 dmg; Razor Petals 7 petals, pierces
+## all; Kageyoshi detonates an active Hanamai orbit for 120 dmg around the player.
 func _exec_sakura_1(direction: Vector3) -> bool:
 	var origin := weapon.get_tip_global() if weapon else _player_origin() + Vector3.UP * 1.0
-	var count := int(_fx(Elements.SAKURA, "senbonzakura_petal_count", 6))
-	var damage := float(_fx(Elements.SAKURA, "senbonzakura_damage", 16.0))
-	var pierce := int(_fx(Elements.SAKURA, "senbonzakura_pierce", 2))
+	var count := int(_fx(Elements.SAKURA, "senbonzakura_petal_count", ElementBalance.SENBONZAKURA_PETALS))
+	var damage := float(_fx(Elements.SAKURA, "senbonzakura_damage", ElementBalance.SENBONZAKURA_DAMAGE))
+	var pierce := int(_fx(Elements.SAKURA, "senbonzakura_pierce", ElementBalance.SENBONZAKURA_PIERCE))
 	_spawn_cutting_petals(origin, direction, count, damage, pierce)
 	if _has_node("senbonzakura_kageyoshi") and hanamai_time_remaining > 0.0:
-		var burst := float(_fx(Elements.SAKURA, "kageyoshi_burst_damage", 80.0))
+		var burst := float(_fx(Elements.SAKURA, "kageyoshi_burst_damage", ElementBalance.KAGEYOSHI_DAMAGE))
 		var center := _player_origin()
 		for enemy in _alive_enemies():
-			if _enemy_center(enemy).distance_to(center) <= 3.2:
-				enemy.receive_element_damage(burst, Elements.SAKURA, _enemy_center(enemy), (_enemy_center(enemy) - center).normalized())
+			if _enemy_center(enemy).distance_to(center) <= ElementBalance.KAGEYOSHI_RADIUS:
+				_hit(enemy, burst, Elements.SAKURA, _enemy_center(enemy), (_enemy_center(enemy) - center).normalized())
 		hanamai_time_remaining = 0.0
 		_clear_orbit_petals()
 		effect_triggered.emit("kageyoshi_burst", {"damage": burst})
@@ -323,11 +330,12 @@ func _exec_sakura_1(direction: Vector3) -> bool:
 
 
 ## Ability 2 (Sakura): Hanamai (花舞 / Petal Dance Barrier)
-## 4 glass petals orbiting player torso at 1.2m for 6.0s, 10 dmg per contact,
-## -30% incoming damage. Tree: Storm of Hanami 8.5 s and −45% damage taken.
+## 4 glass petals orbiting player torso at 1.2m for 6.0s, 7 dmg per contact
+## (every 0.45 s per yōkai), -30% incoming damage. Tree: Storm of Hanami 8.5 s
+## and −45% damage taken.
 func _exec_sakura_2(_direction: Vector3) -> bool:
-	hanamai_time_remaining = float(_fx(Elements.SAKURA, "hanamai_duration", 6.0))
-	_rebuild_hanamai_orbit(4)
+	hanamai_time_remaining = float(_fx(Elements.SAKURA, "hanamai_duration", ElementBalance.HANAMAI_DURATION))
+	_rebuild_hanamai_orbit(ElementBalance.HANAMAI_PETALS)
 	_pulse_both_hands([[0.5, 0.08], [0.25, 0.12]])
 	Sfx.play_at("level_up", _player_origin(), -6.0, 3.5, 1.3)
 	effect_triggered.emit("hanamai", {"duration": hanamai_time_remaining})
@@ -337,12 +345,12 @@ func _exec_sakura_2(_direction: Vector3) -> bool:
 # --- Storm Abilities ----------------------------------------------------------
 
 ## Ability 1 (Storm): Raikiri (雷切 / Lightning Cutter)
-## Searing chain lightning: 32 dmg to primary target, 18 dmg to up to 3 nearby enemies within 5m.
+## Searing chain lightning: 45 dmg to primary target, 24 dmg to up to 3 nearby enemies within 5m.
 func _exec_storm_1(direction: Vector3) -> bool:
 	var origin := weapon.get_tip_global() if weapon else _player_origin() + Vector3.UP * 1.0
-	var primary := _nearest_enemy_in_cone(origin, direction, 8.0, 0.5)
+	var primary := _nearest_enemy_in_cone(origin, direction, ElementBalance.RAIKIRI_RANGE, 0.5)
 	if primary == null:
-		primary = _nearest_enemy(origin, 8.0)
+		primary = _nearest_enemy(origin, ElementBalance.RAIKIRI_RANGE)
 	if primary == null:
 		# Discharge harmlessly forward if no target
 		var dummy_point := origin + direction * 5.0
@@ -353,17 +361,17 @@ func _exec_storm_1(direction: Vector3) -> bool:
 		return true
 
 	var primary_center := _enemy_center(primary)
-	primary.receive_element_damage(32.0, Elements.STORM, primary_center, direction)
+	_hit(primary, ElementBalance.RAIKIRI_PRIMARY_DAMAGE, Elements.STORM, primary_center, direction)
 	var stun := float(_fx(Elements.STORM, "raikiri_stun_duration", 0.0))
 	if stun > 0.0:
 		primary.apply_stagger(stun)
 	var points: Array[Vector3] = [origin, primary_center]
 
-	var chain_count := int(_fx(Elements.STORM, "raikiri_chain_targets", 3))
-	var chain_targets := _nearest_enemies_excluding(primary_center, chain_count, 5.0, [primary])
+	var chain_count := int(_fx(Elements.STORM, "raikiri_chain_targets", ElementBalance.RAIKIRI_CHAIN_TARGETS))
+	var chain_targets := _nearest_enemies_excluding(primary_center, chain_count, ElementBalance.RAIKIRI_CHAIN_RADIUS, [primary])
 	for enemy in chain_targets:
 		var target_center := _enemy_center(enemy)
-		enemy.receive_element_damage(18.0, Elements.STORM, target_center, (target_center - primary_center).normalized())
+		_hit(enemy, ElementBalance.RAIKIRI_CHAIN_DAMAGE, Elements.STORM, target_center, (target_center - primary_center).normalized())
 		points.append(target_center)
 
 	_spawn_lightning(points, Color(0.32, 0.82, 1.0), 0.16, 0.012)
@@ -375,12 +383,12 @@ func _exec_storm_1(direction: Vector3) -> bool:
 
 ## Ability 2 (Storm): Shiden (紫電 / Thunder Step)
 ## High-velocity dash 4.2m forward, staggers enemies at departure point within
-## 2.8m for 1.4s. Tree: Flash Stride 6.0 m / 2.2 s; Ikazuchi Avatar leaves a
+## 2.8m for 1.4s (15 dmg). Tree: Flash Stride 6.0 m / 2.2 s; Ikazuchi Avatar leaves a
 ## 4 s lightning barrier between departure and arrival.
 func _exec_storm_2(direction: Vector3) -> bool:
 	var player_pos := _player_origin()
-	var distance := float(_fx(Elements.STORM, "shiden_distance", 4.2))
-	var stagger := float(_fx(Elements.STORM, "shiden_stagger", 1.4))
+	var distance := float(_fx(Elements.STORM, "shiden_distance", ElementBalance.SHIDEN_DISTANCE))
+	var stagger := float(_fx(Elements.STORM, "shiden_stagger", ElementBalance.SHIDEN_STAGGER))
 	var from := player_pos + Vector3(0.0, 0.85, 0.0)
 
 	var sweep := PhysicsShapeQueryParameters3D.new()
@@ -400,9 +408,9 @@ func _exec_storm_2(direction: Vector3) -> bool:
 
 	# Stagger enemies at departure point within 2.8m
 	for enemy in _alive_enemies():
-		if _enemy_center(enemy).distance_to(player_pos) <= 2.8:
+		if _enemy_center(enemy).distance_to(player_pos) <= ElementBalance.SHIDEN_RADIUS:
 			enemy.apply_stagger(stagger)
-			enemy.receive_element_damage(10.0, Elements.STORM, _enemy_center(enemy), Vector3.UP)
+			_hit(enemy, ElementBalance.SHIDEN_DAMAGE, Elements.STORM, _enemy_center(enemy), Vector3.UP)
 
 	# Teleport player
 	_teleport_player(desired)
@@ -413,7 +421,7 @@ func _exec_storm_2(direction: Vector3) -> bool:
 		_barriers.append({
 			"from": player_pos, "to": desired, "age": 0.0,
 			"lifetime": barrier_time, "tick": 0.0,
-			"damage": float(_fx(Elements.STORM, "shiden_barrier_damage", 20.0)),
+			"damage": float(_fx(Elements.STORM, "shiden_barrier_damage", ElementBalance.IKAZUCHI_DAMAGE)),
 		})
 
 	# VFX & SFX
@@ -430,14 +438,14 @@ func _exec_storm_2(direction: Vector3) -> bool:
 
 ## Ability 1 (Ink): Sumi-gaeshi (墨返し / Ink Sweep)
 ## Horizontal ground wave in 60° forward cone up to 4.5m: 7 dmg + 60% slow,
-## paints a 5.0 s ink pool. Tree: Sumi Mastery slows 75%; Splatter Tide
+## paints a 5.0 s ink pool (8 dmg/s). Tree: Sumi Mastery slows 75%; Splatter Tide
 ## widens the cone to 90° and doubles the pool's damage over time.
 func _exec_ink_1(direction: Vector3) -> bool:
 	var player_pos := _player_origin()
-	var cone_range := 4.5
-	var half_deg := float(_fx(Elements.INK, "sumi_cone_half_deg", 30.0))
+	var cone_range := ElementBalance.SUMI_RANGE
+	var half_deg := float(_fx(Elements.INK, "sumi_cone_half_deg", ElementBalance.SUMI_HALF_DEGREES))
 	var half_angle_cos := cos(deg_to_rad(half_deg))
-	var slow_scale := float(_fx(Elements.INK, "ink_slow_scale", 0.40))
+	var slow_scale := float(_fx(Elements.INK, "ink_slow_scale", ElementBalance.SUMI_SLOW_SCALE))
 
 	for enemy in _alive_enemies():
 		var diff := _enemy_center(enemy) - player_pos
@@ -445,11 +453,12 @@ func _exec_ink_1(direction: Vector3) -> bool:
 		if flat_dist <= cone_range and flat_dist > 0.05:
 			var dot := Vector2(direction.x, direction.z).normalized().dot(Vector2(diff.x, diff.z).normalized())
 			if dot >= half_angle_cos:
-				enemy.receive_element_damage(7.0, Elements.INK, _enemy_center(enemy), direction)
-				enemy.apply_slow(5.0, slow_scale)
+				_hit(enemy, ElementBalance.SUMI_DAMAGE, Elements.INK, _enemy_center(enemy), direction)
+				enemy.apply_slow(ElementBalance.SUMI_SLOW_SECONDS, slow_scale)
 
-	var pool_center := player_pos + direction * 2.2
-	paint_ink(pool_center, 2.2, 5.0, float(_fx(Elements.INK, "ink_dps", 7.0)))
+	var pool_center := player_pos + direction * ElementBalance.SUMI_POOL_RADIUS
+	paint_ink(pool_center, ElementBalance.SUMI_POOL_RADIUS, ElementBalance.SUMI_POOL_SECONDS,
+		float(_fx(Elements.INK, "ink_dps", ElementBalance.SUMI_POOL_DPS)))
 
 	_pulse_sword_hand([[0.6, 0.14]])
 	Sfx.play_at("slap", pool_center, 0.0, 4.0, 0.8)
@@ -458,25 +467,25 @@ func _exec_ink_1(direction: Vector3) -> bool:
 
 
 ## Ability 2 (Ink): Kage-nawa (影縄 / Ink Binding Tendrils)
-## Roots up to 3 enemies within 7m for 2.8s, deals 14 impact dmg, and drags
+## Roots up to 3 enemies within 7m for 2.8s, deals 20 impact dmg, and drags
 ## them 1.5m toward player. Tree: Black Bind snares 5 and pulls into melee.
 func _exec_ink_2(_direction: Vector3) -> bool:
 	var player_pos := _player_origin()
-	var max_targets := int(_fx(Elements.INK, "kage_nawa_targets", 3))
-	var targets := _nearest_enemies(player_pos, max_targets, 7.0)
+	var max_targets := int(_fx(Elements.INK, "kage_nawa_targets", ElementBalance.KAGE_NAWA_TARGETS))
+	var targets := _nearest_enemies(player_pos, max_targets, ElementBalance.KAGE_NAWA_RANGE)
 	if targets.is_empty():
 		return false
 
 	for enemy in targets:
 		var center := _enemy_center(enemy)
-		enemy.receive_element_damage(14.0, Elements.INK, center, Vector3.UP)
-		enemy.apply_slow(2.8, 0.25)
+		_hit(enemy, ElementBalance.KAGE_NAWA_DAMAGE, Elements.INK, center, Vector3.UP)
+		enemy.apply_slow(ElementBalance.KAGE_NAWA_ROOT_SECONDS, ElementBalance.KAGE_NAWA_ROOT_SCALE)
 
 		# Pull toward the player (into melee range with Black Bind).
 		var to_player := player_pos - center
 		to_player.y = 0.0
 		var dist := to_player.length()
-		var pull_amount := clampf(dist - 1.05, 0.0, 6.0) if _has_node("black_bind") else clampf(dist - 1.2, 0.0, 1.5)
+		var pull_amount := clampf(dist - 1.05, 0.0, 6.0) if _has_node("black_bind") else clampf(dist - 1.2, 0.0, ElementBalance.KAGE_NAWA_PULL)
 		if pull_amount > 0.0 and dist > 0.01:
 			var pull_vec := to_player.normalized() * pull_amount
 			enemy.global_position += pull_vec
@@ -492,7 +501,7 @@ func _exec_ink_2(_direction: Vector3) -> bool:
 # --- Shadow Abilities ---------------------------------------------------------
 
 ## Ability 1 (Shadow): Kagemusha (影武者 / Shadow Decoy)
-## Smoke silhouette decoy for 3.0s or 2 hits; redirects enemy aggro within 9.0m.
+## Smoke silhouette decoy for 4.0s or 2 hits; redirects enemy aggro within 9.0m.
 func _exec_shadow_1(_direction: Vector3) -> bool:
 	var player_pos := _player_origin()
 	_spawn_shadow_decoy(player_pos)
@@ -503,12 +512,12 @@ func _exec_shadow_1(_direction: Vector3) -> bool:
 
 
 ## Ability 2 (Shadow): Yami-watari (闇渡り / Shadow Step & Cleave)
-## Blinks behind nearest target within 4.5m (or forward); primes +60%
-## critical strike on next hit. Tree: Umbral Reach searches 6.5 m; Shadow
+## Blinks behind nearest target within 4.5m (or forward); primes a x2.2
+## critical strike on the next hit within 2.5 s. Tree: Umbral Reach searches 6.5 m; Shadow
 ## Clones mirror the next cut onto 2 nearby yōkai.
 func _exec_shadow_2(direction: Vector3) -> bool:
 	var player_pos := _player_origin()
-	var search_range := float(_fx(Elements.SHADOW, "yami_range", 4.5))
+	var search_range := float(_fx(Elements.SHADOW, "yami_range", ElementBalance.YAMI_RANGE))
 	var target := _nearest_enemy(player_pos, search_range)
 	var desired := player_pos + direction * 2.5
 	var target_yaw := 0.0
@@ -532,17 +541,12 @@ func _exec_shadow_2(direction: Vector3) -> bool:
 	_spawn_shadow_trace(player_pos + Vector3.UP * 0.8, desired + Vector3.UP * 0.8)
 	_teleport_player(desired, target_yaw)
 
-	shadow_cleave_buff_time = 1.8
+	shadow_cleave_buff_time = ElementBalance.YAMI_CRIT_SECONDS
 	shadow_clone_charges = int(_fx(Elements.SHADOW, "shadow_clone_count", 0))
 	_pulse_sword_hand([[0.25, 0.04], [0.9, 0.06]])
 	Sfx.play_at("ofuda_slice", player_pos, 0.0, 4.0, 0.9)
 	effect_triggered.emit("yami_watari", {"from": player_pos, "to": desired})
 	return true
-
-
-## Backward compatibility alias for legacy code and tests
-func try_shadow_blink(direction: Vector3 = Vector3.ZERO) -> bool:
-	return execute_ability_2(direction)
 
 
 # --- Physics Processing & Lifecycle -------------------------------------------
@@ -568,22 +572,13 @@ func _physics_process(delta: float) -> void:
 	# Tick ongoing Shadow Decoy (Phantom Retaliation: expiry explodes)
 	if kagemusha_time_remaining > 0.0:
 		kagemusha_time_remaining = maxf(0.0, kagemusha_time_remaining - delta)
-		if kagemusha_time_remaining <= 0.0 and kagemusha_decoy and is_instance_valid(kagemusha_decoy):
-			var decoy_pos := kagemusha_decoy.global_position
-			kagemusha_decoy.queue_free()
-			kagemusha_decoy = null
-			var boom := float(_fx(Elements.SHADOW, "decoy_explosion_damage", 0.0))
-			if boom > 0.0:
-				for enemy in _alive_enemies():
-					if _enemy_center(enemy).distance_to(decoy_pos) <= 3.0:
-						enemy.receive_element_damage(boom, Elements.SHADOW, _enemy_center(enemy), Vector3.UP)
-				_spawn_darkness(decoy_pos, 3.0, 1.2)
-				effect_triggered.emit("decoy_explosion", {"position": decoy_pos, "damage": boom})
+		if kagemusha_time_remaining <= 0.0:
+			_end_decoy()
 
 	# Tick element imbue duration
 	if current_element != Elements.NONE:
 		element_time_remaining = maxf(0.0, element_time_remaining - delta)
-		is_fade_warning = (element_time_remaining <= FADE_WARNING_TIME and element_time_remaining > 0.0)
+		is_fade_warning = (element_time_remaining <= ElementBalance.FADE_WARNING_SECONDS and element_time_remaining > 0.0)
 		if weapon:
 			weapon.element = current_element
 			weapon.element_time_remaining = element_time_remaining
@@ -600,6 +595,34 @@ func _physics_process(delta: float) -> void:
 	_update_ink_pools(delta)
 	_update_darkness(delta)
 	_update_transients(delta)
+
+
+## A yōkai's claw landed on the decoy (called through the "element_system" group
+## by [Yokai]): it absorbs [constant ElementBalance.KAGEMUSHA_HITS] strikes, then
+## dissolves like it would on time-out.
+func on_decoy_struck() -> void:
+	if kagemusha_decoy == null or not is_instance_valid(kagemusha_decoy):
+		return
+	kagemusha_hits_remaining -= 1
+	if kagemusha_hits_remaining <= 0:
+		kagemusha_time_remaining = 0.0
+		_end_decoy()
+
+
+## Removes the decoy; Phantom Retaliation (Shadow Node 2) makes it burst.
+func _end_decoy() -> void:
+	if kagemusha_decoy == null or not is_instance_valid(kagemusha_decoy):
+		return
+	var decoy_pos := kagemusha_decoy.global_position
+	kagemusha_decoy.queue_free()
+	kagemusha_decoy = null
+	var boom := float(_fx(Elements.SHADOW, "decoy_explosion_damage", 0.0))
+	if boom > 0.0:
+		for enemy in _alive_enemies():
+			if _enemy_center(enemy).distance_to(decoy_pos) <= ElementBalance.DECOY_EXPLOSION_RADIUS:
+				_hit(enemy, boom, Elements.SHADOW, _enemy_center(enemy), Vector3.UP)
+		_spawn_darkness(decoy_pos, 3.0, 1.2)
+		effect_triggered.emit("decoy_explosion", {"position": decoy_pos, "damage": boom})
 
 
 ## Ikazuchi Avatar barriers: yōkai near the dash line take damage twice a second.
@@ -619,7 +642,7 @@ func _update_barriers(delta: float) -> void:
 				var center := _enemy_center(enemy)
 				var closest := Geometry3D.get_closest_point_to_segment(center, a + Vector3.UP * 0.8, c + Vector3.UP * 0.8)
 				if center.distance_to(closest) <= 1.1:
-					enemy.receive_element_damage(float(b.damage), Elements.STORM, center, Vector3.UP)
+					_hit(enemy, float(b.damage), Elements.STORM, center, Vector3.UP)
 			_spawn_lightning([a + Vector3.UP * 0.8, c + Vector3.UP * 0.8], Color(0.32, 0.82, 1.0), 0.3, 0.008)
 		_barriers[i] = b
 
@@ -662,10 +685,10 @@ func on_blade_hit(hit: Dictionary) -> void:
 	var point: Vector3 = hit.get("point", weapon.get_tip_global() if weapon else Vector3.ZERO)
 	var direction: Vector3 = hit.get("direction", Vector3.FORWARD)
 
-	# Shadow Cleave critical strike (+60% damage)
+	# Shadow Cleave critical strike
 	if shadow_cleave_buff_time > 0.0:
 		shadow_cleave_buff_time = 0.0
-		hit["damage"] = float(hit.get("damage", 0.0)) * 1.6
+		hit["damage"] = float(hit.get("damage", 0.0)) * ElementBalance.YAMI_CRIT_MULTIPLIER
 		_spawn_shadow_trace(point, point + Vector3.UP * 0.5)
 		effect_triggered.emit("shadow_cleave_crit", {"point": point})
 
@@ -686,9 +709,9 @@ func on_blade_hit(hit: Dictionary) -> void:
 				var others := _nearest_enemies_excluding(_enemy_center(struck), 1, 5.0, [struck])
 				if not others.is_empty():
 					var other_center := _enemy_center(others[0])
-					others[0].receive_element_damage(arc, Elements.STORM, other_center, Vector3.UP)
+					_hit(others[0], arc, Elements.STORM, other_center, Vector3.UP)
 					_spawn_lightning([point, other_center], Color(0.32, 0.82, 1.0), 0.14, 0.008)
-					_chain_cooldown = 0.3
+					_chain_cooldown = ElementBalance.OVERCHARGE_COOLDOWN
 					effect_triggered.emit("overcharge", {"point": other_center})
 		elif current_element == Elements.INK and struck:
 			# Dragon Calligraphy: yōkai standing in ink take heavier cuts.
@@ -709,7 +732,7 @@ func on_blade_hit(hit: Dictionary) -> void:
 					effect_triggered.emit("backstab", {"point": point})
 					if _backstab_cooldown <= 0.0 and run_game:
 						run_game.add_ofuda(int(_fx(Elements.SHADOW, "backstab_ofuda", 0)))
-						_backstab_cooldown = 1.0
+						_backstab_cooldown = ElementBalance.BACKSTAB_OFUDA_THROTTLE
 		# Shadow Clones: the first cut after Yami-watari is mirrored onto
 		# the nearest other yōkai by two fleeting silhouettes.
 		if shadow_clone_charges > 0 and struck:
@@ -767,7 +790,7 @@ func on_enemy_died(_enemy: Yokai) -> void:
 func get_incoming_damage_multiplier() -> float:
 	if hanamai_time_remaining <= 0.0:
 		return 1.0
-	return float(_fx(Elements.SAKURA, "incoming_damage_multiplier", 0.7))
+	return float(_fx(Elements.SAKURA, "incoming_damage_multiplier", ElementBalance.HANAMAI_DAMAGE_TAKEN))
 
 
 # --- VFX & Mesh Pool Systems --------------------------------------------------
@@ -781,16 +804,17 @@ func _build_shared_petals() -> void:
 
 func debug_release_petals(direction: Vector3 = Vector3.FORWARD) -> void:
 	var origin := weapon.get_tip_global() if weapon else _player_origin() + Vector3.UP * 1.0
-	_spawn_cutting_petals(origin, direction.normalized() if direction.length_squared() > 0.01 else Vector3.FORWARD, 3, 16.0, 2)
+	_spawn_cutting_petals(origin, direction.normalized() if direction.length_squared() > 0.01 else Vector3.FORWARD, 3)
 
 
-func _spawn_cutting_petals(origin: Vector3, direction: Vector3, count: int = 6, damage: float = 16.0, pierce: int = 2) -> void:
+func _spawn_cutting_petals(origin: Vector3, direction: Vector3, count: int = ElementBalance.SENBONZAKURA_PETALS,
+		damage: float = ElementBalance.SENBONZAKURA_DAMAGE, pierce: int = ElementBalance.SENBONZAKURA_PIERCE) -> void:
 	var right := direction.cross(Vector3.UP)
 	if right.length_squared() < 0.01:
 		right = Vector3.RIGHT
 	right = right.normalized()
 
-	var arc_rad := deg_to_rad(32.0)
+	var arc_rad := deg_to_rad(ElementBalance.SENBONZAKURA_FAN_DEGREES)
 	var step := arc_rad / maxf(1.0, float(count - 1))
 
 	for i in count:
@@ -810,12 +834,12 @@ func _spawn_cutting_petals(origin: Vector3, direction: Vector3, count: int = 6, 
 		node.global_position = origin + right * (float(i) - float(count - 1) * 0.5) * 0.05
 		node.look_at(node.global_position + petal_dir, Vector3.UP)
 
-		var velocity := petal_dir * 12.0
+		var velocity := petal_dir * ElementBalance.SENBONZAKURA_SPEED
 		_petals.append({
 			"node": node,
 			"velocity": velocity,
 			"age": 0.0,
-			"max_age": 0.65,
+			"max_age": ElementBalance.SENBONZAKURA_LIFETIME,
 			"damage": damage,
 			"pierce": pierce,
 			"hit_ids": {},
@@ -847,7 +871,7 @@ func _update_petals(delta: float) -> void:
 				var hit_ids: Dictionary = p.hit_ids
 				if not hit_ids.has(id):
 					hit_ids[id] = true
-					enemy.receive_element_damage(float(p.damage), Elements.SAKURA, node.global_position, velocity.normalized())
+					_hit(enemy, float(p.damage), Elements.SAKURA, node.global_position, velocity.normalized())
 					p.pierce = int(p.pierce) - 1
 					if int(p.pierce) <= 0:
 						_free_petal(i)
@@ -877,7 +901,7 @@ func _update_orbit_petals(delta: float) -> void:
 			_orbit_hits.erase(id)
 
 	var center := _player_origin() + Vector3(0.0, 0.9, 0.0)
-	var radius := 1.2
+	var radius := ElementBalance.HANAMAI_RADIUS
 	for i in _orbit_petals.size():
 		var angle := _orbit_clock * 2.5 + TAU * float(i) / float(_orbit_petals.size())
 		var petal := _orbit_petals[i]
@@ -886,8 +910,8 @@ func _update_orbit_petals(delta: float) -> void:
 		for enemy in _nearest_enemies(petal.global_position, 1, 0.45):
 			var id := enemy.get_instance_id()
 			if not _orbit_hits.has(id):
-				_orbit_hits[id] = 0.35
-				enemy.receive_element_damage(10.0, Elements.SAKURA, petal.global_position, (_enemy_center(enemy) - center).normalized())
+				_orbit_hits[id] = ElementBalance.HANAMAI_TICK
+				_hit(enemy, ElementBalance.HANAMAI_DAMAGE, Elements.SAKURA, petal.global_position, (_enemy_center(enemy) - center).normalized())
 
 
 func _clear_orbit_petals() -> void:
@@ -898,7 +922,8 @@ func _clear_orbit_petals() -> void:
 	_orbit_hits.clear()
 
 
-func paint_ink(at: Vector3, radius: float = 2.2, lifetime: float = 5.0, dps: float = 7.0) -> void:
+func paint_ink(at: Vector3, radius: float = ElementBalance.SUMI_POOL_RADIUS,
+		lifetime: float = ElementBalance.SUMI_POOL_SECONDS, dps: float = ElementBalance.SUMI_POOL_DPS) -> void:
 	var ground := _ground_below(at)
 	while _ink_pools.size() >= MAX_INK_POOLS:
 		_free_pool(0)
@@ -934,13 +959,13 @@ func _update_ink_pools(delta: float) -> void:
 			_free_pool(i)
 			continue
 		(pool.mat as ShaderMaterial).set_shader_parameter("age", pool.age)
-		var pool_slow := float(_fx(Elements.INK, "ink_slow_scale", 0.40))
+		var pool_slow := float(_fx(Elements.INK, "ink_slow_scale", ElementBalance.SUMI_SLOW_SCALE))
 		for enemy in _alive_enemies():
 			var flat := _enemy_center(enemy) - (pool.position as Vector3)
 			flat.y = 0.0
 			if flat.length() <= float(pool.radius):
 				enemy.apply_slow(0.3, pool_slow)
-				enemy.receive_element_damage(float(pool.get("dps", 7.0)) * delta, Elements.INK, _enemy_center(enemy), Vector3.UP)
+				_hit(enemy, float(pool.get("dps", ElementBalance.SUMI_POOL_DPS)) * delta, Elements.INK, _enemy_center(enemy), Vector3.UP)
 		_ink_pools[i] = pool
 
 
@@ -978,8 +1003,8 @@ func _spawn_shadow_decoy(at: Vector3) -> void:
 	mesh_inst.material_override = mat
 	kagemusha_decoy.add_child(mesh_inst)
 
-	kagemusha_time_remaining = float(_fx(Elements.SHADOW, "kagemusha_duration", 3.0))
-	kagemusha_hits_remaining = 2
+	kagemusha_time_remaining = float(_fx(Elements.SHADOW, "kagemusha_duration", ElementBalance.KAGEMUSHA_SECONDS))
+	kagemusha_hits_remaining = ElementBalance.KAGEMUSHA_HITS
 
 
 func _spawn_darkness(at: Vector3, radius: float = 3.4, lifetime: float = 3.2) -> void:

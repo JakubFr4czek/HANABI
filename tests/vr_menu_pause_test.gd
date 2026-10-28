@@ -227,14 +227,19 @@ func _test_world_stands_still_rig_keeps_going() -> void:
 # --- 3. Pointing and buying ------------------------------------------------------------
 
 func _test_pointers_buy_only_through_run_game() -> void:
-	run.ofuda_count = 5
+	# Static Conduit (tier 1) is affordable, Thunder Splitter (tier 2) one Ofuda short after it.
+	var cost1 := int(SkillTreeData.node_by_id("static_conduit").cost)
+	var cost2 := int(SkillTreeData.node_by_id("thunder_splitter").cost)
+	var purse := cost1 + cost2 - 1
+	var left := purse - cost1
+	run.ofuda_count = purse
 	run.skill_tree.reset()
 	var events: Array[String] = []
 	run.skill_unlocked.connect(func(id: String) -> void: events.append(id))
 	await _tap_menu_button()
 	_check("the menu opens for the purchase checks", ctl.is_open)
 	var c: SkillTreeCanvas = menu.canvas
-	_check("the pane shows the Ofuda balance", c.balance == 5)
+	_check("the pane shows the Ofuda balance", c.balance == purse)
 
 	# Left hand: choose Storm, then Static Conduit (tier 1), then UNLOCK.
 	await _click("left", c.tab_rect(1).get_center())
@@ -244,19 +249,19 @@ func _test_pointers_buy_only_through_run_game() -> void:
 	await _click("left", SkillTreeCanvas.UNLOCK_RECT.get_center())
 	_check("UNLOCK buys through RunGame.unlock_skill (signal %s)" % [events],
 		events == ["static_conduit"] and run.skill_tree.is_unlocked("static_conduit"))
-	_check("the cost left the wallet (5 -> %d) and the pane follows" % run.ofuda_count, run.ofuda_count == 3 and c.balance == 3)
+	_check("the cost left the wallet (%d -> %d) and the pane follows" % [purse, run.ofuda_count], run.ofuda_count == left and c.balance == left)
 
 	# Right hand: a locked node is refused and costs nothing.
 	await _click("right", c.node_rect(SkillTreeData.node_by_id("ikazuchi_avatar")).get_center())
 	_check("the right-hand pointer selects too", c.selected_id == "ikazuchi_avatar")
 	await _click("right", SkillTreeCanvas.UNLOCK_RECT.get_center())
 	_check("a locked node cannot be bought (still %d Ofuda)" % run.ofuda_count,
-		not run.skill_tree.is_unlocked("ikazuchi_avatar") and run.ofuda_count == 3 and c.status_text != "")
-	# Affordability: Thunder Splitter costs 4, we hold 3.
+		not run.skill_tree.is_unlocked("ikazuchi_avatar") and run.ofuda_count == left and c.status_text != "")
+	# Affordability: Thunder Splitter costs one more Ofuda than we hold.
 	await _click("right", c.node_rect(SkillTreeData.node_by_id("thunder_splitter")).get_center())
 	await _click("right", SkillTreeCanvas.UNLOCK_RECT.get_center())
 	_check("an unaffordable node is refused without charge",
-		not run.skill_tree.is_unlocked("thunder_splitter") and run.ofuda_count == 3)
+		not run.skill_tree.is_unlocked("thunder_splitter") and run.ofuda_count == left)
 	var spec := c.button_spec("thunder_splitter")
 	_check("the button reads how many Ofuda are missing (%s)" % spec.label, spec.mode == "poor" and "1" in String(spec.label))
 	_check("only the one legitimate purchase was signalled", events == ["static_conduit"])

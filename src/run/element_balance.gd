@@ -1,0 +1,125 @@
+class_name ElementBalance
+extends RefCounted
+## Every tunable number of the element system in one place (docs/ELEMENTS_PLAN.md,
+## Phase E4). [ElementSystem] and [SkillTreeData] read these constants, and the
+## headless balance model (tools/balance_model.gd) reads the very same ones, so
+## "what the game does" and "what the balance table says" cannot drift apart.
+##
+## Reading guide: a school has two abilities (A / B). Names are
+## <ABILITY>_<STAT>; a _T<n> suffix is the value after the node of that tier
+## (cost and prerequisites live in [SkillTreeData]). Damage is in hit points of a
+## wave yōkai (95 HP at the start, growing ~14% per wave and 0.4% per second;
+## a solid sword cut is ~85) and is multiplied by the run's Razor Edge stacks,
+## see [method ElementSystem.ability_power].
+
+# --- Imbue (one constant for every school) -------------------------------------
+## Seconds a torii gate keeps the blade imbued. THE one place for the 20 s.
+const IMBUE_SECONDS := 20.0
+## Node 1 ("school awakening") of every tree adds this many seconds.
+const IMBUE_NODE_BONUS_SECONDS := 4.0
+## The last seconds of an imbue pulse (blade, trail, wrist crest) as a warning.
+const FADE_WARNING_SECONDS := 3.0
+## Passing the same school's gate again tops the clock up and takes this share
+## off both cooldowns.
+const REFRESH_COOLDOWN_KEEP := 0.5
+
+## Every direct ability hit is multiplied by the blade's Razor Edge factor and by
+## (1 + this × (soul rank − 1)): yōkai gain ~14% HP per wave, the abilities must
+## keep up. Rank 10 ≈ ×1.36.
+const POWER_PER_RANK := 0.04
+
+# --- Sakura 桜: pack cutter. Cheap volley, a barrier that keeps you alive. ------
+const SENBONZAKURA_COOLDOWN := 4.0
+const SENBONZAKURA_PETALS := 6
+const SENBONZAKURA_PETALS_T2 := 7
+const SENBONZAKURA_DAMAGE := 12.0
+const SENBONZAKURA_DAMAGE_T1 := 15.0       # Petal Sense: +25%
+const SENBONZAKURA_PIERCE := 2
+const SENBONZAKURA_PIERCE_T2 := 99
+const SENBONZAKURA_FAN_DEGREES := 32.0
+const SENBONZAKURA_SPEED := 12.0
+const SENBONZAKURA_LIFETIME := 0.65
+const HANAMAI_COOLDOWN := 13.0
+const HANAMAI_PETALS := 4
+const HANAMAI_DURATION := 6.0
+const HANAMAI_DURATION_T3 := 8.5
+const HANAMAI_DAMAGE := 7.0                # per petal contact
+const HANAMAI_TICK := 0.45                 # seconds between contacts on one enemy
+const HANAMAI_RADIUS := 1.2
+const HANAMAI_DAMAGE_TAKEN := 0.70         # incoming damage multiplier
+const HANAMAI_DAMAGE_TAKEN_T3 := 0.55
+const LIFE_BLOOM_HEAL_HIT := 4.0
+const LIFE_BLOOM_HEAL_KILL := 12.0
+const KAGEYOSHI_DAMAGE := 100.0            # Senbonzakura during Hanamai: orbit detonates
+const KAGEYOSHI_RADIUS := 3.2
+
+# --- Storm 雷: burst and mobility. Hits many, hits first, gets out. -----------------
+const RAIKIRI_COOLDOWN := 3.5
+const RAIKIRI_COOLDOWN_T2 := 2.5
+const RAIKIRI_PRIMARY_DAMAGE := 45.0
+const RAIKIRI_CHAIN_DAMAGE := 24.0
+const RAIKIRI_CHAIN_TARGETS := 3
+const RAIKIRI_CHAIN_TARGETS_T1 := 5
+const RAIKIRI_RANGE := 8.0
+const RAIKIRI_CHAIN_RADIUS := 5.0
+const RAIKIRI_STUN_T2 := 1.0
+const SHIDEN_COOLDOWN := 8.0
+const SHIDEN_DISTANCE := 4.2
+const SHIDEN_DISTANCE_T3 := 6.0
+const SHIDEN_STAGGER := 1.4
+const SHIDEN_STAGGER_T3 := 2.2
+const SHIDEN_RADIUS := 2.8
+const SHIDEN_DAMAGE := 15.0
+const OVERCHARGE_DAMAGE := 14.0
+const OVERCHARGE_COOLDOWN := 0.3           # between arcs
+const IKAZUCHI_DURATION := 4.0
+const IKAZUCHI_DAMAGE := 20.0              # per 0.5 s while a yōkai stands on the line
+
+# --- Ink 墨: control. Slows, holds, makes the ground yours. ------------------------
+const SUMI_COOLDOWN := 5.0
+const SUMI_RANGE := 4.5
+const SUMI_HALF_DEGREES := 30.0
+const SUMI_HALF_DEGREES_T2 := 45.0
+const SUMI_DAMAGE := 7.0
+const SUMI_SLOW_SECONDS := 5.0
+const SUMI_SLOW_SCALE := 0.40              # speed multiplier while slowed
+const SUMI_SLOW_SCALE_T1 := 0.25
+const SUMI_POOL_RADIUS := 2.2
+const SUMI_POOL_SECONDS := 5.0
+const SUMI_POOL_DPS := 8.0
+const SUMI_POOL_DPS_T2 := 16.0
+const KAGE_NAWA_COOLDOWN := 10.0
+const KAGE_NAWA_TARGETS := 3
+const KAGE_NAWA_TARGETS_T3 := 5
+const KAGE_NAWA_RANGE := 7.0
+const KAGE_NAWA_DAMAGE := 20.0
+const KAGE_NAWA_ROOT_SECONDS := 2.8
+const KAGE_NAWA_ROOT_SCALE := 0.25
+const KAGE_NAWA_PULL := 1.5
+const DRAGON_DAMAGE_MULTIPLIER := 1.35
+const ABYSSAL_SPEED_MULTIPLIER := 1.2
+
+# --- Shadow 影: the duelist. Misdirect, appear behind, one cut that counts. ---------
+const KAGEMUSHA_COOLDOWN := 9.0
+const KAGEMUSHA_SECONDS := 4.0
+const KAGEMUSHA_SECONDS_T1 := 6.0
+const KAGEMUSHA_HITS := 2
+const YAMI_COOLDOWN := 6.5
+const YAMI_COOLDOWN_T3 := 5.0
+const YAMI_RANGE := 4.5
+const YAMI_RANGE_T3 := 6.5
+const YAMI_CRIT_MULTIPLIER := 2.2          # next sword cut within the window
+const YAMI_CRIT_SECONDS := 2.5
+const DECOY_EXPLOSION_DAMAGE := 60.0
+const DECOY_EXPLOSION_RADIUS := 3.0
+const BACKSTAB_MULTIPLIER := 2.5
+const BACKSTAB_OFUDA := 1
+const BACKSTAB_OFUDA_THROTTLE := 6.0       # seconds between bonus Ofuda
+const SHADOW_CLONES := 2
+
+# --- Ofuda economy (the currency the trees are bought with) ----------------------------
+const OFUDA_SWARM_CHANCE := 0.25
+const OFUDA_ELITE_MIN := 1
+const OFUDA_ELITE_MAX := 2
+const OFUDA_ONI_MIN := 5
+const OFUDA_ONI_MAX := 6

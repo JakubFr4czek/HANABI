@@ -227,9 +227,9 @@ func _update_seal_element(elem: String) -> void:
 		_seal_labels[i].modulate = neon[i] if idx == i else inlay
 
 
-## Run mode: keep every unlocked quadrant lit and reserve the inner star for
-## an evolution. Training mode still highlights only the held weapon's element.
-func set_seal_progress(unlocked: Array[String], evolution_mask: int = 0) -> void:
+## Run mode: keep every given quadrant lit. Training mode still highlights
+## only the held weapon's element.
+func set_seal_progress(unlocked: Array[String]) -> void:
 	_seal_progress_mode = true
 	var mask := 0
 	for element in unlocked:
@@ -239,19 +239,10 @@ func set_seal_progress(unlocked: Array[String], evolution_mask: int = 0) -> void
 	if _seal_material:
 		_seal_material.set_shader_parameter("active_element_index", -1)
 		_seal_material.set_shader_parameter("active_elements_mask", mask)
-		_seal_material.set_shader_parameter("evolution_mask", evolution_mask)
 	var inlay := Color(0.2, 0.21, 0.27, 0.8)
 	for i in _seal_labels.size():
 		var element := Elements.COMBAT_ELEMENTS[i]
 		_seal_labels[i].modulate = Elements.accent_color(element) * 0.92 if unlocked.has(element) else inlay
-
-
-func clear_seal_progress() -> void:
-	_seal_progress_mode = false
-	if _seal_material:
-		_seal_material.set_shader_parameter("active_elements_mask", 0)
-		_seal_material.set_shader_parameter("evolution_mask", 0)
-	_update_seal_element(Elements.NONE)
 
 
 func _style_torii_gates(arena: Node) -> void:
