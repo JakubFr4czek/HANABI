@@ -5,6 +5,9 @@ extends Node
 ## - while open: yōkai, element timer, cooldowns, the run clock, regeneration,
 ##   wave spawns and particles stand still; abilities are ignored; locomotion
 ##   is off — but the rig, the hand, the held katana and the pointer keep going
+## - opening the menu mid-stride, with the stick deflected and a snap turn
+##   running, moves neither the origin nor the body (1 mm, 0.1°) — not at the
+##   opening, while paused, nor after closing (D3_fix1)
 ## - pointing a controller (left or right) and pulling the trigger switches
 ##   school, selects a node and buys it only through RunGame.unlock_skill;
 ##   a locked or unaffordable node is refused and costs nothing
@@ -62,6 +65,7 @@ func _run_all() -> void:
 	await _test_menu_button_tap_toggles()
 	await _test_menu_carries_the_blade_state()
 	await _test_world_stands_still_rig_keeps_going()
+	await _test_opening_never_moves_the_player()
 	await _test_pointers_buy_only_through_run_game()
 	await _test_settings_tab()
 	await _test_audio_settings()
@@ -227,6 +231,63 @@ func _test_world_stands_still_rig_keeps_going() -> void:
 	sim.set_head(Transform3D(sim.head_xf.basis, sim.head_xf.origin - Vector3(0.4, 0.0, 0.0)))
 	await _frames(5)
 
+
+# --- 2b. Opening the menu never moves the player (D3_fix1) -----------------------------
+
+## Walking momentum, a deflected stick and a snap turn still running must not carry
+## the player through the pause. The reference is the pose the instant the menu takes
+## over ("przy otwarciu"): the walk up to the press is ordinary movement and is not
+## measured. Tolerance 1 mm and 0.1°.
+func _test_opening_never_moves_the_player() -> void:
+	var cases := [
+		{"label": "walking forward", "move": Vector2(0.0, 1.0), "turn": Vector2.ZERO},
+		{"label": "strafing with a snap turn running", "move": Vector2(0.7, 0.7), "turn": Vector2(1.0, 0.0)},
+	]
+	for c in cases:
+		await _open_close_while_moving(c)
+	var panel_bodies := menu.find_children("*", "CollisionObject3D", true, false)
+	_check("the menu panel has no collision body (%d)" % panel_bodies.size(), panel_bodies.is_empty())
+
+
+func _open_close_while_moving(c: Dictionary) -> void:
+	var label: String = c.label
+	sim.set_stick("left", Vector2.ZERO)
+	sim.set_stick("right", Vector2.ZERO)
+	await _frames(60)  # let any earlier momentum drain
+	var yaw_before := origin.global_rotation.y
+	sim.set_stick("left", c.move)
+	sim.set_stick("right", c.turn)
+	await _frames(40)
+	var speed := (xr.get_node("XROrigin3D/PlayerBody") as CharacterBody3D).velocity.length()
+	_check("%s: moving %.2f m/s when the press lands" % [label, speed], speed > 0.5)
+	if c.turn != Vector2.ZERO:
+		var turned := rad_to_deg(absf(angle_difference(yaw_before, origin.global_rotation.y)))
+		_check("%s: the snap turn is running (%.0f° turned before the press)" % [label, turned], turned > 15.0)
+	# The stick stays deflected through the press and the pause.
+	var at_open := {}
+	ctl.opened.connect(func() -> void: at_open.merge(_rig_pose()), CONNECT_ONE_SHOT)
+	await _tap_menu_button()
+	_check("%s: the menu is open" % label, ctl.is_open)
+	await _frames(45)
+	var paused := _rig_pose()
+	var gap := _pose_gap(at_open, paused)
+	_check("%s: the pose while paused equals the pose at opening (origin %.4f m, body %.4f m, yaw %.3f°)" % [label, gap.x, gap.y, gap.z],
+		_same_pose(at_open, paused))
+	# Let go of both sticks, then close: nothing may drift at the close or after it.
+	sim.set_stick("left", Vector2.ZERO)
+	sim.set_stick("right", Vector2.ZERO)
+	var at_close := {}
+	ctl.closed.connect(func() -> void: at_close.merge(_rig_pose()), CONNECT_ONE_SHOT)
+	await _tap_menu_button()
+	_check("%s: the menu closed" % label, not ctl.is_open and not get_tree().paused)
+	_check("%s: the pose at closing equals the pose at opening" % label, _same_pose(at_open, at_close))
+	await _frames(30)
+	var after := _rig_pose()
+	_check("%s: the pose 30 frames after closing equals the pose at opening" % label, _same_pose(at_open, after))
+	_check("%s: no momentum left after the close (%.2f m/s)" % [label, (xr.get_node("XROrigin3D/PlayerBody") as CharacterBody3D).velocity.length()],
+		(xr.get_node("XROrigin3D/PlayerBody") as CharacterBody3D).velocity.length() < 0.05)
+	# Put the sticks back at rest for the next case.
+	await _frames(60)
 
 # --- 3. Pointing and buying ------------------------------------------------------------
 
@@ -738,6 +799,26 @@ func _imbue_seconds(element: String) -> float:
 
 func _camera() -> Node3D:
 	return xr.get_node("XROrigin3D/XRCamera3D") as Node3D
+
+
+## Where the rig stands: the XR origin and the physics body, with their yaw.
+func _rig_pose() -> Dictionary:
+	var body := xr.get_node("XROrigin3D/PlayerBody") as Node3D
+	return {"origin": origin.global_position, "body": body.global_position,
+		"origin_yaw": origin.global_rotation.y, "body_yaw": body.global_rotation.y}
+
+
+## Gaps between two rig poses: (origin m, body m, yaw degrees, the larger of origin and body yaw).
+func _pose_gap(a: Dictionary, b: Dictionary) -> Vector3:
+	return Vector3(
+		(a.origin as Vector3).distance_to(b.origin),
+		(a.body as Vector3).distance_to(b.body),
+		rad_to_deg(maxf(absf(angle_difference(a.origin_yaw, b.origin_yaw)), absf(angle_difference(a.body_yaw, b.body_yaw)))))
+
+
+func _same_pose(a: Dictionary, b: Dictionary) -> bool:
+	var gap := _pose_gap(a, b)
+	return gap.x < 0.001 and gap.y < 0.001 and gap.z < 0.1
 
 
 func _tap_menu_button() -> void:
