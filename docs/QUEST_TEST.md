@@ -21,7 +21,7 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 - [ ] **Yōkai (§16):** w podejściu pochylenie + krok (nogi), wind-up oczu/pazurów, slash czytelny; trafienie = stagger lub krótki flinch — bez „sztywnego ragdolla T-pose”.
 - [ ] Trafienia: iskry czytelne, nie biały szum.
 - [ ] **Śmierć:** firework w kolorze żywiołu we mgle; przy wielu killach naraz **max 2–3 błyski światła** (reszta emisja).
-- [ ] Elita: halo w kolorze żywiołu.
+- [ ] Elita: oczy, sigil, szarfa i pazury w kolorze żywiołu; **bez** okręgu ani halo na ciele (D2).
 - [ ] **Oni (§19):** maska `oni_mask_run.glb` (sculpt v2 ~1k v) — **~2 m**: biały lakier, oczodoły, kły/rogi; **~6 m**: sylwetka + czerwone oczy we mgle; nie „gładka kula”.
 - [ ] **Yōkai (§19):** przejście stalk→approach płynne (bez szarpnięcia); trafienie = krótki **flinch** z lekkim kołysaniem, potem powrót do stalk.
 - [ ] Parry / stagger Oni: czytelne, **bez zmiany chwytu** katany.
