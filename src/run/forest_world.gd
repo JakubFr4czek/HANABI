@@ -1263,8 +1263,13 @@ func _commit_multimesh(root: Node3D, label: String, mesh: Mesh, mat: Material,
 	call_deferred("_refresh_multimesh_transforms", mm_inst, transforms)
 
 
-func _refresh_multimesh_transforms(mm_inst: MultiMeshInstance3D, transforms: Array[Transform3D]) -> void:
-	if not is_instance_valid(mm_inst) or mm_inst.multimesh == null:
+## Deferred: the node may already be freed by a reset. Both arguments are Variant:
+## a typed parameter (even Object) fails the call before the validity check runs.
+func _refresh_multimesh_transforms(node: Variant, transforms: Variant) -> void:
+	if not is_instance_valid(node):
+		return
+	var mm_inst := node as MultiMeshInstance3D
+	if mm_inst == null or mm_inst.multimesh == null:
 		return
 	if _is_tree_node(String(mm_inst.name)) and follow:
 		_refresh_tree_draw(_anchor_position())
