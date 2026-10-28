@@ -156,7 +156,7 @@ func spawn_spark(parent: Node, at: Vector3, normal: Vector3, color: Color, amoun
 			s.get_parent().remove_child(s)
 		add_child(s)
 	s.fire_from_pool(at, normal, color, amount_, speed)
-	get_tree().create_timer(s.lifetime + 0.08).timeout.connect(func() -> void:
+	get_tree().create_timer(s.lifetime + 0.08, false).timeout.connect(func() -> void:
 		_return_spark(s), CONNECT_ONE_SHOT)
 
 
@@ -179,7 +179,7 @@ func spawn_element_ring(parent: Node, at: Vector3, col: Color, scale: float) -> 
 	p.global_position = at
 	p.restart()
 	p.emitting = true
-	get_tree().create_timer(p.lifetime + 0.08).timeout.connect(func() -> void:
+	get_tree().create_timer(p.lifetime + 0.08, false).timeout.connect(func() -> void:
 		_return_ring(p), CONNECT_ONE_SHOT)
 
 
