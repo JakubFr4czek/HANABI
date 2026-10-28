@@ -87,6 +87,8 @@ $GODOT --headless --path . --fixed-fps 90 res://tests/run_intro_test.tscn -- --d
 $GODOT --headless --path . --fixed-fps 90 res://tests/quest_perf_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/vfx_polish_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/vfx_pool_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/skill_tree_data_test.tscn -- --desktop
+$GODOT --headless --path . --fixed-fps 90 res://tests/ofuda_drop_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/audio_sfx_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/quest_perf_overlay_test.tscn -- --desktop
 $GODOT --headless --path . --fixed-fps 90 res://tests/yokai_approach_test.tscn -- --desktop

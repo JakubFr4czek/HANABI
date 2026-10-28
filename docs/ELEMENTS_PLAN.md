@@ -421,17 +421,50 @@ Everything the player needs to know is conveyed naturally in the game world with
   - Ink: Sumi-gaeshi (ground ink cone) & Kage-nawa (root tendrils).
   - Shadow: Kagemusha (decoy clone) & Yami-watari (blink & cleave).
 - [x] **E2b.4: Remove Old Procs & Ensure Ongoing Expiry Completion**: Clean out legacy probabilistic hit procs from `element_system.gd`. Ensure ongoing abilities (Hanamai, ink pools, decoy) finish their full duration upon element expiration.
-- [ ] **Critical Tests**:
+- [x] **Critical Tests**:
   - [x] `tests/element_abilities_test.tscn`: Each ability fires on the correct button, respects cooldown, consumes no element charges, does nothing on plain steel, and finishes execution if element expires mid-ability.
   - [x] `tests/vfx_pool_test.tscn`: All ability VFX respect Quest bounds (`MAX_PETALS <= 12`, `MAX_INK_POOLS <= 6`, `MAX_TRANSIENT_MESHES <= 18`).
 
 ### Phase E2c: Ofuda Currency & Skill Tree Data Architecture
-- [ ] **E2c.1: Ofuda Item & Drops**: Create collectible 3D paper talisman drop (`src/run/ofuda_pickup.gd`); update `Yokai` death logic to drop Ofuda; integrate with `SoulMagnet`. Remove old `OfudaTalisman` level-up slicing.
-- [ ] **E2c.2: Skill Tree Data Model (`src/run/skill_tree_data.gd`)**: Implement 4 trees x 5 nodes with strict prerequisite validation and per-run reset.
-- [ ] **E2c.3: Stat & Ability Wiring**: Connect unlocked nodes to modify ability parameters (cooldowns, damage, durations, healing).
-- [ ] **Critical Tests**:
+- [x] **E2c.1: Ofuda Item & Drops**: Create collectible 3D paper talisman drop (`src/run/ofuda_pickup.gd`); update `Yokai` death logic to drop Ofuda; integrate with `SoulMagnet`. Remove old `OfudaTalisman` level-up slicing.
+- [x] **E2c.2: Skill Tree Data Model (`src/run/skill_tree_data.gd`)**: Implement 4 trees x 5 nodes with strict prerequisite validation and per-run reset.
+- [x] **E2c.3: Stat & Ability Wiring**: Connect unlocked nodes to modify ability parameters (cooldowns, damage, durations, healing).
+- [x] **Critical Tests**:
   - `tests/skill_tree_data_test.tscn`: Cannot purchase without sufficient Ofuda; cannot purchase Node 2 without Node 1; purchase correctly alters ability stats.
   - `tests/ofuda_drop_test.tscn`: Enemies drop correct Ofuda tallies; magnet draws them into player inventory.
+
+#### E2c implementation decisions (2026-10-28)
+- **Level-up keeps only generic cards.** The E2b review found element cards in
+  `UpgradePool` were dead no-ops in `RunGame._apply_upgrade`. E2c removes
+  `ELEMENT_UPGRADES` from the pool entirely: level-up offers only the six
+  generic stat upgrades, each with a real effect, and `_apply_upgrade`
+  ignores unknown ids without stacking them. `tests/elements_test.gd`
+  asserts seeded hands contain no element/dead card and that every generic
+  applies its effect. The `OfudaTalisman` slicing UI therefore remains only
+  as the generic-choice and restart presenter; element acquisition through
+  slicing is gone, and Ofuda currency is spent exclusively via the tree.
+- **Currency vs. cards are physically distinct.** Ofuda currency is the new
+  `OfudaPickup` (0.08 m × 0.16 m ground drop, cinnabar seal), dropped by
+  yōkai (swarm 35% ×1, elite 3–4, Oni 8–10; expected 20–30 per 5–7 min run)
+  and magnet-collected with the Hitodama rule. The wallet is
+  `RunGame.ofuda_count`; the single spending path is
+  `RunGame.unlock_skill(node_id)`, which returns the `SkillTreeData`
+  verdict (`ok` / `missing_prerequisite` / `insufficient_ofuda` /
+  `already_unlocked` / `unknown_node`) plus the balance — the exact API the
+  E2d VR menu will call. The wrist plate shows `札×N`.
+- **Tree shape & economy.** 4 trees × 5 nodes, costs 2/4/4/6/8 = 24 Ofuda
+  for a full tree: affordable in one 5–10 minute demo run without making
+  the first node a grind (Node 1 after ~6 swarm kills on average). Node 4
+  requires Node 2 OR Node 3; Node 5 requires Node 4. Bank and unlocks are
+  per-run: reset on run start and on death.
+- **Wiring, not flags.** `ElementSystem` reads upgraded parameters live via
+  `SkillTreeData.effect_value` (imbue 20→24 s, Senbonzakura 6→8 petals and
+  16→20 dmg, Raikiri cooldown 3.5→2.5 s and 3→5 chains, Shiden 4.2→6.0 m
+  plus the Ikazuchi barrier, ink slow 60%→75%, Kage-nawa 3→5 targets,
+  decoy 3→5 s with retaliation explosion, backstab ×2.5 + bonus Ofuda,
+  shadow clones, Life Bloom healing, Abyssal ward + speed). Torii gates now
+  call `imbue(element)` so the duration node applies; explicit durations
+  (tests, refresh) are still honoured.
 
 ### Phase E2d: VR Skill Tree Menu, Pause System & No-Clipping
 - [ ] **E2d.1: Pause Manager**: Wire Left Menu button to `get_tree().paused = true`. Configure `process_mode = PROCESS_MODE_ALWAYS` on XR rig, controllers, hands, and UI. Kinematically freeze katana.
