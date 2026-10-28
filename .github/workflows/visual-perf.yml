@@ -112,6 +112,10 @@ jobs:
             ci_out/*.json
             ci_out/snapshots.log
           retention-days: 14
+      # Job result = result of its checks (red run + ❌ in the summary); not a required check, so merges are never blocked.
+      - name: Verdict
+        if: always()
+        run: bash ci/verdict.sh "render zrzutów=${{ steps.shots.outcome }}" "pixel diff=${{ steps.diff.outcome }}" "perf=${{ steps.perf.outcome }}"
 
   visual-fuzz:
     name: Visual fuzz (random legal spots)
@@ -180,3 +184,7 @@ jobs:
             ci_out/vfuzz/visual_fuzz.json
             ci_out/vfuzz.log
           retention-days: 14
+      # Job result = result of its checks (red run + ❌ in the summary); not a required check, so merges are never blocked.
+      - name: Verdict
+        if: always()
+        run: bash ci/verdict.sh "wizualny fuzzing=${{ steps.vfuzz.outcome }}"

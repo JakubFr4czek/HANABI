@@ -93,3 +93,7 @@ jobs:
           name: security-assets-report
           path: ci_out/
           retention-days: 14
+      # Job result = result of its checks (red run + ❌ in the summary); not a required check, so merges are never blocked.
+      - name: Verdict
+        if: always()
+        run: bash ci/verdict.sh "gitleaks=${{ steps.gitleaks.outcome }}" "licencje assetów=${{ steps.licences.outcome }}" "rozmiar=${{ steps.size.outcome }}"

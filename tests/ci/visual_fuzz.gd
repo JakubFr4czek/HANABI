@@ -231,7 +231,7 @@ func _shoot(i: int, kind: String, d: int, spot: Vector3, yaw: float, pitch: floa
 		errors.append_array(_physics_checks(cam))
 	var g := _guard_count()
 	if g > guard_seen:
-		errors.append("RuntimeGuard: %d new violation(s)" % (g - guard_seen))
+		errors.append("RuntimeGuard: %d new violation(s): %s" % [g - guard_seen, _guard_codes()])
 		guard_seen = g
 	frames_checked += 1
 	var thumb := img.duplicate() as Image
@@ -389,8 +389,20 @@ func _fail_global(msg: String) -> void:
 	print("VFUZZ FAIL seed=%d :: %s" % [seed_value, msg])
 
 
+## RuntimeGuard violations, minus frame_hitch: the box renders with software GL under Xvfb,
+## so every frame is >60 ms there (perf is tracked by the perf baseline job instead).
 func _guard_count() -> int:
-	return int(get_node("/root/RuntimeGuard").violation_count()) if has_node("/root/RuntimeGuard") else 0
+	if not has_node("/root/RuntimeGuard"):
+		return 0
+	var guard := get_node("/root/RuntimeGuard")
+	var v: Dictionary = guard.get("violations") if "violations" in guard else {}
+	if v.is_empty():
+		return int(guard.violation_count())
+	var n := 0
+	for code in v:
+		if str(code) != "frame_hitch":
+			n += int(v[code])
+	return n
 
 
 static func _finite(v: Vector3) -> bool:
@@ -404,3 +416,17 @@ static func _finite_xf(t: Transform3D) -> bool:
 func _frames(count: int) -> void:
 	for k in count:
 		await get_tree().process_frame
+
+
+## "code xN (first message)" for every counted RuntimeGuard code (frame_hitch excluded, see above).
+func _guard_codes() -> String:
+	if not has_node("/root/RuntimeGuard"):
+		return ""
+	var guard := get_node("/root/RuntimeGuard")
+	var v: Dictionary = guard.get("violations") if "violations" in guard else {}
+	var first: Dictionary = guard.get("_first_seen") if "_first_seen" in guard else {}
+	var out: Array[String] = []
+	for code in v:
+		if str(code) != "frame_hitch":
+			out.append("%s x%d (%s)" % [code, int(v[code]), str(first.get(code, "")).left(160)])
+	return ", ".join(out)
