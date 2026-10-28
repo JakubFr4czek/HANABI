@@ -54,6 +54,9 @@ func take_hit(amount: float, source: Vector3, info: Dictionary = {}) -> bool:
 		return false
 	var final_amount := amount
 	var es := get_tree().get_first_node_in_group("element_system") if get_tree() else null
+	# Abyssal Sea (Ink Node 5): standing in your own ink wards the hit off.
+	if es and es.has_method("is_player_warded") and es.is_player_warded():
+		return false
 	if es and es.has_method("get_incoming_damage_multiplier"):
 		final_amount *= es.get_incoming_damage_multiplier()
 	hp = maxf(hp - final_amount, 0.0)

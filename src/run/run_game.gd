@@ -16,6 +16,8 @@ signal level_up_started(level: int, choices: Array[Dictionary])
 signal upgrade_chosen(upgrade: Dictionary, level: int)
 signal run_ended(summary: Dictionary)
 signal run_started
+signal ofuda_changed(count: int)
+signal skill_unlocked(node_id: String)
 
 ## Milk fog is solid here. The old 9 m bubble read as a small arena with a
 ## few trees; opened up as far as the Quest triangle budget allows (the tree
@@ -42,6 +44,10 @@ var high_score := 0
 var new_record := false
 var soul_magnet_radius := 3.8
 var upgrade_stacks := {}  # upgrade_id -> int
+## Ofuda skill-tree currency (E2c): collected from yōkai drops, spent only
+## through [method unlock_skill]. Bank and unlocks reset every run.
+var ofuda_count := 0
+var skill_tree: SkillTreeData = null
 
 var wave_director: WaveDirector
 var diegetic_hud: DiegeticHud
@@ -56,7 +62,9 @@ var restart_ofuda: OfudaTalisman = null
 
 var _souls_root: Node3D
 var _ofuda_root: Node3D
+var _ofuda_pickups_root: Node3D
 var _end_screen_root: Node3D
+var _base_move_speed := 3.0
 var _pending_level_ups := 0
 var _base_max_force := 260.0
 var _base_max_torque := 40.0
@@ -321,6 +329,15 @@ func _setup_run_nodes() -> void:
 	_ofuda_root.name = "OfudaChoices"
 	add_child(_ofuda_root)
 
+	_ofuda_pickups_root = Node3D.new()
+	_ofuda_pickups_root.name = "OfudaPickups"
+	add_child(_ofuda_pickups_root)
+
+	if skill_tree == null:
+		skill_tree = SkillTreeData.new()
+	if player is DesktopPlayer:
+		_base_move_speed = (player as DesktopPlayer).move_speed
+
 	_end_screen_root = Node3D.new()
 	_end_screen_root.name = "EndScreen"
 	add_child(_end_screen_root)
@@ -392,6 +409,11 @@ func start_run() -> void:
 	_pending_level_ups = 0
 	upgrade_stacks.clear()
 	soul_magnet_radius = base_magnet_radius
+	# Per-run progression (E2c): Ofuda bank, tree unlocks and loose drops reset.
+	ofuda_count = 0
+	if skill_tree:
+		skill_tree.reset()
+	_clear_ofuda_pickups()
 	element_system.reset()
 	if forest_world:
 		forest_world.reset()
@@ -480,12 +502,21 @@ func _physics_process(delta: float) -> void:
 	elif combat_fog:
 		combat_fog.step(p_pos, [], false)
 
+	# Abyssal Sea (Ink Node 5): +20% locomotion while standing in own ink.
+	if player is DesktopPlayer and element_system:
+		(player as DesktopPlayer).move_speed = _base_move_speed * element_system.get_player_speed_multiplier()
+
 	# Step soul orbs even during level-up slow-mo (using simulation delta).
 	if _souls_root == null:
 		return
 	for child in _souls_root.get_children():
 		if child is SoulOrb:
 			(child as SoulOrb).step_orb(delta, p_pos, soul_magnet_radius)
+	# Ofuda currency pickups ride the same soul magnet.
+	if _ofuda_pickups_root:
+		for child in _ofuda_pickups_root.get_children():
+			if child is OfudaPickup:
+				(child as OfudaPickup).step_pickup(delta, p_pos, soul_magnet_radius)
 
 	_refresh_hud()
 
@@ -531,6 +562,8 @@ func _on_oni_defeated(oni: RunOniBoss, hit: Dictionary) -> void:
 		# Pooled orbs come back still connected from their last life.
 		if not orb.collected.is_connected(_on_soul_collected):
 			orb.collected.connect(_on_soul_collected)
+	# The Oni's fall scatters a hoard of Ofuda (plan: 8–10).
+	_spawn_ofuda_drops(origin, _rng.randi_range(8, 10))
 	GameEvents.log_event("oni_boss_kill", {"kills": kills, "element": hit.get("element", Elements.NONE)})
 
 
@@ -546,6 +579,57 @@ func _on_enemy_died(yokai: Yokai, _hit: Dictionary) -> void:
 	for orb in orbs:
 		if not orb.collected.is_connected(_on_soul_collected):
 			orb.collected.connect(_on_soul_collected)
+	# Ofuda currency drop (E2c): swarm 35% ×1, elite guaranteed 3–4.
+	_spawn_ofuda_drops(origin, ofuda_drop_count_for(yokai, _rng))
+
+
+# --- Ofuda currency & skill tree (E2c) -----------------------------------------
+
+## How many Ofuda [param yokai] drops on death, rolled with [param rng]:
+## standard yōkai 35% for 1; elites always drop 3–4. (The Oni drops 8–10,
+## see _on_oni_defeated.) Expected yield: 20–30 in a 5–7 minute run.
+func ofuda_drop_count_for(yokai: Yokai, rng: RandomNumberGenerator) -> int:
+	if yokai.is_elite():
+		return rng.randi_range(3, 4)
+	return 1 if rng.randf() < 0.35 else 0
+
+
+func _spawn_ofuda_drops(origin: Vector3, count: int) -> void:
+	if count <= 0 or _ofuda_pickups_root == null:
+		return
+	for pickup in OfudaPickup.spawn_drops(_ofuda_pickups_root, origin, count, _rng):
+		pickup.collected.connect(_on_ofuda_pickup_collected)
+
+
+func _on_ofuda_pickup_collected(_pickup: OfudaPickup) -> void:
+	add_ofuda(1)
+	_refresh_hud()
+
+
+## Adds (or, with a negative amount, removes) spendable Ofuda. Never below 0.
+func add_ofuda(amount: int) -> void:
+	if amount == 0:
+		return
+	ofuda_count = maxi(0, ofuda_count + amount)
+	ofuda_changed.emit(ofuda_count)
+	GameEvents.log_event("ofuda_changed", {"delta": amount, "total": ofuda_count})
+
+
+## Buys skill-tree node [param node_id] with the Ofuda wallet. This is the
+## single spending path — the E2d VR tree menu calls exactly this. Returns
+## SkillTreeData's verdict plus the wallet balance after the attempt.
+func unlock_skill(node_id: String) -> Dictionary:
+	if skill_tree == null:
+		return {"ok": false, "reason": SkillTreeData.REASON_UNKNOWN_NODE, "cost": 0, "balance": ofuda_count}
+	var verdict := skill_tree.try_unlock(node_id, ofuda_count)
+	if bool(verdict.get("ok", false)):
+		ofuda_count = maxi(0, ofuda_count - int(verdict.get("cost", 0)))
+		ofuda_changed.emit(ofuda_count)
+		skill_unlocked.emit(node_id)
+		GameEvents.log_event("skill_unlocked", {"id": node_id, "cost": int(verdict.get("cost", 0)), "balance": ofuda_count})
+		_refresh_hud()
+	verdict["balance"] = ofuda_count
+	return verdict
 
 
 func _on_soul_collected(xp_amount: int, elem: String) -> void:
@@ -589,9 +673,7 @@ func _present_level_up() -> void:
 
 	var health := _player_health()
 	var hp_ratio := (health.hp / maxf(health.max_hp, 1.0)) if health else 1.0
-	var choices := UpgradePool.pick_choices(
-		3, upgrade_stacks, hp_ratio, _rng,
-		_seal_elements(), UpgradePool.element_slot_count(upgrade_stacks))
+	var choices := UpgradePool.pick_choices(3, upgrade_stacks, hp_ratio, _rng)
 
 	frame = _clear_frame(frame, [Vector3(-0.38, 0.0, -1.16), Vector3(0.0, 0.0, -1.16), Vector3(0.38, 0.0, -1.16), Vector3(0.0, 0.0, -0.6)])
 	var center := frame.origin + (-frame.basis.z) * 1.16
@@ -647,14 +729,11 @@ func _on_ofuda_sliced(chosen: OfudaTalisman, upgrade: Dictionary) -> void:
 
 func _apply_upgrade(upgrade: Dictionary) -> void:
 	var id := String(upgrade.get("id", ""))
-	if id == "":
+	# Only real generic upgrades exist in the pool (E2c): unknown ids —
+	# including the retired element cards — are ignored, never stacked, so
+	# no chosen card can ever be a dead no-op.
+	if id == "" or UpgradePool.get_upgrade(id).is_empty():
 		return
-	var element := UpgradePool.element_for_upgrade(id)
-	if element != Elements.NONE:
-		if not _seal_elements().has(element) and _seal_elements().size() >= 1:
-			return
-		if int(upgrade_stacks.get(id, 0)) <= 0 and UpgradePool.element_slot_count(upgrade_stacks) >= UpgradePool.ELEMENT_SLOT_LIMIT:
-			return
 	var stacks := int(upgrade_stacks.get(id, 0)) + 1
 	upgrade_stacks[id] = stacks
 	var health := _player_health()
@@ -681,11 +760,6 @@ func _apply_upgrade(upgrade: Dictionary) -> void:
 		"regen":
 			if health:
 				health.regen_per_sec = 2.5 * float(stacks)
-		_:
-			if element != Elements.NONE:
-				# Element cards retired: the blade element comes only from
-				# Torii gates; the Ofuda skill tree arrives in E2c. No-op here.
-				pass
 
 	GameEvents.log_event("upgrade_picked", {
 		"id": id,
@@ -738,6 +812,11 @@ func _on_player_died() -> void:
 		return
 	state = RunState.GAME_OVER
 	_pending_level_ups = 0
+	# Per-run progression ends with the run (E2c): bank and unlocks reset.
+	ofuda_count = 0
+	if skill_tree:
+		skill_tree.reset()
+	_clear_ofuda_pickups()
 	TimeController.clear()
 	wave_director.stop_director()
 	for e in wave_director.alive_enemies():
@@ -920,7 +999,7 @@ func _refresh_hud() -> void:
 	var hp_val := health.hp if health else 100.0
 	var max_hp_val := health.max_hp if health else 100.0
 	var elem := element_system.visual_element() if element_system else (katana.element if katana else Elements.NONE)
-	diegetic_hud.update_hud(hp_val, max_hp_val, xp, xp_to_next, level, maxi(wave_director.wave, 1), score, kills, run_time, elem)
+	diegetic_hud.update_hud(hp_val, max_hp_val, xp, xp_to_next, level, maxi(wave_director.wave, 1), score, kills, run_time, elem, ofuda_count)
 
 
 func _on_parry_diegetic(_info: Dictionary) -> void:
@@ -1020,6 +1099,13 @@ func _clear_ofuda() -> void:
 	if _ofuda_root == null:
 		return
 	for c in _ofuda_root.get_children():
+		c.queue_free()
+
+
+func _clear_ofuda_pickups() -> void:
+	if _ofuda_pickups_root == null:
+		return
+	for c in _ofuda_pickups_root.get_children():
 		c.queue_free()
 
 
