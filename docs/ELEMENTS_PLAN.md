@@ -600,7 +600,7 @@ Dodatkowo: tekst błędu drzewka `skill_tree_menu.gd` („Gather more Ofuda from
 
 Jakub napisał: „ta ofuda ... bedzie wystepowac duzo zardziej niz torii dosc bardzo rzadko". Przyjęta interpretacja: **„zardziej" = „rzadziej"**, czyli kapliczki są **dużo rzadsze niż torii**.
 - Torii żywiołów: co 18–32 m (średnio 24 m).
-- Kapliczka: **średnio co ~187 m marszu** (slot 6×6 chunków = 168 m, szansa 0.9 na kapliczkę w slocie), czyli **~60–90 s marszu** w tempie 2.2–3.0 m/s. To ~8× rzadziej niż torii.
+- Kapliczka: **średnio co ~216 m marszu** (zmierzone w teście chodzenia 1.5 km: 7 kapliczek, ~214 m), czyli **~80 s marszu** w średnim tempie (2.6 m/s). To ~9× rzadziej niż torii.
 - Pierwsza kapliczka: **otwierająca**, 30 m przed startem (widoczna od razu, ~12 s marszu) – spełnia gwarancję „w zasięgu w ciągu ~60 s".
 
 Jeśli Jakub miał na myśli coś innego, zmiana to jedna stała: `ElementBalance.HOKORA_SLOT_CHANCE` / `HOKORA_SLOT_CHUNKS`.
@@ -611,12 +611,14 @@ Jeśli Jakub miał na myśli coś innego, zmiana to jedna stała: `ElementBalanc
 - **Dźwięk**: dzwoneczek **suzu** (`hokora_suzu`, generowany w `scripts/generate_hanabi_proc_audio.py`) przy zbliżeniu do 14 m, co 6 s.
 - **Bez strzałek UI.**
 - **Model**: proceduralny drewniany hokora na kamiennym cokole. Punkt podmiany: węzeł `ModelSlot` w `scenes/world/hokora_shrine.tscn` (D5 podmieni na asset z `assets_incoming/shrine/`).
-- **Odbiór**: **podejście** – ciało gracza w promieniu **1.4 m** od ołtarza. Bez cięcia katanĄ. Feedback: dźwięk, 6 ofuda wypływa z ołtarza i leci do gracza (`OfudaPickup`, magnes), licznik `札×N` na nadgarstku rośnie o 1 przy każdym podniesieniu, kapliczka gaśnie **na stałe** (bez farmienia, na czas runu).
+- **Odbiór**: **podejście** – ciało gracza w promieniu **1.4 m** od ołtarza. Bez cięcia kataną. Feedback: dźwięk suzu, 6 ofuda wypływa z ołtarza i **leci do etykiety licznika na nadgarstku** (`OfudaPickup.fly_to`), licznik `札×N` rośnie o 1 dopiero po dolocie, a lewa dłoń dostaje krótki impuls haptyczny (`WeaponHolder.pulse`). Kapliczka gaśnie **na stałe** (bez farmienia, na czas runu).
 - **Liczba z jednej kapliczki: 6** (`ElementBalance.OFUDA_PER_HOKORA`).
 
 ### Placement (wzór: torii E2a)
 
-- Slot = 6×6 chunków (168 m). Pozycja kandydata = deterministyczny hash (`slot`, seed świata) → ta sama mapa w każdym runie, zero losowości per chunk.
+- Slot = 4×4 chunki (112 m). Pozycja kandydata = deterministyczny seed z `(slot, seed świata)` → ta sama mapa w każdym runie.
+- Dlaczego 4×4, a nie 6×6: gracz widzi kapliczki w pasie ±34 m wokół trasy, więc gęstość na metr marszu to (pas 68 m) × (szansa × udział poprawnych slotów) / (bok slotu)². Pierwsza wersja (6×6 = 168 m, z kandydatami 2.4 m) dawała **2 kapliczki na 1.5 km** (ok. 750 m), za rzadko. 3×3 dało 15 (ok. 100 m), za gęsto. 4×4 → 7 na 1.5 km. Udział slotów z poprawnym punktem zmierzony: ~95 %.
+- Przy wyborze punktu: promień czystości **1.6 m** (cokół ma ~0.75 m półszerokości; pień dolicza własny promień), wachlarz 25 kątów × 4 odległości dla otwierającej, 41 kandydatów na slot (torii mają 24 × 8).
 - Walidacja **raz**, przy pierwszym zbliżeniu (≤ 34 m): `ForestWorld.is_clear_of_props(r=2.4)`, zapytanie fizyczne na warstwę pni (`TRUNK_LAYER`), odległość ≥ 10 m od torii (`ToriiManager.is_near_gate`), nachylenie terenu ≤ 0.5. Nieudany kandydat → 6 alternatywnych offsetów z tego samego hasha → inaczej slot pusty (cache `none`).
 - Kandydat trafia do cache na czas runu; węzeł kapliczki powstaje w promieniu **34 m** i jest zwalniany dopiero w promieniu **60 m** (poza mgłą, bez „znikania przed graczem").
 - Ponowne wejście w slot: ten sam węzeł (słownik `slot → węzeł`), **bez duplikatów**; odebrana kapliczka wraca jako ciemna (`claimed` trzymane w słowniku runu).
@@ -631,4 +633,17 @@ Cele (z zadania Jakuba):
 - w 8-minutowym runie **5–7 węzłów** (średni gracz),
 - finał (węzeł 5 = „cięcie jak masło", D4) osiągalny w **dobrym** runie ~8–10 min.
 
-Wynik symulacji: patrz sekcja „Wynik symulacji D1" poniżej (wpisana po implementacji).
+### Wynik symulacji D1 (`tools/balance_sim.tscn`, 720 s, 6 Ofuda na kapliczkę, ~216 m)
+
+| profil | 2 min | 4 min | 6 min | 8 min | 10 min | master (węzeł 5 jednej szkoły, 33 札) |
+|---|---|---|---|---|---|---|
+| careful (2.2 m/s × 0.45 marszu) | 6札 · 2 węzły | 6札 · 2 | 12札 · 4 | 18札 · **5** | 18札 · 5 | nie w 12 min |
+| **average** (2.6 m/s × 0.6, cel) | 6札 · 2 | 12札 · 4 | 18札 · 5 | 24札 · **6** | 30札 · 7 | ~12 min |
+| skilled, dobry run (3.0 m/s × 0.75) | 12札 · 4 | 18札 · 5 | 24札 · 6 | 30札 · 7 | 42札 · 10 | **8:20** |
+
+- Cel „5–7 węzłów w 8 min" dla średniego gracza: **6** ✓.
+- Cel „finał osiągalny w dobrym runie ~8–10 min": **8:20** ✓.
+- Pierwszy węzeł (3札) w **0:20** (opening shrine 30 m od startu). Kapliczki: 1 na ~216 m.
+- Koszty drzewka zostają **3/5/5/8/12**: przy tej gęstości kapliczek przelicznik wychodzi właśnie tu. Obniżenie kosztów albo zwiększenie wydajności za kapliczkę zmieniałoby tempo o ~2× i nie ma powodu.
+
+Testy, które to pilnują: `tests/skill_tree_data_test.gd` (`_test_balance_targets`) i `tests/hokora_test.gd` (`_test_density_along_a_walk`: 5–11 kapliczek na 1.5 km).
