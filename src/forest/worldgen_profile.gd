@@ -218,6 +218,54 @@ func group_names() -> PackedStringArray:
 	return out
 
 
+## Problems with this profile, in Polish, for the dock and the tests. Empty
+## when the profile is sound. Errors break the forest; warnings only look wrong.
+func validate() -> Array[String]:
+	var out: Array[String] = []
+	var ordinary_weight := 0.0
+	if trees.is_empty():
+		out.append("BŁĄD: brak gatunków drzew (trees) – las będzie pusty.")
+	for entry in trees:
+		if entry == null:
+			out.append("BŁĄD: pusty wpis w trees.")
+			continue
+		if entry.scale_min > entry.scale_max:
+			out.append("BŁĄD: drzewo „%s”: skala min (%.2f) > max (%.2f)." % [entry.label, entry.scale_min, entry.scale_max])
+		if not entry.is_focal() and entry.weight > 0.0:
+			ordinary_weight += entry.weight
+		if not entry.has_scene() and entry.crown != TreeEntry.Crown.SAKURA:
+			out.append("UWAGA: drzewo „%s” nie ma sceny – rysowany jest proceduralny cedr." % entry.label)
+		if entry.min_spacing > chunk_size * 0.5:
+			out.append("UWAGA: drzewo „%s”: odstęp %.1f m jest większy niż pół chunka – na chunk wypada 1–2 drzewa." % [entry.label, entry.min_spacing])
+	if not trees.is_empty() and ordinary_weight <= 0.0:
+		out.append("BŁĄD: żaden gatunek nie jest zwykłym drzewem (waga > 0 i bez focal) – brak lasu.")
+	for entry in undergrowth:
+		if entry == null:
+			continue
+		if entry.scale_min > entry.scale_max:
+			out.append("BŁĄD: podszycie „%s”: skala min > max." % entry.label)
+		if entry.source == UndergrowthEntry.Source.SCENE and entry.scene == null:
+			out.append("BŁĄD: podszycie „%s” ma źródło SCENE bez sceny." % entry.label)
+	if chunk_size < clearing_radius * 2.0:
+		out.append("UWAGA: polana (%.1f m) jest szersza niż połowa chunka (%.1f m)." % [clearing_radius, chunk_size])
+	if fog_start >= fog_end:
+		out.append("BŁĄD: mgła zaczyna się (%.1f m) za późno, skoro kończy się w %.1f m." % [fog_start, fog_end])
+	if torii_height_min > torii_height_max:
+		out.append("BŁĄD: wysokość bram: min > max.")
+	if torii_row_min > torii_row_max:
+		out.append("BŁĄD: rzędy bram: min > max.")
+	# Shrines must stay rarer than gates: compare the expected count per chunk.
+	var shrines_per_chunk := shrine_slot_chance / float(shrine_slot_chunks * shrine_slot_chunks)
+	var torii_per_chunk := torii_chunk_chance * float(torii_max_per_chunk) * torii_group_keep
+	if shrines_per_chunk >= torii_per_chunk and torii_per_chunk > 0.0:
+		out.append("BŁĄD: kapliczki (%.3f na chunk) nie są rzadsze niż torii (%.3f na chunk)." % [shrines_per_chunk, torii_per_chunk])
+	if paths_enabled and path_width > path_node_spacing * 0.25:
+		out.append("UWAGA: ścieżka (%.1f m) jest szersza niż ćwierć odstępu węzłów (%.1f m)." % [path_width, path_node_spacing])
+	if volumetric_fog:
+		out.append("UWAGA: volumetric fog jest włączony – na Quest 3 to za drogo (tylko PC / nagrania).")
+	return out
+
+
 ## Everything the generator reads, as one number. The preview regenerates when it changes.
 func signature() -> int:
 	var parts: PackedStringArray = []
