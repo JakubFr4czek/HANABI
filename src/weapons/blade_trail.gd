@@ -74,7 +74,8 @@ func _physics_process(delta: float) -> void:
 		_samples.pop_front()
 	_samples.append([base, tip, 0.0, strength])
 	if _blade and _blade.element != Elements.NONE and _blade.is_fade_warning:
-		var pulse := 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.001 * TAU * 3.0)
+		# Same 3 Hz beat as the blade, driven by the imbue clock (so it also holds in a pause).
+		var pulse := 0.6 + 0.4 * sin(_blade.element_time_remaining * TAU * 3.0)
 		_material.albedo_color = Elements.color(_blade.element) * pulse
 	_rebuild()
 

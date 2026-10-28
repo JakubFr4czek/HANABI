@@ -42,6 +42,8 @@ var skill_tree: SkillTreeData = null
 ## The single imbued element on the katana (~20s duration), or Elements.NONE.
 var current_element: String = Elements.NONE
 var element_time_remaining: float = 0.0
+## Length of the current imbue (the wrist arc is remaining / this).
+var imbue_total: float = ELEMENT_DURATION
 var is_fade_warning: bool = false
 
 var ability_1_cooldown: float = 0.0
@@ -79,6 +81,34 @@ func _fx(element: String, key: String, default_value: Variant) -> Variant:
 
 func _has_node(node_id: String) -> bool:
 	return skill_tree != null and skill_tree.is_unlocked(node_id)
+
+
+## Full cooldown (seconds) of ability [param slot] (1 = A, 2 = B) on the
+## current element, including skill-tree upgrades. 0 on plain steel.
+func ability_cooldown_total(slot: int) -> float:
+	if current_element == Elements.NONE:
+		return 0.0
+	if slot == 1:
+		return float(_fx(current_element, "cooldown_ability_1", float(COOLDOWNS_ABILITY_1.get(current_element, 4.0))))
+	return float(_fx(current_element, "cooldown_ability_2", float(COOLDOWNS_ABILITY_2.get(current_element, 8.0))))
+
+
+## 0..1 readiness of ability [param slot]: 1 = ready, filling while it cools down.
+## Plain steel has nothing to ready, so it reads 0.
+func ability_ready_ratio(slot: int) -> float:
+	if current_element == Elements.NONE:
+		return 0.0
+	var cd := ability_1_cooldown if slot == 1 else ability_2_cooldown
+	if cd <= 0.0:
+		return 1.0
+	return clampf(1.0 - cd / maxf(ability_cooldown_total(slot), cd), 0.0, 1.0)
+
+
+## 0..1 share of the imbue still left (the wrist arc); 0 on plain steel.
+func imbue_ratio() -> float:
+	if current_element == Elements.NONE:
+		return 0.0
+	return clampf(element_time_remaining / maxf(imbue_total, 0.01), 0.0, 1.0)
 
 ## Backward compatibility aliases for legacy code and tests
 var storm_charge: float = 0.0
@@ -146,12 +176,14 @@ func imbue_duration_for(element_name: String) -> float:
 ## [method imbue_duration_for]); explicit values are honoured as given.
 func imbue(element_name: String, duration: float = -1.0) -> void:
 	var dur := duration if duration >= 0.0 else imbue_duration_for(element_name)
+	imbue_total = maxf(dur, 0.01)
 	if element_name == current_element and current_element != Elements.NONE:
 		element_time_remaining = dur
 		ability_1_cooldown *= 0.5
 		ability_2_cooldown *= 0.5
 		if weapon:
 			weapon.imbue_element(element_name, dur)
+		_play_imbue_cue(element_name, true)
 		effect_triggered.emit("refresh", {"element": element_name, "duration": dur})
 		return
 
@@ -162,11 +194,27 @@ func imbue(element_name: String, duration: float = -1.0) -> void:
 	ability_2_cooldown = 0.0
 	if weapon:
 		weapon.imbue_element(element_name, dur)
+	_play_imbue_cue(element_name, false)
 	effect_triggered.emit("imbue", {"element": element_name, "duration": dur})
+
+
+## The sound of the school taking hold of the blade (quiet, from the hand), or a
+## softer, higher touch when a gate only tops the same element up.
+func _play_imbue_cue(element_name: String, refresh: bool) -> void:
+	if element_name == Elements.NONE or not is_inside_tree():
+		return
+	Sfx.play_at("imbue_" + element_name, _cue_position(), -9.0 if refresh else -5.0, 5.0, 1.12 if refresh else 1.0)
+
+
+func _cue_position() -> Vector3:
+	if weapon and is_instance_valid(weapon) and weapon.is_inside_tree():
+		return weapon.global_position
+	return _player_origin() + Vector3.UP * 1.1
 
 
 func _expire_element() -> void:
 	var prev := current_element
+	Sfx.play_at("element_fade", _cue_position(), -11.0, 5.0)
 	current_element = Elements.NONE
 	element_time_remaining = 0.0
 	is_fade_warning = false

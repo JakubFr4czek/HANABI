@@ -60,3 +60,25 @@ static func build_label(element: String) -> String:
 		BLACK_LIGHTNING: return "黒雷"
 		PHANTOM_PETALS: return "幻影桜"
 	return "—"
+
+
+## One-glyph engraving for each ability, shown on the wrist plate next to its
+## button pip (slot 1 = A, slot 2 = B): 千本桜, 花舞, 雷切, 紫電, 墨返, 影縄,
+## 影武者, 闇渡り.
+static func ability_glyph(element: String, slot: int) -> String:
+	match element:
+		SAKURA: return "千" if slot == 1 else "舞"
+		STORM: return "切" if slot == 1 else "電"
+		INK: return "返" if slot == 1 else "縄"
+		SHADOW: return "武" if slot == 1 else "渡"
+	return ""
+
+
+## Romanised ability name (menu footer, logs).
+static func ability_name(element: String, slot: int) -> String:
+	match element:
+		SAKURA: return "Senbonzakura" if slot == 1 else "Hanamai"
+		STORM: return "Raikiri" if slot == 1 else "Shiden"
+		INK: return "Sumi-gaeshi" if slot == 1 else "Kage-nawa"
+		SHADOW: return "Kagemusha" if slot == 1 else "Yami-watari"
+	return ""

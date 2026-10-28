@@ -70,6 +70,8 @@ var hover: Dictionary = {}
 ## Element on the katana now and its seconds left, for the footer.
 var blade_element := Elements.NONE
 var blade_seconds := 0.0
+## The A / B abilities of the blade's element for the footer: [{glyph, name, ratio, seconds}].
+var abilities: Array[Dictionary] = []
 var hint_text := ""
 ## Transient detail-pane message (why a purchase failed).
 var status_text := ""
@@ -551,4 +553,12 @@ func _draw_footer() -> void:
 		blade = "BLADE  ·  %s %s  ·  %d s" % [Elements.build_label(blade_element),
 				String(ELEMENT_TITLE.get(blade_element, "")), ceili(blade_seconds)]
 		col = accent_of(blade_element)
-	_text(blade, Vector2(SIZE.x - 70 - 560, 936), 25, col, HORIZONTAL_ALIGNMENT_RIGHT, 560)
+	_text(blade, Vector2(SIZE.x - 70 - 560, 926), 25, col, HORIZONTAL_ALIGNMENT_RIGHT, 560)
+	# What the two face buttons do right now (frozen, like the rest of the world).
+	if blade_element != Elements.NONE and abilities.size() == 2:
+		var parts: Array[String] = []
+		for i in 2:
+			var a: Dictionary = abilities[i]
+			var state := "ready" if float(a.ratio) >= 0.999 else "%d s" % ceili(float(a.seconds))
+			parts.append("%s  %s %s  %s" % ["A" if i == 0 else "B", a.glyph, String(a.name).to_upper(), state])
+		_text("   ·   ".join(parts), Vector2(SIZE.x - 96 - 900, 954), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 900)

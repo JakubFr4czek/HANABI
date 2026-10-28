@@ -54,6 +54,15 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 Zrzuty menu (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/skill_menu_screenshots.tscn -- --desktop --shots /tmp/hanabi_e2d`
 (`canvas_*.png` = sama tafla 1600×1000 jak w goglach).
 
+## Czytelność żywiołów (E3)
+
+- [ ] Ostrze świeci **krawędzią** w kolorze żywiołu (nie płaską plamą); imbue przebiega od jabłka do czubka w ~0.4 s; po wygaśnięciu światło spływa (~0.6 s).
+- [ ] Ostatnie 3 s: ostrze, smuga i pierścień na nadgarstku pulsują razem (3 Hz).
+- [ ] Nadgarstek (podniesiony): kanji żywiołu + pierścień czasu, liczba sekund, dwa pierścienie A / B z glifami (pełny jasny = gotowe), 札×N. Stal bez żywiołu: przygaszone 門.
+- [ ] Brama aktywna widoczna we mgle z ~25 m jako pionowa smuga światła w kolorze żywiołu; po przejściu rozbłysk i wygaszenie; nieaktywna ginie we mgle.
+- [ ] Dźwięk przy nasyceniu (inny per żywioł, cichy) i miękkie „zgaśnięcie” przy końcu.
+- [ ] Menu wsuwa się płynnie; stopka pokazuje żywioł, sekundy, A/B i 札. Zrzuty: `godot --path . --fixed-fps 90 res://tests/e3_readability_screenshots.tscn -- --desktop --shots /tmp/hanabi_e3`.
+
 ## Komfort VR
 
 - [ ] Chwyt katany stabilny (brak dryfu dłoni > ~15 cm).

@@ -488,6 +488,22 @@ Everything the player needs to know is conveyed naturally in the game world with
 
 ---
 
+### Phase E3: Readability & Feel
+- [x] **E3.1: Blade light per element** (`katana_steel.gdshader`, `blade_body.gd`): an edge light on the cutting edge plus a faint rim, never a flat wash. Sakura rose + slow breathing, Storm cyan with short crackling arcs, Ink a wet black coat with an indigo hairline, Shadow violet breath with rising wisps. The imbue runs guard-to-tip in 0.38 s with a brief front, a gate top-up only flashes, expiry drains over 0.6 s (real time). Last 3 s: blade, trail and wrist crest beat at 3 Hz from the *imbue clock* (so they hold in a pause).
+- [x] **E3.2: Imbue sound**: five procedural CC0 cues (`imbue_sakura/storm/ink/shadow`, `element_fade`; `scripts/generate_hanabi_proc_audio.py --imbue-only`), played quietly at the sword hand; a refresh is softer and higher.
+- [x] **E3.3: Wrist element strip** (`wrist_element.gdshader`, `diegetic_hud.gd`): under the HP row, towards the elbow. Crest (kanji; ring = imbue left, clockwise from 12), the seconds left, and one ring per button (A left, B right) with the ability's glyph (千舞 切電 返縄 武渡): full bright ring = ready, partial = recharging. Plain steel: dim 門 ("seek a gate") and empty rings. The 札×N tally stays on the raised-wrist text. Still one quad + three labels; the gilt frame is now one mesh (net −3 meshes).
+- [x] **E3.4: Gate light** (`torii_lantern_halo.gdshader`, `torii_gate.gd`): the halo is *mixed* over the fog (additive washed out to white), with a thin vertical shaft so a gate is a line in the mist, scaling with distance past 9 m so it keeps its apparent size at 28 m, a slow breath, per-gate phase. Lit lantern is an unshaded paper andon that ignores fog; a spent gate flares for 0.7 s, drains in 0.9 s to a dull lantern that fades into the fog, and wakes over 2 s when it reactivates.
+- [x] **E3.5: Menu**: eases in over 0.16 s (alpha only, hit-testing unaffected); the footer carries the blade's element, seconds left and both buttons (A/B, glyph, name, ready or seconds), the header the Ofuda.
+- [x] **E3.6: Draw-call headroom**: `RunPerfProbe.estimate_scene_cost` counted every node with its own `visible` flag, including whole hidden subtrees (arena props, the stowed kanabō, the finished intro: ~55 meshes). It now counts `is_visible_in_tree()`. Stressed run: 341 → 287 estimated draws (menu open 288 of 345); a new check keeps ≥ 30 of headroom with the menu open and the wrist plate ≤ 9 meshes.
+- [x] **Tests (extended, none added)**: `element_abilities_test` (blade kind/colour per element, crest/glyphs, arc and ring values, A empties on firing, 3 Hz warning on blade and crest, refresh, expiry fade + cue, plain steel), `torii_gate_test` (flare, drain, wake, fog flags), `vr_menu_pause_test` (ease-in, footer state, same state when drawn on top), `quest_perf_test` (headroom, plate meshes, no gate lights), `wrist_hud_test` (whole new plate clears the hand).
+
+#### E3 implementation decisions (2026-10-28)
+- **On-top menu vs the wrist plate.** An opaque plate cannot be drawn *after* a no-depth-test panel without changing its materials, and forcing it over the panel would also draw it through the hand. Instead nothing important lives only on the plate: the panel footer/header repeat element, time, A/B and Ofuda, so the on-top fallback hides nothing the player needs. In the normal (depth-tested) mode the raised wrist, being nearer than the panel, correctly occludes it.
+- **Fog.** Fog stays. Gate light is mixed (not added), saturated per element (the Ink gate's dark indigo is darker than the fog), lit lanterns and halos ignore fog, spent ones do not. Yōkai silhouettes in fog were not touched.
+- **Known weak spots (honest).** Seen from behind, the thin blade reads as coloured steel more than an edge light; Storm is pastel rather than electric. The 6 m lantern is a flat paper box. The sound cues are synthesised and untested on real headphones. Pip glyphs are ~7 mm: legible on a raised wrist, not at arm's length.
+
+---
+
 ## Harsh Self-Review & Integrity Audit (Rule 9)
 
 ### 1. Pacing & Downtime Risk: "Boring plain steel running"

@@ -27,6 +27,18 @@ var current_element: String:
 var element_time_remaining: float = 0.0
 var is_fade_warning: bool = false
 var _blade_mat: ShaderMaterial = null
+
+## Blade imbue animation (real time, driven by [method _update_blade_material]):
+## the school runs guard-to-tip, flashes once, and fades out when it lapses.
+const SWEEP_SECONDS := 0.38
+const FLASH_SECONDS := 0.55
+const FADE_SECONDS := 0.6
+const KIND := {Elements.SAKURA: 1, Elements.STORM: 2, Elements.INK: 3, Elements.SHADOW: 4}
+var _sweep_msec := -100000
+var _flash_msec := -100000
+var _fade_element := Elements.NONE
+var _fade_msec := -100000
+var _shader_cache := {}
 ## Draw a ribbon trail behind the blade when it moves fast.
 @export var show_trail := true
 
@@ -75,6 +87,13 @@ func get_blade_start_global() -> Vector3:
 
 
 func set_element(new_element: String) -> void:
+	if new_element != element:
+		if element != Elements.NONE and new_element == Elements.NONE:
+			_fade_element = element
+			_fade_msec = Time.get_ticks_msec()
+		elif new_element != Elements.NONE:
+			_sweep_msec = Time.get_ticks_msec()
+			_flash_msec = _sweep_msec
 	element = new_element
 	# Single source of truth: set_element sets visual state without starting a timer.
 	# The 20s countdown is managed exclusively by ElementSystem via imbue_element.
@@ -86,9 +105,17 @@ func set_element(new_element: String) -> void:
 
 
 func imbue_element(new_element: String, duration: float = ELEMENT_DURATION) -> void:
+	var now := Time.get_ticks_msec()
 	if new_element == element and element != Elements.NONE:
 		element_time_remaining = duration
+		_flash_msec = now  # a gate topping the same school up: a flash, no new sweep
 	else:
+		if new_element != Elements.NONE:
+			_sweep_msec = now
+			_flash_msec = now
+		elif element != Elements.NONE:
+			_fade_element = element
+			_fade_msec = now
 		element = new_element
 		element_time_remaining = duration if new_element != Elements.NONE else 0.0
 		is_fade_warning = false
@@ -114,15 +141,43 @@ func _update_blade_material() -> void:
 	var mat := _get_blade_material()
 	if mat == null:
 		return
+	var now := Time.get_ticks_msec()
+	var shown := element
+	var level := 1.0
+	var sweep := 2.0
+	var flash := 0.0
+	var warn := 0.0
 	if element == Elements.NONE:
-		mat.set_shader_parameter("element_glow", 0.0)
+		# Lapsed: the school drains out of the steel instead of snapping off.
+		var k := float(now - _fade_msec) / (FADE_SECONDS * 1000.0)
+		if k < 1.0 and _fade_element != Elements.NONE:
+			shown = _fade_element
+			level = (1.0 - k) * (1.0 - k)
+		else:
+			shown = Elements.NONE
 	else:
-		var glow := 1.0
-		if is_fade_warning:
-			glow = 0.6 + 0.5 * sin(Time.get_ticks_msec() * 0.001 * TAU * 3.0)
-		var c := Elements.accent_color(element)
-		mat.set_shader_parameter("element_glow", glow)
-		mat.set_shader_parameter("element_color", Vector3(c.r, c.g, c.b))
+		sweep = minf(float(now - _sweep_msec) / (SWEEP_SECONDS * 1000.0), 1.0) * 1.25
+		flash = clampf(1.0 - float(now - _flash_msec) / (FLASH_SECONDS * 1000.0), 0.0, 1.0)
+		warn = 1.0 if is_fade_warning else 0.0
+	if shown == Elements.NONE:
+		_set_shader(mat, "element_glow", 0.0)
+		return
+	var c := Elements.accent_color(shown)
+	_set_shader(mat, "element_color", Vector3(c.r, c.g, c.b))
+	_set_shader(mat, "element_kind", int(KIND.get(shown, 1)))
+	_set_shader(mat, "element_sweep", sweep)
+	_set_shader(mat, "element_flash", flash)
+	_set_shader(mat, "element_warn", warn)
+	_set_shader(mat, "element_left", element_time_remaining)
+	_set_shader(mat, "element_glow", level)
+
+
+## Only touches the material when a value actually changed.
+func _set_shader(mat: ShaderMaterial, key: String, value: Variant) -> void:
+	if _shader_cache.get(key) == value:
+		return
+	_shader_cache[key] = value
+	mat.set_shader_parameter(key, value)
 
 
 ## Velocity a world point on this weapon had going into the last physics step.

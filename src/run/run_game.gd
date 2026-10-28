@@ -364,6 +364,7 @@ func _setup_run_nodes() -> void:
 	element_system.name = "ElementSystem"
 	add_child(element_system)
 	element_system.setup(self, katana)
+	diegetic_hud.bind_elements(element_system)
 	GameEvents.hit_landed.connect(_on_game_hit)
 	pause_controller = PauseController.new()
 	pause_controller.name = "PauseController"
