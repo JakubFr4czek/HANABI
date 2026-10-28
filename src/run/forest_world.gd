@@ -31,6 +31,8 @@ const TRUNK_LAYER := 64
 const TRUNK_CELL := 3.0
 ## Gate candidates keep this far from a live gameplay gate (ToriiManager).
 const GATE_CLEAR_OF_LIVE_GATE := 3.5
+## A shrine is joined to a path that passes this close, metres.
+const SHRINE_SPUR_REACH := 40.0
 ## Senbon rows: axis threshold and the spacing from the corridor noise.
 const SENBON_AXIS_THRESHOLD := 0.72
 const CORRIDOR_SCALE := 1.7
@@ -74,6 +76,10 @@ var _trunk_cells: Dictionary = {}
 var _tree_spot_cache: Dictionary = {}
 ## Chunk coord -> {points: Array[Vector4] (x, z, entry, spacing), clearing: int}.
 var _potential_cache: Dictionary = {}
+## Chunk coord -> PackedFloat32Array: distance to the nearest path at every terrain vertex.
+var _path_field_cache: Dictionary = {}
+## The footpath network (null when the profile turns paths off).
+var paths: ForestPaths = null
 var _spots_ready := false
 ## Trees reveal as the player approaches, not only at chunk borders.
 var _last_tree_draw_pos := Vector3.INF
@@ -151,6 +157,7 @@ func reset() -> void:
 	_trunk_cells.clear()
 	_tree_spot_cache.clear()
 	_potential_cache.clear()
+	_path_field_cache.clear()
 	_last_tree_draw_pos = Vector3.INF
 	center_chunk = Vector2i.ZERO
 	chunk_count = 0
@@ -166,6 +173,7 @@ func _apply_profile() -> void:
 	var seed_mix := profile.world_seed
 	_tree_spot_cache.clear()
 	_potential_cache.clear()
+	_path_field_cache.clear()
 	_spots_ready = false
 	_height_noise.seed = 0x464F52455354 ^ seed_mix
 	_height_noise.frequency = profile.hill_frequency
@@ -181,6 +189,10 @@ func _apply_profile() -> void:
 	_scatter_noise.frequency = 0.11
 	_corridor_noise.seed = 0x53454E424F4E ^ seed_mix
 	_corridor_noise.frequency = 0.018
+	paths = null
+	if profile.paths_enabled:
+		paths = ForestPaths.new()
+		paths.setup(profile, Callable(self, "_hill_height"))
 	_spots_ready = true
 	_build_materials()
 	_build_meshes()
@@ -357,6 +369,10 @@ func _rebuild_active_chunks() -> void:
 		var c: Vector2i = key
 		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 2:
 			_potential_cache.erase(key)
+	for key in _path_field_cache.keys():
+		var c: Vector2i = key
+		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 2:
+			_path_field_cache.erase(key)
 	if follow:
 		_last_tree_draw_pos = _anchor_position()
 		_refresh_tree_draw(_anchor_position())
@@ -462,8 +478,10 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 	# near a border respect them too. Gates in one group stay close (they form
 	# corridors), so torii check trees wide but each other narrow.
 	var tree_keep := _tree_trunk_points(coord)
+	var field := _path_field(coord)
+	var path_keep := _path_half_width() + 0.6
 	var placed: Array = []
-	for p in _prop_sites(rng, int(spec.max), float(spec.spacing)):
+	for p in _sites_for(rng, coord, spec):
 		var lx: float = p.x
 		var lz: float = p.y
 		var wx := root.position.x + lx
@@ -472,6 +490,8 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 			clearing_hits += 1
 			continue
 		if torii_manager and torii_manager.is_near_gate(wx, wz, GATE_CLEAR_OF_LIVE_GATE):
+			continue
+		if bool(spec.avoid_path) and not field.is_empty() and _field_at(field, Vector2(lx, lz)) < path_keep:
 			continue
 		var density := _scatter_noise.get_noise_2d(wx * profile.density_frequency, wz * profile.density_frequency) * 0.5 + 0.5
 		if kind == KIND_TORII:
@@ -535,6 +555,7 @@ func _torii_spec() -> Dictionary:
 		"scale_min": 0.0, "scale_max": 0.0, "grow": 0.0,
 		"tree_clear": profile.torii_tree_clearance, "prop_clear": profile.torii_prop_clearance,
 		"bury": 0.0, "obstacle": true,
+		"path_share": profile.torii_on_path, "path_offset": _path_half_width() + 2.8, "avoid_path": false,
 	}
 
 
@@ -545,6 +566,7 @@ func _lantern_spec() -> Dictionary:
 		"scale_min": profile.lantern_scale_min, "scale_max": profile.lantern_scale_max, "grow": 0.0,
 		"tree_clear": profile.lantern_clearance, "prop_clear": profile.lantern_clearance,
 		"bury": 0.0, "obstacle": true,
+		"path_share": profile.lantern_on_path, "path_offset": _path_half_width() + 1.4, "avoid_path": false,
 	}
 
 
@@ -554,6 +576,7 @@ func _undergrowth_spec(entry: UndergrowthEntry) -> Dictionary:
 		"scale_min": entry.scale_min, "scale_max": entry.scale_max, "grow": 0.5,
 		"tree_clear": entry.clearance, "prop_clear": entry.clearance,
 		"bury": entry.bury, "obstacle": entry.obstacle,
+		"path_share": 0.0, "path_offset": 0.0, "avoid_path": true,
 	}
 
 
@@ -580,6 +603,8 @@ func _potential_trunks(coord: Vector2i) -> Dictionary:
 	var clearing := 0
 	var size := profile.chunk_size
 	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
+	var field := _path_field(coord)
+	var path_gap := _path_half_width() + profile.path_tree_clearance
 	for e in _ordinary_entries():
 		var entry := profile.trees[e]
 		var rng := RandomNumberGenerator.new()
@@ -588,6 +613,8 @@ func _potential_trunks(coord: Vector2i) -> Dictionary:
 		for p in sample:
 			if _in_clearing(p.x, p.y):
 				clearing += 1
+				continue
+			if not field.is_empty() and _field_at(field, p - centre) < path_gap:
 				continue
 			var density := _scatter_noise.get_noise_2d(p.x * profile.density_frequency, p.y * profile.density_frequency) * 0.5 + 0.5
 			if _point_random(p.x, p.y, 1) > lerpf(profile.tree_keep_min, profile.tree_keep_max, density):
@@ -811,6 +838,146 @@ func _basis_up(up: Vector3, yaw: float, scale: float) -> Basis:
 	var z := x.cross(y).normalized()
 	var b := Basis(x, y, z).rotated(y, yaw)
 	return b.scaled(Vector3.ONE * scale)
+
+
+func _path_half_width() -> float:
+	return profile.path_width * 0.5
+
+
+## Trodden spur from the nearest path to a shrine. Top level, in world space, so
+## the shrine's own turn does not bend it; it is freed with the shrine.
+func connect_shrine(shrine: Node3D) -> void:
+	if paths == null:
+		return
+	var at := shrine.position
+	var near := paths.nearest_point(Vector2(at.x, at.z), SHRINE_SPUR_REACH)
+	if near == Vector2.INF:
+		return
+	var spur := MeshInstance3D.new()
+	spur.name = "PathSpur"
+	spur.top_level = true
+	spur.mesh = _ribbon_mesh(PackedVector2Array([near, Vector2(at.x, at.z)]))
+	spur.material_override = _ground_mat
+	spur.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	spur.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	shrine.add_child(spur)
+
+
+## A flat strip of path along [param line] (world xz), lying on the terrain.
+func _ribbon_mesh(line: PackedVector2Array) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hw := _path_half_width()
+	var colour := Color(1.0, 0.0, 0.0, 1.0)
+	for k in range(line.size() - 1):
+		var a := line[k]
+		var b := line[k + 1]
+		var t := (b - a).normalized()
+		var n := Vector2(-t.y, t.x) * hw
+		var pa := [a + n, a - n]
+		var pb := [b + n, b - n]
+		var va := [Vector3(pa[0].x, height_at(pa[0].x, pa[0].y) + 0.03, pa[0].y),
+			Vector3(pa[1].x, height_at(pa[1].x, pa[1].y) + 0.03, pa[1].y)]
+		var vb := [Vector3(pb[0].x, height_at(pb[0].x, pb[0].y) + 0.03, pb[0].y),
+			Vector3(pb[1].x, height_at(pb[1].x, pb[1].y) + 0.03, pb[1].y)]
+		for v in [va[0], vb[0], vb[1], va[0], vb[1], va[1]]:
+			st.set_normal(Vector3.UP)
+			st.set_color(colour)
+			st.add_vertex(v)
+	return st.commit()
+
+
+## Distance from every terrain vertex of a chunk to the nearest path centre line,
+## row-major (index j * res + i, same lattice as _build_terrain_mesh), capped at
+## the reach the tree and terrain rules need. Empty when paths are off.
+func _path_field(coord: Vector2i) -> PackedFloat32Array:
+	if paths == null:
+		return PackedFloat32Array()
+	if _path_field_cache.has(coord):
+		return _path_field_cache[coord]
+	var res := profile.terrain_resolution
+	var size := profile.chunk_size
+	var step := size / float(res - 1)
+	var half := size * 0.5
+	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
+	var reach := _path_half_width() + maxf(2.0, profile.path_tree_clearance + 1.0)
+	var field := PackedFloat32Array()
+	field.resize(res * res)
+	field.fill(reach)
+	var segments := paths.segments_in_rect(Rect2(centre - Vector2(half, half), Vector2(size, size)), reach)
+	for k in range(0, segments.size() - 1, 2):
+		var a := segments[k]
+		var b := segments[k + 1]
+		var lo := Vector2(minf(a.x, b.x), minf(a.y, b.y)) - Vector2(reach, reach) - centre + Vector2(half, half)
+		var hi := Vector2(maxf(a.x, b.x), maxf(a.y, b.y)) + Vector2(reach, reach) - centre + Vector2(half, half)
+		var i0 := clampi(int(floor(lo.x / step)), 0, res - 1)
+		var i1 := clampi(int(ceil(hi.x / step)), 0, res - 1)
+		var j0 := clampi(int(floor(lo.y / step)), 0, res - 1)
+		var j1 := clampi(int(ceil(hi.y / step)), 0, res - 1)
+		for j in range(j0, j1 + 1):
+			for i in range(i0, i1 + 1):
+				var vp := centre + Vector2(-half + float(i) * step, -half + float(j) * step)
+				var d := minf(ForestPaths.segment_distance(vp, a, b), reach)
+				var idx := j * res + i
+				if d < field[idx]:
+					field[idx] = d
+	_path_field_cache[coord] = field
+	return field
+
+
+## Field value at a chunk-local point (nearest lattice vertex).
+func _field_at(field: PackedFloat32Array, local: Vector2) -> float:
+	var res := profile.terrain_resolution
+	var step := profile.chunk_size / float(res - 1)
+	var half := profile.chunk_size * 0.5
+	var i := clampi(int(round((local.x + half) / step)), 0, res - 1)
+	var j := clampi(int(round((local.y + half) / step)), 0, res - 1)
+	return field[j * res + i]
+
+
+## Local sites of one prop kind. A share of [param spec].path_share comes from
+## the path (beside it, [param spec].path_offset metres off the centre line);
+## the rest from Poisson-disk sampling. Both keep [param spec].spacing apart.
+func _sites_for(rng: RandomNumberGenerator, coord: Vector2i, spec: Dictionary) -> Array[Vector2]:
+	var count := int(spec.max)
+	var spacing := float(spec.spacing)
+	var share := float(spec.path_share)
+	var poisson := _prop_sites(rng, count, spacing)
+	if paths == null or share <= 0.0 or count <= 0:
+		return poisson
+	var size := profile.chunk_size
+	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
+	var on_path: Array[Vector2] = []
+	for sample in paths.samples_in_rect(Rect2(centre - Vector2(size, size) * 0.5, Vector2(size, size)), spacing):
+		var normal := Vector2(-sample.w, sample.z)
+		var side := 1.0 if rng.randf() < 0.5 else -1.0
+		var site := Vector2(sample.x, sample.y) + normal * side * float(spec.path_offset)
+		on_path.append(site - centre)
+	for k in range(on_path.size() - 1, 0, -1):
+		var j := rng.randi_range(0, k)
+		var tmp := on_path[k]
+		on_path[k] = on_path[j]
+		on_path[j] = tmp
+	var picks: Array[Vector2] = []
+	var want := int(round(float(count) * share))
+	for site in on_path:
+		if picks.size() >= want:
+			break
+		if _spaced(picks, site, spacing):
+			picks.append(site)
+	for site in poisson:
+		if picks.size() >= count:
+			break
+		if _spaced(picks, site, spacing):
+			picks.append(site)
+	return picks
+
+
+static func _spaced(picks: Array[Vector2], site: Vector2, spacing: float) -> bool:
+	for q in picks:
+		if q.distance_to(site) < spacing:
+			return false
+	return true
 
 
 ## Local (x, z) sites for gates, lanterns and boulders: Poisson-disk samples
@@ -1119,12 +1286,16 @@ func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 	root.set_meta("senbon_pending", transforms)
 
 
+## Ground mesh of a chunk. Vertex colour R is the path weight (1 on the
+## trodden centre line, 0 off it); the ground shader lays the stone layer there.
 func _build_terrain_mesh(coord: Vector2i) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var size := profile.chunk_size
 	var res := profile.terrain_resolution
 	var step := size / float(res - 1)
+	var field := _path_field(coord)
+	var half_width := _path_half_width()
 	for z in res - 1:
 		for x in res - 1:
 			var x0 := -size * 0.5 + float(x) * step
@@ -1139,8 +1310,12 @@ func _build_terrain_mesh(coord: Vector2i) -> ArrayMesh:
 			var p10 := Vector3(x1, height_at(wx1, wz0), z0)
 			var p01 := Vector3(x0, height_at(wx0, wz1), z1)
 			var p11 := Vector3(x1, height_at(wx1, wz1), z1)
-			_add_tri(st, p00, p10, p11)
-			_add_tri(st, p00, p11, p01)
+			var c00 := _path_colour(field, z * res + x, half_width)
+			var c10 := _path_colour(field, z * res + x + 1, half_width)
+			var c01 := _path_colour(field, (z + 1) * res + x, half_width)
+			var c11 := _path_colour(field, (z + 1) * res + x + 1, half_width)
+			_add_tri(st, p00, p10, p11, c00, c10, c11)
+			_add_tri(st, p00, p11, p01, c00, c11, c01)
 	# Shared vertices, then one normal per point, so a root reads as a mound
 	# instead of a faceted plate.
 	st.index()
@@ -1197,14 +1372,27 @@ func nearest_torii_position(from: Vector3) -> Vector3:
 	return best
 
 
-static func _add_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
+static func _add_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3,
+		ca := Color.BLACK, cb := Color.BLACK, cc := Color.BLACK) -> void:
 	var n := (b - a).cross(c - a).normalized()
 	st.set_normal(n)
+	st.set_color(ca)
 	st.add_vertex(a)
 	st.set_normal(n)
+	st.set_color(cb)
 	st.add_vertex(b)
 	st.set_normal(n)
+	st.set_color(cc)
 	st.add_vertex(c)
+
+
+## Path weight of one terrain vertex as a colour (R): full on the centre line,
+## fading over half a width to the shoulders.
+static func _path_colour(field: PackedFloat32Array, idx: int, half_width: float) -> Color:
+	if field.is_empty():
+		return Color.BLACK
+	var d := field[idx]
+	return Color(1.0 - smoothstep(half_width * 0.5, half_width * 1.6, d), 0.0, 0.0, 1.0)
 
 
 func _build_materials() -> void:

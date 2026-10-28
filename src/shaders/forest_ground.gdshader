@@ -60,7 +60,11 @@ void fragment() {
 	float slope = 1.0 - clamp(v_world_normal.y, 0.0, 1.0);
 	float broad = vnoise(p * 0.11) * 0.7 + vnoise(p * 0.37) * 0.3;
 	float beds = vnoise(p * 0.52 + 17.0);
+	// Footpaths: vertex colour R is the path weight (ForestWorld._build_terrain_mesh).
+	// A noisy edge keeps the trodden strip from reading as a drawn line.
+	float trail = smoothstep(0.3, 0.7, COLOR.r + (vnoise(p * 0.9) - 0.5) * 0.35);
 	float w_stone = clamp(smoothstep(0.07, 0.19, slope) + smoothstep(0.74, 0.86, beds) * 0.85, 0.0, 1.0);
+	w_stone = max(w_stone, trail);
 	float w_grass = smoothstep(0.44, 0.6, broad) * (1.0 - w_stone);
 	float w_soil = max(1.0 - w_stone - w_grass, 0.0);
 
@@ -81,6 +85,8 @@ void fragment() {
 	float litter = vnoise(p * 1.65 + 4.0);
 	float damp = vnoise(p * 0.27 + 11.0);
 	alb *= mix(0.74, 1.08, litter);
+	// Trodden earth is a little darker than the litter around it.
+	alb *= mix(1.0, 0.86, trail);
 	alb *= mix(0.82, 1.0, damp);
 	// Grooves in the scan sit a little darker, like pockets of wet needles.
 	alb *= mix(0.8, 1.04, smoothstep(0.32, 0.68, nrm.g));

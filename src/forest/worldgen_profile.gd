@@ -126,6 +126,24 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(0.0, 3.0, 0.01) var ground_normal_strength := 1.2
 @export_range(0.0, 1.0, 0.01) var ground_roughness_wet := 0.72
 
+@export_group("Paths")
+## Footpaths joining the glade, the gates and the shrines (see ForestPaths).
+@export var paths_enabled := true
+## Lattice spacing of the path network, metres: a node per cell, joined to the start.
+@export_range(28.0, 140.0, 0.5) var path_node_spacing := 56.0
+## Width of the trodden strip, metres (terrain colour and clearing of trees).
+@export_range(0.6, 4.0, 0.05) var path_width := 1.6
+## Share of the lattice edges that also become loops (0 = a tree of paths).
+@export_range(0.0, 1.0, 0.01) var path_loop_chance := 0.25
+## How much the routes meander around the terrain's bumps.
+@export_range(0.0, 2.0, 0.01) var path_curviness := 0.6
+## Gap kept free of trunks beside a path, metres (on top of half the width).
+@export_range(0.0, 6.0, 0.05) var path_tree_clearance := 1.2
+## Share of gates that stand beside a path instead of at a random site.
+@export_range(0.0, 1.0, 0.01) var torii_on_path := 0.6
+## Share of lanterns that stand along a path instead of at a random site.
+@export_range(0.0, 1.0, 0.01) var lantern_on_path := 0.7
+
 @export_group("Distance and LOD")
 ## Trees are drawn out to this distance from the camera; past it they are fog.
 @export_range(4.0, 60.0, 0.5) var tree_draw_radius := 11.0
