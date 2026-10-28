@@ -85,11 +85,18 @@ func _ready() -> void:
 	await _frames(14)
 	await _shot("05_shadow_unlocked_flash")
 
-	# Comfort settings tab
-	menu.select_comfort()
-	_aim(menu, SkillTreeCanvas.comfort_rect("turn_snap").get_center())
+	# SETTINGS tab: each page, then the controller diagram for both dominant hands.
+	# The hand is changed in memory only, so the screenshots never touch hanabi_vr.cfg.
+	menu.select_settings()
+	for page in [[SkillTreeCanvas.PAGE_AUDIO, "07_settings_audio"], [SkillTreeCanvas.PAGE_MOVE, "08_settings_movement"],
+			[SkillTreeCanvas.PAGE_ACCESS, "09_settings_access"], [SkillTreeCanvas.PAGE_CONTROLS, "10_settings_controls_right"]]:
+		menu.canvas.settings_page = page[0]
+		await _frames(14)
+		await _shot(page[1])
+	VrComfortSettings.dominant_hand = "left"
 	await _frames(14)
-	await _shot("07_comfort_settings_tab")
+	await _shot("11_settings_controls_left")
+	VrComfortSettings.dominant_hand = "right"
 
 	run.pause_controller.close()
 

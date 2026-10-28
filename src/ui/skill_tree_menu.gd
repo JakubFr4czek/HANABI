@@ -132,7 +132,7 @@ func open(game: RunGame, pose: Dictionary, blade_element: String, blade_seconds:
 	canvas.abilities = _ability_status(game)
 	canvas.hint_text = hint
 	canvas.status_text = ""
-	canvas.is_comfort_tab = false
+	canvas.is_settings_tab = false
 	if Elements.COMBAT_ELEMENTS.has(blade_element):
 		canvas.element = blade_element
 	elif not Elements.COMBAT_ELEMENTS.has(canvas.element):
@@ -356,7 +356,7 @@ func _activate(target: Dictionary, pointer_id: String) -> void:
 		"tab":
 			var k := int(target.key)
 			if k == 4:
-				select_comfort()
+				select_settings()
 			else:
 				select_element(Elements.COMBAT_ELEMENTS[k])
 			_buzz(pointer_id, 0.3, 0.03)
@@ -367,19 +367,20 @@ func _activate(target: Dictionary, pointer_id: String) -> void:
 			unlock_selected(pointer_id)
 		"close":
 			close_requested.emit()
-		"comfort":
-			_handle_comfort_action(String(target.key), pointer_id)
+		"settings":
+			_handle_settings_action(String(target.key), pointer_id)
 
 
-func select_comfort() -> void:
-	canvas.is_comfort_tab = true
+## Opens the SETTINGS tab on the page it was left on (audio, movement, access, controls).
+func select_settings() -> void:
+	canvas.is_settings_tab = true
 	canvas.status_text = ""
 	Sfx.play_at("ofuda_slice", global_position, -17.0, 4.0, 1.25)
 	_redraw_now()
 
 
 func select_element(el: String) -> void:
-	canvas.is_comfort_tab = false
+	canvas.is_settings_tab = false
 	if not Elements.COMBAT_ELEMENTS.has(el):
 		return
 	canvas.element = el
@@ -434,9 +435,13 @@ static func reason_text(reason: String) -> String:
 	return ""
 
 
-func _handle_comfort_action(key: String, pointer_id: String) -> void:
+## Settings buttons. A page button shows that page; every other button sets one
+## value in VrComfortSettings (saved at once) or runs its action.
+func _handle_settings_action(key: String, pointer_id: String) -> void:
 	var player: Node3D = run_game.player if run_game else null
-	if VrComfortSettings:
+	if key.begins_with("page_"):
+		canvas.settings_page = int(SkillTreeCanvas.SUBNAV_PAGE[key])
+	elif VrComfortSettings:
 		match key:
 			"vignette_on":
 				VrComfortSettings.set_vignette_enabled(true, player)
@@ -474,6 +479,12 @@ func _handle_comfort_action(key: String, pointer_id: String) -> void:
 				VrComfortSettings.set_smooth_turn_speed(3.0, player)
 			"smooth_40":
 				VrComfortSettings.set_smooth_turn_speed(4.0, player)
+			"walk_slow":
+				VrComfortSettings.set_walk_scale(0.7, player)
+			"walk_normal":
+				VrComfortSettings.set_walk_scale(1.0, player)
+			"walk_fast":
+				VrComfortSettings.set_walk_scale(1.3, player)
 			"hand_right":
 				VrComfortSettings.set_dominant_hand("right", player)
 			"hand_left":
@@ -493,6 +504,31 @@ func _handle_comfort_action(key: String, pointer_id: String) -> void:
 					(player as XRPlayer).recenter_view()
 				else:
 					XRServer.center_on_hmd(XRServer.RESET_BUT_KEEP_TILT, true)
+			"vol_master_dn", "vol_music_dn", "vol_sfx_dn", "vol_ambience_dn":
+				VrComfortSettings.step_volume(_volume_key(key), -1)
+			"vol_master_up", "vol_music_up", "vol_sfx_up", "vol_ambience_up":
+				VrComfortSettings.step_volume(_volume_key(key), 1)
+			"flash_100":
+				VrComfortSettings.set_flash_percent(100)
+			"flash_50":
+				VrComfortSettings.set_flash_percent(50)
+			"flash_0":
+				VrComfortSettings.set_flash_percent(0)
+			"haptic_0":
+				VrComfortSettings.set_haptic_percent(0)
+			"haptic_50":
+				VrComfortSettings.set_haptic_percent(50)
+			"haptic_100":
+				VrComfortSettings.set_haptic_percent(100)
+			"haptic_test":
+				# Hears and feels the setting: one pulse on the katana hand.
+				if player is XRPlayer:
+					(player as XRPlayer).get_dominant_holder().pulse(0.6, 0.12)
 	Sfx.play_at("ofuda_slice", global_position, -16.0, 4.0, 1.1)
 	_buzz(pointer_id, 0.35, 0.04)
 	_redraw_now()
+
+
+## "vol_sfx_up" -> "sfx".
+static func _volume_key(key: String) -> String:
+	return key.split("_")[1]
