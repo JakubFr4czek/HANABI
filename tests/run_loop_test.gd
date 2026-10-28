@@ -148,6 +148,9 @@ func _run_all() -> void:
 		run.level == level_before + 1 and absf(player.health.hp - (40.0 + RunGame.LEVEL_UP_HEAL_HP)) < 0.5)
 	_check("Level-up gives exactly one skill point (%d -> %d)" % [points_before, run.skill_points],
 		run.skill_points == points_before + 1)
+	var hud := run.diegetic_hud
+	_check("Level-up flashes the wrist charm and shows the new level on the readout",
+		hud._charm_energy() > hud._charm_base_energy + 0.5 and hud._level_text.contains("LV %d" % run.level))
 	_check("Level-up keeps playing: state PLAYING, no slow motion (scale %.2f)" % TimeController.time_scale,
 		run.state == RunGame.RunState.PLAYING and TimeController.time_scale > 0.95)
 	_check("Level-up presents no card: no votive plaque in the run",

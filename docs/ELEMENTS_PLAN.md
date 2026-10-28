@@ -908,7 +908,7 @@ Testy pilnujące liczb: `tests/skill_tree_data_test.gd` (`_test_balance_targets`
 - [x] **D12.8 Buffy:** `RunBuffs`, mnożniki w `apply_locomotion_speed`, `outgoing_scale`, leczenie i regen, HUD buffów.
 - [x] **D12.9 Testy:** rozszerzenie `hokora_test`, `skill_tree_data_test`, `vr_menu_pause_test`, `run_loop_test`, `element_abilities_test`; nowy test wizualny na `run.tscn`.
 - [x] **D12.10 Balans:** `tools/balance_model.gd` (XP, poziomy, punkty, buffy), `balance_sim`, wynik w sekcji 6.
-- [ ] **D12.11 Screenshoty i ocena surowa:** HUD XP/poziom, level-up, kapliczka z żółtymi ofudami i wyborem, aktywny buff.
+- [x] **D12.11 Screenshoty i ocena surowa:** HUD XP/poziom, level-up, kapliczka z żółtymi ofudami i wyborem, aktywny buff.
 
 ### 11. Decyzje podjęte bez pytania (do przeglądu)
 
@@ -919,3 +919,24 @@ Testy pilnujące liczb: `tests/skill_tree_data_test.gd` (`_test_balance_targets`
 - **Koszty 1/1/1/2/3** (finał = 7 pkt), zamiast skalowania kosztów 3/5/5/8/12 o ~2×, żeby zachować tempo D1 przy nowym źródle punktów.
 - **Elita 48 XP** (2× yōkai): tyle, żeby elita była warta odwrócenia uwagi, ale nie zastępowała tłumu.
 - **Odmowa gestu przy wrogu w 3.5 m**, a nie tylko przy braku miejsca, bo wróg tuż obok to też ryzyko przypadkowego otwarcia w walce.
+
+### 12. Realizacja i ocena (D12, 2026-10-28)
+
+Zrobione: punkty z poziomów (`RunGame.skill_points`, koszty 1/1/1/2/3), XP per typ wroga (24 / 48 / 64), krzywa 150 + 45·(L−1), gest dłoni na ołtarzu (`HokoraShrine.is_touched_by`, `HokoraManager.poll_touch`, E na desktopie), odmowa w walce i bez miejsca, `ShrineOffering` (trzy żółte `OfudaTalisman`, `plan_placement` z zapytaniami fizycznymi), wspólna pauza `PauseController.hold_for_offering`, bramka trafień `HeldWeapon.combat_blocked`, `RunBuffs` (speed, damage, heal) z mnożnikami w `apply_locomotion_speed` i `HeldWeapon.outgoing_scale`, HUD z linią buffów i błyskiem poziomu, usunięty `OfudaPickup`.
+
+Testy: `hokora_test` (gest, odmowa, pauza, katana, karty bez kolizji, ściana, cięcie i buff, zużyta kapliczka, mnożniki, kadr i kontrast na prawdziwej scenie), `vr_menu_pause_test` (wolna dłoń otwiera, dłoń z kataną nie), `skill_tree_data_test`, `run_loop_test`, `elements_test`. Zrzuty w `docs/d12/`.
+
+Ocena surowa (zrzuty z okna gry, nie z preview):
+- **Dobre:** żółte karty z cynobrową pieczęcią czytelne na tle mgły; kontrast tuszu na papierze 12:1 (cel 4.5:1), nagłówek 5.9:1. Karty w środku kadru, 0.75–1.3 m od oczu. Napisy czytają się w dobrą stronę (przód karty patrzy na gracza; w pierwszej wersji były lustrzane, poprawione). Drzewko czytelne z `点 × N`.
+- **Słabe, najważniejsze:** kapliczka (procedural hokora) to prawie czarna bryła. Ołtarz, w który trzeba położyć dłoń, jest praktycznie niewidoczny w mgle, więc gracz nie wie, gdzie dotknąć. Potrzebny cue (ciepły rąbek ołtarza) albo podmiana modelu z `assets_incoming/shrine/` (D5).
+- **Słabe:** na desktopowym kadrze płytka nadgarstka zasłania dolny podpis lewej karty (szybkość), a ostrze katany przysłania prawą (leczenie). To efekt kadru desktopowego: płytka jest na dłoni pomocniczej, a katana w dłoni. Do sprawdzenia w goglach.
+- **Słabe:** błysk poziomu trwa 0.6 s; na nieruchomym kadrze ledwo widać. Linia nadgarstka ma 22 px, czytelna z bliska; oba do sprawdzenia w ruchu na Quest.
+- **Nie zweryfikowane:** dotyk i haptyka w prawdziwym VR (test idzie przez XR sim); zrzuty robione na desktopie.
+
+Decyzje podjęte w trakcie (do przeglądu):
+- Linia 1 nadgarstka zostaje z wynikiem (`pt`), fala przeniesiona na linię 2 (`XP · 点 · 波`), buffy na linii 3. Etykieta 22 px, przesunięta w dół, żeby trzy linie nie wchodziły w „命”.
+- Desktop: klawisz **E** sięga do najbliższego ołtarza (w zasięgu 2.2 m). To wygoda testowa; w VR liczy się prawdziwa dłoń.
+- Gdy nie ma miejsca na trzy karty (np. ściana), gest jest odrzucony. Nie ma wariantu z mniejszą liczbą kart.
+- Karty trzech buffów są stałe i zawsze te same (od lewej: Szybkość, Siła, Leczenie), żeby wybór był czytelny.
+- Odmowa przy wrogu w 3.5 m zamiast „przesuń wroga": wróg w zasięgu kart jest zawsze odrzucany, więc karty nigdy nie przenikają wroga.
+

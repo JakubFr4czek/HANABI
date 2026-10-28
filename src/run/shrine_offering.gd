@@ -18,7 +18,7 @@ const CARD_HEIGHT_BELOW_HEAD := 0.35
 const RADII := [1.0, 0.9, 1.15, 0.8, 1.25]
 ## Yaw of the three cards around the view (deg). The arc is 24° apart, so the cards
 ## keep a gap of about 8 cm.
-const ARC_YAW_DEG := [-24.0, 0.0, 24.0]
+const ARC_YAW_DEG := [24.0, 0.0, -24.0]
 ## Whole-arc shifts tried when the centred arc is blocked (deg).
 const SHIFT_YAW_DEG := [0.0, -12.0, 12.0]
 ## Free space around a card (m) that no enemy, trunk or prop may enter.
@@ -113,8 +113,9 @@ func plan_placement() -> Array[Transform3D]:
 				var yaw := base_yaw + deg_to_rad(arc + shift)
 				var pos := head_pos + Vector3(sin(yaw), 0.0, cos(yaw)) * radius
 				pos.y = head_pos.y - CARD_HEIGHT_BELOW_HEAD
-				var to_head := Vector3(head_pos.x, pos.y, head_pos.z) - pos
-				var at := Transform3D(Basis.looking_at(to_head, Vector3.UP), pos)
+				# The card's front (+Z) faces the player: its -Z points away from them.
+				var away := pos - Vector3(head_pos.x, pos.y, head_pos.z)
+				var at := Transform3D(Basis.looking_at(away, Vector3.UP), pos)
 				if not card_clear(space, at):
 					break
 				out.append(at)

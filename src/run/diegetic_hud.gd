@@ -188,7 +188,9 @@ func _setup_wrist_unit(player: Node3D) -> void:
 		font.fallbacks = [load(HUD_FONT_PATH)]
 	font.variation_embolden = 0.35
 	hp_label = _make_label("HpLabel", font, 44, Vector3(TEXT_X, 0.0021, -0.0085))
-	wrist_label = _make_label("WristLabel", font, 26, Vector3(TEXT_X, 0.0021, 0.0062))
+	# Three lines (rank, XP and points, buffs) sit in the band between the HP row and the
+	# element strip; centred lower than the HP label so they never run into it.
+	wrist_label = _make_label("WristLabel", font, 22, Vector3(TEXT_X, 0.0021, 0.0145))
 	wrist_label.line_spacing = -2.0
 	wrist_face.add_child(hp_label)
 	wrist_face.add_child(wrist_label)
@@ -417,12 +419,9 @@ func _make_label(node_name: String, font: Font, size: int, at: Vector3) -> Label
 func _process(delta: float) -> void:
 	if _parry_glow > 0.0:
 		_parry_glow = maxf(_parry_glow - delta, 0.0)
-		_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2
-	if _level_flash > 0.0:
-		_level_flash = maxf(_level_flash - delta, 0.0)
-		_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2 \
-			+ LEVEL_FLASH_STRENGTH * _level_flash / LEVEL_FLASH_SECONDS
+	_level_flash = maxf(_level_flash - delta, 0.0)
 	_level_text_left = maxf(_level_text_left - delta, 0.0)
+	_charm_mat.emission_energy_multiplier = _charm_energy()
 	_orient_wrist_face(delta)
 	_update_element_strip(delta)
 	_update_label_visibility()
@@ -479,6 +478,12 @@ func flash_level_up(new_level: int) -> void:
 var _charm_base_energy := 0.28
 
 
+## Charm glow: the health base, the parry pulse and the level-up flash, all in one place
+## (the HUD sets it every physics frame, so the flash must be part of it).
+func _charm_energy() -> float:
+	return _charm_base_energy + _parry_glow * 2.2 + LEVEL_FLASH_STRENGTH * _level_flash / LEVEL_FLASH_SECONDS
+
+
 ## The readout fades in only when the wrist is raised toward the face.
 ## (Desktop pins the wrist to the camera inside the show zone, so it reads
 ## as permanently raised there.)
@@ -522,7 +527,7 @@ func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, 
 	_charm_mat.albedo_color = hp_col * Color(0.55, 0.55, 0.55, 1.0)
 	_charm_mat.emission = hp_col
 	_charm_base_energy = 0.28 + (1.0 - hp_ratio) * 0.55 + (0.65 if critical else 0.0)
-	_charm_mat.emission_energy_multiplier = _charm_base_energy + _parry_glow * 2.2
+	_charm_mat.emission_energy_multiplier = _charm_energy()
 
 	if hp_gauge:
 		_hp_gauge_mat.set_shader_parameter("fill_ratio", hp_ratio)
