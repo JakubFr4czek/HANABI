@@ -33,7 +33,7 @@ func _ready() -> void:
 	var elite := run.wave_director.spawn_elite_at(Vector3(1.8, 0.0, -2.4), player.global_position, Elements.SHADOW)
 	elite.set_pose("stalk")
 	await _frames(18)
-	await _shot("elite_halo_fog")
+	await _shot("elite_fog")
 
 	var oni := run.wave_director.spawn_oni_boss(player.global_position)
 	oni.global_position = Vector3(-0.5, 0.0, -2.6)

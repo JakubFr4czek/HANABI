@@ -38,9 +38,31 @@ func _run_all() -> void:
 		oni._flesh != null and oni._flesh.get_shader_parameter("base_color").r < 0.2)
 	var elite := run.wave_director.spawn_elite_at(Vector3(2.0, 0.0, -2.5), player.global_position, Elements.INK)
 	await _frames(4)
-	_check("Elite yōkai wear a visible elemental halo ring", elite._elite_halo != null)
+	# Elites carry their element in the body (eyes, sigil, sash, claws, skin),
+	# never in a ring or an overlay that draws over the scene.
+	_check("Elite yōkai has no ring, torus or no_depth_test overlay", not _has_overlay(elite) and elite.find_child("EliteHalo", true, false) == null)
+	_check("Ink elite's eyes take the element colour (blue over red, swarm is red)",
+		elite._eyes.emission.b > elite._eyes.emission.r and y._eyes.emission.r > y._eyes.emission.b)
+	_check("Elite adds no draw calls over a swarm body (%d vs %d meshes)" % [_mesh_count(elite), _mesh_count(y)],
+		_mesh_count(elite) <= _mesh_count(y))
 	_check("Element firework helper exists for death VFX", ElementFirework != null)
 	run.queue_free()
+
+
+## True if [param body] draws a torus ring or a mesh that ignores depth (drawn through walls and bodies).
+func _has_overlay(body: Node) -> bool:
+	for m in body.find_children("*", "MeshInstance3D", true, false):
+		var mi := m as MeshInstance3D
+		if mi.mesh is TorusMesh:
+			return true
+		var mat := mi.material_override as BaseMaterial3D
+		if mat and mat.no_depth_test:
+			return true
+	return false
+
+
+func _mesh_count(body: Node) -> int:
+	return body.find_children("*", "MeshInstance3D", true, false).size()
 
 
 func _check(label: String, ok: bool) -> void:

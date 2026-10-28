@@ -1,7 +1,7 @@
 extends Node
 ## Pooled yōkai must come back as clean swarm bodies: an elite corpse recycled
-## by WaveDirector and reused for a swarm spawn must lose its scale, halo,
-## group and death-dissolve material state.
+## by WaveDirector and reused for a swarm spawn must lose its scale, element
+## tint, group and death-dissolve material state.
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
 
@@ -26,8 +26,8 @@ func _run_all() -> void:
 	var elite := director.spawn_elite_at(Vector3(0.0, 0.0, 8.0), player.global_position, Elements.STORM)
 	await _frames(4)
 	# Elites are not node-scaled (that tears rigid parts off their joints);
-	# they read as elite through the halo instead.
-	_check("Elite spawns unscaled with a halo", is_equal_approx(elite.scale.x, 1.0) and elite._elite_halo != null and elite._elite_halo.visible)
+	# they read as elite through their element-coloured eyes instead.
+	_check("Elite spawns unscaled with storm-blue eyes", is_equal_approx(elite.scale.x, 1.0) and elite._eyes.emission.b > elite._eyes.emission.r)
 	elite.die({})
 	# 0.95 s dissolve at 90 fps ≈ 86 frames; recycle happens on dissolve_finished.
 	await _frames(140)
@@ -39,7 +39,10 @@ func _run_all() -> void:
 	_check("Respawned yōkai is alive and standing",
 		not swarm.is_dead and swarm.state == ActiveRagdoll.State.STANDING)
 	_check("Respawned swarm is back to normal size (was elite 1.14×)", swarm.scale.is_equal_approx(Vector3.ONE))
-	_check("Respawned swarm lost the elite halo", swarm.find_child("EliteHalo", true, false) == null)
+	_check("Respawned swarm lost the elite tint and ring",
+		swarm.find_child("EliteHalo", true, false) == null
+		and swarm._skin.get_shader_parameter("base_color").is_equal_approx(Yokai.SKIN_BASE)
+		and swarm._eyes.emission.r > swarm._eyes.emission.b)
 	_check("Respawned swarm left the elite group", not swarm.is_in_group("elite_yokai"))
 	_check("Respawned skin fill restored (was dissolved to ~0.1)",
 		float(swarm._skin.get_shader_parameter("fill")) > 1.0)
