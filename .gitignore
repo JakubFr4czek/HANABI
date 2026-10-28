@@ -25,3 +25,8 @@ export_presets.cfg.bak
 .vscode/
 .idea/
 /.tools/
+
+# Surowa paczka assetów (new_assets/ = zip od Jakuba, assets_incoming/ = rozpakowana).
+# Do repo trafiają tylko przeniesione do assets/ pliki faktycznie użyte (zasada 6: nic >50 MB).
+/new_assets/
+/assets_incoming/
