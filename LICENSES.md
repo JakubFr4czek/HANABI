@@ -84,5 +84,7 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `music/orientalsomber.ogg`, `.mid` | https://opengameart.org/content/oriental-somber | Tozan | CC0 |
 | `music/ruskerdax_-_kamogawa_nightbreak.mp3` | https://opengameart.org/content/kamogawa-nightbreak | Ruskerdax | CC0 |
 | `fonts/yujisyuku`, `yujiboku`, `yujimai`, `zenantique` | https://github.com/google/fonts/tree/main/ofl | Kinuta Font Factory / Yoshimichi Ohira | SIL OFL 1.1 |
+| `ui/splash/firework_transparent.png`, `ui/splash/hanabi_splash_1920x1080.png` | original project artwork (AI-assisted) | Jakub Frączek (project author) | Project-owned asset (no third-party license) |
+| `ui/splash/nanjo_logo_transparent.png`, `ui/splash/nanjo_logo_1920x1080.png` | Nanjo studio logo | Nanjo (studio's own asset) | Own asset, not CC; used as the studio logo |
 
 Not downloaded (need a login, see `assets_raw/*/MANUAL_DOWNLOADS.md`): Mixamo, Freesound sounds. Any CC BY asset added to `assets/` needs a row here, a credit in `CREDITS.md`, and a line in the in-game `CreditsLabel` (`scenes/training_arena.tscn`).
