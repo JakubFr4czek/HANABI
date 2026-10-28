@@ -34,6 +34,9 @@ var _down_time := 0.0
 
 
 func _ready() -> void:
+	# The rig around us keeps processing while a menu pauses the game; hit
+	# points, regeneration and the invulnerability window must not.
+	process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_to_group("player_health")
 	hp = max_hp
 

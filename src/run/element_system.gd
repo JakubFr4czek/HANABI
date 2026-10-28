@@ -57,6 +57,14 @@ var kagemusha_decoy: Node3D = null
 ## ink ward, pending Shadow Clone mirrors and the backstab Ofuda throttle.
 var _barriers: Array[Dictionary] = []
 var abyssal_ward_time: float = 0.0
+## Abyssal Sea: true while the player stands in one of their own ink pools.
+var abyssal_in_ink: bool = false
+var _abyssal_ward_cooldown: float = 0.0
+## Plan (d): stepping onto your ink grants a *brief* (0.5 s) invulnerability,
+## not immunity for as long as the pool lasts: it triggers on entering ink and
+## re-arms after this many seconds.
+const ABYSSAL_WARD_TIME := 0.5
+const ABYSSAL_WARD_REARM := 4.0
 var shadow_clone_charges: int = 0
 var _backstab_cooldown: float = 0.0
 
@@ -116,6 +124,8 @@ func reset() -> void:
 	shadow_cleave_buff_time = 0.0
 	kagemusha_time_remaining = 0.0
 	abyssal_ward_time = 0.0
+	abyssal_in_ink = false
+	_abyssal_ward_cooldown = 0.0
 	shadow_clone_charges = 0
 	_backstab_cooldown = 0.0
 	_clear_runtime_vfx()
@@ -566,28 +576,34 @@ func _update_barriers(delta: float) -> void:
 		_barriers[i] = b
 
 
-## Abyssal Sea: standing in your own ink refreshes a short damage ward.
+## Abyssal Sea: stepping onto your own ink grants a 0.5 s ward (once per
+## [constant ABYSSAL_WARD_REARM]); standing in it keeps the speed boost.
 func _update_abyssal_ward(delta: float) -> void:
 	abyssal_ward_time = maxf(0.0, abyssal_ward_time - delta)
-	if not _has_node("abyssal_sea") or _ink_pools.is_empty():
-		return
-	var p := _player_origin()
-	for pool: Dictionary in _ink_pools:
-		var flat := p - (pool.position as Vector3)
-		flat.y = 0.0
-		if flat.length() <= float(pool.radius):
-			abyssal_ward_time = 0.5
-			return
+	_abyssal_ward_cooldown = maxf(0.0, _abyssal_ward_cooldown - delta)
+	var inside := false
+	if _has_node("abyssal_sea") and not _ink_pools.is_empty():
+		var p := _player_origin()
+		for pool: Dictionary in _ink_pools:
+			var flat := p - (pool.position as Vector3)
+			flat.y = 0.0
+			if flat.length() <= float(pool.radius):
+				inside = true
+				break
+	if inside and not abyssal_in_ink and _abyssal_ward_cooldown <= 0.0:
+		abyssal_ward_time = ABYSSAL_WARD_TIME
+		_abyssal_ward_cooldown = ABYSSAL_WARD_REARM
+	abyssal_in_ink = inside
 
 
-## True while the Abyssal Sea ward is up (PlayerHealth negates the hit).
+## True during the brief Abyssal Sea ward (PlayerHealth negates that one hit window).
 func is_player_warded() -> bool:
 	return abyssal_ward_time > 0.0
 
 
 ## Locomotion multiplier from Abyssal Sea while standing in ink (1.0 else).
 func get_player_speed_multiplier() -> float:
-	if abyssal_ward_time > 0.0 and _has_node("abyssal_sea"):
+	if abyssal_in_ink and _has_node("abyssal_sea"):
 		return float(_fx(Elements.INK, "abyssal_speed_multiplier", 1.0))
 	return 1.0
 

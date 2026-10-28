@@ -21,6 +21,8 @@ var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	# Keeps playing while a menu pauses the game (ducked by Sfx.set_pause_ducking).
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	rain_player = AudioStreamPlayer.new()
 	rain_player.name = "Rain"
 	var stream: AudioStream = RAIN
