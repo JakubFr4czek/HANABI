@@ -390,6 +390,7 @@ func _test_choice_reads_on_screen() -> void:
 	var space := run.get_world_3d().direct_space_state
 	var in_view := 0
 	var unblocked := 0
+	var facing := 0
 	var reading := 0
 	var central := 0
 	for c in cards:
@@ -406,10 +407,15 @@ func _test_choice_reads_on_screen() -> void:
 		var ray := PhysicsRayQueryParameters3D.create(cam.global_position, at, 1 | 2 | 64)
 		if space.intersect_ray(ray).is_empty():
 			unblocked += 1
+		# The front of the card (+Z) must face the eyes, or the inscription reads backwards.
+		var to_eye := (cam.global_position - at).normalized()
+		if card.global_basis.z.dot(to_eye) > 0.7:
+			facing += 1
 	_check("All three cards are in the camera's view (%d/3)" % in_view, in_view == 3)
 	_check("All three cards read at 0.75–1.3 m from the eyes (%d/3)" % reading, reading == 3)
 	_check("All three cards sit in the central 60 %% of the screen (%d/3)" % central, central == 3)
 	_check("Nothing blocks the view of any card: no trunk, prop or terrain in front (%d/3)" % unblocked, unblocked == 3)
+	_check("Every card faces the player, so the inscription reads the right way round (%d/3)" % facing, facing == 3)
 	var ink := OfudaTalisman.INK
 	var paper := OfudaTalisman.PAPER
 	var ratio := (_luminance(paper) + 0.05) / (_luminance(ink) + 0.05)

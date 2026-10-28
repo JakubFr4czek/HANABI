@@ -26,7 +26,7 @@ const CATEGORIES := {
 	"imbue_ink": ["res://assets/audio/sfx/hanabi_proc", "imbue_ink"],
 	"imbue_shadow": ["res://assets/audio/sfx/hanabi_proc", "imbue_shadow"],
 	"element_fade": ["res://assets/audio/sfx/hanabi_proc", "element_fade"],
-	# Hokora shrine handbell (D1): rings on approach, once per claim.
+	# Hokora shrine handbell (D1, D12): rings on approach and on every hand touch.
 	"hokora_suzu": ["res://assets/audio/sfx/hanabi_proc", "hokora_suzu"],
 	# Bonshō temple bell cues (Zadanie 5)
 	"bonsho": ["res://assets/audio/sfx/bonsho", "bonsho_run_start"],
