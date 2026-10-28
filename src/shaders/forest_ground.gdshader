@@ -28,6 +28,14 @@ uniform float ambient_fill = 0.0;
 // Kept for callers that set it; the scans carry their own cavities.
 uniform float fill = 1.35;
 uniform float cavity_ao : hint_range(0.0, 1.0) = 0.0;
+// Footpath material (its own texture, never mixed with the layers above).
+uniform sampler2D path_albedo : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D path_normal : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform float path_tile = 2.2;
+// Warm, lit packed earth: brighter than the dark duff beside the trail.
+uniform vec3 path_tint : source_color = vec3(1.0, 0.9, 0.76);
+// Lifts the trail above the dark duff beside it (about 40% more luminance).
+uniform float path_gain = 1.5;
 
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
@@ -60,13 +68,14 @@ void fragment() {
 	float slope = 1.0 - clamp(v_world_normal.y, 0.0, 1.0);
 	float broad = vnoise(p * 0.11) * 0.7 + vnoise(p * 0.37) * 0.3;
 	float beds = vnoise(p * 0.52 + 17.0);
-	// Footpaths: vertex colour R is the path weight (ForestWorld._build_terrain_mesh).
-	// A noisy edge keeps the trodden strip from reading as a drawn line.
+	// Footpaths (vertex colour R, ForestWorld._build_terrain_mesh). The strip is
+	// its own material: no stone, grass or soil mixes into it. The edge is soft
+	// and noisy, so it never reads as a drawn line.
 	float trail = smoothstep(0.3, 0.7, COLOR.r + (vnoise(p * 0.9) - 0.5) * 0.35);
-	float w_stone = clamp(smoothstep(0.07, 0.19, slope) + smoothstep(0.74, 0.86, beds) * 0.85, 0.0, 1.0);
-	w_stone = max(w_stone, trail);
-	float w_grass = smoothstep(0.44, 0.6, broad) * (1.0 - w_stone);
-	float w_soil = max(1.0 - w_stone - w_grass, 0.0);
+	float free = 1.0 - trail;
+	float w_stone = clamp(smoothstep(0.07, 0.19, slope) + smoothstep(0.74, 0.86, beds) * 0.85, 0.0, 1.0) * free;
+	float w_grass = smoothstep(0.44, 0.6, broad) * max(free - w_stone, 0.0);
+	float w_soil = max(free - w_stone - w_grass, 0.0);
 
 	// A second, tighter sample so needles and grit stay visible at the feet.
 	vec3 soil = mix(texture(soil_albedo, p / soil_tile).rgb,
@@ -74,19 +83,22 @@ void fragment() {
 	vec3 grass = mix(texture(grass_albedo, p / grass_tile).rgb,
 		texture(grass_albedo, p / (grass_tile * 0.45) + vec2(8.0, 1.0)).rgb, 0.38);
 	vec3 stone = texture(stone_albedo, p / stone_tile).rgb;
+	// Packed earth of the trail; a coarser second sample breaks the tiling.
+	vec3 path = mix(texture(path_albedo, p / path_tile).rgb,
+		texture(path_albedo, p / (path_tile * 0.4) + vec2(3.0, 7.0)).rgb, 0.35) * path_tint * path_gain;
 	vec3 nrm = texture(soil_normal, p / soil_tile).rgb * w_soil
 		+ texture(grass_normal, p / grass_tile).rgb * w_grass
-		+ texture(stone_normal, p / stone_tile).rgb * w_stone;
+		+ texture(stone_normal, p / stone_tile).rgb * w_stone
+		+ texture(path_normal, p / path_tile).rgb * trail;
 	// Soil stays brown, grass stays green, stone stays cool. One grey tint
 	// was turning the whole floor into a single sheet.
 	vec3 alb = soil * vec3(0.58, 0.50, 0.44) * w_soil
 		+ grass * vec3(0.42, 0.52, 0.40) * w_grass
-		+ stone * vec3(0.50, 0.52, 0.54) * w_stone;
+		+ stone * vec3(0.50, 0.52, 0.54) * w_stone
+		+ path * trail;
 	float litter = vnoise(p * 1.65 + 4.0);
 	float damp = vnoise(p * 0.27 + 11.0);
 	alb *= mix(0.74, 1.08, litter);
-	// Trodden earth is a little darker than the litter around it.
-	alb *= mix(1.0, 0.86, trail);
 	alb *= mix(0.82, 1.0, damp);
 	// Grooves in the scan sit a little darker, like pockets of wet needles.
 	alb *= mix(0.8, 1.04, smoothstep(0.32, 0.68, nrm.g));

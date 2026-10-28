@@ -153,8 +153,10 @@ func setup(p_follow: Node3D, arena_lightmap: LightmapGI = null) -> void:
 		torii_manager = ToriiManager.new()
 		torii_manager.name = "ToriiManager"
 		add_child(torii_manager)
-	torii_manager.setup(self, follow, get_parent() as RunGame)
+	# The ring first, then the gates: gate and shrine checks read the chunks, so
+	# they must see the same world whether this is the first run or a reset.
 	_rebuild_active_chunks()
+	torii_manager.setup(self, follow, get_parent() as RunGame)
 
 
 ## Swaps the profile in place (the dock and the preview use this): meshes,
@@ -165,22 +167,34 @@ func apply_profile(p_profile: WorldGenProfile) -> void:
 	reset()
 
 
-func reset() -> void:
+## A new run. [param anchor] (the spawn) centres the ring before it is built:
+## the player may still stand far away from the spawn, and the opening shrine is
+## checked against the ring around the spawn right after this call.
+func reset(anchor: Vector3 = Vector3.INF, facing: Vector3 = Vector3.ZERO) -> void:
+	# Freed now, not at the end of the frame: a queued chunk keeps its trunk
+	# colliders in the physics space while the new ring is built, and gate and
+	# shrine checks would see trunks that are gone.
 	for key in _chunks.keys():
-		(_chunks[key] as Node3D).queue_free()
+		var old := _chunks[key] as Node3D
+		remove_child(old)
+		old.free()
 	_chunks.clear()
 	_trunk_cells.clear()
 	_tree_spot_cache.clear()
 	_potential_cache.clear()
 	_path_field_cache.clear()
 	_last_tree_draw_pos = Vector3.INF
-	center_chunk = Vector2i.ZERO
+	center_chunk = _world_to_chunk(anchor) if anchor != Vector3.INF else Vector2i.ZERO
 	chunk_count = 0
 	active_chunk_keys.clear()
+	# The same order as setup(): gates are cleared, the ring is rebuilt without
+	# them, then the gates are placed on the new ring.
 	if torii_manager:
-		torii_manager.reset()
+		torii_manager.clear_gates()
 	if follow:
 		_rebuild_active_chunks()
+	if torii_manager:
+		torii_manager.ensure_gates_ahead(anchor, facing)
 
 
 ## Noise, materials and meshes come from the profile. Called whenever it changes.
@@ -410,6 +424,10 @@ func _rebuild_active_chunks() -> void:
 		var c: Vector2i = key
 		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 2:
 			_path_field_cache.erase(key)
+	if paths != null:
+		var reach := (radius + 2.5) * _chunk_size
+		var centre := Vector2(center_chunk.x, center_chunk.y) * _chunk_size
+		paths.prune(Rect2(centre - Vector2(reach, reach), Vector2(reach, reach) * 2.0))
 	if follow:
 		_last_tree_draw_pos = _anchor_position()
 		_refresh_tree_draw(_anchor_position())
@@ -570,6 +588,10 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 			var gates: Array = root.get_meta("torii_world_positions", [])
 			gates.append(Vector3(wx, hy, wz))
 			root.set_meta("torii_world_positions", gates)
+		elif kind >= KIND_UNDERGROWTH:
+			var stones: Array = root.get_meta("undergrowth_world_positions", [])
+			stones.append(Vector3(wx, hy, wz))
+			root.set_meta("undergrowth_world_positions", stones)
 		elif kind == KIND_LANTERN:
 			var lanterns: Array = root.get_meta("lantern_world_positions", [])
 			lanterns.append(Vector3(wx, hy, wz))
@@ -894,10 +916,15 @@ func connect_shrine(shrine: Node3D) -> void:
 	var near := paths.nearest_point(Vector2(at.x, at.z), SHRINE_SPUR_REACH)
 	if near == Vector2.INF:
 		return
+	# Routed like the network (A* on the slope), so the spur follows the hill
+	# instead of cutting across it; _ribbon_mesh samples the ground every metre.
+	var line := paths.route_between(near, Vector2(at.x, at.z))
+	if line.size() < 2:
+		return
 	var spur := MeshInstance3D.new()
 	spur.name = "PathSpur"
 	spur.top_level = true
-	spur.mesh = _ribbon_mesh(PackedVector2Array([near, Vector2(at.x, at.z)]))
+	spur.mesh = _ribbon_mesh(line)
 	spur.material_override = _ground_mat
 	spur.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	spur.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
@@ -1471,6 +1498,11 @@ func _build_materials() -> void:
 		_ground_mat.set_shader_parameter(layer + "_albedo", load(dir + "_diff_1k.jpg"))
 		_ground_mat.set_shader_parameter(layer + "_normal", load(dir + "_nor_gl_1k.jpg"))
 	_ground_mat.set_shader_parameter("fog_fade_start", profile.ground_fade_start)
+	# Footpath material: its own texture and warm tint (see forest_ground.gdshader).
+	_ground_mat.set_shader_parameter("path_albedo", load("res://assets/textures/forest_path/ground067_diff_1k.jpg"))
+	_ground_mat.set_shader_parameter("path_normal", load("res://assets/textures/forest_path/ground067_nor_gl_1k.jpg"))
+	_ground_mat.set_shader_parameter("path_tint", profile.path_tint)
+	_ground_mat.set_shader_parameter("path_gain", profile.path_gain)
 	_ground_mat.set_shader_parameter("fog_fade_end", profile.ground_fade_end)
 
 	_torii_mat = ShaderMaterial.new()

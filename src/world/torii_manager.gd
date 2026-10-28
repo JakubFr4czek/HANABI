@@ -26,6 +26,9 @@ var _rng := RandomNumberGenerator.new()
 var _spawn_check_timer: float = 0.0
 var _clearance_query: PhysicsShapeQueryParameters3D = null
 var _clearance_cyl: CylinderShape3D = null
+## Pose override while placing gates for a reset (see ensure_gates_ahead).
+var _pose_at := Vector3.INF
+var _pose_facing := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -42,13 +45,22 @@ func setup(p_forest: ForestWorld, p_follow: Node3D, p_run: RunGame = null) -> vo
 
 
 func reset() -> void:
-	for gate in active_gates:
-		if is_instance_valid(gate):
-			gate.queue_free()
-	active_gates.clear()
+	clear_gates()
 	_shuffle_bag.clear()
 	_refill_shuffle_bag()
 	_ensure_gates_ahead()
+
+
+## Removes every gate now (not at the end of the frame): a queued gate keeps its
+## colliders in the physics space, and the next placement would see them.
+func clear_gates() -> void:
+	for gate in active_gates:
+		if is_instance_valid(gate):
+			var parent := gate.get_parent()
+			if parent != null:
+				parent.remove_child(gate)
+			gate.free()
+	active_gates.clear()
 
 
 func _refill_shuffle_bag() -> void:
@@ -118,6 +130,17 @@ func _cull_distant_gates() -> void:
 			else:
 				kept.append(g)
 	active_gates = kept
+
+
+## Places gates ahead of the player up to the target count (run start and reset).
+## [param at] and [param facing] stand in for the player's pose when the player is
+## not yet on the spawn (a reset happens before the player is placed).
+func ensure_gates_ahead(at: Vector3 = Vector3.INF, facing: Vector3 = Vector3.ZERO) -> void:
+	_pose_at = at
+	_pose_facing = facing
+	_ensure_gates_ahead()
+	_pose_at = Vector3.INF
+	_pose_facing = Vector3.ZERO
 
 
 func _ensure_gates_ahead() -> void:
@@ -241,6 +264,8 @@ func spawn_gate_at(wx: float, wz: float, elem: String = "") -> ToriiGate:
 
 
 func _player_pos() -> Vector3:
+	if _pose_at != Vector3.INF:
+		return _pose_at
 	if follow and is_instance_valid(follow):
 		if follow.has_method("feet_position"):
 			return follow.call("feet_position")
@@ -249,6 +274,8 @@ func _player_pos() -> Vector3:
 
 
 func _player_forward() -> Vector3:
+	if _pose_facing != Vector3.ZERO:
+		return _pose_facing
 	if follow and is_instance_valid(follow):
 		var f := -follow.global_transform.basis.z
 		f.y = 0.0

@@ -420,7 +420,8 @@ func start_run() -> void:
 	_clear_ofuda_pickups()
 	element_system.reset()
 	if forest_world:
-		forest_world.reset()
+		forest_world.reset(spawn.global_position if spawn else Vector3.INF,
+			-spawn.global_transform.basis.z if spawn else Vector3.ZERO)
 	# After the forest: the opening shrine is validated against the chunks around the spawn.
 	if hokora_manager and spawn:
 		hokora_manager.reset(spawn.global_position, -spawn.global_transform.basis.z)
