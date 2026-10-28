@@ -105,20 +105,26 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Moonlight through canopy gaps: shafts per chunk.
 @export_range(0, 8, 1) var shafts_max_per_chunk := 5
 @export_range(4.0, 40.0, 0.5) var shaft_length := 15.0
-## Depth fog: where the milk starts and how fast it thickens (the density knob).
-## Fog reaches full strength at fog_end, which must stay inside the loaded chunks.
-@export_range(0.0, 20.0, 0.1) var fog_start := 0.4
-@export_range(4.0, 14.0, 0.1) var fog_end := 10.5
+## Depth fog: where the milk starts and how fast it thickens. Fog reaches full
+## strength at fog_end, which must stay inside the loaded chunks (VIEW_RANGE_END).
+## A later start thins the mist near the player; the far edge stays opaque.
+@export_range(0.0, 20.0, 0.1) var fog_start := 3.5
+@export_range(4.0, 14.0, 0.1) var fog_end := 11.0
 @export_range(0.2, 4.0, 0.05) var fog_curve := 1.0
-## Milk fog colour (sRGB). The background is the same colour, so the forest has no edge.
-@export var fog_color := Color(0.5, 0.53, 0.6)
+## Dusk palette: rose and blue, mixed by dusk_mix (0 = night blue, 1 = dusk rose).
+## fog, ambient and moon colours all follow the mix (see fog_color()).
+@export var dusk_pink := Color(0.66, 0.5, 0.64)
+@export var night_blue := Color(0.42, 0.48, 0.64)
+@export_range(0.0, 1.0, 0.01) var dusk_mix := 0.3
 @export_range(0.0, 2.0, 0.01) var ambient_energy := 0.55
-@export var moon_color := Color(0.64, 0.66, 0.68)
 @export_range(0.0, 3.0, 0.01) var moon_energy := 0.5
 @export_range(0.5, 1.5, 0.01) var exposure := 0.92
 @export_range(0.0, 1.0, 0.01) var glow_intensity := 0.16
 ## Volumetric fog is a PC-only recording setting (GDD §9): it is slow on Quest.
 @export var volumetric_fog := false
+## Cyan glow of the forest gates: the emission tint of the gate material.
+@export var torii_glow_color := Color(0.3, 0.9, 1.0)
+@export_range(0.0, 2.0, 0.01) var torii_glow_strength := 0.35
 
 @export_group("Ground")
 @export_range(0.0, 1.0, 0.01) var ground_wetness := 0.3
@@ -159,6 +165,16 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Set in the editor (a fresh seed each click) or by randomize_seed().
 func randomize_seed() -> void:
 	world_seed = randi() % 1000000
+
+
+## Milk fog and background colour (sRGB) at the current dusk mix.
+func fog_color() -> Color:
+	return night_blue.lerp(dusk_pink, dusk_mix)
+
+
+## Moonlight colour: a blue-white moon at night, a rose-white one at dusk.
+func moon_color() -> Color:
+	return night_blue.lightened(0.45).lerp(dusk_pink.lightened(0.4), dusk_mix)
 
 
 func _init() -> void:

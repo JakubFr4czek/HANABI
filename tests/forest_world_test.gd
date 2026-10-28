@@ -76,10 +76,10 @@ func _run_all() -> void:
 		forest._world_to_chunk(Vector3(13.9, 0.0, 0.0)) == Vector2i(0, 0)
 		and forest._world_to_chunk(Vector3(14.1, 0.0, 0.0)) == Vector2i(1, 0)
 		and forest._world_to_chunk(Vector3(-14.1, 0.0, 0.0)) == Vector2i(-1, 0))
-	_check("Fog bubble opened past the 9 m closet (end %.1f m)" % RunGame.RUN_FOG_END,
-		RunGame.RUN_FOG_END > 9.0 and RunGame.RUN_FOG_END <= ForestWorld.VIEW_RANGE_END)
+	_check("Fog bubble opened past the 9 m closet (end %.1f m)" % forest.profile.fog_end,
+		forest.profile.fog_end > 9.0 and forest.profile.fog_end <= ForestWorld.VIEW_RANGE_END)
 	_check("Trees draw out to the fog (radius %.1f m)" % forest.profile.tree_draw_radius,
-		forest.profile.tree_draw_radius >= RunGame.RUN_FOG_END)
+		forest.profile.tree_draw_radius >= forest.profile.fog_end)
 	_check("Chunks hold up to %d torii gates" % forest.profile.torii_max_per_chunk,
 		forest.profile.torii_max_per_chunk >= 2)
 	# Gate positions come from chunk meta (MultiMesh buffers read back empty
