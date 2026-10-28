@@ -147,7 +147,7 @@ Played once per launch, before the run intro. The launch scene is `scenes/main.t
 - **Look:** the film is drawn unshaded, with no fog, glow or camera effects on the splash camera, so the film keeps its own colours. The camera cull mask keeps only the splash layer, so no forest, sky, rain or hands show through.
 - **Hand-over:** a black veil on the camera fades out over 0.6 s while the intro starts, so the forest comes up from black. The films end on black, so this is seamless.
 - **Skip:** trigger, A/X, Space, Enter, Esc or a mouse click fades the film out in 0.4 s. The skip press cannot skip the intro: the intro only starts after the splash ends, and A/X skips the intro only from its own press.
-- **Limits:** the rain and forest ambience already start under the splash (audio, not visuals). The spawn, wave director and katana wait for the intro as before. The splash has no music of its own: apart from the rain and forest ambience above, the firework pop is the only sound.
+- **Sound:** the splash is silent except for the firework pop. The Ambience (rain, forest wind) and World (thunder, impacts) buses are muted while the films play and come back when the intro starts (an instant unmute under the black veil, not a fade). The spawn, wave director and katana wait for the intro as before.
 
 ## 10. Audio
 - Sword swings, clashes and slices; thunder; wind; temple bell (bonshō); night ambience.
