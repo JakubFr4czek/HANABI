@@ -1,3 +1,4 @@
+@tool
 class_name ForestWorld
 extends Node3D
 ## Endless forest illusion around the run shrine (docs/NIGHT_PLAN.md §3, GDD §9).
@@ -295,7 +296,6 @@ func _root_mound(wx: float, wz: float) -> float:
 	if d < clearing - MOUND_FADE_START:
 		return 0.0
 	var fade := smoothstep(clearing - MOUND_FADE_START, clearing + MOUND_FADE_END, d)
-	var slope := _local_hill_slope(wx, wz)
 	# Chunks are centered on their origin, so a point just west of 0 still
 	# belongs to chunk 0. Search the round neighbourhood, not floor() — but
 	# only the 4 m buckets the 1.6 m mound radius can touch.
@@ -306,9 +306,18 @@ func _root_mound(wx: float, wz: float) -> float:
 	var hix := int(floor((wx + 1.7) / MOUND_CELL))
 	var loz := int(floor((wz - 1.7) / MOUND_CELL))
 	var hiz := int(floor((wz + 1.7) / MOUND_CELL))
+	var half := profile.chunk_size * 0.5
 	for ox in range(-1, 2):
+		# A neighbour's trunks can only reach this point if the 1.7 m reach crosses
+		# the shared border: most points only ever query their own chunk.
+		var nx := cx + ox
+		if wx + 1.7 < nx * profile.chunk_size - half or wx - 1.7 > nx * profile.chunk_size + half:
+			continue
 		for oz in range(-1, 2):
-			var packed: Dictionary = _tree_spots(Vector2i(cx + ox, cz + oz))
+			var nz := cz + oz
+			if wz + 1.7 < nz * profile.chunk_size - half or wz - 1.7 > nz * profile.chunk_size + half:
+				continue
+			var packed: Dictionary = _tree_spots(Vector2i(nx, nz))
 			var cells: Dictionary = packed.get("cells", {})
 			for bx in range(lox, hix + 1):
 				for bz in range(loz, hiz + 1):
@@ -319,8 +328,13 @@ func _root_mound(wx: float, wz: float) -> float:
 							continue
 						var t := 1.0 - smoothstep(0.35, 1.55, dist)
 						best = maxf(best, t * 0.2 * spot.z)
+	# Most points have no trunk within reach: the slope (four hill samples) is
+	# only worth computing where there is a heap to settle.
+	if best <= 0.0:
+		return 0.0
 	# Rise over one metre. The walk test uses the same step; a heap on a
 	# face that is already steep is what pushed it past 40°.
+	var slope := _local_hill_slope(wx, wz)
 	var settle := 1.0 - smoothstep(0.1, 0.26, slope)
 	return best * settle * fade
 
@@ -533,6 +547,10 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 			var gates: Array = root.get_meta("torii_world_positions", [])
 			gates.append(Vector3(wx, hy, wz))
 			root.set_meta("torii_world_positions", gates)
+		elif kind == KIND_LANTERN:
+			var lanterns: Array = root.get_meta("lantern_world_positions", [])
+			lanterns.append(Vector3(wx, hy, wz))
+			root.set_meta("lantern_world_positions", lanterns)
 	if kind == KIND_TORII:
 		# Senbon corridors ride the same MultiMesh (one draw call): a node per
 		# corridor cost a draw each against the Quest cap.
@@ -1296,20 +1314,24 @@ func _build_terrain_mesh(coord: Vector2i) -> ArrayMesh:
 	var step := size / float(res - 1)
 	var field := _path_field(coord)
 	var half_width := _path_half_width()
+	# Each lattice height is sampled once; a quad's corners are shared with its
+	# neighbours, so sampling per quad did the same work four times over.
+	var heights := PackedFloat32Array()
+	heights.resize(res * res)
+	for j in res:
+		for i in res:
+			heights[j * res + i] = height_at(coord.x * size - size * 0.5 + float(i) * step,
+				coord.y * size - size * 0.5 + float(j) * step)
 	for z in res - 1:
 		for x in res - 1:
 			var x0 := -size * 0.5 + float(x) * step
 			var z0 := -size * 0.5 + float(z) * step
 			var x1 := x0 + step
 			var z1 := z0 + step
-			var wx0 := coord.x * size + x0
-			var wz0 := coord.y * size + z0
-			var wx1 := coord.x * size + x1
-			var wz1 := coord.y * size + z1
-			var p00 := Vector3(x0, height_at(wx0, wz0), z0)
-			var p10 := Vector3(x1, height_at(wx1, wz0), z0)
-			var p01 := Vector3(x0, height_at(wx0, wz1), z1)
-			var p11 := Vector3(x1, height_at(wx1, wz1), z1)
+			var p00 := Vector3(x0, heights[z * res + x], z0)
+			var p10 := Vector3(x1, heights[z * res + x + 1], z0)
+			var p01 := Vector3(x0, heights[(z + 1) * res + x], z1)
+			var p11 := Vector3(x1, heights[(z + 1) * res + x + 1], z1)
 			var c00 := _path_colour(field, z * res + x, half_width)
 			var c10 := _path_colour(field, z * res + x + 1, half_width)
 			var c01 := _path_colour(field, (z + 1) * res + x, half_width)
@@ -1447,6 +1469,22 @@ func _set_view_range(inst: GeometryInstance3D) -> void:
 	inst.visibility_range_end = 0.0
 
 
+## Meshes and collision hulls that depend only on their scene and crown, not on
+## the profile's numbers: built once per process and shared by every forest
+## (the crown rebuild and the hulls are the slow part of a forest build).
+static var _built: Dictionary = {}
+
+
+static func _built_once(key: String, build: Callable) -> Variant:
+	if not _built.has(key):
+		_built[key] = build.call()
+	return _built[key]
+
+
+static func _scene_key(scene: PackedScene) -> String:
+	return scene.resource_path if scene != null and scene.resource_path != "" else "procedural"
+
+
 func _build_meshes() -> void:
 	_shaft_mesh = QuadMesh.new()
 	_shaft_mesh.size = Vector2(1.0, 1.0)
@@ -1461,24 +1499,37 @@ func _build_meshes() -> void:
 	_tree_shapes.clear()
 	_tree_chest.clear()
 	for entry in profile.trees:
-		var mesh := _tree_mesh_for(entry)
-		var chest: Array = []
-		var hulls := _trunk_hulls(mesh, chest)
-		_tree_meshes.append(mesh)
+		var key := "tree|%s|%d" % [_scene_key(entry.scene), entry.crown]
+		var built := _built_once(key, _build_tree_parts.bind(entry)) as Dictionary
+		_tree_meshes.append(built.mesh)
 		_tree_mats.append(_sakura_material(entry) if entry.crown == TreeEntry.Crown.SAKURA else _tree_material())
-		_tree_shapes.append(hulls)
-		_tree_chest.append(float(chest[0]))
-	_torii_mesh = _build_torii_mesh()
-	_lantern_mesh = _build_lantern_mesh()
+		_tree_shapes.append(built.hulls)
+		_tree_chest.append(float(built.chest))
+	_torii_mesh = _built_once("torii|%s" % _scene_key(profile.torii_scene), _build_torii_mesh) as Mesh
+	_torii_shapes = _built_once("torii_hulls|%s" % _scene_key(profile.torii_scene), _torii_hulls) as Array[ConvexPolygonShape3D]
+	_lantern_mesh = _built_once("lantern|%s" % _scene_key(profile.lantern_scene), _build_lantern_mesh) as Mesh
 	_under_meshes.clear()
 	_under_mats.clear()
 	_under_shapes.clear()
 	for entry in profile.undergrowth:
-		var mesh := _undergrowth_mesh_for(entry)
-		_under_meshes.append(mesh)
+		var key := "under|%s|%d" % [_scene_key(entry.scene), entry.source]
+		var built := _built_once(key, _build_undergrowth_parts.bind(entry)) as Dictionary
+		_under_meshes.append(built.mesh)
 		_under_mats.append(_rock_material())
-		_under_shapes.append(_hull(mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]))
-	_torii_shapes = _torii_hulls()
+		_under_shapes.append(built.shape)
+
+
+## Mesh, trunk hulls and chest radius of one tree kind.
+func _build_tree_parts(entry: TreeEntry) -> Dictionary:
+	var mesh := _tree_mesh_for(entry)
+	var chest: Array = []
+	var hulls := _trunk_hulls(mesh, chest)
+	return {"mesh": mesh, "hulls": hulls, "chest": float(chest[0])}
+
+
+func _build_undergrowth_parts(entry: UndergrowthEntry) -> Dictionary:
+	var mesh := _undergrowth_mesh_for(entry)
+	return {"mesh": mesh, "shape": _hull(mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX])}
 
 
 func _tree_material() -> ShaderMaterial:
@@ -1918,6 +1969,40 @@ static func _merge_meshes(parts: Array[Mesh]) -> ArrayMesh:
 	for mesh in parts:
 		st.append_from(mesh, 0, Transform3D.IDENTITY)
 	return st.commit()
+
+
+## Draw calls, instances and triangles of the forest as it is drawn now (the
+## World Gen dock compares them with the Quest budget, see WorldGenBudget).
+func stats() -> Dictionary:
+	var draws := 0
+	var instances := 0
+	var triangles := 0
+	for key in _chunks:
+		var chunk := _chunks[key] as Node3D
+		for child in chunk.get_children():
+			if child is MeshInstance3D and (child as MeshInstance3D).mesh != null:
+				draws += 1
+				triangles += _triangles(((child as MeshInstance3D).mesh))
+				instances += 1
+			elif child is MultiMeshInstance3D and (child as MultiMeshInstance3D).multimesh != null:
+				var mm := (child as MultiMeshInstance3D).multimesh
+				if mm.instance_count == 0:
+					continue
+				draws += 1
+				instances += mm.instance_count
+				triangles += _triangles(mm.mesh) * mm.instance_count
+	return {"chunks": _chunks.size(), "draws": draws, "instances": instances, "triangles": triangles}
+
+
+static func _triangles(mesh: Mesh) -> int:
+	if mesh == null or mesh.get_surface_count() == 0:
+		return 0
+	var arrays := mesh.surface_get_arrays(0)
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+	if not idx.is_empty():
+		return idx.size() / 3
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	return verts.size() / 3
 
 
 func total_prop_instances() -> int:
