@@ -42,9 +42,14 @@ var _by_time := {}
 var _by_used := {}
 var _menu_hold_time := 0.0
 var _menu_used := false
+var _base_move_speed := -1.0
 
 
 func _ready() -> void:
+	# The rig keeps tracking, rendering and reading the controllers while a
+	# menu pauses the game (get_tree().paused): the player must still look
+	# around and point. Gameplay nodes below us (PlayerHealth) opt back out.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	GameEvents.parry.connect(_on_parry)
 	var camera := $XROrigin3D/XRCamera3D as Node3D
 	health.head = camera
@@ -69,7 +74,9 @@ func _on_parry(_info: Dictionary) -> void:
 			h.pulse_pattern([[0.0, 0.03], [0.45, 0.1]])
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	# Button holds are timed in real seconds, also in slow-mo (delta is scaled).
+	var _delta := delta / maxf(Engine.time_scale, 0.05)
 	# Menu button handling (Left Menu button)
 	if left_controller:
 		var menu_down: bool = left_controller.is_button_pressed("menu_button")
@@ -211,6 +218,31 @@ func set_rig_locked(locked: bool) -> void:
 		var provider := get_node_or_null(path)
 		if provider:
 			provider.set("enabled", not locked)
+
+
+## Smooth-locomotion and snap-turn providers on/off (the pause menu turns them
+## off so a paused player cannot walk or turn away from the panel).
+func set_locomotion_enabled(enabled: bool) -> void:
+	for path in ["XROrigin3D/LeftHand/MovementDirect", "XROrigin3D/RightHand/MovementTurn"]:
+		var provider := get_node_or_null(path)
+		if provider:
+			provider.set("enabled", enabled)
+
+
+## Scales the smooth-locomotion top speed (1.0 = XR Tools default); used by
+## Abyssal Sea's ink speed boost.
+func set_move_speed_scale(scale: float) -> void:
+	var direct := get_node_or_null("XROrigin3D/LeftHand/MovementDirect")
+	if direct == null:
+		return
+	if _base_move_speed < 0.0:
+		_base_move_speed = float(direct.get("max_speed"))
+	direct.set("max_speed", _base_move_speed * scale)
+
+
+func get_move_speed() -> float:
+	var direct := get_node_or_null("XROrigin3D/LeftHand/MovementDirect")
+	return float(direct.get("max_speed")) if direct else 0.0
 
 
 ## Where the player actually stands. Locomotion moves the XR origin, not this

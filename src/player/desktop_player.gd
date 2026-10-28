@@ -72,6 +72,9 @@ var _hud := Label.new()
 
 
 func _ready() -> void:
+	# Mouse look, the hand and the menu pointer keep working while a menu
+	# pauses the game; walking is switched off in _physics_process.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	collision_layer = XRPlayer.COLLISION_LAYER_BODY  # player_body (same layer as XR Tools)
 	add_to_group("player_body")
 	collision_mask = 1 | 2 | 8
@@ -273,6 +276,13 @@ func _kill_swing() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if get_tree().paused:
+		# Menu open: stand still, but the hand still follows the view.
+		velocity = Vector3.ZERO
+		block_amount = move_toward(block_amount, 0.0, TimeController.real_tick() * 8.0)
+		_update_hand()
+		_hud.text = _hud_text()
+		return
 	if movement_locked:
 		velocity = Vector3.ZERO
 		move_and_slide()

@@ -50,6 +50,7 @@ var ofuda_count := 0
 var skill_tree: SkillTreeData = null
 
 var wave_director: WaveDirector
+var pause_controller: PauseController
 var diegetic_hud: DiegeticHud
 var element_system: ElementSystem
 var forest_world: ForestWorld
@@ -352,6 +353,8 @@ func _setup_run_nodes() -> void:
 
 	diegetic_hud = DiegeticHud.new()
 	diegetic_hud.name = "DiegeticHud"
+	# The wrist plate keeps tracking the raised hand while a menu pauses the game.
+	diegetic_hud.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(diegetic_hud)
 	diegetic_hud.setup(player, katana)
 	if not GameEvents.parry.is_connected(_on_parry_diegetic):
@@ -362,6 +365,12 @@ func _setup_run_nodes() -> void:
 	add_child(element_system)
 	element_system.setup(self, katana)
 	GameEvents.hit_landed.connect(_on_game_hit)
+	pause_controller = PauseController.new()
+	pause_controller.name = "PauseController"
+	add_child(pause_controller)
+	pause_controller.setup(self, player, katana)
+	if player.has_signal("menu_requested") and not player.menu_requested.is_connected(pause_controller.toggle):
+		player.menu_requested.connect(pause_controller.toggle)
 	if player.has_signal("ability_1_requested") and not player.ability_1_requested.is_connected(_on_ability_1_requested):
 		player.ability_1_requested.connect(_on_ability_1_requested)
 	if player.has_signal("ability_2_requested") and not player.ability_2_requested.is_connected(_on_ability_2_requested):
@@ -468,6 +477,14 @@ func _begin_play_after_intro() -> void:
 	_refresh_hud()
 
 
+## Scales walking speed on whichever rig is in use (1.0 = normal).
+func apply_locomotion_speed(multiplier: float) -> void:
+	if player is DesktopPlayer:
+		(player as DesktopPlayer).move_speed = _base_move_speed * multiplier
+	elif player is XRPlayer:
+		(player as XRPlayer).set_move_speed_scale(multiplier)
+
+
 func _on_xr_primary_button() -> void:
 	if state == RunState.INTRO and run_intro and run_intro.is_active():
 		run_intro.skip()
@@ -502,9 +519,10 @@ func _physics_process(delta: float) -> void:
 	elif combat_fog:
 		combat_fog.step(p_pos, [], false)
 
-	# Abyssal Sea (Ink Node 5): +20% locomotion while standing in own ink.
-	if player is DesktopPlayer and element_system:
-		(player as DesktopPlayer).move_speed = _base_move_speed * element_system.get_player_speed_multiplier()
+	# Abyssal Sea (Ink Node 5): +20% locomotion while standing in own ink, on
+	# the desktop rig and on the XR rig (the game's main platform).
+	if element_system:
+		apply_locomotion_speed(element_system.get_player_speed_multiplier())
 
 	# Step soul orbs even during level-up slow-mo (using simulation delta).
 	if _souls_root == null:
@@ -774,12 +792,13 @@ func _on_game_hit(hit: Dictionary) -> void:
 
 
 func _on_ability_1_requested(direction: Vector3) -> void:
-	if state == RunState.PLAYING and element_system:
+	# The rig keeps reading buttons while a menu pauses the game: no abilities then.
+	if state == RunState.PLAYING and element_system and not get_tree().paused:
 		element_system.execute_ability_1(direction)
 
 
 func _on_ability_2_requested(direction: Vector3) -> void:
-	if state == RunState.PLAYING and element_system:
+	if state == RunState.PLAYING and element_system and not get_tree().paused:
 		element_system.execute_ability_2(direction)
 
 

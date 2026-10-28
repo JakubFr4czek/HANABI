@@ -175,6 +175,11 @@ func pulse_pattern(steps: Array) -> void:
 func _process(_delta: float) -> void:
 	if _controller == null or not _controller.get_is_active():
 		return
+	# A menu pauses the game: grab/release/recall resume (with the grip the
+	# player holds then) when it closes, so the frozen blade is never dropped
+	# or swapped behind the panel.
+	if get_tree().paused:
+		return
 	var grip := _controller.get_float(grip_action)
 	if held == null and grip > grip_press_threshold:
 		var weapon := _nearest_weapon(grab_radius, false)
