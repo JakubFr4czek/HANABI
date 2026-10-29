@@ -47,17 +47,15 @@
   - Failsafe: timeout (3.0 s), błąd sieciowy, błędny JSON lub brak klucza natychmiast wraca do lokalnej logiki bez opóźniania ani jednej klatki.
 
 ### Krok 4: Integracja z Meta Model API i konfiguracja (Review Fix)
-- **Faktyczny endpoint Meta (OpenAI-compatible) i źródła dokumentacji:**
-  - Zgodnie z oficjalną dokumentacją Meta Llama Developer Portal (Llama API & Llama Stack Compatibility Layer: https://llama.meta.com/docs/llama-api/ oraz Meta Reference Architecture for OpenAI-Compatible Endpoints), oficjalnym adresem zgodnym ze standardem OpenAI Chat Completions jest:
-    `https://llama-api.meta.com/compat/v1/chat/completions`
-    (Wcześniejsze `api.meta.ai` było domeną aplikacji konsumenckiej Meta AI, a nie endpointem developerskiego Llama API).
-  - Wspierane są również oficjalne certyfikowane chmury partnerskie Meta dostarczające natywną inferencję Llama w standardzie OpenAI `/v1/chat/completions`:
-    - Groq: `https://api.groq.com/openai/v1/chat/completions` (model: `llama-3.3-70b-versatile` lub `llama-3.1-8b-instant`)
-    - Together AI: `https://api.together.xyz/v1/chat/completions` (model: `meta-llama/Llama-3.3-70B-Instruct-Turbo`)
+- **Faktyczny endpoint Meta (OpenAI-compatible) i źródło dokumentacji:**
+  - Zgodnie z oficjalną dokumentacją Meta Model API (Chat Completions): https://dev.meta.ai/docs/protocols/chat-completions
+    domyślnym adresem jest `https://api.meta.ai/v1/chat/completions`, model `muse-spark-1.3`, autoryzacja `Authorization: Bearer <MODEL_API_KEY>`.
+  - `llama-api.meta.com` nie występuje w dokumentacji Meta Model API; Llama API to osobny produkt (`https://api.llama.com/compat/v1`) z innymi modelami, więc nie jest domyślnym endpointem bossa.
+  - Alternatywne endpointy zgodne z OpenAI `/v1/chat/completions` można wpisać ręcznie w Settings (np. Groq albo Together AI); presety pozostają wyłącznie wygodą, nie są wymagane.
 - **Konfigurowalność w Settings:**
-  - Domyślny adres: `https://llama-api.meta.com/compat/v1/chat/completions` (zdefiniowany w `VRComfortSettings.DEFAULT_META_ENDPOINT`).
+  - Domyślny adres: `https://api.meta.ai/v1/chat/completions` (zdefiniowany w `VRComfortSettings.DEFAULT_META_ENDPOINT` oraz `OniAiClient.DEFAULT_META_ENDPOINT`).
   - Użytkownik / deweloper może swobodnie zmienić endpoint w ustawieniach (`ai_endpoint` w `user://hanabi_vr.cfg` via `set_meta_api_endpoint()`).
-  - Presety w `VRComfortSettings.ENDPOINT_PRESETS` umożliwiają szybki wybór między oficjalnym Meta Llama, Groq i Together AI.
+  - `OniAiClient` wysyła zapytanie pod `VrComfortSettings.instance.get_effective_meta_api_endpoint()` (z fallbackiem na stałą), więc pole `ai_endpoint` naprawdę steruje ruchem; test `endpoint z Settings trafia do zapytania` przechwytuje URL bez sieci.
 - **Bezpieczeństwo i maskowanie kluczy:**
   - Klucz API pobierany jest hierarchicznie:
     1. Zapisany w konfiguracji gracza (`user://hanabi_vr.cfg`, pole `ai_meta_api_key`).

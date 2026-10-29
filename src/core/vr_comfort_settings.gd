@@ -56,9 +56,9 @@ var ai_boss_enabled: bool = true
 var meta_api_key: String = ""
 var ai_model: String = "muse-spark-1.3"
 var ai_language: String = "pl"
-const DEFAULT_META_ENDPOINT := "https://llama-api.meta.com/compat/v1/chat/completions"
+const DEFAULT_META_ENDPOINT := "https://api.meta.ai/v1/chat/completions"
 const PRESET_META_ENDPOINTS: Array[String] = [
-	"https://llama-api.meta.com/compat/v1/chat/completions",
+	"https://api.meta.ai/v1/chat/completions",
 	"https://api.groq.com/openai/v1/chat/completions",
 	"https://api.together.xyz/v1/chat/completions",
 ]
