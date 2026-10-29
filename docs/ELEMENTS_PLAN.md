@@ -940,3 +940,59 @@ Decyzje podjęte w trakcie (do przeglądu):
 - Karty trzech buffów są stałe i zawsze te same (od lewej: Szybkość, Siła, Leczenie), żeby wybór był czytelny.
 - Odmowa przy wrogu w 3.5 m zamiast „przesuń wroga": wróg w zasięgu kart jest zawsze odrzucany, więc karty nigdy nie przenikają wroga.
 
+
+## D9 – tryb sandbox (przełącznik w Ustawieniach)
+
+Jakub, 28 X 13:06: „trzeba zrobić jakiś sandbox mode, gdzie wszystkie umiejętności są aktywowane, jako przełącznik w ustawieniach”. Cel: szybkie testowanie i pokazywanie (demo, review) wszystkich umiejętności bez grindowania punktów.
+
+### 1. Co zrobiono
+
+- **Przełącznik:** szósta podstrona SETTINGS, **試 SANDBOX** (`SkillTreeCanvas.PAGE_SANDBOX`). Dwa przyciski, ON · ALL SKILLS i OFF · YOUR RUN, plus opis i status. Zapis w `user://hanabi_vr.cfg`, sekcja `[sandbox] enabled`, domyślnie wyłączony. Zapis zachowuje inne sekcje (test w `skill_tree_data_test`).
+- **Odblokowania:** `SkillTreeData.sandbox` (jedna flaga). `is_unlocked(id)` zwraca `sandbox or unlocked[id]`. Wszystkie czytniki (`effect_value`, `has_effect`, `prerequisites_met`, `can_unlock`, `ElementSystem._fx`, menu drzewka) idą tą jedną ścieżką, więc nie ma drugiej logiki skilli.
+- **Brak wydatku:** `can_unlock` zwraca `already_unlocked` dla każdego węzła, więc `unlock_skill` nic nie kosztuje i nie zmienia `unlocked`. Punkty dalej rosną z poziomów i zostają nietknięte.
+- **Wyłączenie:** `unlocked` nigdy nie jest ruszany przez sandbox, więc wyłączenie przywraca dokładnie odblokowania runu sprzed włączenia. Flaga przetrwa `reset()`, bo to ustawienie, nie stan runu.
+- **W trakcie runu:** `RunGame` słucha `VrComfortSettings.settings_changed` i synchronizuje flagę od razu. Bez `Engine.time_scale`; menu i tak pauzuje grę.
+- **Znacznik na nadgarstku:** `DiegeticHud.sandbox_label`, bursztynowy napis SANDBOX, 18 px, w **lewym górnym rogu płytki**. Widoczny tylko przy podniesionym nadgarstku i tylko w runie sandboxowym.
+- **Znacznik w drzewie:** stopka menu zamiast podpowiedzi pauzy mówi „SANDBOX · every node unlocked, nothing is spent”. Kolumna kosztu w panelu szczegółów pokazuje „SANDBOX / NO COST” zamiast ceny.
+- **Rekord:** run, w którym przełącznik był włączony choć raz, nie jest rekordem. Nie ustawia `high_score`, nie zapisuje pliku, a na steli pojawia się „SANDBOX · NO RECORD” zamiast „★ NEW RECORD”. BEST pokazuje prawdziwy rekord.
+
+### 2. Decyzje podjęte bez pytania (do przeglądu)
+
+- **Gdzie przełącznik:** osobna podstrona, nie strona ACCESS. ACCESS jest pełna (błysk i wibracja zajmują cały kadr), a sandbox to tryb gry, nie komfort. Pasek podstron ma teraz sześć równych zakładek (232 px, odstęp 14 px); test sprawdza, że nie nachodzą i mieszczą się w panelu.
+- **Run „sandboxowy” na stałe:** włączenie w połowie runu oznacza cały run jako sandboxowy, nawet po wyłączeniu. Inaczej dało się by zdobyć rekord, włączając sandbox tylko na chwilę.
+- **Punkty w sandboxie:** rosną normalnie i nie są wydawane. Po wyłączeniu zostają. Dzięki temu „wyłączenie przywraca stan” nie kasuje postępu.
+- **Imbue w locie:** czas imbue jest czytany w chwili nałożenia (`imbue_duration_for`), tak jak przy zwykłym zakupie. Przełączenie w trakcie trwającego imbue go nie wydłuża; od następnego nałożenia obowiązuje. Ataki (np. liczba płatków) czytają wartości w chwili użycia, więc działają od razu.
+- **Sandbox tylko w VR:** przełącznik jest w menu VR, bo tam są Ustawienia. Na desktopie nie ma przycisku; testy ustawiają flagę bezpośrednio.
+- **Testy:** suity, które kupują węzły i sprawdzają blokady (`gdd_loop_test`, `elements_test`, `dismember_test`, `quest_perf_test`, `vr_menu_pause_test`, `run_loop_test`), wyłączają sandbox na starcie. Inaczej przełącznik z lokalnego pliku gracza zmieniłby ich wyniki.
+
+### 3. Testy (krytyczne, szybkie, bez czasu rzeczywistego)
+
+- `skill_tree_data_test` (+ reguły): ON odblokowuje wszystkie 20 węzłów, tier 5 włącznie; zakup odmawia bez zmiany `unlocked`; efekt tier 4 (Life Bloom) i finisher są aktywne; reset zachowuje flagę; OFF przywraca `unlocked` identycznie; włącz-wyłącz nie tworzy nowych odblokowań.
+- `skill_tree_data_test` (abilities): w sandboxie imbue trwa 24 s, a Senbonzakura wypuszcza 7 płatków, bez wydanego punktu.
+- `skill_tree_data_test` (zapis): przełącznik zapisuje się w `[sandbox]`, zachowuje `[audio]` i obcą sekcję, po wczytaniu wraca, reset ustawia OFF. Plik testowy, prawdziwe ustawienia nietknięte.
+- `skill_tree_data_test` (układ): sześć podstron i przyciski ON/OFF mieszczą się w panelu i nie nachodzą.
+- `vr_menu_pause_test` (prawdziwy wskaźnik na prawdziwej scenie): klik w SANDBOX, klik ON (drzewo od razu, menu otwarte, tier 5 OWNED na kanwie), zakup odmówiony bez kosztu, klik OFF (`unlocked` identyczny, punkty bez zmian), menu zamyka się czysto.
+- `wrist_hud_test` (run.tscn, podniesiony nadgarstek): znacznik narysowany, w kadrze kamery, na płytce, 2.2 mm poza kołem (koło 21 mm); w zwykłym runie nie rysuje się nic.
+- `run_loop_test`: ta sama śmierć z tym samym wynikiem (900 pt) — w sandboxie: nie rekord, brak pliku, napis na steli; poza sandboxem: rekord i zapis.
+
+Pełny zestaw headless: **52/54 PASS, 0 FAIL**; 2 SKIP to testy z założenia okienkowe (`boot_splash_visual_test`, `worldgen_path_visible_test`).
+
+### 4. Zrzuty (z okna gry, nie z preview) — `docs/d9/`
+
+- `d9_01_settings_sandbox_off.png` — podstrona SANDBOX, przełącznik OFF.
+- `d9_02_settings_sandbox_on.png` — ON, status „20 of 20”, bursztynowa stopka.
+- `d9_03_tree_sandbox_all_unlocked.png` — drzewo Sakury: pięć węzłów OWNED, tier 5 UNLOCKED, „NO COST”.
+- `d9_04_hud_sandbox_mark.png` — kadr gry z podniesionym nadgarstkiem: znacznik SANDBOX w lewym górnym rogu płytki.
+
+### 5. Ocena surowa (co jest słabe)
+
+- **Znacznik na nadgarstku jest mały** (18 px, ~35 px szerokości w kadrze 1600 px). To celowo dyskretne, ale w goglach na ręku o długości ramienia czytelność nie jest sprawdzona. Próba 20 px dotykała koła, więc powiększenie wymaga przesunięcia albo innego miejsca.
+- **Podtytuł strony** przechodził pod plakietką POINTS i był ucinany („Off by defa…”). Skrócony. Opis w pierwszej ramce też się ucinał przy krawędzi. Oba poprawione, na zrzutach widać pełne zdania.
+- **„NO COS”:** kolumna kosztu obcinała słowo „COST”. Poprawione (szerokość 210 px, jak w „you hold”).
+- **Punkty rosną w sandboxie**, choć nie są wydawane. To celowe, ale stopka i status mówią tylko „nothing is spent”, nie że punkty dalej się zbierają.
+- **Nie zweryfikowane:** widoczność znacznika i przełącznika w prawdziwym VR (zrzuty są desktopowe, a test idzie przez XR sim). Kadry na desktopie pokazują wszystko poprawnie.
+
+### 6. Co dalej
+
+- Sprawdzić znacznik na Quest 3 z ręką w ruchu. Jeśli 18 px jest za mały, zmienić miejsce, nie rozmiar.
+- Rozważyć przycisk sandbox na desktopie (dla testów bez gogli); na razie tylko VR.
