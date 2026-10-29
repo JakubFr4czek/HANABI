@@ -4,6 +4,7 @@ var failures := 0
 
 
 func _ready() -> void:
+	_check_rain_loops()
 	_check("Sfx exposes Kenney run categories", Sfx._streams.has("firework") and Sfx._streams.has("soul_collect"))
 	_check("Thunder uses single distant roll (no crack category)", not Sfx.CATEGORIES.has("thunder_crack"))
 	_check("Blade ring uses recorded sword clashes (not generated)", Sfx.CATEGORIES["blade_ring"][0].contains("sword_clash"))
@@ -144,6 +145,31 @@ func _check_music_and_voice_cap() -> void:
 	music.queue_free()
 	storm_ambience.queue_free()
 	forest_ambience.queue_free()
+
+
+## The rain bed loops whatever the import settings: a one-shot WAV plays as a
+## looping copy, and the source resource is left alone.
+func _check_rain_loops() -> void:
+	var def := StormAmbience.new()
+	add_child(def)
+	var ogg := def.rain_player.stream as AudioStreamOggVorbis
+	_check("the default rain bed is an OGG that loops", ogg != null and ogg.loop)
+	def.queue_free()
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = 22050
+	var silence := PackedByteArray()
+	silence.resize(22050 * 2)
+	wav.data = silence
+	wav.loop_mode = AudioStreamWAV.LOOP_DISABLED
+	var amb := StormAmbience.new()
+	amb.rain_stream = wav
+	add_child(amb)
+	var looped := amb.rain_player.stream as AudioStreamWAV
+	_check("a one-shot rain WAV plays as a looping copy", looped != wav and looped.loop_mode == AudioStreamWAV.LOOP_FORWARD)
+	_check("the loop covers the whole rain clip", looped.loop_end == 22050)
+	_check("the source rain resource is not changed", wav.loop_mode == AudioStreamWAV.LOOP_DISABLED)
+	amb.queue_free()
 
 
 func _check(label: String, ok: bool) -> void:
