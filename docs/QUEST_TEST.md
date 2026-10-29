@@ -184,3 +184,8 @@ Sprawdź §19: `oni_fog_2m_wave`, `oni_fog_6m_wave`, `yokai_approach_stride`, `y
 ## D15 Oni boss — zrzuty (ręczne, NIE w suicie)
 
 `tests/oni_boss_screenshots.tscn` nie jest częścią `tools/run_tests.sh` (suita działa wyłącznie headless). Scena wymaga renderowanego okna (framebuffer): w `--headless` kończy się `exit 1` bez zapisu PNG i nie nadpisuje `docs/d15/`. Każdy zrzut przechodzi twarde asercje kadru (głowa, stopy, kanabō i dymek w kadrze; sylwetka różni się od tła), inaczej nie zapisuje PNG. Domyślnie zapis do `/tmp/hanabi_shots`; `--shots docs/d15` tylko świadomie, po zatwierdzeniu wyniku.
+
+Decyzje i ocena zrzutów D15 (commit z 3 PNG w `docs/d15/`):
+- Dymek: płyta 1.30 × 0.30 m, etykieta 340 px; poprzednia 0.92 m zawijała się do 3 linii i wychodziła poza płytę.
+- Telegraf: boss 2.9 m od gracza (w bramce ataku 2.85 + 0.55 m), obiektyw 85° tylko dla tego ujęcia, bo kanabō nad głową nie mieściło się w 75°.
+- Ocena surowa: kadr i czytelność dymka są w porządku. Nie jest to poziom premium: ragdoll to proste bryły, maska to szara plama, a kanabō podczas telegrafu zlewa się z maską (ciemny kształt na tle). Do poprawy modelem/materiałem kanabō, nie kadrem.

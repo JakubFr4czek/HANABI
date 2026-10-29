@@ -36,7 +36,7 @@ func _setup_bubble_visuals() -> void:
 	_border_plate = MeshInstance3D.new()
 	_border_plate.name = "BorderPlate"
 	var border_quad := QuadMesh.new()
-	border_quad.size = Vector2(0.96, 0.28)
+	border_quad.size = Vector2(1.36, 0.36)
 	_border_plate.mesh = border_quad
 
 	_border_mat = StandardMaterial3D.new()
@@ -54,7 +54,7 @@ func _setup_bubble_visuals() -> void:
 	_bg_plate = MeshInstance3D.new()
 	_bg_plate.name = "BgPlate"
 	var quad := QuadMesh.new()
-	quad.size = Vector2(0.92, 0.24)
+	quad.size = Vector2(1.30, 0.30)
 	_bg_plate.mesh = quad
 
 	_bg_mat = StandardMaterial3D.new()
@@ -81,7 +81,7 @@ func _setup_bubble_visuals() -> void:
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_label.width = 270.0
+	_label.width = 340.0
 	_label.render_priority = 15
 	_label.outline_render_priority = 14
 	add_child(_label)
