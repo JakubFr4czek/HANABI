@@ -80,16 +80,29 @@ func _scale_shot() -> bool:
 
 ## 2. Telegraph: the kanabō is raised above the head during the windup of an overhead slam.
 func _telegraph_shot() -> bool:
-	_stage_boss(Vector3(0.0, 0.0, -3.4), 0.0)
+	# Stands 2.9 m out: inside the Oni's attack gate (2.85 m + 0.55 m step), wide enough to keep the raised club in frame.
+	_stage_boss(Vector3(0.0, 0.0, -2.9), 0.0)
 	oni.set_attacks_enabled(true)
 	var brain := oni.brain as DuelistBrain
+	brain.set_seed(1)
 	brain.difficulty.move_speed = 0.0
 	brain.difficulty.hesitate_chance = 0.0
 	brain.difficulty.feint_chance = 0.0
-	_stage_player(Vector3.ZERO, Vector3(0.0, 1.7, -3.4))
+	_stage_player(Vector3.ZERO, Vector3(0.0, 1.45, -2.9))
 	await _frames(SETTLE_FRAMES)
 	if not _standing("telegraph"):
 		return false
+	# The boss drifts during the settle frames, and a forced attack only starts inside
+	# range + MAX_STEP, so put the player 2.9 m from where the boss actually stands.
+	var b := oni.root_part().global_position
+	var toward := player.global_position - b
+	toward.y = 0.0
+	toward = toward.normalized() if toward.length_squared() > 0.01 else Vector3(0.0, 0.0, 1.0)
+	var stand := b + toward * 2.9
+	_stage_player(Vector3(stand.x, 0.0, stand.z), Vector3(b.x, 1.45, b.z))
+	# Face the player and let the brain settle in STALK first (same sequence as the combat test).
+	oni.face_toward(player.global_position)
+	await _frames(6)
 	brain.force_attack("vertical")
 	var raised := false
 	var max_top := -INF
@@ -103,8 +116,13 @@ func _telegraph_shot() -> bool:
 			raised = true
 			break
 	if not raised:
-		print("FAIL  telegraph: kanabō never rose above the head during the windup (top %.2f m, head %.2f m, state %d, phase %d)" % [max_top, max_head, brain.state, brain.attack_phase])
+		var dist := Vector2(oni.root_part().global_position.x - player.global_position.x, oni.root_part().global_position.z - player.global_position.z).length()
+		print("FAIL  telegraph: kanabō never rose above the head during the windup (top %.2f m, head %.2f m, state %d, phase %d, cooldown %.2f, forced '%s', attacks %s, dist %.2f)" % [max_top, max_head, brain.state, brain.attack_phase, brain._cooldown, brain._forced_attack, str(brain.attacks_enabled), dist])
 		return false
+	# Centre the frame between the raised club and the feet so both stay in shot.
+	# A wider lens for this shot: at 2.9 m the raised club and the feet need more vertical field.
+	cam.fov = 85.0
+	cam.look_at((_kanabo_top() + _feet_point()) * 0.5, Vector3.UP)
 	var head_c := oni.head_part().global_position
 	var pts: Array[Vector3] = [_kanabo_top(), head_c + Vector3.UP * HEAD_TOP_OFFSET, _feet_point()]
 	return await _shoot("02_boss_attack_windup", pts, _torso_point(), false)
@@ -160,7 +178,7 @@ func _in_frame(points: Array[Vector3], shot_name: String) -> bool:
 	var rect := get_viewport().get_visible_rect().grow(-FRAME_MARGIN)
 	for p in points:
 		if not cam.is_position_in_frustum(p) or not rect.has_point(cam.unproject_position(p)):
-			print("FAIL  %s: point %s is not fully in frame" % [shot_name, p])
+			print("FAIL  %s: point %s is not fully in frame (frustum %s, screen %s, rect %s)" % [shot_name, p, cam.is_position_in_frustum(p), cam.unproject_position(p), rect])
 			return false
 	return true
 
@@ -217,6 +235,8 @@ func _stage_boss(pos: Vector3, yaw: float) -> void:
 	oni.anchor_position = pos
 	oni.global_rotation = Vector3(0.0, yaw, 0.0)
 	oni.reset()
+	# A line from the previous shot must not drift into this frame.
+	oni.speech_bubble.visible = false
 
 
 ## Stands the player at [param pos] looking at [param look_at_pos] (yaw from the flat direction,
@@ -265,11 +285,11 @@ func _kanabo_top() -> Vector3:
 	return best
 
 
-## The four corners of the speech bubble plate (0.92 × 0.24 m, billboarded to the camera).
+## The four corners of the speech bubble plate (1.30 × 0.30 m, billboarded to the camera).
 func _bubble_corners() -> Array[Vector3]:
 	var c := oni.speech_bubble.global_position
-	var r := cam.global_basis.x * 0.46
-	var u := cam.global_basis.y * 0.12
+	var r := cam.global_basis.x * 0.65
+	var u := cam.global_basis.y * 0.15
 	var out: Array[Vector3] = [c - r - u, c + r - u, c + r + u, c - r + u]
 	return out
 
