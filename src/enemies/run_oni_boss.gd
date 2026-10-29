@@ -350,7 +350,7 @@ func _try_hit_player(damage: float, attack: String) -> void:
 	var a := sword.global_transform * sword.blade_start
 	var b := sword.get_tip_global()
 	var pts := Geometry3D.get_closest_points_between_segments(a, b, body[0], body[1])
-	var reach_radius := float(body[2]) + 0.35
+	var reach_radius := float(body[2]) + 0.65
 	if pts[0].distance_to(pts[1]) <= reach_radius:
 		_hit_player_this_strike = true
 		health.take_hit(damage, pts[0], {"attacker": profile.display_name, "attack": attack})
