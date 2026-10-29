@@ -56,6 +56,13 @@ var ai_boss_enabled: bool = true
 var meta_api_key: String = ""
 var ai_model: String = "muse-spark-1.3"
 var ai_language: String = "pl"
+const DEFAULT_META_ENDPOINT := "https://llama-api.meta.com/compat/v1/chat/completions"
+const PRESET_META_ENDPOINTS: Array[String] = [
+	"https://llama-api.meta.com/compat/v1/chat/completions",
+	"https://api.groq.com/openai/v1/chat/completions",
+	"https://api.together.xyz/v1/chat/completions",
+]
+var ai_endpoint: String = DEFAULT_META_ENDPOINT
 
 static var instance: VrComfortSettings = null
 
@@ -109,6 +116,7 @@ func load_settings() -> void:
 		meta_api_key = String(cfg.get_value("meta_ai", "api_key", meta_api_key))
 		ai_model = String(cfg.get_value("meta_ai", "model", ai_model))
 		ai_language = String(cfg.get_value("meta_ai", "language", ai_language))
+		ai_endpoint = String(cfg.get_value("meta_ai", "endpoint", DEFAULT_META_ENDPOINT))
 
 	apply_audio()
 
@@ -140,6 +148,7 @@ func save_settings() -> void:
 	cfg.set_value("meta_ai", "api_key", meta_api_key)
 	cfg.set_value("meta_ai", "model", ai_model)
 	cfg.set_value("meta_ai", "language", ai_language)
+	cfg.set_value("meta_ai", "endpoint", ai_endpoint)
 
 	var err := cfg.save(SETTINGS_PATH)
 	if err == OK:
@@ -210,6 +219,14 @@ func set_meta_api_key(key: String) -> void:
 	meta_api_key = key.strip_edges()
 	save_settings()
 
+
+func get_effective_meta_api_endpoint() -> String:
+	return ai_endpoint.strip_edges() if ai_endpoint.strip_edges() != "" else DEFAULT_META_ENDPOINT
+
+
+func set_meta_api_endpoint(ep: String) -> void:
+	ai_endpoint = ep.strip_edges()
+	save_settings()
 
 func set_ai_language(lang: String) -> void:
 	var l := lang.to_lower()

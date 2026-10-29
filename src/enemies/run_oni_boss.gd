@@ -109,8 +109,8 @@ func _ready() -> void:
 	_mask.set_shader_parameter("roughness_dry", 0.58)
 	_mask.set_shader_parameter("roughness_wet", 0.22)
 	_mask.set_shader_parameter("wetness", 0.48)
-	_mask.set_shader_parameter("fill", 0.85)
-	_mask.set_shader_parameter("fog_rim", 0.9)
+	_mask.set_shader_parameter("fill", 2.35)
+	_mask.set_shader_parameter("fog_rim", 1.25)
 	_mask.set_shader_parameter("flash_color", Color(0.9, 0.3, 0.16))
 	_mask.set_shader_parameter("normal_texture", ONI_MASK_NRM)
 	_mask.set_shader_parameter("normal_depth", 1.35)
@@ -126,25 +126,10 @@ func _ready() -> void:
 	super._ready()
 
 	_apply_oni_visuals()
-	_eyes.emission = Color(2.5, 0.42, 0.15)
-	_eyes.emission_energy_multiplier = 2.4
-	_sash.albedo_color = Color(0.48, 0.04, 0.06)
-	_sash.emission_enabled = true
-	_sash.emission = Color(0.62, 0.08, 0.05)
-	_sash.emission_energy_multiplier = 0.42
-	set_attacks_enabled(true)
 	_attach_oni_rim_light()
-	_attach_speech_bubble()
 
-	GameEvents.log_event("oni_spawned", {"hp": hp, "height": get_boss_height()})
-
-
-func _attach_speech_bubble() -> void:
-	if speech_bubble != null:
-		return
 	speech_bubble = OniSpeechBubble.new()
 	speech_bubble.name = "SpeechBubble"
-	speech_bubble.position = Vector3(0.0, 2.95, 0.0)
 	add_child(speech_bubble)
 
 	if brain is OniBossBrain:
@@ -157,7 +142,7 @@ func _physics_process(delta: float) -> void:
 	_update_oni_readability()
 	if speech_bubble and parts.has("head"):
 		var head_part := parts["head"] as RagdollPart
-		speech_bubble.global_position = head_part.global_position + Vector3(0.0, 0.48, 0.0)
+		speech_bubble.global_position = head_part.global_position + Vector3(0.0, 0.72, 0.0)
 
 
 func _update_oni_readability() -> void:
@@ -171,13 +156,15 @@ func _update_oni_readability() -> void:
 		var active := d < 14.0
 		_rim.visible = active
 		if active:
-			_rim.light_energy = lerpf(0.45, 1.25, near)
-			_rim.omni_range = lerpf(3.0, 4.2, near)
+			_rim.light_energy = lerpf(1.85, 2.85, near)
+			_rim.omni_range = lerpf(3.8, 5.2, near)
 		else:
 			_rim.light_energy = 0.0
 	_mask.set_shader_parameter("fill", lerpf(2.35, 3.25, near))
+	_mask.set_shader_parameter("fog_rim", lerpf(1.35, 2.05, near))
 	_flesh.set_shader_parameter("fill", lerpf(2.05, 2.65, near))
 	_flesh.set_shader_parameter("fog_rim", lerpf(1.35, 2.05, near))
+	_armor.set_shader_parameter("fill", lerpf(1.85, 2.45, near))
 	_armor.set_shader_parameter("fog_rim", lerpf(1.1, 1.65, near))
 
 
@@ -194,13 +181,22 @@ func _attach_oni_rim_light() -> void:
 	add_child(lamp)
 
 
+func _sword_grip_transform() -> Transform3D:
+	if not parts.has("lower_arm_r"):
+		return super._sword_grip_transform()
+	var forearm: RagdollPart = parts["lower_arm_r"]
+	var grip_rot := Basis.from_euler(Vector3(deg_to_rad(-78.0), deg_to_rad(12.0), deg_to_rad(6.0)))
+	var grip_pos := Vector3(0.08, -0.28, 0.12)
+	return forearm.global_transform * Transform3D(grip_rot, grip_pos)
+
+
 func equip_sword() -> void:
 	super.equip_sword()
 	if sword:
 		sword.visible = false
-		sword.blade_start = Vector3(0, 0, -0.18)
-		sword.blade_tip = Vector3(0, 0, -1.45)
-		sword.mass = 3.8
+		sword.blade_start = Vector3(0, 0, 0.10)
+		sword.blade_tip = Vector3(0, 0, -1.65)
+		sword.mass = 4.5
 	_attach_kanabo_visual()
 
 
@@ -209,11 +205,14 @@ func _apply_oni_visuals() -> void:
 		for c in p.get_children():
 			if c is MeshInstance3D:
 				var mi := c as MeshInstance3D
-				var keep := mi.name in ["OniMask", "OniBodyShell", "OniKanaboVisual"]
-				if not keep:
+				if mi.name in ["OniMask", "OniBodyShell", "OniKanaboVisual"]:
+					continue
+				if p.name in ["pelvis", "chest"]:
 					mi.visible = false
-				elif mi.material_override == _straw:
-					mi.material_override = _flesh
+				else:
+					mi.visible = true
+					if mi.material_override == _straw or mi.material_override == null:
+						mi.material_override = _flesh
 	if parts.has("pelvis"):
 		_attach_oni_body_shell(parts["pelvis"] as RagdollPart)
 	if parts.has("head"):
@@ -228,14 +227,14 @@ func _attach_oni_body_shell(pelvis: RagdollPart) -> void:
 	for c in pelvis.get_children():
 		if c.name == "OniBodyShell":
 			return
-	var shell := MeshInstance3D.new()
-	shell.name = "OniBodyShell"
+	var body_mi := MeshInstance3D.new()
+	body_mi.name = "OniBodyShell"
 	var mesh := _oni_body_mesh()
-	shell.mesh = mesh if mesh else BoxMesh.new()
-	shell.position = Vector3(0.0, 0.06, 0.0)
-	shell.scale = Vector3(1.55, 1.52, 1.48)
-	shell.material_override = _armor
-	pelvis.add_child(shell)
+	body_mi.mesh = mesh if mesh else BoxMesh.new()
+	body_mi.position = Vector3(0.0, 0.22, 0.0)
+	body_mi.scale = Vector3(1.48, 1.48, 1.48)
+	body_mi.material_override = _armor
+	pelvis.add_child(body_mi)
 
 
 func _attach_kanabo_visual() -> void:
@@ -274,7 +273,6 @@ static func _oni_body_mesh() -> Mesh:
 		if mi.mesh:
 			_cached_body_mesh = mi.mesh
 			break
-	inst.free()
 	return _cached_body_mesh
 
 
@@ -287,40 +285,7 @@ static func _oni_kanabo_mesh() -> Mesh:
 		if mi.mesh:
 			_cached_kanabo_mesh = mi.mesh
 			break
-	inst.free()
 	return _cached_kanabo_mesh
-
-
-func _attach_oni_mask(head: RagdollPart) -> void:
-	for c in head.get_children():
-		if c.name == "OniMask":
-			return
-	var mask_mi := MeshInstance3D.new()
-	mask_mi.name = "OniMask"
-	var mesh := _oni_mask_mesh()
-	mask_mi.mesh = mesh if mesh else _fallback_mask_mesh()
-	mask_mi.position = Vector3(0.0, 0.03, 0.16)
-	mask_mi.scale = Vector3(1.52, 1.56, 1.44)
-	mask_mi.material_override = _mask
-	var eye_l := MeshInstance3D.new()
-	var eye_m := SphereMesh.new()
-	eye_m.radius = 0.026
-	eye_m.height = 0.052
-	eye_l.mesh = eye_m
-	var eye_mat := StandardMaterial3D.new()
-	eye_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	eye_mat.albedo_color = Color(2.8, 0.40, 0.10)
-	eye_mat.emission_enabled = true
-	eye_mat.emission = Color(3.0, 0.50, 0.12)
-	eye_mat.emission_energy_multiplier = 2.6
-	eye_l.material_override = eye_mat
-	for sx in [-1.0, 1.0]:
-		var e := eye_l.duplicate() as MeshInstance3D
-		e.position = Vector3(0.075 * sx, 0.03, 0.18)
-		mask_mi.add_child(e)
-	# Glowing ocular cavities reading sharply in fog
-	EyeGlow.attach(mask_mi, Vector3(0.0, 0.03, 0.18), Color(1.0, 0.36, 0.08), 0.15, 0.10)
-	head.add_child(mask_mi)
 
 
 static func _oni_mask_mesh() -> Mesh:
@@ -332,8 +297,40 @@ static func _oni_mask_mesh() -> Mesh:
 		if mi.mesh:
 			_cached_mask_mesh = mi.mesh
 			break
-	inst.free()
 	return _cached_mask_mesh
+
+
+func _attach_oni_mask(head: RagdollPart) -> void:
+	for c in head.get_children():
+		if c.name == "OniMask":
+			return
+	var mask_mi := MeshInstance3D.new()
+	mask_mi.name = "OniMask"
+	var mesh := _oni_mask_mesh()
+	mask_mi.mesh = mesh if mesh else _fallback_mask_mesh()
+	mask_mi.position = Vector3(0.0, 0.03, 0.16)
+	mask_mi.scale = Vector3(1.36, 1.36, 1.35)
+	mask_mi.material_override = _mask
+	var eye_l := MeshInstance3D.new()
+	var eye_m := SphereMesh.new()
+	eye_m.radius = 0.045
+	eye_m.height = 0.09
+	eye_l.mesh = eye_m
+	var eye_mat := StandardMaterial3D.new()
+	eye_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	eye_mat.disable_fog = true
+	eye_mat.render_priority = 5
+	eye_mat.albedo_color = Color(3.5, 0.65, 0.15)
+	eye_mat.emission_enabled = true
+	eye_mat.emission = Color(3.5, 0.65, 0.15)
+	eye_mat.emission_energy_multiplier = 3.0
+	eye_l.material_override = eye_mat
+	for sx in [-1.0, 1.0]:
+		var e := eye_l.duplicate() as MeshInstance3D
+		e.name = "OniEye_" + ("l" if sx < 0 else "r")
+		e.position = Vector3(0.075 * sx, 0.03, 0.18)
+		mask_mi.add_child(e)
+	head.add_child(mask_mi)
 
 
 static func _fallback_mask_mesh() -> Mesh:
@@ -342,9 +339,66 @@ static func _fallback_mask_mesh() -> Mesh:
 	return m
 
 
-## Returns total calculated height in meters from ground to top of horns.
+
+func _try_hit_player(damage: float, attack: String) -> void:
+	if _hit_player_this_strike or sword == null:
+		return
+	var health := get_tree().get_first_node_in_group("player_health") as PlayerHealth
+	if health == null or not health.is_alive():
+		return
+	var body := health.hurt_capsule()
+	var a := sword.global_transform * sword.blade_start
+	var b := sword.get_tip_global()
+	var pts := Geometry3D.get_closest_points_between_segments(a, b, body[0], body[1])
+	var reach_radius := float(body[2]) + 0.35
+	if pts[0].distance_to(pts[1]) <= reach_radius:
+		_hit_player_this_strike = true
+		health.take_hit(damage, pts[0], {"attacker": profile.display_name, "attack": attack})
+
+
+## Returns actual physical height measured from real visible mesh geometry.
 func get_boss_height() -> float:
-	return 2.82
+	return get_measured_height()
+
+
+func get_measured_height() -> float:
+	var min_y := INF
+	var max_y := -INF
+	for p: RagdollPart in parts.values():
+		for c in p.get_children():
+			if c is MeshInstance3D:
+				var mi := c as MeshInstance3D
+				if mi.visible and mi.mesh != null and mi.name != "OniKanaboVisual":
+					var aabb := mi.mesh.get_aabb()
+					for i in 8:
+						var world_pt := mi.global_transform * aabb.get_endpoint(i)
+						min_y = minf(min_y, world_pt.y)
+						max_y = maxf(max_y, world_pt.y)
+	if min_y == INF or max_y == -INF:
+		return 2.82
+	return max_y - min_y
+
+
+func get_feet_lowest_y() -> float:
+	var min_y := INF
+	for side in ["l", "r"]:
+		var part_name: String = "lower_leg_" + str(side)
+		if parts.has(part_name):
+			var leg := parts[part_name] as RagdollPart
+			for c in leg.get_children():
+				if c is MeshInstance3D:
+					var mi := c as MeshInstance3D
+					if mi.visible and mi.mesh != null and mi.name != "OniKanaboVisual":
+						var aabb := mi.mesh.get_aabb()
+						for i in 8:
+							var world_pt := mi.global_transform * aabb.get_endpoint(i)
+							min_y = minf(min_y, world_pt.y)
+	return min_y if min_y != INF else global_position.y
+
+
+
+func reset() -> void:
+	reset_dummy()
 
 
 func _allow_revive_after_knockout() -> bool:

@@ -25,6 +25,13 @@ var _recent_player_actions: Array[String] = []
 func setup(p_body: Node3D, p_profile: EnemyProfile) -> void:
 	super.setup(p_body, p_profile)
 	attacks_enabled = true
+	attack_table["vertical"].range = 2.85
+	attack_table["vertical"].damage = 25.0
+	attack_table["horizontal"].range = 2.80
+	attack_table["horizontal"].damage = 20.0
+	attack_table["thrust"].range = 3.10
+	attack_table["thrust"].damage = 30.0
+	_apply_phase_parameters()
 	if ai_client == null:
 		ai_client = OniAiClient.new()
 		ai_client.name = "OniAiClient"
@@ -44,15 +51,16 @@ func think(delta: float, ctx: Dictionary) -> Dictionary:
 		to_player.y = 0.0
 		var dist := to_player.length()
 		var engage_d := float(_last_ai_decision.get("target_distance", 2.2))
-		if dist > engage_d + 0.3:
+		if dist > engage_d + 0.15:
 			var fwd := to_player.normalized()
-			var chase_speed := difficulty.move_speed * (1.3 if phase >= 2 else 1.1)
-			intent.move = intent.move.lerp(fwd * chase_speed, 0.7)
+			var chase_mult := 1.7 if phase >= 3 else (1.45 if phase == 2 else 1.25)
+			intent.move = fwd * (difficulty.move_speed * chase_mult)
+			intent.plant = false
 
 	return intent
 
 
-func _update_phase(_ctx: Dictionary) -> void:
+func _update_phase(_ctx: Dictionary = {}) -> void:
 	var boss := body as TrainingDummy
 	if boss == null or boss.profile == null or boss.profile.max_hp <= 0.0:
 		return
@@ -64,7 +72,7 @@ func _update_phase(_ctx: Dictionary) -> void:
 	elif ratio < 0.60:
 		target_phase = 2
 
-	if target_phase != phase:
+	if target_phase != phase or difficulty.windup_scale == 0.75:
 		phase = target_phase
 		_apply_phase_parameters()
 		phase_changed.emit(phase)
@@ -74,22 +82,22 @@ func _update_phase(_ctx: Dictionary) -> void:
 func _apply_phase_parameters() -> void:
 	match phase:
 		1:
-			difficulty.move_speed = 1.1
+			difficulty.move_speed = 1.85
 			difficulty.aggression = 0.4
 			difficulty.combo_chance = 0.25
 			difficulty.windup_scale = 1.15
 			difficulty.damage_scale = 1.3
 		2:
-			difficulty.move_speed = 1.35
+			difficulty.move_speed = 2.25
 			difficulty.aggression = 0.65
 			difficulty.combo_chance = 0.55
 			difficulty.windup_scale = 0.95
 			difficulty.damage_scale = 1.5
 		3:
-			difficulty.move_speed = 1.55
+			difficulty.move_speed = 2.65
 			difficulty.aggression = 0.90
 			difficulty.combo_chance = 0.75
-			difficulty.windup_scale = 0.85
+			difficulty.windup_scale = 0.70
 			difficulty.damage_scale = 1.75
 
 
