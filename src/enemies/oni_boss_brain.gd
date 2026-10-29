@@ -72,11 +72,15 @@ func _update_phase(_ctx: Dictionary = {}) -> void:
 	elif ratio < 0.60:
 		target_phase = 2
 
-	if target_phase != phase or difficulty.windup_scale == 0.75:
+	if target_phase != phase:
 		phase = target_phase
 		_apply_phase_parameters()
 		phase_changed.emit(phase)
 		GameEvents.log_event("oni_phase_shift", {"phase": phase, "hp_ratio": ratio})
+
+
+func refresh_phase_parameters() -> void:
+	_apply_phase_parameters()
 
 
 func _apply_phase_parameters() -> void:
