@@ -29,6 +29,12 @@ var failures := 0
 
 
 func _ready() -> void:
+	# Project rule: no window in the suite. Reading the framebuffer headless never
+	# returns a frame, so this check is reported as SKIP instead of hanging the run.
+	if DisplayServer.get_name() == "headless":
+		print("SKIP  boot splash pixel checks need a window (run windowed by hand, see docs/QUEST_TEST.md)")
+		get_tree().quit(0)
+		return
 	DirAccess.make_dir_recursive_absolute(DEBUG_DIR)
 	await _run_desktop()
 	await _run_vr_framing()
