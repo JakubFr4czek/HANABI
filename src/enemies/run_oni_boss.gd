@@ -273,6 +273,7 @@ static func _oni_body_mesh() -> Mesh:
 		if mi.mesh:
 			_cached_body_mesh = mi.mesh
 			break
+	inst.free()
 	return _cached_body_mesh
 
 
@@ -285,6 +286,7 @@ static func _oni_kanabo_mesh() -> Mesh:
 		if mi.mesh:
 			_cached_kanabo_mesh = mi.mesh
 			break
+	inst.free()
 	return _cached_kanabo_mesh
 
 
@@ -297,6 +299,7 @@ static func _oni_mask_mesh() -> Mesh:
 		if mi.mesh:
 			_cached_mask_mesh = mi.mesh
 			break
+	inst.free()
 	return _cached_mask_mesh
 
 
