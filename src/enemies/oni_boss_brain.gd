@@ -50,7 +50,7 @@ func think(delta: float, ctx: Dictionary) -> Dictionary:
 		var to_player: Vector3 = ctx.player_position - ctx.self_position
 		to_player.y = 0.0
 		var dist := to_player.length()
-		var engage_d := float(_last_ai_decision.get("target_distance", 2.2))
+		var engage_d := float(_last_ai_decision.get("target_distance", 1.8))
 		if dist > engage_d + 0.15:
 			var fwd := to_player.normalized()
 			var chase_mult := 1.7 if phase >= 3 else (1.45 if phase == 2 else 1.25)
