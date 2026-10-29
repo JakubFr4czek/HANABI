@@ -59,6 +59,10 @@ const HP_WARN_RATIO := 0.5
 const HP_CRITICAL_RATIO := 0.25
 ## The fire's palette (edge, middle, core). The middle sits behind the white figure, so
 ## it is kept dark enough for the figure to read (see wrist_hud_test).
+## D9: the SANDBOX mark, amber, in the plate's top-left corner. The top is the only free edge:
+## the element, ability and status rows all hang below the ring, and the ring keeps its clearance.
+const SANDBOX_FONT := 18
+const SANDBOX_COLOR := Color(1.0, 0.7, 0.3)
 const FLAME_EDGE := Color(0.5, 0.05, 0.02)
 const FLAME_MID := Color(0.78, 0.18, 0.04)
 const FLAME_CORE := Color(1.0, 0.66, 0.2)
@@ -82,6 +86,9 @@ var wrist_label: Label3D
 ## Debug builds: a small red count of RuntimeGuard violations on the plate,
 ## so a problem is noticed in the headset (details in the console / log).
 var guard_label: Label3D
+## D9: a sandbox run marks itself on the plate, so no demo is mistaken for a real run.
+var sandbox_label: Label3D
+var _sandbox_run := false
 
 var _ring_mat := ShaderMaterial.new()
 var _ring_cache := {}
@@ -190,6 +197,13 @@ func _setup_wrist_unit(player: Node3D) -> void:
 		l.render_priority = 2
 		wrist_face.add_child(l)
 
+	sandbox_label = _make_label("SandboxLabel", font, SANDBOX_FONT, Vector3(-PLATE_SIZE.x * 0.5 + 0.002, LABEL_Y, -PLATE_SIZE.y * 0.5 + 0.0038))
+	sandbox_label.text = "SANDBOX"
+	sandbox_label.modulate = SANDBOX_COLOR
+	sandbox_label.render_priority = 2
+	sandbox_label.visible = false
+	wrist_face.add_child(sandbox_label)
+
 	if RuntimeGuard.enabled:
 		guard_label = _make_label("GuardLabel", font, 22, Vector3(PLATE_SIZE.x * 0.5 - 0.006, LABEL_Y, -PLATE_SIZE.y * 0.5 + 0.006))
 		guard_label.modulate = Color(1.0, 0.25, 0.2)
@@ -283,6 +297,9 @@ func _process(delta: float) -> void:
 		label.visible = _presence > 0.02 and label.text != ""
 		label.modulate.a = 0.98 * _presence
 		label.outline_modulate.a = 0.95 * _presence
+	if sandbox_label:
+		sandbox_label.visible = _sandbox_run and _presence > 0.02
+		sandbox_label.modulate.a = 0.98 * _presence
 	if guard_label:
 		var n := RuntimeGuard.violation_count()
 		guard_label.visible = n > 0
@@ -440,6 +457,11 @@ func _orient_wrist_face(delta: float) -> void:
 	# never dips below the untilted plane into the hand mesh.
 	var lean := wrist_face.quaternion.get_angle()
 	wrist_face.position.y = sin(lean) * PLATE_SIZE.x * 0.57
+
+
+## Shows or hides the SANDBOX mark (D9): true for a run that used the sandbox.
+func set_sandbox_run(on: bool) -> void:
+	_sandbox_run = on
 
 
 func on_parry() -> void:

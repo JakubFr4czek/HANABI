@@ -41,6 +41,8 @@ func _run_all() -> void:
 	run.skip_run_intro = true
 	run.high_score_path = "user://test_vr_menu_pause_save.cfg"
 	VrComfortSettings.settings_path = "user://test_vr_menu_pause_settings.cfg"
+	# The locks below assume a normal tree: a sandbox switch left on in the player's own file is not read here.
+	VrComfortSettings.sandbox_enabled = false
 	add_child(run)
 	await _frames(12)
 	xr = run.player as XRPlayer
@@ -70,6 +72,7 @@ func _run_all() -> void:
 	await _test_opening_never_moves_the_player()
 	await _test_pointers_buy_only_through_run_game()
 	await _test_settings_tab()
+	await _test_sandbox_page()
 	await _test_audio_settings()
 	await _test_access_and_pace()
 	await _test_controls_page_matches_action_map()
@@ -543,6 +546,52 @@ func _test_settings_tab() -> void:
 	await _release_triggers()
 	await _tap_menu_button()
 	_check("the menu closes cleanly after settings checks", not ctl.is_open and not get_tree().paused)
+	_restore_settings_file(backup)
+
+
+## D9: the SANDBOX sub-tab through the real pointer. ON reads every node of the run's tree as
+## owned (tier 5 too) and a buy costs nothing; OFF gives the run's own unlocks back exactly.
+## The points are never touched, and the run's unlocks and points are put back afterwards.
+func _test_sandbox_page() -> void:
+	var backup := _backup_settings_file()
+	var saved_unlocks: Dictionary = run.skill_tree.unlocked.duplicate()
+	var saved_points := run.skill_points
+	run.skill_tree.reset()
+	run.add_points(2)
+	run.unlock_skill("petal_sense")
+	var real_unlocks: Dictionary = run.skill_tree.unlocked.duplicate()
+	var purse := run.skill_points
+
+	var c := await _open_settings()
+	await _click_page("page_sandbox")
+	_check("the SANDBOX sub-tab opens its page", c.is_settings_tab and c.settings_page == SkillTreeCanvas.PAGE_SANDBOX)
+	_check("the page has an ON and an OFF button in the panel",
+		c.settings_rect("sandbox_on").size != Vector2.ZERO and c.settings_rect("sandbox_off").size != Vector2.ZERO)
+
+	await _click("left", c.settings_rect("sandbox_on").get_center())
+	_check("clicking ON saves the switch", VrComfortSettings.sandbox_enabled)
+	_check("the run's tree follows at once, with the menu still open (sandbox %s)" % run.skill_tree.sandbox,
+		run.skill_tree.sandbox and ctl.is_open)
+	_check("tier-5 Ikazuchi Avatar reads as owned on the canvas (%s)" % c.node_state("ikazuchi_avatar"),
+		c.node_state("ikazuchi_avatar") == "owned")
+	_check("the run keeps its own unlocks underneath while the sandbox is on", run.skill_tree.unlocked == real_unlocks)
+	var verdict: Dictionary = run.unlock_skill("ikazuchi_avatar")
+	_check("buying a node in the sandbox is refused as owned and costs nothing (%s)" % verdict.get("reason", ""),
+		not verdict.get("ok", true) and run.skill_points == purse)
+	_check("the sandbox run is marked as one (run_used_sandbox)", run.run_used_sandbox)
+
+	await _click("left", c.settings_rect("sandbox_off").get_center())
+	_check("clicking OFF saves the switch", not VrComfortSettings.sandbox_enabled and not run.skill_tree.sandbox)
+	_check("OFF gives back the run's unlocks exactly (%s)" % [run.skill_tree.unlocked.keys()],
+		run.skill_tree.unlocked == real_unlocks and not run.skill_tree.is_unlocked("ikazuchi_avatar"))
+	_check("the points were never touched (%d -> %d)" % [purse, run.skill_points], run.skill_points == purse)
+
+	await _click("left", c.tab_rect(0).get_center())
+	await _release_triggers()
+	await _tap_menu_button()
+	_check("the menu closes after the sandbox checks", not ctl.is_open and not get_tree().paused)
+	run.skill_tree.unlocked = saved_unlocks
+	run.skill_points = saved_points
 	_restore_settings_file(backup)
 
 

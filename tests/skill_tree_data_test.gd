@@ -6,6 +6,9 @@ extends Node
 ## - An unlock measurably changes the ability (petal count, cooldown,
 ##   imbue duration, damage reduction) through ElementSystem
 ## - Per-run reset clears unlocks
+## - Sandbox (D9): every node reads as unlocked and costs nothing; switching it off restores
+##   the run's own unlocks exactly; the switch saves without touching other sections; the
+##   settings sub-tabs lay out inside the panel
 ##   godot --headless --path . --fixed-fps 90 res://tests/skill_tree_data_test.tscn -- --desktop
 
 const KATANA_SCENE := preload("res://scenes/weapons/katana.tscn")
@@ -37,6 +40,10 @@ func _run_all() -> void:
 	await _frames(3)
 
 	await _test_unlock_changes_abilities(elem_sys, tree, katana)
+	await _test_sandbox_abilities(elem_sys)
+	_test_sandbox_rules()
+	_test_sandbox_setting_persists()
+	_test_sandbox_page_layout()
 
 	katana.queue_free()
 	elem_sys.queue_free()
@@ -243,6 +250,113 @@ func _test_unlock_changes_abilities(elem_sys: ElementSystem, tree: SkillTreeData
 
 	elem_sys.reset()
 	_check("Katana returns to plain steel after reset", katana.element == Elements.NONE)
+
+
+## D9 (sandbox): the switch unlocks every node through is_unlocked, so the effects, the
+## finishers and the menu all follow; nothing is bought; the real unlocks come back as they were.
+func _test_sandbox_rules() -> void:
+	var tree := SkillTreeData.new()
+	tree.try_unlock("petal_sense", 1)
+	var real := tree.unlocked.duplicate()
+
+	tree.sandbox = true
+	var all_on := true
+	for n: Dictionary in SkillTreeData.NODES:
+		all_on = all_on and tree.is_unlocked(String(n.id))
+	_check("sandbox: all 20 nodes read as unlocked, tier 5 included", all_on and tree.is_unlocked("ikazuchi_avatar"))
+	var poor: Dictionary = tree.can_unlock("razor_petals", 0)
+	_check("sandbox: nothing is bought, so no points are needed (%s)" % poor.get("reason", ""),
+		poor.get("reason") == SkillTreeData.REASON_ALREADY_UNLOCKED and not tree.try_unlock("razor_petals", 0).get("ok", true))
+	_check("sandbox: buying changes no unlock state", tree.unlocked == real)
+	_check("sandbox: the finisher is on for every school (%s)" % Elements.kirisute_name(Elements.STORM),
+		tree.has_effect(Elements.STORM, "kirisute") and tree.has_effect(Elements.INK, "kirisute"))
+	_check("sandbox: a tier-4 effect is live too (Life Bloom heal %.0f)" % tree.effect_value(Elements.SAKURA, "heal_on_kill", 0.0),
+		absf(float(tree.effect_value(Elements.SAKURA, "heal_on_kill", 0.0)) - ElementBalance.LIFE_BLOOM_HEAL_KILL) < 0.001)
+	tree.reset()
+	_check("sandbox survives a run reset (the switch is a setting, not a run unlock)", tree.sandbox and tree.is_unlocked("shadow_clones"))
+
+	tree.sandbox = false
+	_check("switching off gives back the run's unlocks exactly", tree.unlocked == {} and not tree.is_unlocked("ikazuchi_avatar"))
+	var tree2 := SkillTreeData.new()
+	tree2.try_unlock("petal_sense", 1)
+	var before := tree2.unlocked.duplicate()
+	tree2.sandbox = true
+	tree2.sandbox = false
+	_check("on, then off: a bought node stays bought and nothing else appears",
+		tree2.unlocked == before and tree2.is_unlocked("petal_sense") and not tree2.is_unlocked("razor_petals"))
+
+
+## D9: the abilities read the sandbox through the same effect path (no cached copy):
+## Sakura's Senbonzakura releases the Razor Petals count without a single point spent.
+func _test_sandbox_abilities(elem_sys: ElementSystem) -> void:
+	var tree := SkillTreeData.new()
+	tree.sandbox = true
+	elem_sys.skill_tree = tree
+	elem_sys.reset()
+	elem_sys.imbue(Elements.SAKURA)
+	_check("sandbox: the Sakura imbue lasts the Petal Sense 24.0 s", absf(elem_sys.element_time_remaining - 24.0) < 0.01)
+	var counts: Array = []
+	var cb := func(type: String, data: Dictionary) -> void:
+		if type == "senbonzakura":
+			counts.append(int(data.get("count", 0)))
+	elem_sys.effect_triggered.connect(cb)
+	elem_sys.execute_ability_1(Vector3.FORWARD)
+	_check("sandbox: Senbonzakura releases the tier-2 petal count (%s)" % [counts],
+		counts == [ElementBalance.SENBONZAKURA_PETALS_T2])
+	elem_sys.effect_triggered.disconnect(cb)
+	elem_sys.reset()
+	elem_sys.skill_tree = null
+
+
+## The SANDBOX switch saves through VrComfortSettings. A section it does not own survives the
+## save, and a fresh load brings the switch back. Scratch file only: the real settings stay put.
+func _test_sandbox_setting_persists() -> void:
+	var real_path := VrComfortSettings.settings_path
+	var scratch := "user://test_sandbox_setting.cfg"
+	VrComfortSettings.settings_path = scratch
+	var seed_cfg := ConfigFile.new()
+	seed_cfg.set_value("audio", "music", 50)
+	seed_cfg.set_value("future", "keep_me", 7)
+	seed_cfg.save(scratch)
+	VrComfortSettings.load_settings()
+	VrComfortSettings.set_sandbox_enabled(true)
+
+	var after := ConfigFile.new()
+	after.load(scratch)
+	_check("sandbox switch is saved in its own [sandbox] section", bool(after.get_value("sandbox", "enabled", false)))
+	_check("saving keeps the other sections (audio %s, unknown section %s)" % [after.get_value("audio", "music", -1), after.get_value("future", "keep_me", -1)],
+		int(after.get_value("audio", "music", -1)) == 50 and int(after.get_value("future", "keep_me", -1)) == 7)
+	VrComfortSettings.sandbox_enabled = false
+	VrComfortSettings.load_settings()
+	_check("loading the file brings the switch back on", VrComfortSettings.sandbox_enabled)
+
+	VrComfortSettings.reset_to_defaults()
+	_check("reset to defaults turns the sandbox back off", not VrComfortSettings.sandbox_enabled)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(scratch))
+	VrComfortSettings.settings_path = real_path
+	VrComfortSettings.sandbox_enabled = false
+
+
+## The SANDBOX sub-tab is the sixth of six equal tabs: all of them and the switch's buttons sit
+## inside the panel and none overlaps another.
+func _test_sandbox_page_layout() -> void:
+	var panel := Rect2(Vector2.ZERO, SkillTreeCanvas.SIZE)
+	var tabs: Array[Rect2] = []
+	for key: String in SkillTreeCanvas.SUBNAV_RECTS:
+		tabs.append(SkillTreeCanvas.SUBNAV_RECTS[key])
+	var inside := true
+	var apart := true
+	for i in tabs.size():
+		inside = inside and panel.encloses(tabs[i])
+		for j in range(i + 1, tabs.size()):
+			apart = apart and not tabs[i].intersects(tabs[j])
+	_check("the six settings sub-tabs sit inside the panel and do not overlap", tabs.size() == 6 and inside and apart)
+	var page := Rect2(66.0, 268.0, 1468.0, 300.0)
+	var buttons: Array[Rect2] = []
+	for key: String in SkillTreeCanvas.SETTINGS_RECTS[SkillTreeCanvas.PAGE_SANDBOX]:
+		buttons.append(SkillTreeCanvas.SETTINGS_RECTS[SkillTreeCanvas.PAGE_SANDBOX][key])
+	_check("the ON and OFF buttons sit inside the SANDBOX page and do not overlap",
+		buttons.size() == 2 and page.encloses(buttons[0]) and page.encloses(buttons[1]) and not buttons[0].intersects(buttons[1]))
 
 
 func _check(label: String, ok: bool) -> void:

@@ -9,6 +9,7 @@ extends Node
 ## - [access] lightning and firework flash strength, haptic strength
 ## - [body] body weight for the calorie estimate (D14), 40–150 kg in 5 kg steps
 ## - [meta_ai] enabled (bool), api_key (masked in UI/logs), model, language (D15)
+## - [sandbox] enabled (bool): every skill-tree node unlocked for demos and tests (D9)
 ## It configures godot-xr-tools, the AudioServer buses (through [Sfx]) and the
 ## effects that read [method flash_scale] and [method haptic_amplitude].
 
@@ -57,6 +58,8 @@ var ai_boss_enabled: bool = true
 var meta_api_key: String = ""
 var ai_model: String = "muse-spark-1.3"
 var ai_language: String = "pl"
+## Sandbox (D9): off by default. Read by RunGame, which passes it to SkillTreeData.sandbox.
+var sandbox_enabled: bool = false
 const DEFAULT_META_ENDPOINT := "https://api.meta.ai/v1/chat/completions"
 const PRESET_META_ENDPOINTS: Array[String] = [
 	"https://api.meta.ai/v1/chat/completions",
@@ -112,6 +115,9 @@ func load_settings() -> void:
 	if cfg.has_section("body"):
 		body_weight_kg = clampf(float(cfg.get_value("body", "weight_kg", body_weight_kg)), WEIGHT_MIN, WEIGHT_MAX)
 
+	if cfg.has_section("sandbox"):
+		sandbox_enabled = bool(cfg.get_value("sandbox", "enabled", sandbox_enabled))
+
 	if cfg.has_section("meta_ai"):
 		ai_boss_enabled = bool(cfg.get_value("meta_ai", "enabled", ai_boss_enabled))
 		meta_api_key = String(cfg.get_value("meta_ai", "api_key", meta_api_key))
@@ -150,6 +156,7 @@ func save_settings() -> void:
 	cfg.set_value("meta_ai", "model", ai_model)
 	cfg.set_value("meta_ai", "language", ai_language)
 	cfg.set_value("meta_ai", "endpoint", ai_endpoint)
+	cfg.set_value("sandbox", "enabled", sandbox_enabled)
 
 	var err := cfg.save(settings_path)
 	if err == OK:
@@ -169,6 +176,7 @@ func save_settings() -> void:
 			"body_weight_kg": body_weight_kg,
 			"ai_boss_enabled": ai_boss_enabled,
 			"ai_has_key": get_effective_meta_api_key() != "",
+			"sandbox": sandbox_enabled,
 		})
 	settings_changed.emit()
 
@@ -228,6 +236,12 @@ func get_effective_meta_api_endpoint() -> String:
 func set_meta_api_endpoint(ep: String) -> void:
 	ai_endpoint = ep.strip_edges()
 	save_settings()
+
+## Sandbox on or off (D9). Saved at once; RunGame follows through [signal settings_changed].
+func set_sandbox_enabled(enabled: bool) -> void:
+	sandbox_enabled = enabled
+	save_settings()
+
 
 func set_ai_language(lang: String) -> void:
 	var l := lang.to_lower()
@@ -446,6 +460,7 @@ func reset_to_defaults(player: Node3D = null) -> void:
 	flash_percent = 100
 	haptic_percent = 100
 	ai_boss_enabled = true
+	sandbox_enabled = false
 	apply_audio()
 	if player:
 		apply_to_player(player)
