@@ -79,8 +79,17 @@ void fragment() {
 		}
 	}
 	if (normal_depth > 0.0) {
-		NORMAL_MAP = texture(normal_texture, UV).rgb;
-		NORMAL_MAP_DEPTH = normal_depth;
+		vec3 n_tex = texture(normal_texture, UV).rgb * 2.0 - 1.0;
+		vec3 q0 = dFdx(v_world_pos);
+		vec3 q1 = dFdy(v_world_pos);
+		vec2 st0 = dFdx(UV);
+		vec2 st1 = dFdy(UV);
+		vec3 N = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+		vec3 T = normalize(q0 * st1.t - q1 * st0.t);
+		vec3 B = -normalize(cross(N, T));
+		mat3 TBN = mat3(T, B, N);
+		vec3 perturbed = normalize(TBN * n_tex);
+		NORMAL = (VIEW_MATRIX * vec4(mix(N, perturbed, normal_depth), 0.0)).xyz;
 	}
 
 	// World-space normal (before the normal map): tops hold water, walls drain.

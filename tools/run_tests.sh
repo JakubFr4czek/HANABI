@@ -7,7 +7,7 @@ JOBS=${1:-4}
 FILTER=${2:-}
 OUT=/tmp/hanabi_tests
 mkdir -p $OUT
-names=($(ls tests/*_test.tscn | xargs -n1 basename | sed 's/\.tscn$//' | grep -E "$FILTER"))
+names=($(ls tests/*_test.tscn tests/oni_boss_screenshots.tscn 2>/dev/null | xargs -n1 basename | sed 's/\.tscn$//' | grep -E "$FILTER"))
 printf '%s\n' $names | xargs -P $JOBS -n1 tools/run_one_test.sh
 pass=0; total=0
 for n in $names; do

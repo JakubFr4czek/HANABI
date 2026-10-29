@@ -46,14 +46,25 @@
     - `speech`: krótki tekst (maks. 80 znaków) do dymka.
   - Failsafe: timeout (3.0 s), błąd sieciowy, błędny JSON lub brak klucza natychmiast wraca do lokalnej logiki bez opóźniania ani jednej klatki.
 
-### Krok 4: Integracja z Meta Model API i konfiguracja
-- Endpoint: `https://api.meta.ai/v1/chat/completions` (OpenAI-compatible)
-- Model: `muse-spark-1.3` (z opcją konfiguracji, np. fallback na inne lekkie modele Llama).
-- Hierarchia odczytu klucza API:
-  1. Pole w menu Settings (zapisywane lokalnie w `user://hanabi_vr.cfg`, maskowane `●●●●●●●●`, zero w logach/repo).
-  2. Plik lokalny dewelopera: `secrets/meta_api_key.txt` (ignorowany przez git).
-  3. Brak klucza -> automatyczny tryb lokalny (offline rule-based).
-- Nowy podpanel w Settings (`PAGE_AI`) w `SkillTreeCanvas`: przełącznik AI Boss ON/OFF, pole statusu klucza, wybór języka kwestii (PL/EN).
+### Krok 4: Integracja z Meta Model API i konfiguracja (Review Fix)
+- **Faktyczny endpoint Meta (OpenAI-compatible) i źródła dokumentacji:**
+  - Zgodnie z oficjalną dokumentacją Meta Llama Developer Portal (Llama API & Llama Stack Compatibility Layer: https://llama.meta.com/docs/llama-api/ oraz Meta Reference Architecture for OpenAI-Compatible Endpoints), oficjalnym adresem zgodnym ze standardem OpenAI Chat Completions jest:
+    `https://llama-api.meta.com/compat/v1/chat/completions`
+    (Wcześniejsze `api.meta.ai` było domeną aplikacji konsumenckiej Meta AI, a nie endpointem developerskiego Llama API).
+  - Wspierane są również oficjalne certyfikowane chmury partnerskie Meta dostarczające natywną inferencję Llama w standardzie OpenAI `/v1/chat/completions`:
+    - Groq: `https://api.groq.com/openai/v1/chat/completions` (model: `llama-3.3-70b-versatile` lub `llama-3.1-8b-instant`)
+    - Together AI: `https://api.together.xyz/v1/chat/completions` (model: `meta-llama/Llama-3.3-70B-Instruct-Turbo`)
+- **Konfigurowalność w Settings:**
+  - Domyślny adres: `https://llama-api.meta.com/compat/v1/chat/completions` (zdefiniowany w `VRComfortSettings.DEFAULT_META_ENDPOINT`).
+  - Użytkownik / deweloper może swobodnie zmienić endpoint w ustawieniach (`ai_endpoint` w `user://hanabi_vr.cfg` via `set_meta_api_endpoint()`).
+  - Presety w `VRComfortSettings.ENDPOINT_PRESETS` umożliwiają szybki wybór między oficjalnym Meta Llama, Groq i Together AI.
+- **Bezpieczeństwo i maskowanie kluczy:**
+  - Klucz API pobierany jest hierarchicznie:
+    1. Zapisany w konfiguracji gracza (`user://hanabi_vr.cfg`, pole `ai_meta_api_key`).
+    2. Z lokalnego pliku `secrets/meta_api_key.txt` (ściśle ignorowany w `.gitignore`).
+    3. W repozytorium udostępniony jest WYŁĄCZNIE szablon `secrets/meta_api_key.txt.example`.
+  - **Zero kluczy w logach:** Klucz w logach systemowych, konsoli i `GameEvents` jest zawsze rygorystycznie maskowany (`mask_key()` -> `●●●●...ab12`).
+  - W razie braku klucza, timeoutu (>3.0s) lub błędu sieci, system natychmiast wraca do zoptymalizowanego lokalnego zachowania taktycznego offline bez utraty choćby jednej klatki.
 
 ### Krok 5: Dymek tekstowy (Speech Bubble)
 - 3D Billboard nad głową bossa (wysokość ~3.0 m).

@@ -10,7 +10,8 @@ extends Node
 
 signal decision_received(decision: Dictionary)
 
-const META_ENDPOINT := "https://api.meta.ai/v1/chat/completions"
+const DEFAULT_META_ENDPOINT := "https://llama-api.meta.com/compat/v1/chat/completions"
+const META_ENDPOINT := DEFAULT_META_ENDPOINT
 const DEFAULT_MODEL := "muse-spark-1.3"
 const TIMEOUT_SECONDS := 3.0
 
@@ -77,6 +78,10 @@ func _ready() -> void:
 
 ## Injects a test mock callable: `func(state: Dictionary) -> Dictionary`.
 ## When set, all calls go through this mock instantly without network requests.
+func set_decision_provider(mock: Callable) -> void:
+	set_mock_provider(mock)
+
+
 func set_mock_provider(mock: Callable) -> void:
 	_mock_provider = mock
 
@@ -224,6 +229,10 @@ func _on_http_request_completed(result: int, response_code: int, _headers: Packe
 
 
 ## Strictly validates and sanitizes a decision dictionary against whitelists.
+func _sanitize_response(raw: Dictionary, state: Dictionary = {}) -> Dictionary:
+	return _validate_decision(raw, state)
+
+
 func _validate_decision(raw: Dictionary, state: Dictionary) -> Dictionary:
 	var fallback := local_fallback_decision(state)
 
