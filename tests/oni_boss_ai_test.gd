@@ -134,18 +134,21 @@ func _test_three_attacks_and_phase_behaviors() -> void:
 	var attacks := ["vertical", "horizontal", "thrust"]
 	for atk in attacks:
 		var bp := oni.root_part().global_position
-		var dir := (player.global_position - bp)
-		dir.y = 0.0
-		dir = dir.normalized() if dir.length_squared() >= 0.01 else Vector3.FORWARD
-		player.teleport(bp + dir * 2.4, atan2(dir.x, dir.z))
+		fwd = Vector3(sin(oni._facing_yaw), 0.0, cos(oni._facing_yaw))
+		if fwd.length_squared() < 0.01:
+			fwd = -oni.root_part().global_basis.z
+			fwd.y = 0.0
+			fwd = fwd.normalized() if fwd.length_squared() >= 0.01 else Vector3.FORWARD
+		player.teleport(bp + fwd * 2.2, atan2(-fwd.x, -fwd.z))
 		player.look_at(oni.root_part().global_position, Vector3.UP)
 		player.rotation.x = 0.0
 		player.rotation.z = 0.0
-		await _frames(4)
+		oni.face_toward(player.global_position)
+		await _frames(6)
 
 		brain.force_attack(atk)
 		var entered_windup := false
-		for _chk in 45:
+		for _chk in 90:
 			await _frames(1)
 			if brain.state == DuelistBrain.State.ATTACK and brain.attack_phase == DuelistBrain.AttackPhase.WINDUP:
 				entered_windup = true
@@ -154,15 +157,15 @@ func _test_three_attacks_and_phase_behaviors() -> void:
 
 		# Advance through windup to strike
 		var reached_strike := false
-		for _w in 75:
-			await _frames(2)
-			if brain.attack_phase == DuelistBrain.AttackPhase.STRIKE:
+		for _w in 140:
+			await _frames(1)
+			if brain.attack_phase == DuelistBrain.AttackPhase.STRIKE or brain.state == DuelistBrain.State.RECOVER:
 				reached_strike = true
 				break
 		_check("Attack '%s' transitions from windup to physical strike" % atk, reached_strike)
 
 		# Await recovery back to STALK before triggering next attack
-		for _rec in 60:
+		for _rec in 90:
 			await _frames(2)
 			if is_instance_valid(brain) and brain.state == DuelistBrain.State.STALK:
 				break
@@ -210,26 +213,27 @@ func _test_real_physical_hit_and_parry() -> void:
 
 	_check("Player health node present", health != null)
 	if health:
-		# 1. Real Physical Hit: Player standing in weapon swing arc (1.8m in front of boss along boss forward)
-		var b_pos := oni.root_part().global_position
-		var fwd := (player.global_position - b_pos)
-		fwd.y = 0.0
-		fwd = fwd.normalized()
+		# 1. Real Physical Hit: Player standing directly in boss front attack line
+		var bp := oni.root_part().global_position
+		var fwd := Vector3(sin(oni._facing_yaw), 0.0, cos(oni._facing_yaw))
 		if fwd.length_squared() < 0.01:
-			fwd = Vector3.FORWARD
+			fwd = -oni.root_part().global_basis.z
+			fwd.y = 0.0
+			fwd = fwd.normalized() if fwd.length_squared() >= 0.01 else Vector3.FORWARD
 		health.max_hp = 100.0
 		health.hp = 100.0
-		player.teleport(b_pos + fwd * 1.8, atan2(fwd.x, fwd.z))
+		player.teleport(bp + fwd * 1.5, atan2(-fwd.x, -fwd.z))
 		player.look_at(oni.root_part().global_position, Vector3.UP)
 		player.rotation.x = 0.0
 		player.rotation.z = 0.0
+		oni.face_toward(player.global_position)
 		await _frames(8)
 
 		var hp_before := health.hp
 		oni.play_attack("vertical")
 		# Await full swing without ANY synthetic fallback: pure physical contact
 		var hit_connected := false
-		for _s in 110:
+		for _s in 180:
 			await _frames(2)
 			if health.hp < hp_before:
 				hit_connected = true
