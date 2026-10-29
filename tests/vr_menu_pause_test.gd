@@ -40,6 +40,7 @@ func _run_all() -> void:
 	run = RUN_SCENE.instantiate()
 	run.skip_run_intro = true
 	run.high_score_path = "user://test_vr_menu_pause_save.cfg"
+	VrComfortSettings.settings_path = "user://test_vr_menu_pause_settings.cfg"
 	add_child(run)
 	await _frames(12)
 	xr = run.player as XRPlayer
@@ -77,6 +78,7 @@ func _run_all() -> void:
 	await _test_music_ducking()
 	await _test_locomotion_speed_boost()
 	await _test_offering_touch_in_vr()
+	await _test_view_buttons_and_height()
 	_test_ui_source_has_one_spending_path()
 	run.queue_free()
 
@@ -406,13 +408,13 @@ func _test_pointers_buy_only_through_run_game() -> void:
 
 # --- 4b. SETTINGS tab (comfort, audio, access, controls) ----------------------------------
 
-## Settings the tests change are saved to the player's real hanabi_vr.cfg: keep
-## a copy and put it back, so a test run never leaves the headset tuned.
+## Settings the tests change go to a scratch file (settings_path); this helper keeps
+## that file as it was before the run, so a rerun starts from the same state.
 func _backup_settings_file() -> Dictionary:
-	var had := FileAccess.file_exists(VrComfortSettings.SETTINGS_PATH)
+	var had := FileAccess.file_exists(VrComfortSettings.settings_path)
 	var content := ""
 	if had:
-		var fa := FileAccess.open(VrComfortSettings.SETTINGS_PATH, FileAccess.READ)
+		var fa := FileAccess.open(VrComfortSettings.settings_path, FileAccess.READ)
 		if fa:
 			content = fa.get_as_text()
 			fa.close()
@@ -421,12 +423,12 @@ func _backup_settings_file() -> Dictionary:
 
 func _restore_settings_file(backup: Dictionary) -> void:
 	if backup.had:
-		var fw := FileAccess.open(VrComfortSettings.SETTINGS_PATH, FileAccess.WRITE)
+		var fw := FileAccess.open(VrComfortSettings.settings_path, FileAccess.WRITE)
 		if fw:
 			fw.store_string(backup.content)
 			fw.close()
 	else:
-		DirAccess.remove_absolute(VrComfortSettings.SETTINGS_PATH)
+		DirAccess.remove_absolute(VrComfortSettings.settings_path)
 	VrComfortSettings.load_settings()
 	VrComfortSettings.apply_to_player(xr)
 
@@ -527,7 +529,7 @@ func _test_settings_tab() -> void:
 
 	# 5. Persistence verification
 	var cfg := ConfigFile.new()
-	var err := cfg.load(VrComfortSettings.SETTINGS_PATH)
+	var err := cfg.load(VrComfortSettings.settings_path)
 	_check("user://hanabi_vr.cfg loaded successfully", err == OK)
 	_check("vignette_enabled saved in cfg", cfg.get_value("comfort", "vignette_enabled", false) == true)
 	_check("vignette_strength saved in cfg", absf(float(cfg.get_value("comfort", "vignette_strength", 0.0)) - 0.75) < 0.01)
@@ -588,7 +590,7 @@ func _test_audio_settings() -> void:
 
 	# Survives a save and a reload: forget the values in memory, then load the file.
 	var cfg := ConfigFile.new()
-	cfg.load(VrComfortSettings.SETTINGS_PATH)
+	cfg.load(VrComfortSettings.settings_path)
 	_check("the [audio] section is saved (master %s, music %s, sfx %s, ambience %s)" % [
 			cfg.get_value("audio", "master"), cfg.get_value("audio", "music"),
 			cfg.get_value("audio", "sfx"), cfg.get_value("audio", "ambience")],
@@ -649,7 +651,7 @@ func _test_access_and_pace() -> void:
 	await _click("left", c.settings_rect("walk_slow").get_center())
 	_check("SLOW walks at 0.7x (%.2f)" % xr.get_move_speed(), absf(xr.get_move_speed() - base * 0.7) < 0.01)
 	var cfg := ConfigFile.new()
-	cfg.load(VrComfortSettings.SETTINGS_PATH)
+	cfg.load(VrComfortSettings.settings_path)
 	_check("the pace and the access levels are saved", absf(float(cfg.get_value("comfort", "walk_scale", 0.0)) - 0.7) < 0.001
 		and int(cfg.get_value("access", "flash_percent", -1)) == 0 and int(cfg.get_value("access", "haptic_percent", -1)) == 100)
 
@@ -832,6 +834,38 @@ func _test_locomotion_speed_boost() -> void:
 
 
 # --- 9. One door for spending ----------------------------------------------------------
+
+## B on a hand with nothing in it: a short tap asks for an attacks toggle, and
+## holding B on the turn-stick hand with the stick up raises eye height. Holding
+## B (or a recenter) makes the release save the user's view settings, so this is
+## the last check and B is never released: the run ends with the button down and
+## nothing is written to the real config.
+func _test_view_buttons_and_height() -> void:
+	sim.set_grip("right", 0.0)
+	await _frames(12)
+	_check("letting go of the katana leaves the sword hand empty", xr.right_holder.held == null)
+	var toggles := [0]
+	var on_toggle := func() -> void:
+		toggles[0] += 1
+	xr.toggle_attacks_requested.connect(on_toggle)
+	sim.set_button("left", "by_button", true)
+	await _frames(6)
+	sim.set_button("left", "by_button", false)
+	await _frames(6)
+	xr.toggle_attacks_requested.disconnect(on_toggle)
+	_check("a short B tap asks for an attacks toggle", toggles[0] == 1)
+
+	var height0: float = xr.height_offset
+	sim.set_button("right", "by_button", true)
+	sim.set_stick("right", Vector2(0.0, 1.0))
+	await _frames(45)
+	sim.set_stick("right", Vector2.ZERO)
+	await _frames(3)
+	_check("holding B and pushing the turn stick up raises eye height (%.3f m)" % (xr.height_offset - height0),
+		xr.height_offset > height0 + 0.05)
+	var body := xr.get_node("XROrigin3D/PlayerBody")
+	_check("the physics body follows the new eye height", is_equal_approx(float(body.get("player_height_offset")), xr.height_offset))
+
 
 func _test_ui_source_has_one_spending_path() -> void:
 	var offenders: Array[String] = []
