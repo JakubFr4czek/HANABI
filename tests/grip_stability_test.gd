@@ -222,7 +222,7 @@ func _xr_hand_stays_with_controller() -> void:
 	# The holder sits in the fist, offset from the controller: put the fist on the grip.
 	controller.global_transform = BASE_POSE * xr_player.right_holder.transform.affine_inverse()
 	xr_player.right_holder.grab(katana)
-	await _wait(0.3)
+	await _wait(0.5)
 	var pinned_gap := hand.global_position.distance_to(controller.global_position)
 	# Hold the blade back with a wall-like stop, then yank the hand far away.
 	katana.freeze = true
