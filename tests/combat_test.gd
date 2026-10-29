@@ -32,6 +32,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	await _wait(1.0)
+	await _test_desktop_keys()
 
 	# 1. Weight: the same "arm" moves a heavy weapon slower than a katana.
 	player.teleport(Vector3(3.5, 0, 3.5))  # away from the dummy
@@ -482,6 +483,59 @@ static func calm_difficulty() -> DuelistDifficulty:
 	d.riposte_chance = 0.0
 	d.hesitate_chance = 0.0
 	return d
+
+
+## Keyboard and wheel go through the desktop player's own input handler.
+func _test_desktop_keys() -> void:
+	player.take_weapon(katana)
+	await _wait(0.2)
+	var d0: float = player.swing_duration
+	_send_wheel(MOUSE_BUTTON_WHEEL_UP)
+	_check("wheel up makes the swing faster by one step", is_equal_approx(player.swing_duration, d0 - 0.02))
+	for i in 40:
+		_send_wheel(MOUSE_BUTTON_WHEEL_UP)
+	_check("swing speed stops at the fastest setting (0.06 s)", is_equal_approx(player.swing_duration, 0.06))
+	for i in 60:
+		_send_wheel(MOUSE_BUTTON_WHEEL_DOWN)
+	_check("swing speed stops at the slowest setting (0.6 s)", is_equal_approx(player.swing_duration, 0.6))
+
+	_send_key(KEY_H, true)
+	_check("holding H shows the wrist readout", player.wrist_check)
+	_send_key(KEY_H, false)
+	_check("releasing H hides the wrist readout", not player.wrist_check)
+
+	var hands: bool = player.two_handed
+	_send_key(KEY_V, true)
+	_check("V switches between one and two hands", player.two_handed != hands)
+	_send_key(KEY_V, true)
+	_check("a second V switches back", player.two_handed == hands)
+
+	var element: String = katana.element
+	_send_key(KEY_Z, true)
+	_check("Z cycles the held blade's element", katana.element == XRPlayer.next_element(element))
+
+	_send_key(KEY_E, true)
+	_check("E lets go of the held weapon", player.holder.held == null)
+	_send_key(KEY_E, true)
+	await _wait(0.3)
+	_check("E again pulls the weapon back into the hand", player.holder.held == katana)
+
+	_send_key(KEY_ESCAPE, true)
+	_check("Esc frees the mouse", Input.mouse_mode == Input.MOUSE_MODE_VISIBLE)
+
+
+func _send_key(code: Key, pressed: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = code
+	ev.pressed = pressed
+	player._unhandled_input(ev)
+
+
+func _send_wheel(button: MouseButton) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = button
+	ev.pressed = true
+	player._unhandled_input(ev)
 
 
 func _wait(seconds: float) -> void:

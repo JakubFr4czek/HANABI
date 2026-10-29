@@ -5,6 +5,7 @@ var failures := 0
 
 func _ready() -> void:
 	await _run_all()
+	await _ephemeral_spark()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	get_tree().quit(1 if failures > 0 else 0)
 
@@ -60,6 +61,22 @@ func _check(label: String, ok: bool) -> void:
 	print("%s  %s" % ["PASS" if ok else "FAIL", label])
 	if not ok:
 		failures += 1
+
+
+## Without the pool a spark burst is a one-shot, additive, fog-free burst under its
+## parent that frees itself after its lifetime.
+func _ephemeral_spark() -> void:
+	var host := Node3D.new()
+	add_child(host)
+	var s := SparkBurst._spawn_ephemeral(host, Vector3(0, 1, 0), Vector3.UP, Color(1, 0.5, 0.2), 9, 2.0)
+	var mat := s.material_override as StandardMaterial3D
+	_check("fallback spark is a one-shot burst under its parent", s.get_parent() == host and s.one_shot and s.emitting)
+	_check("fallback spark emits the requested amount", s.amount == 9)
+	_check("fallback spark is additive and ignores fog", mat != null
+		and mat.blend_mode == BaseMaterial3D.BLEND_MODE_ADD and mat.disable_fog)
+	await _frames(50)
+	_check("fallback spark frees itself after its lifetime", not is_instance_valid(s))
+	host.queue_free()
 
 
 func _frames(n: int) -> void:
