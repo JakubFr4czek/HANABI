@@ -34,6 +34,7 @@ func _run_all() -> void:
 	await _test_three_attacks_and_phase_behaviors()
 	await _test_real_physical_hit_and_parry()
 	await _test_ai_brain_mock_and_failsafe()
+	_test_http_reply_parsing()
 	await _test_real_pixel_contrast_and_fog_readability()
 
 
@@ -340,6 +341,49 @@ func _test_real_physical_hit_and_parry() -> void:
 
 	run.queue_free()
 	await _frames(4)
+
+
+## The HTTP reply path: a good reply (also when fenced in markdown) becomes an
+## "ai" decision; a failed request, an error status, or a reply that is not the
+## expected JSON falls back locally so the boss always gets a decision.
+func _test_http_reply_parsing() -> void:
+	print("\n[TEST] 6. AI HTTP reply parsing")
+	var client := OniAiClient.new()
+	add_child(client)
+	var decision := JSON.stringify({"tactic": "advance", "attack": "thrust", "speech": "Hej"})
+	var good := JSON.stringify({"choices": [{"message": {"content": decision}}]})
+	var fenced := JSON.stringify({"choices": [{"message": {"content": "```json\n" + decision + "\n```"}}]})
+
+	var ok := _http_reply(client, HTTPRequest.RESULT_SUCCESS, 200, good)
+	_check("a good reply is used as the AI decision", ok.get("source") == "ai" and ok.get("tactic") == "advance")
+	var md := _http_reply(client, HTTPRequest.RESULT_SUCCESS, 200, fenced)
+	_check("a reply fenced in markdown is still read", md.get("source") == "ai" and md.get("attack") == "thrust")
+	var net := _http_reply(client, HTTPRequest.RESULT_CANT_CONNECT, 0, "")
+	_check("a failed connection falls back locally", net.get("source") == "fallback")
+	var bad_status := _http_reply(client, HTTPRequest.RESULT_SUCCESS, 500, good)
+	_check("an error status falls back locally", bad_status.get("source") == "fallback")
+	var not_json := _http_reply(client, HTTPRequest.RESULT_SUCCESS, 200, "<html>")
+	_check("a non-JSON body falls back locally", not_json.get("source") == "fallback")
+	var no_choices := _http_reply(client, HTTPRequest.RESULT_SUCCESS, 200, JSON.stringify({"error": "quota"}))
+	_check("a reply without choices falls back locally", no_choices.get("source") == "fallback")
+	var bad_content := _http_reply(client, HTTPRequest.RESULT_SUCCESS, 200,
+		JSON.stringify({"choices": [{"message": {"content": "sorry, no json"}}]}))
+	_check("a reply whose content is not JSON falls back locally", bad_content.get("source") == "fallback")
+
+	client._is_busy = false
+	var late := {}
+	client._pending_callback = func(d: Dictionary) -> void: late.merge(d, true)
+	client._on_http_request_completed(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), good.to_utf8_buffer())
+	_check("a reply that arrives with no request in flight is ignored", late.is_empty())
+	client.queue_free()
+
+
+func _http_reply(client: OniAiClient, result: int, code: int, body: String) -> Dictionary:
+	var got := {}
+	client._is_busy = true
+	client._pending_callback = func(d: Dictionary) -> void: got.merge(d, true)
+	client._on_http_request_completed(result, code, PackedStringArray(), body.to_utf8_buffer())
+	return got
 
 
 func _test_ai_brain_mock_and_failsafe() -> void:

@@ -31,6 +31,7 @@ func _ready() -> void:
 	player = room.player
 	health = player.health
 	GameEvents.event_logged.connect(func(e): events.append(e))
+	_base_brain_holds_guard()
 	await _run()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -664,6 +665,16 @@ func _distance() -> float:
 func _bearing() -> float:
 	var d := dummy.root_part().global_position - player.camera.global_position
 	return rad_to_deg(atan2(d.x, d.z))
+
+
+## The base brain is the do-nothing default: it holds guard and takes hits in silence.
+func _base_brain_holds_guard() -> void:
+	var base := EnemyBrain.new()
+	_check("the base brain holds guard", base.think(0.016, {})["pose"] == "guard")
+	base.on_hit({})
+	base.on_parried({})
+	_check("the base brain takes hits and parries without changing its intent", base.think(0.016, {}) == {"pose": "guard"})
+	base.free()
 
 
 func _check(label: String, ok: bool) -> void:
