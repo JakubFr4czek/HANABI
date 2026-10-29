@@ -23,10 +23,31 @@ func _run() -> void:
 		music.duck_for_level_up(0.04, -6.0)
 		await _frames(55)
 		_check("Level-up duck returns toward base volume", absf(music._duck_offset_db) < 0.5)
+		await _music_recovers(music)
 	var forest := run.get_node_or_null("RunForestAmbience") as RunForestAmbience
 	if forest and forest._player:
 		_check("Forest wind on Ambience bus (not Music)", forest._player.bus == Sfx.AMBIENCE_BUS)
 	run.queue_free()
+
+
+## Audio focus changes can stop a track; the run must never go silent. A
+## crossfade runs once and hands the lead to the other player.
+func _music_recovers(music: StormMusic) -> void:
+	var lead := music._players[music._lead]
+	lead.stop()
+	await _frames(2)
+	_check("an interrupted lead track restarts", lead.playing)
+	var layer := music.get_layer_player()
+	layer.stop()
+	await _frames(2)
+	_check("an interrupted layer track restarts", layer.playing)
+	var before := music._lead
+	music._begin_crossfade()
+	music._begin_crossfade()
+	_check("a second crossfade request during one in progress is ignored", music._crossfading)
+	await _frames(55)
+	_check("the crossfade hands the lead to the other player", music._lead == 1 - before and not music._crossfading)
+	_check("the faded-out player is stopped", not music._players[before].playing)
 
 
 func _check(label: String, ok: bool) -> void:
