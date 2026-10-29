@@ -637,7 +637,7 @@ func _draw_detail() -> void:
 	# D9: in the sandbox nothing is charged, so the cost column says so instead of a price.
 	if tree.sandbox:
 		_text("SANDBOX", Vector2(cost_x, req_y), 22, Color(1.0, 0.7, 0.3), HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
-		_text("no cost", Vector2(cost_x, req_y + 24), 36, Color(1.0, 0.7, 0.3), HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
+		_text("no cost", Vector2(cost_x - 60, req_y + 24), 36, Color(1.0, 0.7, 0.3), HORIZONTAL_ALIGNMENT_RIGHT, 210.0)
 	else:
 		_text("COST", Vector2(cost_x, req_y), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
 		_text("点 × %d" % int(n.cost), Vector2(cost_x, req_y + 24), 46, GILT, HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
