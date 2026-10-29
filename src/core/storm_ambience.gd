@@ -6,6 +6,7 @@ extends Node
 
 const RAIN := preload("res://assets/audio/sfx/cc0_storm/amb_rain_loop_1.ogg")
 
+@export var rain_stream: AudioStream = RAIN
 @export var rain_volume_db := -14.0
 @export var thunder_volume_db := 2.0
 ## Seconds between the flash and the thunder (distant storm).
@@ -25,7 +26,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	rain_player = AudioStreamPlayer.new()
 	rain_player.name = "Rain"
-	var stream: AudioStream = RAIN
+	var stream: AudioStream = rain_stream
 	if stream is AudioStreamOggVorbis:
 		var ogg := (stream as AudioStreamOggVorbis).duplicate()
 		ogg.loop = true
