@@ -39,6 +39,14 @@ func _run() -> void:
 	RuntimeGuard._pending.clear()
 	RuntimeGuard.reset()
 
+	RuntimeGuard.print_summary()
+	RuntimeGuard.report("SUMMARY_CODE", "one problem")
+	RuntimeGuard.report("SUMMARY_CODE", "two problem")
+	RuntimeGuard.print_summary()
+	var log_text := FileAccess.get_file_as_string(RuntimeGuard.LOG_PATH)
+	_check("the summary written to the guard log counts the violations", log_text.contains("summary: 2 violation(s)"))
+	RuntimeGuard.reset()
+
 
 func _check(label: String, ok: bool) -> void:
 	print("%s  %s" % ["PASS" if ok else "FAIL", label])
