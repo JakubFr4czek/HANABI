@@ -72,7 +72,7 @@ func _test_boss_geometric_scale_and_grounding() -> void:
 
 
 func _test_boss_approach() -> void:
-	print("\n[TEST] 2. Active Approach (9.2 m -> <= 3.0 m)")
+	print("\n[TEST] 2. Active Approach (9.2 m -> <= 2.0 m, inside kanabō reach)")
 	var run: RunGame = RUN_SCENE.instantiate()
 	run.skip_run_intro = true
 	add_child(run)
@@ -91,11 +91,13 @@ func _test_boss_approach() -> void:
 	for _k in 320:
 		await _frames(2)
 		var current_d := _flat_dist(oni.root_part().global_position, player.global_position)
-		if current_d <= 3.0:
+		if current_d <= 2.0:
 			break
 
+	# A standoff beyond ~2.03 m puts the player outside the kanabō contact zone:
+	# the boss would swing at air, so it must close inside it.
 	var final_dist := _flat_dist(oni.root_part().global_position, player.global_position)
-	_check("Boss actively closes distance to melee range (<= 3.0 m, got %.2f m)" % final_dist, final_dist <= 3.0)
+	_check("Boss actively closes distance inside kanabō reach (<= 2.0 m, got %.2f m)" % final_dist, final_dist <= 2.0)
 
 	run.queue_free()
 	await _frames(4)
@@ -303,6 +305,9 @@ func _test_real_physical_hit_and_parry() -> void:
 		# The high guard holds the katana 0.42 m in front of the eyes (BLOCK_HIGH z), so the
 		# body stands one guard-length behind the chop line: the katana, not the torso,
 		# meets the kanabō.
+		# Freeze the boss's pursuit for the parry: otherwise it walks up to its standoff and
+		# drags the katana off the chop line.
+		brain_sp.difficulty.move_speed = 0.0
 		var parry_line := strike_line + 0.42
 		var ground2 := run.forest_world.height_at(bp2.x + dir2.x * parry_line, bp2.z + dir2.z * parry_line)
 		player.teleport(Vector3(bp2.x + dir2.x * parry_line, ground2, bp2.z + dir2.z * parry_line), atan2(-dir2.x, -dir2.z))
