@@ -83,7 +83,7 @@ func _ready() -> void:
 	# and let the practicals model the form instead of turning the body into a
 	# glowing balloon. A warm rim keeps the silhouette readable in the fog.
 	_flesh.shader = WET_SURFACE_SHADER
-	_flesh.set_shader_parameter("base_color", Color(0.36, 0.10, 0.09))
+	_flesh.set_shader_parameter("base_color", Color(0.18, 0.06, 0.06))
 	_flesh.set_shader_parameter("roughness_dry", 0.60)
 	_flesh.set_shader_parameter("roughness_wet", 0.28)
 	_flesh.set_shader_parameter("wetness", 0.58)
