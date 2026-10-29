@@ -136,3 +136,8 @@ func _on_fade_out_finished() -> void:
 ## Returns true if a speech line is currently displayed.
 func is_showing() -> bool:
 	return visible and _alpha > 0.05
+
+
+## The line currently set on the bubble (empty before the first speech).
+func get_text() -> String:
+	return _label.text if _label else ""

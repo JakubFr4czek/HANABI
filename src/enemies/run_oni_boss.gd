@@ -13,6 +13,10 @@ extends TrainingDummy
 signal boss_defeated(oni: RunOniBoss, hit: Dictionary)
 
 const ONI_SCALE := 1.50
+## Half-thickness of the visible kanabō head: mesh AABB x 0.144 m × 1.45 scale
+## (0.209 m) → radius 0.105 m. Added to the player capsule radius; the blade
+## segment below already spans the whole visible head, so no extra reach fudge.
+const KANABO_HIT_RADIUS := 0.105
 
 const ONI_MASK_GLB := preload("res://assets/models/enemies/oni_mask_run.glb")
 const ONI_MASK_NRM := preload("res://assets/models/enemies/oni_mask_run_normal.png")
@@ -75,25 +79,30 @@ func _ready() -> void:
 	anchor_stiffness = 3.5
 	anchor_gain = 0.08
 
+	# Deep crimson flesh: the shader's `fill` is a flat self-light, so keep it low
+	# and let the practicals model the form instead of turning the body into a
+	# glowing balloon. A warm rim keeps the silhouette readable in the fog.
 	_flesh.shader = WET_SURFACE_SHADER
-	_flesh.set_shader_parameter("base_color", Color(0.11, 0.04, 0.05))
-	_flesh.set_shader_parameter("roughness_dry", 0.62)
+	_flesh.set_shader_parameter("base_color", Color(0.36, 0.10, 0.09))
+	_flesh.set_shader_parameter("roughness_dry", 0.60)
 	_flesh.set_shader_parameter("roughness_wet", 0.28)
 	_flesh.set_shader_parameter("wetness", 0.58)
 	_flesh.set_shader_parameter("waterline_y", -10.0)
-	_flesh.set_shader_parameter("fill", 2.05)
-	_flesh.set_shader_parameter("fog_rim", 1.35)
-	_flesh.set_shader_parameter("emission_tint", Color(0.55, 0.08, 0.06))
+	_flesh.set_shader_parameter("fill", 0.85)
+	_flesh.set_shader_parameter("fog_rim", 1.25)
+	_flesh.set_shader_parameter("emission_tint", Color(0.30, 0.05, 0.04))
 	_flesh.set_shader_parameter("flash_color", Color(1.2, 0.22, 0.1))
 
+	# Lacquered plate: darker than the flesh, brighter rim so shoulders and the
+	# chest plate read as facets instead of a single red egg.
 	_armor.shader = WET_SURFACE_SHADER
-	_armor.set_shader_parameter("base_color", Color(0.38, 0.03, 0.05))
-	_armor.set_shader_parameter("roughness_dry", 0.48)
-	_armor.set_shader_parameter("roughness_wet", 0.22)
+	_armor.set_shader_parameter("base_color", Color(0.28, 0.055, 0.06))
+	_armor.set_shader_parameter("roughness_dry", 0.44)
+	_armor.set_shader_parameter("roughness_wet", 0.20)
 	_armor.set_shader_parameter("wetness", 0.62)
-	_armor.set_shader_parameter("fill", 1.85)
-	_armor.set_shader_parameter("fog_rim", 1.1)
-	_armor.set_shader_parameter("emission_tint", Color(0.42, 0.05, 0.04))
+	_armor.set_shader_parameter("fill", 0.65)
+	_armor.set_shader_parameter("fog_rim", 0.95)
+	_armor.set_shader_parameter("emission_tint", Color(0.20, 0.03, 0.03))
 
 	_robe.shader = WET_SURFACE_SHADER
 	_robe.set_shader_parameter("base_color", Color(0.08, 0.05, 0.07))
@@ -156,16 +165,16 @@ func _update_oni_readability() -> void:
 		var active := d < 14.0
 		_rim.visible = active
 		if active:
-			_rim.light_energy = lerpf(1.85, 2.85, near)
-			_rim.omni_range = lerpf(3.8, 5.2, near)
+			_rim.light_energy = lerpf(1.0, 1.7, near)
+			_rim.omni_range = lerpf(3.2, 4.6, near)
 		else:
 			_rim.light_energy = 0.0
 	_mask.set_shader_parameter("fill", lerpf(2.35, 3.25, near))
 	_mask.set_shader_parameter("fog_rim", lerpf(1.35, 2.05, near))
-	_flesh.set_shader_parameter("fill", lerpf(2.05, 2.65, near))
-	_flesh.set_shader_parameter("fog_rim", lerpf(1.35, 2.05, near))
-	_armor.set_shader_parameter("fill", lerpf(1.85, 2.45, near))
-	_armor.set_shader_parameter("fog_rim", lerpf(1.1, 1.65, near))
+	_flesh.set_shader_parameter("fill", lerpf(0.85, 1.25, near))
+	_flesh.set_shader_parameter("fog_rim", lerpf(1.25, 1.75, near))
+	_armor.set_shader_parameter("fill", lerpf(0.65, 0.95, near))
+	_armor.set_shader_parameter("fog_rim", lerpf(0.95, 1.35, near))
 
 
 func _attach_oni_rim_light() -> void:
@@ -173,12 +182,32 @@ func _attach_oni_rim_light() -> void:
 		return
 	var lamp := OmniLight3D.new()
 	lamp.name = "OniRimLight"
-	lamp.light_color = Color(1.0, 0.32, 0.12)
-	lamp.light_energy = 0.55
-	lamp.omni_range = 3.6
+	lamp.light_color = Color(1.0, 0.30, 0.11)
+	lamp.light_energy = 0.9
+	lamp.omni_range = 4.0
 	lamp.shadow_enabled = false
-	lamp.position = Vector3(0.0, 2.05, 0.35)
+	# Behind and above the shoulders: an ember rim, not a hot spot on the chest.
+	lamp.position = Vector3(0.0, 2.25, -0.6)
 	add_child(lamp)
+
+	# A dim cool key from the front-left models the chest and mask under the
+	# canopy without the flat self-light (fill) that used to wash out the form.
+	var key := OmniLight3D.new()
+	key.name = "OniKeyLight"
+	key.light_color = Color(0.58, 0.66, 0.9)
+	key.light_energy = 0.5
+	key.omni_range = 3.6
+	key.shadow_enabled = false
+	key.position = Vector3(0.55, 2.1, 1.25)
+	add_child(key)
+
+
+## WaveDirector swaps in the Oni difficulty after setup(); re-apply the phase
+## parameters so phase 1 does not silently keep the generic "hard" preset.
+func set_difficulty(new_difficulty: DuelistDifficulty) -> void:
+	super.set_difficulty(new_difficulty)
+	if brain is OniBossBrain:
+		(brain as OniBossBrain).refresh_phase_parameters()
 
 
 func _sword_grip_transform() -> Transform3D:
@@ -194,8 +223,11 @@ func equip_sword() -> void:
 	super.equip_sword()
 	if sword:
 		sword.visible = false
-		sword.blade_start = Vector3(0, 0, 0.10)
-		sword.blade_tip = Vector3(0, 0, -1.65)
+		# Hit segment = the visible kanabō head, not a katana blade. Mesh AABB
+		# 0.144 × 0.535 × 0.52 m at scale 1.45 (head 0.21 × 0.78 × 0.75 m),
+		# centred ~0.05 m off the grip: forward tip -0.43 m, back end +0.34 m.
+		sword.blade_start = Vector3(0, 0, 0.34)
+		sword.blade_tip = Vector3(0, 0, -0.43)
 		sword.mass = 4.5
 	_attach_kanabo_visual()
 
@@ -231,8 +263,11 @@ func _attach_oni_body_shell(pelvis: RagdollPart) -> void:
 	body_mi.name = "OniBodyShell"
 	var mesh := _oni_body_mesh()
 	body_mi.mesh = mesh if mesh else BoxMesh.new()
-	body_mi.position = Vector3(0.0, 0.22, 0.0)
-	body_mi.scale = Vector3(1.48, 1.48, 1.48)
+	# Keep the shell below the neck: with a uniform 1.48 scale the generated
+	# torso reached ~2.77 m and swallowed the 2.5 m head, hiding the mask behind
+	# the chest plate whenever the boss faced the camera dead-on.
+	body_mi.position = Vector3(0.0, 0.02, 0.0)
+	body_mi.scale = Vector3(1.48, 1.20, 1.48)
 	body_mi.material_override = _armor
 	pelvis.add_child(body_mi)
 
@@ -353,7 +388,7 @@ func _try_hit_player(damage: float, attack: String) -> void:
 	var a := sword.global_transform * sword.blade_start
 	var b := sword.get_tip_global()
 	var pts := Geometry3D.get_closest_points_between_segments(a, b, body[0], body[1])
-	var reach_radius := float(body[2]) + 0.65
+	var reach_radius := float(body[2]) + KANABO_HIT_RADIUS
 	if pts[0].distance_to(pts[1]) <= reach_radius:
 		_hit_player_this_strike = true
 		health.take_hit(damage, pts[0], {"attacker": profile.display_name, "attack": attack})
@@ -378,7 +413,8 @@ func get_measured_height() -> float:
 						min_y = minf(min_y, world_pt.y)
 						max_y = maxf(max_y, world_pt.y)
 	if min_y == INF or max_y == -INF:
-		return 2.82
+		push_warning("RunOniBoss: no visible mesh geometry to measure the boss height")
+		return 0.0
 	return max_y - min_y
 
 
