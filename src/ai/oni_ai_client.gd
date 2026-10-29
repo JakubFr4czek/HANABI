@@ -10,11 +10,10 @@ extends Node
 
 signal decision_received(decision: Dictionary)
 
-const DEFAULT_META_ENDPOINT := "https://llama-api.meta.com/compat/v1/chat/completions"
+const DEFAULT_META_ENDPOINT := "https://api.meta.ai/v1/chat/completions"
 const META_ENDPOINT := DEFAULT_META_ENDPOINT
 const DEFAULT_MODEL := "muse-spark-1.3"
 const TIMEOUT_SECONDS := 3.0
-
 const VALID_TACTICS: Array[String] = [
 	"stalk", "advance", "retreat", "circle_left", "circle_right", "attack", "taunt"
 ]
@@ -62,6 +61,11 @@ const FALLBACK_SPEECH_EN_P3: Array[String] = [
 
 var _http: HTTPRequest
 var _mock_provider: Callable
+## Test seam: when set, it receives (url, headers, body) instead of HTTPRequest
+## so tests can capture the effective endpoint without touching the network.
+var _request_hook: Callable
+## URL of the last dispatched request (visible to tests/logs; never the key).
+var last_request_url := ""
 var _pending_callback: Callable
 var _is_busy := false
 var _rng := RandomNumberGenerator.new()
@@ -89,6 +93,11 @@ func set_mock_provider(mock: Callable) -> void:
 ## Clears any active mock provider.
 func clear_mock_provider() -> void:
 	_mock_provider = Callable()
+
+
+## Injects a test hook replacing the HTTP dispatch: `func(url, headers, body) -> int`.
+func set_request_hook(hook: Callable) -> void:
+	_request_hook = hook
 
 
 ## Requests an AI combat decision asynchronously.
@@ -164,7 +173,18 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 	}
 
 	var json_body := JSON.stringify(body_dict)
-	var err := _http.request(META_ENDPOINT, headers, HTTPClient.METHOD_POST, json_body)
+	# The endpoint comes from Settings (fallback: the Meta default constant).
+	var endpoint := DEFAULT_META_ENDPOINT
+	if settings != null and settings.has_method("get_effective_meta_api_endpoint"):
+		var configured: String = settings.get_effective_meta_api_endpoint()
+		if configured.strip_edges() != "":
+			endpoint = configured.strip_edges()
+	last_request_url = endpoint
+	var err := OK
+	if _request_hook.is_valid():
+		err = int(_request_hook.call(endpoint, headers, json_body))
+	else:
+		err = _http.request(endpoint, headers, HTTPClient.METHOD_POST, json_body)
 	if err != OK:
 		_is_busy = false
 		var fallback := local_fallback_decision(state)

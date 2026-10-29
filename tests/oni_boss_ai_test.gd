@@ -317,6 +317,30 @@ func _test_ai_brain_mock_and_failsafe() -> void:
 	_check("Speech length sanitized (<= 80 chars, got %d)" % String(sanitized_box["result"].get("speech", "")).length(),
 		String(sanitized_box["result"].get("speech", "")).length() <= 80)
 
+	# 3. The endpoint configured in Settings is the URL actually requested (no network).
+	ai_client.clear_mock_provider()
+	var old_endpoint: String = VrComfortSettings.ai_endpoint
+	var old_key: String = VrComfortSettings.meta_api_key
+	var old_enabled: bool = VrComfortSettings.ai_boss_enabled
+	var capture := {"url": "", "called": false}
+	VrComfortSettings.ai_endpoint = "https://endpoint.test/v1/chat/completions"
+	VrComfortSettings.meta_api_key = "test-key-not-a-secret"
+	VrComfortSettings.ai_boss_enabled = true
+	ai_client.set_request_hook(func(url: String, _headers: PackedStringArray, _body: String) -> int:
+		capture["url"] = url
+		capture["called"] = true
+		return OK
+	)
+	ai_client.request_decision({"distance": 2.0}, func(_res: Dictionary): pass)
+	_check("Settings endpoint reaches the request URL (%s)" % capture["url"],
+		capture["called"] and capture["url"] == "https://endpoint.test/v1/chat/completions")
+	_check("OniAiClient default endpoint is Meta Model API (%s)" % OniAiClient.DEFAULT_META_ENDPOINT,
+		OniAiClient.DEFAULT_META_ENDPOINT == VrComfortSettings.DEFAULT_META_ENDPOINT
+		and OniAiClient.DEFAULT_META_ENDPOINT == "https://api.meta.ai/v1/chat/completions")
+	VrComfortSettings.meta_api_key = old_key
+	VrComfortSettings.ai_boss_enabled = old_enabled
+	VrComfortSettings.ai_endpoint = old_endpoint
+
 	ai_client.queue_free()
 	await _frames(2)
 
