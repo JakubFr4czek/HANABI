@@ -83,3 +83,14 @@
     - `01_boss_scale_vs_player.png` (porównanie skali boss vs gracz)
     - `02_boss_attack_windup.png` (wind-up i telegrafowanie ataku)
     - `03_boss_speech_bubble.png` (dymek tekstowy nad bossem)
+
+## 7. Ocena zrzutów (D15_fix2)
+
+Zrzuty: `docs/d15/01_boss_scale_vs_player.png`, `02_boss_attack_windup.png`, `03_boss_speech_bubble.png`. Generowane w oknie przez `tests/oni_boss_screenshots.tscn` (`--shots docs/d15`), każde ujęcie przechodzi twarde asercje kadru zanim PNG zostanie zapisany.
+
+- **01 skala:** cały boss w kadrze, ok. 5 m od gracza, dymek jednowierszowy i czytelny. Słabe: ragdoll to proste bryły i pałeczkowate kończyny, maska to szara, płaska plama, a kanabō w tej pozie to brązowy pręt. Nie jest to poziom premium.
+- **02 telegraf:** kanabō uniesione nad głową, czytelne jako broń, bo kamera orbituje o 35° od osi bossa i odsuwa klub od maski. Ograniczenie: klub nadal jest matowym, ciemnobrązowym prętem (metallic 0.72 przy ciemnym albedo, bez dodatkowego oświetlenia), więc w ciemniejszej mgle wtapia się w tło. Nie zmieniałem modelu ani oświetlenia. Wniosek: telegraf jest czytelny w tym ujęciu, ale nie ma efektu premium.
+- **03 dymek:** dwuwierszowy tekst na czarnej płycie z czerwoną ramką, czytelny na tle mgły; boss w całości w kadrze. Słabe: ten sam prymitywny model.
+- Usunięto katanę gracza z kadru (przecinała boss w 01 i 03). To wybór prezentacyjny, nie zmiana w grze.
+
+**Decyzja:** te trzy PNG wystarczą do przeglądu kompozycji, skali, telegrafu i czytelności dymka. **Nie wystarczają** jako dowód jakości premium: do tego potrzebny jest model bossa z detalem (maska, kanabō, sylwetka) i przegląd na Questcie, którego w tej sesji nie zrobiono.
