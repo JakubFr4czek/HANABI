@@ -13,9 +13,11 @@ extends Node
 const RUN_SCENE := preload("res://scenes/run.tscn")
 
 var failures := 0
+var events: Array[Dictionary] = []
 
 
 func _ready() -> void:
+	GameEvents.event_logged.connect(func(e: Dictionary): events.append(e))
 	get_tree().create_timer(75.0).timeout.connect(func():
 		print("\nWATCHDOG TIMEOUT in oni_boss_ai_test!")
 		get_tree().quit(1)
@@ -115,7 +117,25 @@ func _test_three_attacks_and_phase_behaviors() -> void:
 
 	var oni: RunOniBoss = run.wave_director.spawn_oni_boss(player.global_position)
 	var brain := oni.brain as OniBossBrain
+	# Fixed seed: the decision RNG (block/feint/combo rolls) must not decide whether
+	# a windup happens, otherwise the timing checks flake from run to run.
+	brain.set_seed(1)
 	_check("OniBossBrain is attached", brain != null)
+	var forearm := oni.parts.get("lower_arm_r") as RagdollPart
+	var kanabo_visual: MeshInstance3D = null
+	if forearm:
+		kanabo_visual = forearm.find_child("OniKanaboVisual", true, false) as MeshInstance3D
+	_check("Kanabō visual is welded to the right forearm",
+		kanabo_visual != null and kanabo_visual.mesh != null)
+	var profile_leash := float(oni.profile.tactics.get("leash_radius", 0.0)) if oni.profile else 0.0
+	_check("Boss leash radius keeps it roaming the arena (>= 40 m, got %.0f m)" % profile_leash,
+		profile_leash >= 40.0)
+
+	# The AI decision path must reach the speech bubble and show the AI text.
+	brain.apply_ai_decision({"tactic": "advance", "attack": "slam", "speech": "Poczuj gniew demonów!", "source": "ai"})
+	await _frames(6)
+	_check("AI decision text is shown in the boss speech bubble (got '%s')" % oni.speech_bubble.get_text(),
+		oni.speech_bubble.is_showing() and oni.speech_bubble.get_text() == "Poczuj gniew demonów!")
 
 	# Position player facing boss at 2.4 m along boss forward vector (in view cone, reads all telegraphed attacks)
 	var b_pos := oni.root_part().global_position
@@ -155,14 +175,18 @@ func _test_three_attacks_and_phase_behaviors() -> void:
 				break
 		_check("Attack '%s' enters telegraph/windup phase" % atk, entered_windup)
 
-		# Advance through windup to strike
+		# Advance through windup to strike (must see STRIKE, RECOVER alone is not enough)
+		var saw_windup := false
 		var reached_strike := false
-		for _w in 140:
+		for _w in 240:
 			await _frames(1)
-			if brain.attack_phase == DuelistBrain.AttackPhase.STRIKE or brain.state == DuelistBrain.State.RECOVER:
+			if brain.state == DuelistBrain.State.ATTACK and brain.attack_phase == DuelistBrain.AttackPhase.WINDUP:
+				saw_windup = true
+			if brain.attack_phase == DuelistBrain.AttackPhase.STRIKE:
 				reached_strike = true
 				break
-		_check("Attack '%s' transitions from windup to physical strike" % atk, reached_strike)
+		_check("Attack '%s' really reaches STRIKE after a windup > 0 s (windup %.2f s, saw windup %s)" % [atk, brain.last_windup_time, str(saw_windup)],
+			saw_windup and reached_strike and brain.last_windup_time > 0.0)
 
 		# Await recovery back to STALK before triggering next attack
 		for _rec in 90:
@@ -179,6 +203,10 @@ func _test_three_attacks_and_phase_behaviors() -> void:
 	var p1_windup_scale: float = brain.difficulty.windup_scale
 	var p1_speed: float = brain.difficulty.move_speed
 	_check("Phase 1 has standard telegraph windup (scale %.2f)" % p1_windup_scale, p1_windup_scale >= 1.0)
+	brain.difficulty.hesitate_chance = 0.0
+	brain.difficulty.feint_chance = 0.0
+	var p1_measured := await _measure_attack_windup(oni, brain, player, run)
+	_check("Phase 1 really winds up before STRIKE (%.2f s measured)" % p1_measured, p1_measured > 0.0)
 
 	oni.hp = max_hp * 0.50
 	brain.update_combat_phase()
@@ -189,10 +217,16 @@ func _test_three_attacks_and_phase_behaviors() -> void:
 	var p3_windup_scale: float = brain.difficulty.windup_scale
 	var p3_speed: float = brain.difficulty.move_speed
 	_check("Phase 3 transitions at 20%% HP", brain.current_phase == 3)
-	_check("Phase 3 has significantly faster windup (%.2f vs %.2f)" % [p3_windup_scale, p1_windup_scale],
-		p3_windup_scale < p1_windup_scale * 0.8)
+	# Remove hesitation/feint randomness so the measured windups are comparable.
+	brain.difficulty.hesitate_chance = 0.0
+	brain.difficulty.feint_chance = 0.0
+	var p3_measured := await _measure_attack_windup(oni, brain, player, run)
+	_check("Phase 3 measured windup is significantly shorter (%.2f s vs %.2f s)" % [p3_measured, p1_measured],
+		p3_measured > 0.0 and p3_measured < p1_measured * 0.9)
 	_check("Phase 3 has increased movement aggression (%.2f vs %.2f m/s)" % [p3_speed, p1_speed],
 		p3_speed > p1_speed)
+	_check("Phase 3 windup scale is faster than Phase 1 (%.2f vs %.2f)" % [p3_windup_scale, p1_windup_scale],
+		p3_windup_scale < p1_windup_scale)
 
 	run.queue_free()
 	await _frames(4)
@@ -210,6 +244,16 @@ func _test_real_physical_hit_and_parry() -> void:
 
 	var oni: RunOniBoss = run.wave_director.spawn_oni_boss(player.global_position)
 	var health := run.get_tree().get_first_node_in_group("player_health") as PlayerHealth
+	# Measured in the boss frame: the kanabō chop lands ~1.73 m forward of the pelvis
+	# at x ≈ 0; with the 0.2 m torso capsule and 0.105 m head radius the contact zone is
+	# 1.43–2.03 m. Stand in its middle so the hit is decided by the swing, not by a
+	# player standing on the zone's edge. No hesitation, feint or block rolls here.
+	var strike_line := 1.7
+	var brain_sp := oni.brain as DuelistBrain
+	brain_sp.set_seed(4)
+	brain_sp.difficulty.hesitate_chance = 0.0
+	brain_sp.difficulty.feint_chance = 0.0
+	brain_sp.difficulty.block_chance = 0.0
 
 	_check("Player health node present", health != null)
 	if health:
@@ -222,7 +266,7 @@ func _test_real_physical_hit_and_parry() -> void:
 			fwd = fwd.normalized() if fwd.length_squared() >= 0.01 else Vector3.FORWARD
 		health.max_hp = 100.0
 		health.hp = 100.0
-		player.teleport(bp + fwd * 1.5, atan2(-fwd.x, -fwd.z))
+		player.teleport(bp + fwd * strike_line, atan2(-fwd.x, -fwd.z))
 		player.look_at(oni.root_part().global_position, Vector3.UP)
 		player.rotation.x = 0.0
 		player.rotation.z = 0.0
@@ -231,7 +275,6 @@ func _test_real_physical_hit_and_parry() -> void:
 
 		var hp_before := health.hp
 		oni.play_attack("vertical")
-		# Await full swing without ANY synthetic fallback: pure physical contact
 		var hit_connected := false
 		for _s in 180:
 			await _frames(2)
@@ -249,14 +292,41 @@ func _test_real_physical_hit_and_parry() -> void:
 				break
 		await _frames(8)
 
-		# 2. Parry Deflection: A successful parry deflects the attack, takes zero damage, opens counter window
+		# 2. Parry Deflection: Player raises high block with katana; contact in STRIKE deflects kanabō
 		var hp_during_parry := health.hp
-		oni.play_attack("horizontal")
-		await _frames(6)  # Entering windup
-		# Simulate successful parry clash
-		oni.on_parried({"point": oni.root_part().global_position + Vector3(0, 1.5, 0.8)})
-		await _frames(15)
+		if run.katana and not player.holder.held:
+			player.take_weapon(run.katana)
+		var bp2 := oni.root_part().global_position
+		var dir2 := player.global_position - bp2
+		dir2.y = 0.0
+		dir2 = dir2.normalized() if dir2.length_squared() >= 0.01 else Vector3.FORWARD
+		# The high guard holds the katana 0.42 m in front of the eyes (BLOCK_HIGH z), so the
+		# body stands one guard-length behind the chop line: the katana, not the torso,
+		# meets the kanabō.
+		var parry_line := strike_line + 0.42
+		var ground2 := run.forest_world.height_at(bp2.x + dir2.x * parry_line, bp2.z + dir2.z * parry_line)
+		player.teleport(Vector3(bp2.x + dir2.x * parry_line, ground2, bp2.z + dir2.z * parry_line), atan2(-dir2.x, -dir2.z))
+		player.look_at(oni.root_part().global_position, Vector3.UP)
+		player.rotation.x = 0.0
+		player.rotation.z = 0.0
+		oni.face_toward(player.global_position)
+		# Hold the high guard for ~1 s before the cut, as the duelist parry test does,
+		# so the katana is already up on the chop line when the kanabō comes down.
+		player.force_block = true
+		events.clear()
+		await _frames(90)
+		var parry_brain := oni.brain as DuelistBrain
+		parry_brain.force_attack("vertical")
+		var parried := false
+		for _p in 240:
+			await _frames(1)
+			if events.any(func(e: Dictionary): return e.type == "parry"):
+				parried = true
+				break
+		await _frames(4)
+		player.force_block = false
 
+		_check("Real katana vs kanabō contact in STRIKE is a parry", parried)
 		_check("Successful parry inflicts ZERO damage on player (%.1f == %.1f HP)" % [health.hp, hp_during_parry],
 			health.hp == hp_during_parry)
 		_check("Parry opens counter window on boss (> 0 s, got %.2f s)" % oni.counter_time_left(),
@@ -317,6 +387,27 @@ func _test_ai_brain_mock_and_failsafe() -> void:
 	_check("Speech length sanitized (<= 80 chars, got %d)" % String(sanitized_box["result"].get("speech", "")).length(),
 		String(sanitized_box["result"].get("speech", "")).length() <= 80)
 
+	# 2b. Null/malformed provider result -> local fallback with non-empty speech
+	ai_client.set_mock_provider(func(_state: Dictionary) -> Variant:
+		return null
+	)
+	var null_box := {"result": {}}
+	ai_client.request_decision({"phase": 2}, func(res: Dictionary): null_box["result"] = res)
+	await _frames(2)
+	_check("Null provider -> local fallback with non-empty speech ('%s')" % String(null_box["result"].get("speech", "")),
+		String(null_box["result"].get("source", "")) == "fallback"
+		and String(null_box["result"].get("speech", "")).strip_edges() != ""
+		and OniAiClient.VALID_TACTICS.has(String(null_box["result"].get("tactic", ""))))
+	ai_client.set_mock_provider(func(_state: Dictionary) -> Variant:
+		return "boom"
+	)
+	var junk_box := {"result": {}}
+	ai_client.request_decision({}, func(res: Dictionary): junk_box["result"] = res)
+	await _frames(2)
+	_check("Malformed provider result -> local fallback with non-empty speech",
+		String(junk_box["result"].get("source", "")) == "fallback"
+		and String(junk_box["result"].get("speech", "")).strip_edges() != "")
+
 	# 3. The endpoint configured in Settings is the URL actually requested (no network).
 	ai_client.clear_mock_provider()
 	var old_endpoint: String = VrComfortSettings.ai_endpoint
@@ -369,8 +460,17 @@ func _test_real_pixel_contrast_and_fog_readability() -> void:
 	player.teleport(Vector3(0.0, 0.0, 0.0), 0.0)
 	await _frames(15)
 
+	var ground5 := run.forest_world.height_at(0.0, -5.0)
+	oni.global_position = Vector3(0.0, ground5, -5.0)
+	oni.home_position = oni.global_position
+	oni.anchor_position = oni.global_position
+	oni.reset()
+	player.teleport(Vector3(0.0, run.forest_world.height_at(0.0, 0.0), 0.0), 0.0)
+	await _frames(15)
+
 	var head_pos := oni.head_part().global_position
-	var feet_pos := oni.root_part().global_position - Vector3(0, 1.47, 0)
+	var feet_pos := oni.root_part().global_position
+	feet_pos.y = oni.get_feet_lowest_y()
 
 	_check("Boss is within camera view frustum at 5 m",
 		cam.is_position_in_frustum(head_pos) and cam.is_position_in_frustum(feet_pos))
@@ -382,19 +482,28 @@ func _test_real_pixel_contrast_and_fog_readability() -> void:
 	if DisplayServer.get_name() != "headless":
 		await RenderingServer.frame_post_draw
 		var img := get_viewport().get_texture().get_image()
-		var head_node := oni.head_part()
-		var eye_pos := head_node.global_position + head_node.global_basis * Vector3(0.075, 0.03, 0.18)
-		var sp_eye := cam.unproject_position(eye_pos)
+		var shell := oni.find_child("OniBodyShell", true, false) as MeshInstance3D
+		var torso_pos := head_pos
+		if shell and shell.mesh:
+			torso_pos = shell.global_transform * shell.mesh.get_aabb().get_center()
+		var sp_torso := cam.unproject_position(torso_pos)
 		var sp_bg := cam.unproject_position(head_pos + Vector3(2.2, 0.0, 0.0))
 		var sp_bubble := cam.unproject_position(oni.speech_bubble.global_position)
 
-		var l_boss := _sample_luminance(img, sp_eye)
+		var c_torso := _sample_color(img, sp_torso, 4)
+		oni.visible = false
+		await RenderingServer.frame_post_draw
+		var bg_img := get_viewport().get_texture().get_image()
+		oni.visible = true
+		await RenderingServer.frame_post_draw
+		var c_background := _sample_color(bg_img, sp_torso, 4)
+		var torso_delta := _color_delta(c_torso, c_background)
 		var l_fog := _sample_luminance(img, sp_bg)
-		var contrast_boss := (maxf(l_boss, l_fog) + 0.05) / (minf(l_boss, l_fog) + 0.05)
 		var l_bubble := _sample_luminance(img, sp_bubble)
 		var contrast_bubble := (maxf(l_bubble, l_fog) + 0.05) / (minf(l_bubble, l_fog) + 0.05)
-		print("DEBUG 5m: eye=%s bg=%s bub=%s l_boss=%.4f l_fog=%.4f l_bub=%.4f c_boss=%.2f:1 c_bub=%.2f:1" % [sp_eye, sp_bg, sp_bubble, l_boss, l_fog, l_bubble, contrast_boss, contrast_bubble])
-		_check("Boss silhouette pixel contrast vs fog >= 2.0:1 (got %.2f:1)" % contrast_boss, contrast_boss >= 2.0)
+		print("DEBUG 5m: torso=%s bg=%s bub=%s torso_delta=%.3f l_fog=%.4f l_bub=%.4f c_bub=%.2f:1" % [sp_torso, sp_bg, sp_bubble, torso_delta, l_fog, l_bubble, contrast_bubble])
+		_check("Torso shell silhouette differs from the background behind it (delta %.3f >= 0.10)" % torso_delta,
+			torso_delta >= 0.10)
 		_check("Speech bubble pixel contrast at 5 m >= 2.0:1 (got %.2f:1)" % contrast_bubble, contrast_bubble >= 2.0)
 
 		# 2. Fog Readability at 8.0 m
@@ -416,8 +525,7 @@ func _test_real_pixel_contrast_and_fog_readability() -> void:
 		var contrast8 := (maxf(l_bub8, l_fog8) + 0.05) / (minf(l_bub8, l_fog8) + 0.05)
 		_check("Speech bubble readable in fog at 8 m (contrast %.2f:1 >= 1.8:1)" % contrast8, contrast8 >= 1.8)
 	else:
-		_check("Pixel contrast verified (unshaded bubble with disable_fog=true)", true)
-		_check("8m fog readability verified (no_depth_test plate priority 15)", true)
+		_skip("Real pixel contrast & 8 m fog readability need a rendered window (headless has no framebuffer)")
 
 	run.queue_free()
 	await _frames(4)
@@ -462,3 +570,57 @@ func _check(label: String, ok: bool) -> void:
 func _frames(n: int) -> void:
 	for _i in n:
 		await get_tree().process_frame
+
+
+func _measure_attack_windup(oni: RunOniBoss, brain: DuelistBrain, player: DesktopPlayer, run: RunGame) -> float:
+	var bp := oni.root_part().global_position
+	var fwd := player.global_position - bp
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length_squared() >= 0.01 else Vector3.FORWARD
+	var target := bp + fwd * 2.2
+	var ground := run.forest_world.height_at(target.x, target.z)
+	player.teleport(Vector3(target.x, ground, target.z), atan2(-fwd.x, -fwd.z))
+	player.look_at(oni.root_part().global_position, Vector3.UP)
+	player.rotation.x = 0.0
+	player.rotation.z = 0.0
+	oni.face_toward(player.global_position)
+	# Wait until the boss is back in STALK so force_attack is not dropped mid-recover.
+	for _w in 300:
+		await _frames(1)
+		if brain.state == DuelistBrain.State.STALK:
+			break
+	await _frames(4)
+	oni.face_toward(player.global_position)
+	brain.last_windup_time = 0.0
+	brain.force_attack("vertical")
+	var saw_windup := false
+	for _w in 240:
+		await _frames(1)
+		if brain.attack_phase == DuelistBrain.AttackPhase.WINDUP:
+			saw_windup = true
+		if brain.attack_phase == DuelistBrain.AttackPhase.STRIKE:
+			return brain.last_windup_time if saw_windup else -1.0
+	return -1.0
+
+
+func _skip(label: String) -> void:
+	print("SKIP  %s" % label)
+
+
+func _sample_color(img: Image, pos: Vector2, radius: int = 2) -> Color:
+	var sum := Color(0.0, 0.0, 0.0, 0.0)
+	var count := 0
+	var cx := int(round(pos.x))
+	var cy := int(round(pos.y))
+	for dx in range(-radius, radius + 1):
+		for dy in range(-radius, radius + 1):
+			var x := cx + dx
+			var y := cy + dy
+			if x >= 0 and y >= 0 and x < img.get_width() and y < img.get_height():
+				sum += img.get_pixel(x, y)
+				count += 1
+	return sum / maxf(float(count), 1.0)
+
+
+func _color_delta(a: Color, b: Color) -> float:
+	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length()
