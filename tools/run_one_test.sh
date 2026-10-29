@@ -8,10 +8,9 @@ name=$1
 ARGS="--desktop"
 # Tests that drive the real XRPlayer through XrSim need --xr-sim instead.
 if [[ $name == xr_play_test || $name == vr_menu_pause_test || $name == boot_splash_xr_test ]]; then ARGS="--xr-sim"; fi
-# Tests that read rendered pixels need a real window: no --headless for them.
-# oni_boss_ai_test stays headless: its pixel-contrast block SKIPs explicitly there.
+# Project rule: every test runs headless (no window, no GUI editor). Pixel checks
+# that need a framebuffer must SKIP explicitly in headless, never open a window.
 HEADLESS="--headless"
-if [[ $name == worldgen_path_visible_test || $name == boot_splash_visual_test || $name == oni_boss_screenshots ]]; then HEADLESS=""; fi
 start=$SECONDS
 timeout 600 $GODOT ${=HEADLESS} --path . --fixed-fps 90 res://tests/$name.tscn -- ${=ARGS} > $OUT/$name.log 2>&1
 echo "$name exit=$? $((SECONDS-start))s" > $OUT/$name.result

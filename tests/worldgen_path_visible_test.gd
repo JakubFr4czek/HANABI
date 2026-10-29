@@ -20,6 +20,12 @@ var failures := 0
 
 
 func _ready() -> void:
+	# Project rule: no window in the suite. Reading the framebuffer headless never
+	# returns a frame, so this check is reported as SKIP instead of hanging the run.
+	if DisplayServer.get_name() == "headless":
+		print("SKIP  worldgen path visibility needs a window (run windowed by hand, see docs/WORLDGEN_TOOL.md)")
+		get_tree().quit(0)
+		return
 	await _run_all()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	get_tree().quit(1 if failures > 0 else 0)
