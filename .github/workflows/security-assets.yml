@@ -4,7 +4,7 @@ name: security-assets
 
 on:
   schedule:
-    - cron: "0 */2 * * *"
+    - cron: "12 */4 * * *"
   workflow_dispatch:
 
 permissions:
