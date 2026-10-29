@@ -40,3 +40,37 @@ godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 --
 godot --path . --rendering-method gl_compatibility --rendering-driver opengl3 --resolution 960x540 \
   res://tests/ci/visual_snapshots.tscn -- --desktop --out=/tmp/shots
 ```
+
+## Pokrycie lokalnie (macOS, bez boxa)
+
+Nano Coverage da się zbudować i uruchomić na Macu, ale nigdy w repo (addon trafia tylko do kopii roboczej).
+Kroki (SHA jak w `correctness.yml`, `NANO_COVERAGE_SHA`):
+
+```sh
+# 1. addon ze źródeł (scons: pip3 install --user scons)
+git clone --recursive https://github.com/IgorBayerl/nano-coverage-godot /tmp/nano
+cd /tmp/nano && git checkout fce7a0ae9281533456023275504bbd81d74d95be && git submodule update --init --recursive
+scons -j8 target=editor build_tests=no    # -> demo/addons/nano_coverage_godot/bin/libnano_coverage_godot.macos.editor.universal.dylib
+
+# 2. kopia projektu (bez .git i .tools), addon + ustawienia jak w CI
+rsync -a --exclude .git --exclude .tools --exclude assets_raw --exclude assets_incoming --exclude secrets ./ /tmp/hanabi_cov/
+cd /tmp/hanabi_cov && rm -rf addons/nano_coverage_godot && cp -r /tmp/nano/demo/addons/nano_coverage_godot addons/
+# manifest oczekuje nazw per architektura: skopiuj dylib pod każdą z nich (macOS, universal)
+for n in macos.editor.x86_64 macos.editor.arm64 macos.template_debug.x86_64 macos.template_debug.arm64 macos.template_release.x86_64 macos.template_release.arm64; do
+  cp addons/nano_coverage_godot/bin/libnano_coverage_godot.macos.editor.universal.dylib addons/nano_coverage_godot/bin/nano_coverage_godot.$n.dylib; done
+printf '\n[nano_coverage]\n\ngeneral/ignore_paths=PackedStringArray("res://tests/**", "res://tools/**", "res://ci/**", "**/*_test.gd")\n' >> project.godot
+mkdir -p ci_out
+G=/ścieżka/do/repo/.tools/Godot.app/Contents/MacOS/Godot
+
+# 3. import, instrumentacja, testy, raport (raport przywraca skrypty)
+"$G" --headless --path . --import
+"$G" --headless --path . --script res://ci/coverage_instrument.gd
+GODOT="$G" zsh tools/run_tests.sh 4
+"$G" --headless --path . --script res://ci/coverage_report.gd
+python3 ci/lcov_summary.py coverage-report/lcov.info --md ci_out/coverage.md
+```
+
+Uwagi: testy instrumentowane są kilka razy wolniejsze, a testy czasowe (np. `oni_boss_ai_test`, „kanabō swing connects”,
+`blade_feel_test`, perf-checki) mogą wtedy failować bez zmiany kodu. Wynik pokrycia liczy się z przebiegu, w którym
+zestaw testów przeszedł; w razie wątpliwości powtórz pojedynczy test (`tools/run_one_test.sh <nazwa>`) na zainstrumentowanej kopii.
+Każde ponowne uruchomienie testów po instrumentacji wymaga ponownego `coverage_instrument.gd`, bo raport przywraca skrypty.
