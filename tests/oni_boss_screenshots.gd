@@ -14,6 +14,7 @@ const SILHOUETTE_MIN_DELTA := 0.10
 const FRAME_MARGIN := 24.0
 const HEAD_TOP_OFFSET := 0.17  # head sphere radius 0.115 × ONI_SCALE 1.5
 const SETTLE_FRAMES := 45
+const TELEGRAPH_ORBIT_DEG := 35.0
 
 var out_dir := "/tmp/hanabi_shots"
 var run: RunGame
@@ -45,6 +46,9 @@ func _ready() -> void:
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
 	oni = run.wave_director.spawn_oni_boss(player.global_position)
+	# The player's own katana crosses the boss in the reference frames; hide it so the Oni reads.
+	if run.katana:
+		run.katana.visible = false
 	await _frames(12)
 
 	if not await _scale_shot():
@@ -98,7 +102,8 @@ func _telegraph_shot() -> bool:
 	var toward := player.global_position - b
 	toward.y = 0.0
 	toward = toward.normalized() if toward.length_squared() > 0.01 else Vector3(0.0, 0.0, 1.0)
-	var stand := b + toward * 2.9
+	# Orbit the camera off the boss's centre line so the raised club sits against the sky, not the mask.
+	var stand := b + toward.rotated(Vector3.UP, deg_to_rad(TELEGRAPH_ORBIT_DEG)) * 2.9
 	_stage_player(Vector3(stand.x, 0.0, stand.z), Vector3(b.x, 1.45, b.z))
 	# Face the player and let the brain settle in STALK first (same sequence as the combat test).
 	oni.face_toward(player.global_position)
