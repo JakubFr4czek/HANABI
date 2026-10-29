@@ -13,6 +13,11 @@ signal decision_received(decision: Dictionary)
 const DEFAULT_META_ENDPOINT := "https://api.meta.ai/v1/chat/completions"
 const META_ENDPOINT := DEFAULT_META_ENDPOINT
 const DEFAULT_MODEL := "muse-spark-1.3"
+## Melee standoff the boss may ask for, in metres from its pelvis to the player.
+## The kanabō chop lands 1.73 m forward of the pelvis and reaches the torso between
+## 1.43 and 2.03 m (see run_oni_boss.gd); a standoff outside that range whiffs.
+const MELEE_STANDOFF_MIN := 1.4
+const MELEE_STANDOFF_MAX := 1.9
 const TIMEOUT_SECONDS := 3.0
 const VALID_TACTICS: Array[String] = [
 	"stalk", "advance", "retreat", "circle_left", "circle_right", "attack", "taunt"
@@ -158,7 +163,7 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 		+ "Analyze current state and respond ONLY with a raw JSON object (no markdown, no backticks): "
 		+ "{\"tactic\": \"stalk\"|\"advance\"|\"retreat\"|\"circle_left\"|\"circle_right\"|\"attack\"|\"taunt\", "
 		+ "\"attack\": \"slam\"|\"sweep\"|\"thrust\"|\"combo\", "
-		+ "\"target_distance\": float between 1.5 and 3.5, "
+		+ "\"target_distance\": float between 1.5 and 1.9, "
 		+ "\"speech\": short taunt in %s, max 8 words, under 60 chars}."
 	) % ["Polish" if lang == "pl" else "English"]
 
@@ -265,7 +270,7 @@ func _validate_decision(raw: Dictionary, state: Dictionary) -> Dictionary:
 		attack = fallback.attack
 
 	var target_d := float(raw.get("target_distance", fallback.target_distance))
-	target_d = clampf(target_d, 1.4, 4.0)
+	target_d = clampf(target_d, MELEE_STANDOFF_MIN, MELEE_STANDOFF_MAX)
 
 	var speech := String(raw.get("speech", fallback.speech)).strip_edges()
 	# Strip non-printable / control characters and sanitize length
@@ -295,11 +300,11 @@ func local_fallback_decision(state: Dictionary) -> Dictionary:
 
 	var tactic := "stalk"
 	var attack := "slam"
-	var target_d := 2.2
+	var target_d := 1.8
 
 	if dist > 3.2:
 		tactic = "advance"
-		target_d = 2.0
+		target_d = 1.9
 	elif dist < 1.6:
 		tactic = "attack" if phase >= 2 else "retreat"
 		target_d = 1.9
@@ -308,7 +313,7 @@ func local_fallback_decision(state: Dictionary) -> Dictionary:
 			1:
 				tactic = "attack" if _rng.randf() < 0.55 else "stalk"
 				attack = "slam" if _rng.randf() < 0.65 else "sweep"
-				target_d = 2.2
+				target_d = 1.8
 			2:
 				tactic = "attack" if _rng.randf() < 0.70 else "circle_left"
 				attack = "combo" if _rng.randf() < 0.55 else "thrust"
