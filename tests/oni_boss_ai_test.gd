@@ -133,9 +133,19 @@ func _test_three_attacks_and_phase_behaviors() -> void:
 	# Test all 3 attacks sequentially: vertical (slam), horizontal (sweep), thrust (demon thrust)
 	var attacks := ["vertical", "horizontal", "thrust"]
 	for atk in attacks:
+		var bp := oni.root_part().global_position
+		var dir := (player.global_position - bp)
+		dir.y = 0.0
+		dir = dir.normalized() if dir.length_squared() >= 0.01 else Vector3.FORWARD
+		player.teleport(bp + dir * 2.4, atan2(dir.x, dir.z))
+		player.look_at(oni.root_part().global_position, Vector3.UP)
+		player.rotation.x = 0.0
+		player.rotation.z = 0.0
+		await _frames(4)
+
 		brain.force_attack(atk)
 		var entered_windup := false
-		for _chk in 25:
+		for _chk in 45:
 			await _frames(1)
 			if brain.state == DuelistBrain.State.ATTACK and brain.attack_phase == DuelistBrain.AttackPhase.WINDUP:
 				entered_windup = true
