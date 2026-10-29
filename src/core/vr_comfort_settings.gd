@@ -2,7 +2,7 @@ extends Node
 ## Central repository and manager for VR settings: comfort, accessibility,
 ## audio and Meta AI boss (docs/GDD.md §8, §14, docs/ELEMENTS_PLAN.md).
 ##
-## Persists to `user://hanabi_vr.cfg`. Every save re-reads the file first and
+## Persists to `user://hanabi_vr.cfg` (see settings_path). Every save re-reads the file first and
 ## keeps the sections it does not own, so the pages never erase each other:
 ## - [view] eye height; [comfort] vignette, turning, dominant hand, seated, walk pace
 ## - [audio] Master / Music / SFX / Ambience volume, 0–100 % in 10 % steps
@@ -14,7 +14,8 @@ extends Node
 
 signal settings_changed
 
-const SETTINGS_PATH := "user://hanabi_vr.cfg"
+## Tests point this at a scratch file so a run never touches the real config.
+static var settings_path := "user://hanabi_vr.cfg"
 
 const SNAP_ANGLES: Array[float] = [15.0, 30.0, 45.0, 60.0, 90.0]
 const SMOOTH_SPEEDS: Array[float] = [1.0, 1.5, 2.0, 3.0, 4.0]
@@ -78,7 +79,7 @@ func _ready() -> void:
 
 func load_settings() -> void:
 	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS_PATH) != OK:
+	if cfg.load(settings_path) != OK:
 		apply_audio()
 		return
 
@@ -124,7 +125,7 @@ func load_settings() -> void:
 func save_settings() -> void:
 	# Keep the sections this call does not write (audio, access, other pages).
 	var cfg := ConfigFile.new()
-	cfg.load(SETTINGS_PATH)
+	cfg.load(settings_path)
 	cfg.set_value("view", "height_offset", height_offset)
 
 	cfg.set_value("comfort", "vignette_enabled", vignette_enabled)
@@ -150,7 +151,7 @@ func save_settings() -> void:
 	cfg.set_value("meta_ai", "language", ai_language)
 	cfg.set_value("meta_ai", "endpoint", ai_endpoint)
 
-	var err := cfg.save(SETTINGS_PATH)
+	var err := cfg.save(settings_path)
 	if err == OK:
 		GameEvents.log_event("vr_comfort_saved", {
 			"vignette": vignette_enabled,
