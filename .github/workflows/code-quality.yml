@@ -4,7 +4,7 @@ name: code-quality
 
 on:
   schedule:
-    - cron: "0 */2 * * *"
+    - cron: "7 */4 * * *"
   workflow_dispatch:
 
 permissions:

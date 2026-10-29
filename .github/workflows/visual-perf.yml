@@ -8,7 +8,7 @@ name: visual-perf
 
 on:
   schedule:
-    - cron: "0 */2 * * *"
+    - cron: "17 */4 * * *"
   workflow_dispatch:
     inputs:
       vfuzz_seed:

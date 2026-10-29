@@ -1,6 +1,6 @@
 # CI HANABI (GitHub Actions)
 
-Cztery osobne workflowy, każdy co 2 h (`0 */2 * * *`, UTC) i ręcznie (`workflow_dispatch`).
+Cztery osobne workflowy, każdy co 4 h (`7/12/17/22 */4 * * *`, UTC, rozstrzelone o kilka minut, bo jeden runner) i ręcznie (`workflow_dispatch`).
 Żaden nie jest wymaganym checkiem, a kroki mają `continue-on-error`, więc nic nie blokuje merge'a.
 
 | Workflow | Co sprawdza | Artefakty |
