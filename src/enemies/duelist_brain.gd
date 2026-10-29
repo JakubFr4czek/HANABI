@@ -72,6 +72,7 @@ const INTERCEPT_DISTANCE := 0.4
 const GUARD_RESPONSE := 9.0
 const BLOCK_RESPONSE := 24.0
 
+var attack_table: Dictionary = ATTACKS.duplicate(true)
 var state := State.IDLE
 var attack_phase := AttackPhase.NONE
 var current_attack := ""
@@ -178,6 +179,9 @@ func set_seed(value: int) -> void:
 func force_attack(attack: String) -> void:
 	_forced_attack = attack
 	_cooldown = 0.0
+	_hesitate = 0.0
+	if state in [State.RECOVER, State.IDLE]:
+		_enter(State.STALK)
 
 
 func think(delta: float, ctx: Dictionary) -> Dictionary:
@@ -268,7 +272,7 @@ func on_strike_blocked(_info: Dictionary) -> void:
 	if state == State.ATTACK and attack_phase == AttackPhase.STRIKE and not _strike_blocked:
 		_strike_blocked = true
 		GameEvents.log_event("enemy_attack_blocked", {"enemy": _name(), "attack": current_attack})
-		_enter_recover(ATTACKS[current_attack].recover * difficulty.recover_scale * 1.2)
+		_enter_recover(attack_table[current_attack].recover * difficulty.recover_scale * 1.2)
 
 
 ## Our guard met the player's blade. Returns "parry" (raised in time against a
@@ -695,7 +699,7 @@ func _take_initiative(ctx: Dictionary, dist: float) -> void:
 	if _cooldown > 0.0 or not _in_view(ctx):
 		return
 	if _forced_attack != "":
-		if dist <= float(ATTACKS[_forced_attack].range) + MAX_STEP:
+		if dist <= float(attack_table[_forced_attack].range) + MAX_STEP:
 			last_opening = "forced"
 			var a := _forced_attack
 			_forced_attack = ""
@@ -714,7 +718,7 @@ func _take_initiative(ctx: Dictionary, dist: float) -> void:
 
 ## What the player leaves open right now ("" = nothing worth attacking).
 func _find_opening(ctx: Dictionary, dist: float) -> String:
-	if dist > float(ATTACKS.thrust.range) + MAX_STEP:
+	if dist > float(attack_table.thrust.range) + MAX_STEP:
 		return ""
 	# Just swung and missed: still recovering.
 	if _clock - _swing_end < 0.5 and not _swing_touched:
@@ -723,7 +727,7 @@ func _find_opening(ctx: Dictionary, dist: float) -> String:
 	if not _threat.is_empty() or _swing_peak > 0.0:
 		return ""
 	# Stepped into our reach without a cut ready: meet them as they come in.
-	if _approach_speed > 0.5 and dist < float(ATTACKS.vertical.range) + MAX_STEP:
+	if _approach_speed > 0.5 and dist < float(attack_table.vertical.range) + MAX_STEP:
 		_entered_at = _clock
 	if _clock - _entered_at < 0.35 and not _loading:
 		return "entering"
@@ -751,7 +755,7 @@ func _find_opening(ctx: Dictionary, dist: float) -> String:
 
 func _attack_for_opening(opening: String, dist: float) -> String:
 	var t: Dictionary = profile.tactics if profile else {}
-	var allowed: Array = t.get("attack_set", ATTACKS.keys())
+	var allowed: Array = t.get("attack_set", attack_table.keys())
 	var prefs: Array
 	match opening:
 		"raised": prefs = ["thrust", "horizontal"]
@@ -760,7 +764,7 @@ func _attack_for_opening(opening: String, dist: float) -> String:
 		"entering": prefs = ["thrust", "vertical"]
 		"whiff", "riposte": prefs = ["vertical", "horizontal", "thrust"]
 		_: prefs = ["vertical", "horizontal", "thrust"]
-	var options := prefs.filter(func(n): return allowed.has(n) and dist <= float(ATTACKS[n].range) + MAX_STEP)
+	var options := prefs.filter(func(n): return allowed.has(n) and dist <= float(attack_table[n].range) + MAX_STEP)
 	if options.is_empty():
 		return ""
 	# Mostly the best answer, sometimes the second: readable, not scripted.
@@ -770,7 +774,7 @@ func _attack_for_opening(opening: String, dist: float) -> String:
 # --- Attacks -------------------------------------------------------------------------
 
 func _attack(delta: float, ctx: Dictionary, dist: float, fwd: Vector3, intent: Dictionary) -> void:
-	var a: Dictionary = ATTACKS[current_attack]
+	var a: Dictionary = attack_table[current_attack]
 	match attack_phase:
 		AttackPhase.WINDUP:
 			intent.pose = a.windup_pose
@@ -848,7 +852,7 @@ func _start_attack(attack: String, windup_mult: float) -> void:
 	current_attack = attack
 	attack_phase = AttackPhase.WINDUP
 	# Tempo varies from attack to attack so it cannot be timed by counting.
-	_windup_needed = maxf(float(ATTACKS[attack].windup) * difficulty.windup_scale * windup_mult * _rng.randf_range(0.85, 1.2), MIN_TELL)
+	_windup_needed = maxf(float(attack_table[attack].windup) * difficulty.windup_scale * windup_mult * _rng.randf_range(0.85, 1.2), MIN_TELL)
 	_hesitate = _rng.randf_range(0.15, 0.45) if _rng.randf() < difficulty.hesitate_chance else 0.0
 	_visible_time = 0.0
 	_hidden_time = 0.0
@@ -880,9 +884,12 @@ func _enter(new_state: State) -> void:
 	if new_state in [State.STAGGER, State.IDLE, State.ATTACK, State.RECOVER]:
 		_line_start = Vector3.INF
 	if new_state == State.STALK and previous in [State.RECOVER, State.ATTACK, State.BLOCK]:
-		var c := difficulty.attack_cooldown
-		_cooldown = _rng.randf_range(c.x, c.y) * lerpf(1.3, 0.7, difficulty.aggression) * 0.5
-		_patience = _rng.randf_range(c.x, c.y) * lerpf(1.3, 0.7, difficulty.aggression)
+		if _forced_attack != "":
+			_cooldown = 0.0
+		else:
+			var c := difficulty.attack_cooldown
+			_cooldown = _rng.randf_range(c.x, c.y) * lerpf(1.3, 0.7, difficulty.aggression) * 0.5
+			_patience = _rng.randf_range(c.x, c.y) * lerpf(1.3, 0.7, difficulty.aggression)
 	elif new_state == State.STALK and previous == State.IDLE and _forced_attack == "":
 		# Size the player up before the first attack.
 		_cooldown = difficulty.attack_cooldown.x * lerpf(1.2, 0.6, difficulty.aggression)
@@ -926,8 +933,8 @@ func _side_toward_view(ctx: Dictionary, side: Vector3) -> float:
 ## Any attack from the profile's set that reaches from [param dist].
 func _pick_attack(dist: float) -> String:
 	var t: Dictionary = profile.tactics if profile else {}
-	var options: Array = t.get("attack_set", ATTACKS.keys())
-	var in_range := options.filter(func(n): return ATTACKS.has(n) and dist <= float(ATTACKS[n].range) + MAX_STEP)
+	var options: Array = t.get("attack_set", attack_table.keys())
+	var in_range := options.filter(func(n): return attack_table.has(n) and dist <= float(attack_table[n].range) + MAX_STEP)
 	if in_range.is_empty():
 		return ""
 	return in_range[_rng.randi() % in_range.size()]
@@ -935,7 +942,7 @@ func _pick_attack(dist: float) -> String:
 
 func _pick_other_attack(attack: String) -> String:
 	var t: Dictionary = profile.tactics if profile else {}
-	var options: Array = t.get("attack_set", ATTACKS.keys()).filter(func(n): return n != attack and ATTACKS.has(n))
+	var options: Array = t.get("attack_set", attack_table.keys()).filter(func(n): return n != attack and attack_table.has(n))
 	return "" if options.is_empty() else options[_rng.randi() % options.size()]
 
 

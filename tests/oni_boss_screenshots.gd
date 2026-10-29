@@ -9,6 +9,11 @@ var out_dir := "docs/d15"
 
 
 func _ready() -> void:
+	get_tree().create_timer(35.0).timeout.connect(func():
+		print("\nWATCHDOG TIMEOUT in oni_boss_screenshots!")
+		get_tree().quit(1)
+	)
+
 	var args := OS.get_cmdline_user_args()
 	var i := args.find("--shots")
 	if i >= 0 and i + 1 < args.size():
@@ -52,6 +57,7 @@ func _ready() -> void:
 	await _shot("03_boss_speech_bubble")
 
 	run.queue_free()
+	print("\nALL PASSED (screenshots generated)")
 	get_tree().quit(0)
 
 

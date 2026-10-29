@@ -10,10 +10,10 @@ signal speech_displayed(text: String)
 signal speech_dismissed
 
 const DEFAULT_DURATION := 3.5
-const FADE_IN_TIME := 0.22
+const FADE_IN_TIME := 0.06
 const FADE_OUT_TIME := 0.45
 
-const BG_COLOR := Color(0.05, 0.03, 0.04)
+const BG_COLOR := Color(0.005, 0.005, 0.008)
 const TEXT_COLOR := Color(0.96, 0.94, 0.88)
 const BORDER_COLOR := Color(0.68, 0.16, 0.12)
 
@@ -42,9 +42,11 @@ func _setup_bubble_visuals() -> void:
 	_border_mat = StandardMaterial3D.new()
 	_border_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_border_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_border_mat.disable_fog = true
+	_border_mat.no_depth_test = true
 	_border_mat.albedo_color = Color(BORDER_COLOR.r, BORDER_COLOR.g, BORDER_COLOR.b, 0.0)
 	_border_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	_border_mat.render_priority = 1
+	_border_mat.render_priority = 10
 	_border_plate.material_override = _border_mat
 	add_child(_border_plate)
 
@@ -58,9 +60,11 @@ func _setup_bubble_visuals() -> void:
 	_bg_mat = StandardMaterial3D.new()
 	_bg_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_bg_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_bg_mat.disable_fog = true
+	_bg_mat.no_depth_test = true
 	_bg_mat.albedo_color = Color(BG_COLOR.r, BG_COLOR.g, BG_COLOR.b, 0.0)
 	_bg_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	_bg_mat.render_priority = 2
+	_bg_mat.render_priority = 11
 	_bg_plate.material_override = _bg_mat
 	add_child(_bg_plate)
 
@@ -68,21 +72,27 @@ func _setup_bubble_visuals() -> void:
 	_label = Label3D.new()
 	_label.name = "TextLabel"
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_label.font_size = 28
-	_label.pixel_size = 0.0032
+	_label.no_depth_test = true
+	_label.font_size = 32
+	_label.pixel_size = 0.0036
 	_label.modulate = Color(TEXT_COLOR.r, TEXT_COLOR.g, TEXT_COLOR.b, 0.0)
-	_label.outline_size = 4
+	_label.outline_size = 5
 	_label.outline_modulate = Color(0.02, 0.01, 0.02, 0.0)
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_label.width = 270.0
-	_label.render_priority = 3
-	_label.outline_render_priority = 2
+	_label.render_priority = 15
+	_label.outline_render_priority = 14
 	add_child(_label)
 
 
 ## Shows a spoken line with smooth fade-in, stays for [param duration] seconds, then fades out.
+func instant_show(text: String) -> void:
+	show_speech(text, 15.0)
+	_set_alpha(1.0)
+
+
 func show_speech(text: String, duration: float = DEFAULT_DURATION) -> void:
 	if text.strip_edges() == "":
 		return
@@ -109,9 +119,9 @@ func show_speech(text: String, duration: float = DEFAULT_DURATION) -> void:
 func _set_alpha(val: float) -> void:
 	_alpha = val
 	if _border_mat:
-		_border_mat.albedo_color.a = val * 0.82
+		_border_mat.albedo_color.a = val * 0.85
 	if _bg_mat:
-		_bg_mat.albedo_color.a = val * 0.90
+		_bg_mat.albedo_color.a = val * 1.0
 	if _label:
 		_label.modulate.a = val
 		_label.outline_modulate.a = val * 0.95
@@ -126,16 +136,3 @@ func _on_fade_out_finished() -> void:
 ## Returns true if a speech line is currently displayed.
 func is_showing() -> bool:
 	return visible and _alpha > 0.05
-
-
-func is_active() -> bool:
-	return is_showing()
-
-
-## Returns the currently displayed text string.
-func get_current_text() -> String:
-	return _label.text if _label else ""
-
-
-func get_text() -> String:
-	return get_current_text()
