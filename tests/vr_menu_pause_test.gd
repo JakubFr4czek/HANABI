@@ -63,6 +63,7 @@ func _run_all() -> void:
 	_check("the menu is not open at the start", not ctl.is_open and not get_tree().paused)
 
 	await _test_menu_button_tap_toggles()
+	await _test_menu_hold_recenters()
 	await _test_menu_carries_the_blade_state()
 	await _test_world_stands_still_rig_keeps_going()
 	await _test_opening_never_moves_the_player()
@@ -117,6 +118,23 @@ func _test_offering_touch_in_vr() -> void:
 
 
 # --- 1. Left Menu button ---------------------------------------------------------------
+
+## Holding Left Menu for a second recentres the view once and must not open the
+## menu: a hold is not a tap.
+func _test_menu_hold_recenters() -> void:
+	var recentered := []
+	var on_log := func(e: Dictionary) -> void:
+		if e.get("type") == "xr_recenter":
+			recentered.append(e)
+	GameEvents.event_logged.connect(on_log)
+	sim.set_button("left", "menu_button", true)
+	await _frames(100)  # about 1.1 s held
+	sim.set_button("left", "menu_button", false)
+	await _frames(6)
+	GameEvents.event_logged.disconnect(on_log)
+	_check("holding Left Menu for a second recentres the view", recentered.size() == 1)
+	_check("a hold does not open the menu", not ctl.is_open and not menu.visible)
+
 
 func _test_menu_button_tap_toggles() -> void:
 	await _tap_menu_button()

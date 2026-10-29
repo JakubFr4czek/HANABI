@@ -65,6 +65,10 @@ func _check_dominant_hand() -> void:
 	xr.set_dominant_hand("right")
 	_check("right-dominant: the left stick moves and the right holder fights",
 		xr.get_dominant_controller() == xr.right_controller and direct.get_parent() == xr.left_controller)
+	xr.set_dominant_hand("left")
+	_check("the turn stick follows the dominant hand", xr._get_turn_controller() == xr.left_controller)
+	xr.set_dominant_hand("right")
+	_check("the turn stick returns to the right hand", xr._get_turn_controller() == xr.right_controller)
 
 
 func _check_walk_pace_stacks() -> void:
@@ -98,6 +102,13 @@ func _check_lock_and_pause() -> void:
 	_check("the pause menu also disables both stick providers", not direct.get("enabled") and not turn.get("enabled"))
 	xr.set_locomotion_enabled(true)
 	_check("closing the menu restores the stick providers", direct.get("enabled") and turn.get("enabled"))
+
+	var logged := []
+	var on_log := func(e: Dictionary) -> void: logged.append(e)
+	GameEvents.event_logged.connect(on_log)
+	xr.recenter_view()
+	GameEvents.event_logged.disconnect(on_log)
+	_check("recentering logs an xr_recenter event", logged.any(func(e: Dictionary) -> bool: return e.get("type") == "xr_recenter"))
 
 	xr.teleport_feet(Vector3(3.0, 0.0, -2.0))
 	await _frames(2)
