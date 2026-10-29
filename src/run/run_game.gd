@@ -48,6 +48,9 @@ var soul_magnet_radius := 3.8
 ## [method unlock_skill]. Bank and unlocks reset every run.
 var skill_points := 0
 var skill_tree: SkillTreeData = null
+## Sandbox (D9): true once the Settings switch was on at any time in this run. Such a run
+## shows the SANDBOX mark, keeps no record and is not written to the high score.
+var run_used_sandbox := false
 ## Hokora shrines this run gave their buff (D12). Reset every run.
 var shrines_claimed := 0
 var hokora_manager: HokoraManager = null
@@ -322,6 +325,8 @@ func _setup_run_nodes() -> void:
 
 	if skill_tree == null:
 		skill_tree = SkillTreeData.new()
+	if not VrComfortSettings.settings_changed.is_connected(_on_settings_changed):
+		VrComfortSettings.settings_changed.connect(_on_settings_changed)
 	if player is DesktopPlayer:
 		_base_move_speed = (player as DesktopPlayer).move_speed
 
@@ -428,6 +433,8 @@ func start_run() -> void:
 	skill_points = 0
 	if skill_tree:
 		skill_tree.reset()
+	run_used_sandbox = false
+	_sync_sandbox()
 	buffs.clear()
 	if shrine_offering:
 		shrine_offering.cancel()
@@ -704,6 +711,23 @@ func add_points(amount: int) -> void:
 	GameEvents.log_event("points_changed", {"delta": amount, "total": skill_points})
 
 
+## Sandbox (D9): the tree follows the Settings switch at once (no pause needed, no time scale).
+## Switching it on marks the current run as a sandbox run for good.
+func _sync_sandbox() -> void:
+	if skill_tree == null:
+		return
+	skill_tree.sandbox = VrComfortSettings.sandbox_enabled
+	if skill_tree.sandbox:
+		run_used_sandbox = true
+	if diegetic_hud:
+		diegetic_hud.set_sandbox_run(run_used_sandbox)
+
+
+func _on_settings_changed() -> void:
+	_sync_sandbox()
+	_refresh_hud()
+
+
 ## Buys skill-tree node [param node_id] with the skill points. This is the
 ## single spending path — the VR tree menu calls exactly this. Returns
 ## SkillTreeData's verdict plus the points left after the attempt.
@@ -830,7 +854,8 @@ func _on_player_died() -> void:
 	if is_instance_valid(oni) and not oni.is_dead:
 		oni._on_permanent_defeat()
 	score = compute_score()
-	new_record = score > high_score
+	# A sandbox run (D9) is for demos: it is never a record.
+	new_record = score > high_score and not run_used_sandbox
 	if new_record:
 		high_score = score
 		save_high_score()
@@ -846,6 +871,7 @@ func _on_player_died() -> void:
 		"shrines": shrines_claimed,
 		"build": element_system.build_summary() if element_system else "Unbound",
 		"kcal": floori(calorie_meter.kcal) if calorie_meter else 0,
+		"sandbox": run_used_sandbox,
 	}
 	GameEvents.log_event("run_ended", summary)
 	_build_end_screen(summary)
@@ -913,6 +939,8 @@ func _build_end_screen(summary: Dictionary) -> void:
 	]
 	if summary.get("new_record", false):
 		rows.append(["★ NEW RECORD", 28, 0.00112, Color(1.1, 0.78, 0.42), 0.058])
+	elif summary.get("sandbox", false):
+		rows.append(["SANDBOX  ·  NO RECORD", 28, 0.00112, Color(0.98, 0.7, 0.3), 0.058])
 	var kcal_burned := int(summary.get("kcal", 0))
 	var stat_text := "%02d:%02d  ·  斬 %d  ·  LV %d  ·  波 %d" % [mins, secs, int(summary.kills), int(summary.level), int(summary.wave)]
 	if kcal_burned > 0:

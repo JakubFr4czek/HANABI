@@ -541,6 +541,10 @@ func _handle_settings_action(key: String, pointer_id: String) -> void:
 				VrComfortSettings.set_ai_language("pl")
 			"ai_lang_en":
 				VrComfortSettings.set_ai_language("en")
+			"sandbox_on":
+				VrComfortSettings.set_sandbox_enabled(true)
+			"sandbox_off":
+				VrComfortSettings.set_sandbox_enabled(false)
 	Sfx.play_at("ofuda_slice", global_position, -16.0, 4.0, 1.1)
 	_buzz(pointer_id, 0.35, 0.04)
 	_redraw_now()

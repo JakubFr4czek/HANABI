@@ -9,6 +9,8 @@ extends Node
 ## - Figure: the white kcal figure has enough contrast over the fire's middle colour.
 ## - Kcal (run.tscn): rises with movement, the resting rate standing still, not in a pause,
 ##   and the desktop H key raises the readout.
+## - SANDBOX mark (D9, run.tscn): drawn on the plate, in view and clear of the ring, only in a
+##   sandbox run; a normal run shows nothing.
 ## Run with:
 ##   godot --headless --path . res://tests/wrist_hud_test.tscn -- --desktop
 ## Exit code 0 when everything passed.
@@ -31,6 +33,7 @@ func _run() -> void:
 	await _clearance_and_gesture()
 	await _ring_and_figure()
 	await _kcal_in_run()
+	await _sandbox_mark_in_run()
 
 
 # --- Rig: placement, clearance, gesture ----------------------------------------------
@@ -345,6 +348,66 @@ func _kcal_in_run() -> void:
 	_check("H released: the readout hides and draws nothing", not hud.wrist_face.visible and _drawn_under(hud) == 0)
 	run.queue_free()
 	await _frames(2)
+
+
+## D9: a sandbox run wears a small amber SANDBOX mark on the plate, and only that run does. Checked
+## in the real run scene with the wrist raised: the mark is drawn, sits on the plate, is in the
+## camera's view and does not sit on the ring. A normal run draws nothing.
+func _sandbox_mark_in_run() -> void:
+	var real_path := VrComfortSettings.settings_path
+	VrComfortSettings.settings_path = "user://test_wrist_sandbox.cfg"
+	VrComfortSettings.sandbox_enabled = true
+	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
+	run.high_score_path = "user://test_wrist_sandbox_save.cfg"
+	add_child(run)
+	await _frames(8)
+	var hud := run.diegetic_hud
+	var player := run.player as DesktopPlayer
+	var label := hud.sandbox_label
+	player.wrist_check = true
+	await _frames(20)
+	var cam := player.camera
+	# The text's box in the plate's own frame: its four corners, carried through the label's rotation.
+	var aabb := label.get_aabb()
+	var xs: Array[float] = []
+	var zs: Array[float] = []
+	for c: Vector3 in [aabb.position, aabb.end, Vector3(aabb.position.x, aabb.end.y, 0.0), Vector3(aabb.end.x, aabb.position.y, 0.0)]:
+		var p := hud.wrist_face.to_local(label.to_global(c))
+		xs.append(p.x)
+		zs.append(p.z)
+	var left := minf(xs[0], minf(xs[1], minf(xs[2], xs[3])))
+	var right := maxf(xs[0], maxf(xs[1], maxf(xs[2], xs[3])))
+	var top := minf(zs[0], minf(zs[1], minf(zs[2], zs[3])))
+	var bottom := maxf(zs[0], maxf(zs[1], maxf(zs[2], zs[3])))
+	var half := DiegeticHud.PLATE_SIZE * 0.5
+	_check("sandbox run: the SANDBOX mark is drawn with the raised wrist (visible %s)" % label.visible,
+		label.visible and label.text == "SANDBOX" and label.is_visible_in_tree() and hud.wrist_face.visible)
+	_check("the mark sits on the plate (x %.4f..%.4f, z %.4f..%.4f)" % [left, right, top, bottom],
+		left >= -half.x and right <= half.x and top >= -half.y and bottom <= half.y)
+	_check("the mark is in the camera's view", cam.is_position_in_frustum(label.global_position))
+	var nearest := Vector2(clampf(0.0, left, right), clampf(0.0, top, bottom)).length()
+	_check("the mark stays clear of the ring (%.4f m from its centre, ring %.4f m)" % [nearest, DiegeticHud.RING_RADIUS + DiegeticHud.RING_WIDTH],
+		nearest > DiegeticHud.RING_RADIUS + DiegeticHud.RING_WIDTH)
+	player.wrist_check = false
+	run.queue_free()
+	await _frames(4)
+
+	VrComfortSettings.sandbox_enabled = false
+	var plain: RunGame = RUN_SCENE.instantiate()
+	plain.skip_run_intro = true
+	plain.high_score_path = "user://test_wrist_sandbox_save.cfg"
+	add_child(plain)
+	await _frames(8)
+	var plain_player := plain.player as DesktopPlayer
+	plain_player.wrist_check = true
+	await _frames(20)
+	_check("a normal run draws no SANDBOX mark (visible %s)" % plain.diegetic_hud.sandbox_label.visible,
+		not plain.diegetic_hud.sandbox_label.visible and plain.diegetic_hud.wrist_face.visible)
+	plain_player.wrist_check = false
+	plain.queue_free()
+	await _frames(2)
+	VrComfortSettings.settings_path = real_path
 
 
 func _check(label: String, ok: bool) -> void:
