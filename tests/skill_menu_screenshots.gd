@@ -100,6 +100,31 @@ func _ready() -> void:
 
 	run.pause_controller.close()
 
+	# D9 SANDBOX: the switch on its page (off, then on), the tree with every node unlocked, and
+	# the SANDBOX mark on the wrist. In memory only (no save), so hanabi_vr.cfg is never touched.
+	run.pause_controller.open()
+	await _frames(12)
+	menu.select_settings()
+	menu.canvas.settings_page = SkillTreeCanvas.PAGE_SANDBOX
+	await _frames(14)
+	await _shot("12_settings_sandbox_off")
+	VrComfortSettings.sandbox_enabled = true
+	run._sync_sandbox()
+	await _frames(14)
+	await _shot("13_settings_sandbox_on")
+	menu.select_element(Elements.SAKURA)
+	menu.select_node("senbonzakura_kageyoshi")
+	await _frames(14)
+	await _shot("14_tree_sandbox_all_unlocked")
+	run.pause_controller.close()
+	var desk := run.player as DesktopPlayer
+	desk.wrist_check = true
+	await _frames(24)
+	await _shot("15_hud_sandbox_mark")
+	desk.wrist_check = false
+	VrComfortSettings.sandbox_enabled = false
+	run._sync_sandbox()
+
 	# Nose to bark: no clear spot, so the panel is drawn on top of the trunk.
 	var close_stand := tree_pos + dir * (trunk.z + 0.45)
 	close_stand.y = run.forest_world.height_at(close_stand.x, close_stand.z)

@@ -57,26 +57,30 @@ const PAGE_MOVE := 1
 const PAGE_ACCESS := 2
 const PAGE_CONTROLS := 3
 const PAGE_AI := 4
-const PAGE_NAMES := ["AUDIO", "MOVEMENT", "ACCESS", "CONTROLS", "AI BOSS"]
-const PAGE_KANJI := ["音", "移", "補", "操", "知"]
+const PAGE_SANDBOX := 5
+const PAGE_NAMES := ["AUDIO", "MOVEMENT", "ACCESS", "CONTROLS", "AI BOSS", "SANDBOX"]
+const PAGE_KANJI := ["音", "移", "補", "操", "知", "試"]
 const PAGE_SUBTITLE := [
 	"Four buses in 10 % steps. SFX plays a cue as you change it.",
 	"Vignette, turning, walking pace and seated height.",
 	"Photosensitive comfort: lightning flash and haptic strength.",
 	"Both Quest 3 controllers. The katana follows your dominant hand.",
 	"Meta Muse Spark / Llama model configuration, API key and AI combat.",
+	"Demo and test mode: all skills unlocked. Off by default.",
 ]
+## Six sub-tabs of equal width across the 1468 px page (D9 added SANDBOX).
 const SUBNAV_RECTS := {
-	"page_audio": Rect2(66.0, 218.0, 280.0, 44.0),
-	"page_move": Rect2(363.0, 218.0, 280.0, 44.0),
-	"page_access": Rect2(660.0, 218.0, 280.0, 44.0),
-	"page_controls": Rect2(957.0, 218.0, 280.0, 44.0),
-	"page_ai": Rect2(1254.0, 218.0, 280.0, 44.0),
+	"page_audio": Rect2(66.0, 218.0, 232.0, 44.0),
+	"page_move": Rect2(312.0, 218.0, 232.0, 44.0),
+	"page_access": Rect2(558.0, 218.0, 232.0, 44.0),
+	"page_controls": Rect2(804.0, 218.0, 232.0, 44.0),
+	"page_ai": Rect2(1050.0, 218.0, 232.0, 44.0),
+	"page_sandbox": Rect2(1296.0, 218.0, 232.0, 44.0),
 }
 const SUBNAV_PAGE := {
 	"page_audio": PAGE_AUDIO, "page_move": PAGE_MOVE,
 	"page_access": PAGE_ACCESS, "page_controls": PAGE_CONTROLS,
-	"page_ai": PAGE_AI
+	"page_ai": PAGE_AI, "page_sandbox": PAGE_SANDBOX,
 }
 const SETTINGS_RECTS := {
 	PAGE_AUDIO: {
@@ -139,6 +143,10 @@ const SETTINGS_RECTS := {
 		"ai_key_clear": Rect2(780.0, 370.0, 220.0, 56.0),
 		"ai_lang_pl": Rect2(1020.0, 370.0, 160.0, 56.0),
 		"ai_lang_en": Rect2(1200.0, 370.0, 160.0, 56.0),
+	},
+	PAGE_SANDBOX: {
+		"sandbox_on": Rect2(460.0, 384.0, 320.0, 56.0),
+		"sandbox_off": Rect2(800.0, 384.0, 320.0, 56.0),
 	},
 }
 const NODE_SIZE := Vector2(340.0, 120.0)
@@ -626,9 +634,14 @@ func _draw_detail() -> void:
 		for rid: String in any_reqs:
 			line_y += _draw_requirement(rid, Vector2(x, line_y), accent, req_w)
 	var cost_x := x + w - 150.0
-	_text("COST", Vector2(cost_x, req_y), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
-	_text("点 × %d" % int(n.cost), Vector2(cost_x, req_y + 24), 46, GILT, HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
-	_text("you hold 点 × %d" % balance, Vector2(cost_x - 60, req_y + 84), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 210.0)
+	# D9: in the sandbox nothing is charged, so the cost column says so instead of a price.
+	if tree.sandbox:
+		_text("SANDBOX", Vector2(cost_x, req_y), 22, Color(1.0, 0.7, 0.3), HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
+		_text("no cost", Vector2(cost_x, req_y + 24), 36, Color(1.0, 0.7, 0.3), HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
+	else:
+		_text("COST", Vector2(cost_x, req_y), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
+		_text("点 × %d" % int(n.cost), Vector2(cost_x, req_y + 24), 46, GILT, HORIZONTAL_ALIGNMENT_RIGHT, 150.0)
+		_text("you hold 点 × %d" % balance, Vector2(cost_x - 60, req_y + 84), 22, DIM, HORIZONTAL_ALIGNMENT_RIGHT, 210.0)
 	if status_text != "":
 		_text(status_text, Vector2(x, UNLOCK_RECT.position.y - 42.0), 24, Color(CINNABAR, 0.95),
 				HORIZONTAL_ALIGNMENT_CENTER, w)
@@ -680,7 +693,11 @@ func _draw_unlock_button(id: String, accent: Color) -> void:
 
 func _draw_footer() -> void:
 	draw_line(Vector2(66, 918), Vector2(SIZE.x - 66, 918), GILT_DIM, 1.5, true)
-	_text(hint_text, Vector2(70, 924), 24, DIM, HORIZONTAL_ALIGNMENT_LEFT, 1080.0)
+	# D9: the tree says it is a sandbox in the footer, where the pause hint usually sits.
+	if tree != null and tree.sandbox:
+		_text("SANDBOX  ·  every node unlocked, nothing is spent", Vector2(70, 924), 24, Color(1.0, 0.7, 0.3), HORIZONTAL_ALIGNMENT_LEFT, 1080.0, 600)
+	else:
+		_text(hint_text, Vector2(70, 924), 24, DIM, HORIZONTAL_ALIGNMENT_LEFT, 1080.0)
 	var blade := "BLADE  ·  PLAIN STEEL"
 	var col := DIM
 	if blade_element != Elements.NONE:
@@ -711,6 +728,8 @@ func _draw_settings() -> void:
 			_draw_controls()
 		PAGE_AI:
 			_draw_ai()
+		PAGE_SANDBOX:
+			_draw_sandbox()
 		_:
 			_draw_controls()
 
@@ -861,6 +880,31 @@ func _draw_move() -> void:
 	_box(w_box, LACQUER_SUNK, GILT, 2, 10)
 	_text("%d kg" % roundi(weight), w_box.position + Vector2(0, 8), 24, PAPER, HORIZONTAL_ALIGNMENT_CENTER, w_box.size.x, 600)
 	_settings_button("weight_plus", "+5 kg", false)
+
+
+## SANDBOX page (D9): one switch. ON reads every node as unlocked; OFF gives back the run's own unlocks.
+func _draw_sandbox() -> void:
+	var on := VrComfortSettings.sandbox_enabled if VrComfortSettings else false
+	_box(Rect2(66.0, 268.0, 1468.0, 300.0), LACQUER_RAISED, GILT_DIM, 2, 16)
+	_text("試   SANDBOX  ·  ALL SKILLS UNLOCKED", Vector2(90.0, 284.0), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 1420.0, 600)
+	_text("Every node of all four schools reads as unlocked, tier 5 included. Nothing is bought, no points spent.",
+			Vector2(90.0, 318.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 1420.0)
+	_text("MODE", Vector2(90.0, 398.0), 24, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 340.0, 600)
+	_settings_button("sandbox_on", "ON  ·  ALL SKILLS", on, SETTINGS_ACCENT, 26)
+	_settings_button("sandbox_off", "OFF  ·  YOUR RUN", not on, SETTINGS_ACCENT, 26)
+	_text("It takes effect at once, in the middle of a run too.", Vector2(460.0, 456.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 1000.0)
+
+	_box(Rect2(66.0, 584.0, 1468.0, 316.0), LACQUER_RAISED, GILT_DIM, 2, 16)
+	_text("STATUS", Vector2(90.0, 600.0), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 1420.0, 600)
+	if on:
+		_wrapped("ON. Every node reads as unlocked (%d of %d). A sandbox run wears a SANDBOX mark on the wrist and never enters the high score."
+				% [SkillTreeData.NODES.size(), SkillTreeData.NODES.size()],
+				Vector2(90.0, 652.0), 24, Color(1.0, 0.7, 0.3), 1420.0)
+	else:
+		_wrapped("OFF. The tree shows only your own unlocks. Each node costs its points as usual.",
+				Vector2(90.0, 652.0), 24, DIM, 1420.0)
+	_wrapped("Your own unlocks and points come back exactly as they were when you switch it off. Points you earn in the meantime stay.",
+			Vector2(90.0, 716.0), 22, DIM, 1420.0)
 
 
 func _draw_access() -> void:

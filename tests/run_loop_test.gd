@@ -13,6 +13,7 @@ extends Node
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
 const TEST_SAVE_PATH := "user://test_run_high_score.cfg"
+const SANDBOX_SAVE_PATH := "user://test_run_sandbox_record.cfg"
 
 var failures := 0
 
@@ -28,6 +29,8 @@ func _ready() -> void:
 func _run_all() -> void:
 	if FileAccess.file_exists(TEST_SAVE_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_SAVE_PATH))
+	# The record checks below assume a normal run; a sandbox switch in the player's own file is not read.
+	VrComfortSettings.sandbox_enabled = false
 
 	var run: RunGame = RUN_SCENE.instantiate()
 	run.skip_run_intro = true
@@ -210,7 +213,46 @@ func _run_all() -> void:
 		and run.kills == 0
 		and run.high_score == saved_best)
 
+	await _sandbox_keeps_no_record()
 	run.queue_free()
+
+
+## D9: a sandbox run never becomes a record. The same death with the same score is a record
+## outside the sandbox, and only there. Deaths are called directly: the checks are the end state.
+func _sandbox_keeps_no_record() -> void:
+	VrComfortSettings.sandbox_enabled = true
+	var sandbox_run := await _death_with_score(SANDBOX_SAVE_PATH)
+	var stele := _stele_label_text(sandbox_run)
+	_check("sandbox death: the score (%d) is not a record (new_record %s, high score %d)" % [sandbox_run.score, sandbox_run.new_record, sandbox_run.high_score],
+		sandbox_run.score > 0 and not sandbox_run.new_record and sandbox_run.high_score == 0)
+	_check("sandbox death: no high-score file is written", not FileAccess.file_exists(SANDBOX_SAVE_PATH))
+	_check("sandbox death: the stele says SANDBOX · NO RECORD and no NEW RECORD", stele.contains("SANDBOX") and not stele.contains("NEW RECORD"))
+	sandbox_run.queue_free()
+	await _wait(0.1)
+
+	VrComfortSettings.sandbox_enabled = false
+	var normal_run := await _death_with_score(SANDBOX_SAVE_PATH)
+	_check("the same death outside the sandbox is a record (new_record %s, high score %d)" % [normal_run.new_record, normal_run.high_score],
+		normal_run.new_record and normal_run.high_score == normal_run.score and FileAccess.file_exists(SANDBOX_SAVE_PATH))
+	normal_run.queue_free()
+	await _wait(0.1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SANDBOX_SAVE_PATH))
+
+
+## A fresh run that is killed with a fixed score (3 kills, 60 s) and a clean high score.
+func _death_with_score(save_path: String) -> RunGame:
+	if FileAccess.file_exists(save_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(save_path))
+	var run_game: RunGame = RUN_SCENE.instantiate()
+	run_game.skip_run_intro = true
+	run_game.high_score_path = save_path
+	add_child(run_game)
+	await _wait(0.2)
+	run_game.high_score = 0
+	run_game.kills = 3
+	run_game.run_time = 60.0
+	run_game._on_player_died()
+	return run_game
 
 
 func _stele_label_text(run: RunGame) -> String:

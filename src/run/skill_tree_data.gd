@@ -179,6 +179,11 @@ const NODES: Array[Dictionary] = [
 ]
 
 var unlocked: Dictionary = {}  # node id -> true
+## Sandbox (D9, Settings > SANDBOX): every node reads as unlocked, tier 5 included, so
+## the effects, the finishers and the tree menu all follow without a second code path.
+## Nothing is bought and no points are spent, and [member unlocked] is never touched:
+## switching it off gives back exactly the unlocks the run had. Survives [method reset].
+var sandbox := false
 
 
 static func node_by_id(id: String) -> Dictionary:
@@ -210,7 +215,7 @@ func reset() -> void:
 
 
 func is_unlocked(id: String) -> bool:
-	return bool(unlocked.get(id, false))
+	return sandbox or bool(unlocked.get(id, false))
 
 
 func unlocked_count() -> int:

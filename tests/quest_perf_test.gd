@@ -12,6 +12,8 @@ func _ready() -> void:
 
 
 func _run_all() -> void:
+	# Locks and purchases are checked here: a sandbox switch in the player's own file must not be read (D9).
+	VrComfortSettings.sandbox_enabled = false
 	var run: RunGame = RUN_SCENE.instantiate()
 	run.skip_run_intro = true
 	add_child(run)
