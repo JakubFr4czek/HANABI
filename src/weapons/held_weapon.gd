@@ -969,6 +969,9 @@ func _handle_hit(c: Dictionary) -> void:
 	# follows through clean instead of biting in.
 	_apply_cut_resistance(c, mom, strike.kind, 0.25 if hit.has("severed") or hit.get("kirisute", false) else 1.0)
 	var loud := linear_to_db(clampf(0.4 + c.speed / 12.0, 0.4, 1.2))
+	# D17: the counter ring of the blade's school against this yōkai (1.0 = plain steel).
+	var matchup := float(hit.get("matchup", 1.0))
+	var school := String(hit.get("element", Elements.NONE))
 	match strike.kind:
 		"edge", "thrust":
 			# Clean cut: crisp slice, bright thin sparks along the cut, a sharp bite in the palm.
@@ -979,7 +982,7 @@ func _handle_hit(c: Dictionary) -> void:
 				# through the hilt, harder for a committed swing.
 				steps.append([0.0, 0.035])
 				steps.append([clampf(0.6 + float(mom.power) * 0.4, 0.0, 1.0), 0.09])
-			_pulse_pattern(steps)
+			_pulse_pattern(_school_haptics(steps, matchup))
 			Sfx.play_at("cut", c.point, loud)
 			if dmg >= 30.0:
 				Sfx.play_at("impact_heavy", c.point, loud - 6.0)
@@ -992,18 +995,28 @@ func _handle_hit(c: Dictionary) -> void:
 			if dmg >= hit_stop_damage:
 				steps.append([0.0, 0.035])
 				steps.append([clampf(0.6 + float(mom.power) * 0.4, 0.0, 1.0), 0.1])
-			_pulse_pattern(steps)
+			_pulse_pattern(_school_haptics(steps, matchup))
 			Sfx.play_at("impact_heavy" if dmg >= 30.0 else "impact_light", c.point, loud)
 		_:
 			# Flat, spine or hilt: a dull slap with no bite and a few dim, slow sparks.
 			_pulse_pattern([[0.3, 0.05], [0.12, 0.06]])
 			Sfx.play_at("slap", c.point, loud)
 			SparkBurst.spawn(get_tree().current_scene, c.point, -c.direction, Color(0.9, 0.5, 0.25), 5, 1.2)
-	if dmg >= hit_stop_damage:
+	# D17: a school that beats the yōkai rings bright, in its own colour; the same school clinks dully.
+	if matchup > 1.0:
+		Sfx.play_at("blade_ring", c.point, linear_to_db(0.5))
+		SparkBurst.spawn(get_tree().current_scene, c.point, c.direction, Elements.color(school), 16, 3.4)
+	elif matchup < 1.0:
+		Sfx.play_at("impact_light", c.point, loud - 8.0)
+		SparkBurst.spawn(get_tree().current_scene, c.point, c.direction, Elements.color(school), 4, 1.6)
+	var counter := matchup > 1.0
+	if dmg >= hit_stop_damage or (counter and dmg >= micro_stop_damage):
 		# 50 ms for a solid hit, up to 80 ms for the heaviest ones; a flick
 		# stops slightly shorter than a committed swing at the same damage.
 		var stop := lerpf(0.05, 0.08, clampf((dmg - hit_stop_damage) / 60.0, 0.0, 1.0)) \
 			* lerpf(0.85, 1.0, clampf(float(mom.power), 0.0, 1.0))
+		if counter:
+			stop += ElementBalance.COUNTER_HIT_STOP_EXTRA
 		TimeController.hit_stop(clampf(stop, 0.05, 0.08))
 	elif dmg >= micro_stop_damage:
 		TimeController.micro_stop(lerpf(0.025, 0.035, (dmg - micro_stop_damage) / (hit_stop_damage - micro_stop_damage)))
@@ -1144,6 +1157,16 @@ func _pulse(amplitude: float, duration: float) -> void:
 	for h in holders:
 		if h and h.has_method("pulse"):
 			h.pulse(amplitude, duration)
+
+
+## D17: a countering school adds a second, harder beat to the hilt; the same school
+## shortens and softens the pattern (a dull deflection, not a hit).
+func _school_haptics(steps: Array, matchup: float) -> Array:
+	if matchup > 1.0:
+		return steps + [[0.0, 0.03], [0.7, 0.06]]
+	if matchup < 1.0:
+		return [[float(steps[0][0]) * 0.45, 0.025]]
+	return steps
 
 
 func _pulse_pattern(steps: Array) -> void:

@@ -308,8 +308,9 @@ func _set_katana_rain_droplets(weapon: Node, amount: float) -> void:
 
 
 func _soul_element_for_kill(yokai: Yokai) -> String:
-	if yokai.is_elite() and yokai.elite_element != Elements.NONE:
-		return yokai.elite_element
+	# A yōkai of a school drops souls in that school's colour (elite or swarm).
+	if yokai.body_element != Elements.NONE:
+		return yokai.body_element
 	var le := yokai.last_kill_element
 	if le != Elements.NONE and le != "physical":
 		return le
