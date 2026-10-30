@@ -5,7 +5,7 @@ extends Node
 ## - The ring has room for 2–3 guards at each footpath site along a walk
 ## - recall_stragglers leaves a guard at its post, however far the player has walked
 ## - An anchor that streams away takes its guards with it
-## - Over a 120 s walk the live yokai stay within the planner cap plus one guard group
+## - Over a 120 s walk the live yokai, guards included, never exceed the planner cap
 ## godot --headless --path . --fixed-fps 90 res://tests/anchor_guards_test.tscn -- --desktop
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
@@ -56,8 +56,7 @@ func _test_budget_over_a_120_second_walk() -> void:
 	var max_wave := 0
 	var max_guards := 0
 	var max_cap := 0
-	var wave_over_cap := 0
-	var total_over_budget := 0
+	var total_over_budget := 0 # frames with more live yokai than the cap
 	for i in range(1, 121):
 		var x := 3.0 * float(i)
 		player.teleport(Vector3(x, run.forest_world.height_at(x, 0.0), 0.0), 0.0)
@@ -71,14 +70,11 @@ func _test_budget_over_a_120_second_walk() -> void:
 			max_wave = maxi(max_wave, wave)
 			max_guards = maxi(max_guards, guards)
 			max_cap = maxi(max_cap, cap)
-			if wave > cap:
-				wave_over_cap += 1
-			if total > cap + AnchorGuards.MAX_GUARDS:
+			if total > cap:
 				total_over_budget += 1
 	print("BUDGET 120 s walk: max live yokai %d, max wave yokai %d (cap up to %d), max guards %d, anchors %d"
 		% [max_total, max_wave, max_cap, max_guards, run.forest_world.torii_manager.get_active_gates().size() + run.hokora_manager.alive_shrines().size()])
-	_check("Wave yokai never exceed the planner cap (%d frames over)" % wave_over_cap, wave_over_cap == 0)
-	_check("Live yokai never exceed the planner cap plus one guard group of %d (%d frames over)" % [AnchorGuards.MAX_GUARDS, total_over_budget],
+	_check("Live yokai, guards included, never exceed the planner cap (%d frames over)" % total_over_budget,
 		total_over_budget == 0)
 
 
