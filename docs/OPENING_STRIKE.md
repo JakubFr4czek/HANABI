@@ -17,7 +17,8 @@ Kod: `src/cinematic/opening_strike.gd` (`class_name OpeningStrike`), scena `scen
 - **Cięcia:** pięć zwykłych cięć i finisher. Każde trafienie idzie przez `Yokai.receive_hit` z `kirisute_offer` i `blade_axis`, czyli tą samą ścieżką co żywe ostrze (D4). Płaszczyzna = `KirisuteCut.plane_normal(motion, axis)`. Ostrze porusza się 9 m/s (próg Kirisute to 8 m/s), krawędź prowadzi (`classify_strike` → `edge`, zgodność 1,00).
 - **Żywioły:** Sakura (Hanadachi), Storm, Ink, Shadow, Storm, Sakura (finisher). Kolor przekroju i śladu z `Elements.color`.
 - **Hit-stop lokalny:** po każdym cięciu zegar sekwencji zwalnia do 0,12× na 0,07 s rzeczywistego czasu. `Engine.time_scale` nigdy nie jest zmieniane.
-- **Finisher (~0,6 s):** kolor żywiołu narasta (kwadratowo od 2,7 s, pik 0,55) i przechodzi w biel (2,98–3,22 s). Biel trzyma się do końca (3,32 s). Potem wejście w intro: welon z bieli gaśnie w 0,6 s.
+- **Finisher (~0,6 s):** w punkcie kontaktu wybucha firework żywiołu (`ElementFirework`, skala 1,4), potem przejście w biel (2,98–3,22 s). Biel trzyma się do końca (3,32 s). Potem wejście w intro: welon z bieli gaśnie w 0,6 s. Płaski tint z pierwszej wersji usunięty.
+- **Glow przekroju:** nowe kawałki startują 1,6× mocniej niż kawałki biegu (`CUT_GLOW_BOOST`, tylko w tej scenie; test sprawdza próg dla najciemniejszej szkoły, Ink).
 
 ## VR i desktop
 
@@ -32,6 +33,10 @@ Dźwięki są podpięte pod punkt widza (scena ma własną przestrzeń), a `Ambi
 - `Yokai._fx_scene()`: efekty yōkai (przekrój, iskry, fajerwerk, płatki) idą do `SubViewport`, w którym yōkai stoi, a w biegu nadal do `get_tree().current_scene` (zachowanie bez zmian). Powód: `SceneTree.current_scene` przyjmuje tylko bezpośrednie dziecko roota.
 - `RunSplash.was_skipped` i `RunSplash.fade_veil()` (wspólny welon dla splasha i opening strike).
 - `RunGame`: tworzy `run_cinematic` po splashu i przygotowuje stage w trakcie planszy tytułu (`prepare()`), żeby budowa lasu nie była widoczna.
+
+## Lokacja (ograniczenie)
+
+Kinowa scena stoi na polanie startu (origin, promień ~5,2 m, bez drzew), z układem skalowanym do 0,7. Próby przeniesienia w głąb lasu nie wyszły: w (30, 18) pień zasłaniał kamerę, w (-36, -30) kamera stawała w pniu (zrzut w rundzie, odrzucony). Sonda 9 m czystego miejsca nie znalazła kandydatów w siatce co 6 m. Skutek: w kadrze brak lasu z konceptu. Do zrobienia: maska wycinki drzew w strefie sceny (ForestWorld bez zmian w generatorze) albo ręcznie wybrana, zweryfikowana lokacja.
 
 ## Decyzje podjęte bez pytania (do przeglądu)
 
@@ -56,9 +61,9 @@ Dźwięki są podpięte pod punkt widza (scena ma własną przestrzeń), a `Ambi
 
 **Słabe (nie naprawione):**
 - **Brak lasu w kadrze.** Scena stoi na polanie startu (promień ~5,2 m, bez drzew). Kadry widzą ścieżkę, torii i nocne wzgórza, a nie las z konceptu. Próba przesunięcia na środek lasu odpadła: drzewa stają w stacjach kamery (pień ~1 m). Sondaż 9 m czystego miejsca w lesie nie znalazł kandydatów. Do rozwiązania: maska wycinki drzew w strefie sceny albo ręcznie wybrane miejsce z mapy.
-- **Przekrój nie świeci.** Po cięciu połowy to niebieskie bloki bez widocznej żarzącej się linii w kolorze żywiołu (`d11_2`, `d11_4`). Czerwona/różowa krawędź prawie znika na tej odległości.
+- **Przekrój nadal słabo czytelny.** Po cięciu połowy to niebieskie bloki (`d11_2`, `d11_4`); glow 1,6× nie przebija się na tej odległości. Do poprawy: emisja samej krawędzi zamiast całego przekroju.
 - **Yōkai to istniejący model** (prymitywy, „robot”), daleko od premium z GDD §16. Nie zmieniałem go w tym kroku.
-- **Finisher:** `d11_5_flash_builds.png` to płaski różowy filtr na całym kadrze, a nie błysk. Złagodzone (kwadrat, pik 0,55), ale nadal tintuje, zamiast rozbłyskiwać.
+- **Finisher:** firework w punkcie kontaktu jest na zrzucie mały (`d11_4`). Nie widać go jako rozbłysku; do zrobienia: większa skala albo rozbłysk na ostrzu.
 - **Ślad katany** jest prawie niewidoczny.
 - **Wideo (Movie Maker):** patrz niżej w podsumowaniu.
 
