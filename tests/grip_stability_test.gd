@@ -7,6 +7,8 @@ extends Node
 const ROOM := preload("res://scenes/test_room.tscn")
 const BASE_POSE := Transform3D(Basis.IDENTITY, Vector3(-3.0, 1.4, 3.0))
 const HANDLE_GRIP := Vector3(0.0, 0.0, 0.16)
+## Ticks the blade must stay in the hand before the re-pin counts as settled (0.2 s at 90 Hz).
+const SETTLE_TICKS := 18
 
 var room: Node3D
 var player: DesktopPlayer
@@ -238,13 +240,38 @@ func _xr_hand_stays_with_controller() -> void:
 	_check("VR hand model stays on the grip in normal use (gap %.3f m)" % pinned_gap, pinned_gap < 0.03)
 	# Allow one physics-tick overshoot when the pin releases (Jolt + 72/90 Hz variance).
 	_check("VR hand model never drifts more than %.2f m from the controller (max gap %.2f m)" % [limit, max_gap], max_gap <= limit + 0.06)
-	await _wait(0.6)
-	var back_gap := hand.global_position.distance_to(controller.global_position)
-	_check("VR hand model re-pins to the weapon once it is back in the hand (gap %.3f m, error %.3f m)" % [back_gap, katana.grip_error],
-		back_gap < 0.03 and katana.grip_error < 0.03)
+	# Bring the fist back to the handle (the same pose as the grab above), then wait for
+	# the blade and the hand to settle there. Wait on the condition, not on a fixed
+	# time: under CPU load the blade needs a variable number of ticks to catch up.
+	controller.global_transform = BASE_POSE * xr_player.right_holder.transform.affine_inverse()
+	var back := await _wait_until_back_in_hand(katana, hand, controller, 3.0)
+	_check("VR hand model re-pins to the weapon once it is back in the hand (settled after %d ticks, gap %.3f m, error %.3f m)" % [back.ticks, back.gap, back.error],
+		back.ticks >= 0)
 	xr_player.right_holder.release()
 	xr_player.queue_free()
 	await get_tree().physics_frame
+
+
+## Waits until the blade is within grip tolerance and the hand is pinned to it (the
+## hand within tolerance of the controller) for [constant SETTLE_TICKS] in a row.
+## Returns the tick the state was first reached (-1 on timeout) plus the final gaps.
+func _wait_until_back_in_hand(weapon: HeldWeapon, hand: Node3D, controller: Node3D, seconds: float) -> Dictionary:
+	var settled := 0
+	var first := -1
+	var gap := INF
+	for i in int(seconds * Engine.physics_ticks_per_second):
+		await get_tree().physics_frame
+		gap = hand.global_position.distance_to(controller.global_position)
+		if weapon.grip_error < 0.03 and gap < 0.03:
+			settled += 1
+			if settled == 1:
+				first = i
+			if settled >= SETTLE_TICKS:
+				return {"ticks": first, "gap": gap, "error": weapon.grip_error}
+		else:
+			settled = 0
+			first = -1
+	return {"ticks": -1, "gap": gap, "error": weapon.grip_error}
 
 
 func _new_holder(side: String) -> WeaponHolder:
