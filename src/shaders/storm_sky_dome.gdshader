@@ -56,11 +56,14 @@ void fragment() {
 
 	vec3 sky = mix(fog, zenith_color, smoothstep(0.02, 0.5, h));
 
-	// Cloud deck projected on a plane, drifting slowly.
-	vec2 cloud_uv = dir.xz / (h + 0.12) * 0.9;
-	float c1 = fbm(cloud_uv + vec2(TIME * 0.006, -TIME * 0.004));
-	float c2 = fbm(cloud_uv * 2.3 - vec2(TIME * 0.005, TIME * 0.008) + 4.7);
-	float density = smoothstep(0.32, 0.72, c1 * 0.7 + c2 * 0.3);
+	// Cloud deck projected on a plane, drifting slowly. The deck starts well above
+	// the tree line (its lower edge is high, so no band lies behind the crowns)
+	// and thins toward the top, so the clouds stay high, soft and far.
+	vec2 cloud_uv = dir.xz / (h + 0.25) * 0.7;
+	float c1 = fbm(cloud_uv + vec2(TIME * 0.004, -TIME * 0.003));
+	float c2 = fbm(cloud_uv * 2.3 - vec2(TIME * 0.003, TIME * 0.005) + 4.7);
+	float altitude = smoothstep(0.2, 0.5, h) * (1.0 - smoothstep(0.8, 1.0, h) * 0.6);
+	float density = smoothstep(0.38, 0.8, c1 * 0.7 + c2 * 0.3) * altitude;
 	float thickness = c2;
 
 	// Moon: a sharp disc and a wide halo, dimmed where clouds pass in front.
@@ -72,7 +75,7 @@ void fragment() {
 	// Clouds near the moon get a silver lining; the rest stay as dark masses.
 	float moon_near = pow(m, 14.0);
 	vec3 cloud_col = mix(cloud_dark, cloud_lit, moon_near * (1.0 - thickness) * 0.9);
-	sky = mix(sky, cloud_col, density * smoothstep(0.03, 0.2, h) * 0.85);
+	sky = mix(sky, cloud_col, density * 0.6);
 	sky += moon;
 
 	// Lightning lights the clouds from inside, strongest toward the strike.
@@ -81,8 +84,9 @@ void fragment() {
 	float band = smoothstep(0.03, 0.14, h) * (1.0 - smoothstep(0.35, 0.8, h));
 	sky += lightning_tint * storm_flash * (0.08 + density * (0.15 + 0.85 * align * band) * (0.6 + 0.8 * thickness));
 
-	// The lowest band is exactly the fog color, so there is no horizon line.
-	float horizon = 1.0 - smoothstep(0.0, 0.1, h);
+	// The lowest band is exactly the fog color, so there is no horizon line. The
+	// haze is deep enough that the sky melts into the fog behind the tree line.
+	float horizon = 1.0 - smoothstep(0.0, 0.18, h);
 	sky = mix(sky, fog + lightning_tint * storm_flash * 0.06, horizon);
 	ALBEDO = sky;
 }

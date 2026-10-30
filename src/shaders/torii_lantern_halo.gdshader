@@ -29,7 +29,7 @@ void vertex() {
 	v_dist = length(MODEL_MATRIX[3].xyz - INV_VIEW_MATRIX[3].xyz);
 	// Past ~9 m the glow grows with distance so a far gate keeps its apparent
 	// size in the fog (a fixed 2 m halo shrinks to a speck at 28 m).
-	VERTEX.xy *= clamp(v_dist / 9.0, 1.0, 3.0);
+	VERTEX.xy *= clamp(v_dist / 12.0, 1.0, 1.6);
 }
 
 void fragment() {
@@ -42,7 +42,7 @@ void fragment() {
 	// Up close the gate is its own light: keep the shaft and glare gentle.
 	float far_k = smoothstep(3.0, 13.0, v_dist);
 	float a = (halo * mix(0.5, 1.0, far_k) + shaft * 0.6 * far_k) * intensity * breathe;
-	a += core * 0.6 * intensity;
+	a += core * 0.4 * intensity;
 	if (a < 0.004) {
 		discard;
 	}
@@ -50,5 +50,5 @@ void fragment() {
 	// Past ~18 m the glow thins a little more: the trunks and crowns in front of it
 	// read through the milk, and the far gates stay a light rather than a blob.
 	float far_thin = mix(1.0, 0.72, smoothstep(18.0, 36.0, v_dist));
-	ALPHA = clamp(a * far_thin, 0.0, 0.92);
+	ALPHA = clamp(a * far_thin, 0.0, 0.5);
 }

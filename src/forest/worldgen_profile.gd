@@ -194,8 +194,8 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 
 @export_group("Distant fireworks")
 ## Shortest and longest wait between far bursts (or between series), seconds (D18).
-@export_range(5.0, 120.0, 0.5) var firework_interval_min := 20.0
-@export_range(5.0, 120.0, 0.5) var firework_interval_max := 60.0
+@export_range(5.0, 120.0, 0.5) var firework_interval_min := 8.0
+@export_range(5.0, 120.0, 0.5) var firework_interval_max := 15.0
 ## Share of far gaps that open a short series of 2–4 bursts.
 @export_range(0.0, 1.0, 0.01) var firework_series_chance := 0.3
 ## Far band from the player, metres (horizontal). Always behind the fog.
