@@ -11,8 +11,13 @@ const POP_RANGE := 37.0
 ## Largest growth change one crown may show in one physics frame.
 const MAX_GROWTH_STEP := 0.1
 const WALK_STEP := 0.05
-const LEG_FRAMES := 1200
-const LEGS := [Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0), Vector3(0, 0, -1)]
+## Spiral walk: legs grow from 40 m to 140 m and turn 90° each time, so the walk reaches
+## new chunk columns on every leg (a square of fixed legs only re-enters known chunks).
+const LEG_METRES := [40.0, 60.0, 80.0, 100.0, 120.0, 140.0]
+const LEG_DIRECTIONS := [Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0), Vector3(0, 0, -1)]
+## Arrivals are checked out to the draw radius: with chunk_size 40 a chunk arrives ~40 m away,
+## so the arrival check has few crowns inside POP_RANGE (see the commit message).
+const ARRIVAL_RANGE := 40.0
 
 var failures := 0
 
@@ -42,14 +47,16 @@ func _run_all() -> void:
 	var prev := {}
 	var stamped := {}
 	var arrived_crowns := 0
+	var arrived_near := 0
 	var arrived_grown := 0
 	var pops := 0
 	var worst_pop := 0.0
 	var worst_step := 0.0
 	var steps := 0
-	for leg in LEGS:
-		for i in LEG_FRAMES:
-			walker.global_position += (leg as Vector3) * WALK_STEP
+	for leg in LEG_METRES.size():
+		var dir: Vector3 = LEG_DIRECTIONS[leg % LEG_DIRECTIONS.size()]
+		for i in int(LEG_METRES[leg] / WALK_STEP):
+			walker.global_position += dir * WALK_STEP
 			await get_tree().physics_frame
 			var cur := _drawn_growth(forest)
 			var at := walker.global_position
@@ -63,8 +70,11 @@ func _run_all() -> void:
 							continue
 						for xf in chunk.get_meta("xfs_" + String(child.name), []):
 							var o: Vector3 = chunk.position + (xf as Transform3D).origin
-							if cur.has(o):
+							var ad := Vector2(o.x - at.x, o.z - at.z).length()
+							if cur.has(o) and ad <= ARRIVAL_RANGE:
 								arrived_crowns += 1
+								if ad <= POP_RANGE:
+									arrived_near += 1
 								if cur[o] > 0.05:
 									arrived_grown += 1
 			# The first sample has no earlier frame to compare with: the start ring is not an arrival.
@@ -84,8 +94,8 @@ func _run_all() -> void:
 			prev = cur
 
 	_check("Chunks were built while walking (%d arrived)" % stamped.size(), stamped.size() >= 4)
-	_check("Arriving crowns start from zero growth (%d of %d already grown)" % [arrived_grown, arrived_crowns],
-		arrived_crowns > 0 and arrived_grown == 0)
+	_check("Crowns arriving inside %.0f m: %d arrived (%d inside %.0f m), %d already grown" % [ARRIVAL_RANGE, arrived_crowns, arrived_near, POP_RANGE, arrived_grown],
+		arrived_crowns >= 1 and arrived_grown == 0)
 	_check("No crown pops in full size inside %.0f m (%d popped, farthest %.1f m)" % [POP_RANGE, pops, worst_pop],
 		pops == 0)
 	_check("Growth changes smoothly, at most %.2f per frame (worst %.3f over %d crowns)" % [MAX_GROWTH_STEP, worst_step, steps],
