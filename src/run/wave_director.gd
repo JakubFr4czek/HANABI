@@ -35,6 +35,9 @@ var _view_forward := Vector3.ZERO
 ## Set by AnchorGuards while a guard group waits for free slots under the cap (see step_director).
 var reserved_slots := 0
 const YOKAI_POOL_CAP := 14
+## Nothing spawns behind the player: the back sector is 120° wide, centred on the
+## opposite of the view direction, so anything within 60° of "behind" is refused.
+const BEHIND_SECTOR_HALF := deg_to_rad(60.0)
 
 
 func _ready() -> void:
@@ -125,7 +128,7 @@ func step_director(delta: float, player_pos: Vector3, view_forward: Vector3 = Ve
 	if result.kind != "":
 		spawn_in_fog_ring(player_pos, view_forward, result.kind == "elite")
 	if result.oni:
-		spawn_oni_boss(player_pos)
+		spawn_oni_boss(player_pos, view_forward)
 
 
 ## The live cap at the current run time (what the planner enforces).
@@ -145,8 +148,11 @@ func scaled_damage(wave_num: int) -> float:
 	return get_profile().damage_for(wave_num)
 
 
+## Null when no legal spot was found this tick: the spawn is skipped, never moved behind.
 func spawn_in_fog_ring(target_pos: Vector3 = Vector3.ZERO, view_forward: Vector3 = Vector3.ZERO, elite: bool = false) -> Yokai:
 	var pos := find_spawn_point(target_pos, view_forward)
+	if pos == Vector3.INF:
+		return null
 	if elite:
 		return spawn_elite_at(pos, target_pos, EnemyCatalog.elite_element_for_roll(_rng))
 	return spawn_enemy_at(pos, target_pos, get_profile().roll_swarm_element(run_seconds, _rng))
@@ -154,7 +160,8 @@ func spawn_in_fog_ring(target_pos: Vector3 = Vector3.ZERO, view_forward: Vector3
 
 ## A spawn point on the ring round [param center]: outside the view cone of
 ## [param view_forward] (zero = no cone), clear of the world geometry, and not on top
-## of a living yōkai. Tries a few candidates and keeps the most separated.
+## of a living yōkai, and never in the back sector (see BEHIND_SECTOR_HALF). Tries a few
+## candidates and keeps the most separated. Returns Vector3.INF when none is legal.
 func find_spawn_point(center: Vector3, view_forward: Vector3 = Vector3.ZERO) -> Vector3:
 	var p := get_profile()
 	var cone_half := deg_to_rad(p.view_half_angle)
@@ -164,7 +171,7 @@ func find_spawn_point(center: Vector3, view_forward: Vector3 = Vector3.ZERO) -> 
 	var best_clear := -1.0
 	for i in 16:
 		var angle := _rng.randf() * TAU
-		if has_view and absf(angle_difference(yaw_view, angle)) < cone_half:
+		if has_view and not _is_legal_angle(angle, yaw_view, cone_half):
 			continue
 		var pos := _ring_point(center, angle, _rng.randf_range(p.ring_min, p.ring_max))
 		if not is_clear_of_world(pos):
@@ -175,12 +182,14 @@ func find_spawn_point(center: Vector3, view_forward: Vector3 = Vector3.ZERO) -> 
 			best = pos
 		if clear >= 1.3:
 			break
-	if best == Vector3.INF:
-		# Nothing found in the ring: the spot straight behind the player, pushed out
-		# to the ring's outer edge. Still outside the cone, and the best we have.
-		var back := yaw_view + PI if has_view else _rng.randf() * TAU
-		best = _ring_point(center, back, p.ring_max)
 	return best
+
+
+## Outside the view cone (half-width [param cone_half]) and outside the back sector.
+func _is_legal_angle(angle: float, yaw_view: float, cone_half: float) -> bool:
+	if absf(angle_difference(yaw_view, angle)) < cone_half:
+		return false
+	return absf(angle_difference(yaw_view + PI, angle)) >= BEHIND_SECTOR_HALF
 
 
 ## Distance from [param pos] to the nearest living yōkai, on the ground plane.
@@ -229,6 +238,8 @@ func recall_stragglers(player_pos: Vector3) -> void:
 		if Vector2(rp.x - player_pos.x, rp.z - player_pos.z).length() < p.straggler_distance:
 			continue
 		var pos := find_spawn_point(player_pos, _view_forward)
+		if pos == Vector3.INF:
+			continue
 		var dir := player_pos - pos
 		yokai.place_at(pos, atan2(dir.x, dir.z))
 
@@ -275,11 +286,22 @@ func spawn_elite_at(pos: Vector3, facing_target: Vector3, element: String) -> Yo
 	return yokai
 
 
-func spawn_oni_boss(facing_target: Vector3) -> RunOniBoss:
+## The Oni stands on the ring round the player, never in the back sector. Null when no
+## legal spot came up this tick (the planner cues it again).
+func spawn_oni_boss(facing_target: Vector3, view_forward: Vector3 = Vector3.ZERO) -> RunOniBoss:
 	if has_active_oni():
 		return _active_oni
 	var p := get_profile()
-	var pos := _ring_point(facing_target, _rng.randf() * TAU, 9.2)
+	var has_view := view_forward.length_squared() > 0.0001
+	var yaw_view := atan2(view_forward.x, view_forward.z)
+	var angle := _rng.randf() * TAU
+	for i in 16:
+		if not has_view or _is_legal_angle(angle, yaw_view, 0.0):
+			break
+		angle = _rng.randf() * TAU
+	if has_view and not _is_legal_angle(angle, yaw_view, 0.0):
+		return null
+	var pos := _ring_point(facing_target, angle, 9.2)
 	var oni := RunOniBoss.new()
 	oni.profile = EnemyCatalog.make_oni_profile(p.hp_for(maxi(wave, 1), run_seconds) * p.oni_hp_mult)
 	oni.hold_sword = true
