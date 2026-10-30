@@ -9,11 +9,13 @@
 - **Engine:** Godot 4, GDScript.
 - **Context:** Meta Global AI Developer Hackathon (submission due Nov 4, 2026, 9:00 PM ET). Indie developer track.
 - **Tone:** dark action with neon beauty. It is not a horror game: atmosphere is moody, but the core feeling is satisfying, powerful combat.
+- **Lore (D18, decided 2026-10-29):** the run takes place during a summer matsuri, the village festival at the edge of the forest. The fireworks are seen above the trees and heard as far-off thunder. In the middle of the festival the yōkai wake: the music stops, the lanterns go out, and the dead come out of the fog. The fireworks are atmosphere, not a reward: the player hears them beyond the mist while something he cannot reach hunts him. The name works twice, since the matsuri fireworks are real and every kill is a small firework of petals, lightning and ink.
 
 ## 2. Design pillars
 1. **The sword feels real.** Physics-driven blade, weight, no clipping, real parries.
 2. **One more run.** Constant drops, frequent level-ups and meaningful build choices.
 3. **Neon in the dark.** Black fog and red torii, lit by pink sakura, blue lightning and black ink.
+   Distant matsuri fireworks (D18) add tension: far bursts behind the mist, muffled and random, that the player can never reach.
 4. **The world is watching you.** Rare AI-"awakened" enemies that comment on and adapt to your playstyle (Meta AI, later phase).
 
 ## 3. Core loop
@@ -131,12 +133,16 @@ At the start of a run the player hovers about 0.5–1 m above the forest floor i
 
 - **Descent:** slow and smooth (~3.1 s), sakura petals swirl around the player with glowing air steps rippling beneath the feet.
 - **Touchdown:** a lightning flash lights the forest, ground seal glows, and an expanding shockwave ripple washes outward. Locomotion is unlocked at touchdown so the player can look around and walk freely. The player lands at their real standing height (in VR: hold B/Y to recenter, hold B + right stick to adjust eye height).
+- **Title plate (D18, wstępnie: plansza tekstowa, tekst do redakcji):** after the boot splash and before the seiza intro, two or three lines of English on black (`docs/INTRO_TEXT.md`, drafted for Jakub to edit), fading in and out over about 9 s; one far firework is audible at the start. Skippable like the splash. The project has no separate main menu, so the plate sits where the menu would be.
 - **Spirit Gate offering vs. Materialize on touchdown (DECISION FOR JAKUB):**
   - *Original GDD spec:* The katana instantly materializes in the player's hand on touchdown during the lightning flash.
   - *Implemented ritual (`src/run/run_intro.gd`, `tests/intro_grab_test.tscn`):* An ethereal spirit portal gate (`spirit_portal.gdshader`) opens in front of the player. The katana emerges handle-first from the gate, bathed in soft emissive light, before the portal dissolves. The katana hangs floating in mid-air at chest height. Grabbing the hilt physically (`HeldWeapon.is_held()`) acts as the tangible "start button" that finishes the intro, fades the glow, and begins the survival run / yōkai spawns. Pressing A/X provides an instant skip directly into the player's hand.
   - *Decision for Jakub:* Decide whether to keep the spirit gate offering with the physical grab-to-start ceremony as the permanent intro ritual, or revert to the original "instant materialize into hand on touchdown". The gate emergence adds ritual weight and tactile agency in VR, but adds ~4.3 s post-touchdown unless skipped.
 - **Body:** no visible legs. The pose shows only as a shadow, or as a reflection in the water.
 - **Comfort:** linear motion, no sudden deceleration, horizon stable. Nothing takes over the camera beyond the vertical offset. A few seconds at most, and skippable (A/X).
+
+### Distant matsuri fireworks (D18, decided 2026-10-29, [`docs/FIREWORKS_PLAN.md`](FIREWORKS_PLAN.md))
+Far fireworks behind the fog as a source of unease, not a goal. Bursts at random intervals (20–60 s, sometimes a short series of 2–4), 150–400 m away above the tree line, each in a new direction (≥ 70° from the last two). Every few minutes a rarer, nearer burst at 40–80 m, behind the trees, never closer than 40 m. The sound is the main element: a muffled, far thunder through a dedicated `Fireworks` bus (low-pass 300–800 Hz for far bursts, reverb, compressor, limiter), delayed by distance / 343 m/s. The glow is dim and fog-diffused, with no dynamic light (the fog ends at 11 m, so a light at 40 m would light nothing visible). Settings > ACCESS (flash) dims the glow; the sound stays. Parameters live in the World Gen profile ("Distant fireworks" group).
 
 ### Boot splash (D7, films from D7_fix1)
 Played once per launch, before the run intro. The launch scene is `scenes/main.tscn` (sets `play_boot_splash`); tests and screenshot scenes that embed the run skip it.
