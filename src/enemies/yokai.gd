@@ -44,6 +44,9 @@ var brain: YokaiBrain
 var is_dead := false
 var last_kill_element := Elements.NONE
 var kind := Kind.SWARM
+## Instance id of the torii gate or hokora shrine this yōkai stands guard for (AnchorGuards),
+## 0 for an ordinary wave yōkai. Set on every spawn, so a pooled body never keeps a stale post.
+var guard_post := 0
 ## The body's school: rolled per swarm yōkai (WaveProfile), fixed for an elite. Plain = NONE.
 var body_element := Elements.NONE
 var use_pathfinding := false

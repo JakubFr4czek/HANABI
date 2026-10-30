@@ -218,6 +218,9 @@ func _ring_point(center: Vector3, angle: float, radius: float) -> Vector3:
 func recall_stragglers(player_pos: Vector3) -> void:
 	var p := get_profile()
 	for yokai in alive_enemies():
+		# A guard keeps its post at the gate or shrine, however far the player has walked.
+		if yokai.guard_post != 0:
+			continue
 		var rp := yokai.root_part().global_position
 		if Vector2(rp.x - player_pos.x, rp.z - player_pos.z).length() < p.straggler_distance:
 			continue
@@ -227,8 +230,10 @@ func recall_stragglers(player_pos: Vector3) -> void:
 
 
 ## One swarm yōkai at [param pos]; [param element] is its school (plain by default).
-func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO, element: String = Elements.NONE) -> Yokai:
+## [param guard_post] is the instance id of the gate or shrine it guards (0 = a wave yōkai).
+func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO, element: String = Elements.NONE, guard_post: int = 0) -> Yokai:
 	var yokai := _acquire_yokai()
+	yokai.guard_post = guard_post
 	var p := get_profile()
 	var hp_val := p.hp_for(maxi(wave, 1), run_seconds)
 	yokai.configure_kind(Yokai.Kind.SWARM, element, hp_val)
