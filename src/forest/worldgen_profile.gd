@@ -198,7 +198,7 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Chance that a wave start brings a near burst within 3 s (hook to waves, D10).
 @export_range(0.0, 1.0, 0.01) var firework_wave_chance := 0.3
 ## Glow strength of far bursts, 0..1. Near bursts are brighter.
-@export_range(0.0, 1.0, 0.01) var firework_glow := 0.35
+@export_range(0.0, 1.0, 0.01) var firework_glow := 0.1
 ## Low-pass cutoff of the Fireworks bus at the sound, Hz: far bursts sit low, near ones a little brighter.
 @export_range(200.0, 2000.0, 10.0) var firework_far_cutoff_hz := 450.0
 @export_range(200.0, 2000.0, 10.0) var firework_near_cutoff_hz := 1100.0

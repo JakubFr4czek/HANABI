@@ -150,6 +150,22 @@ Zgłoszenie Jakuba (28 X): po odpaleniu menu czasem „przesuwało mnie w bok”
 - [ ] Po splashu: las wychodzi z czerni płynnie (~0,6 s), intro seiza jak wcześniej.
 - [ ] Komfort: brak ruchu kamery, brak migotania, brak wejścia gracza ani wrogów w tle.
 
+## Matsuri: odległe fajerwerki i plansza intro (D18)
+
+Plan: `docs/FIREWORKS_PLAN.md`. Notatka i odsłuch: `docs/d18/NOTES.md`.
+
+- [ ] Po splashu Nanjo: plansza po angielsku (2–3 linijki z `docs/INTRO_TEXT.md`), płynny fade in/out (~9 s), w tle słychać jeden **daleki, wytłumiony huk** (bez trzasku, bez wysokich tonów). Pominięcie triggerem kończy planszę od razu i nie pomija intro.
+- [ ] Po zejściu seiza: pierwszy wybuch w przeciągu 20–60 s; kierunek za każdym razem inny (nie w to samo miejsce dwa razy z rzędu).
+- [ ] Daleki wybuch: poświata za mgłą nad drzewami, przytłumiona, bez ostrej krawędzi; dźwięk spóźniony o ~0.5–1 s względem błysku.
+- [ ] Bliski wybuch (rzadko, co 2–4 min): za drzewami, jaśniejszy i głośniejszy, nigdy blisko gracza.
+- [ ] Ustawienia > UŁATWIENIA, błysk OFF: brak poświaty, dźwięk zostaje. Suwak Ambience steruje głośnością busa „Fireworks".
+- [ ] Menu / pauza / ekran śmierci: wybuchy stoją; po wznowieniu wracają.
+- [ ] Oceń surowo: ma budzić niepokój, nie wyglądać jak sylwester. Jeśli wygląda jak sylwester, zmniejsz `firework_glow` w profilu World Gen (grupa „Distant fireworks").
+- [ ] Wydajność: HUD `draw` i `lights` bez skoku przy wybuchu (cel: +≤4 draw, 0 świateł).
+
+Headless (D18): `tools/run_tests.sh 4 'distant|intro_title|boot_splash'`. Zrzuty i pomiar pikseli (okno, nie headless):
+`$GODOT --path . --fixed-fps 90 res://tests/d18_fireworks_visual_test.tscn -- --desktop --shots docs/d18`.
+
 ## Po sesji
 
 - [ ] Zanotuj falę / liczbę wrogów przy najgorszym fps.
