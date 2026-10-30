@@ -27,11 +27,12 @@ const FAR_SAMPLES: Array[AudioStream] = [
 	preload("res://assets/audio/sfx/cc0_storm/thunder_impact_heavy_2.ogg"),
 ]
 const NEAR_SAMPLE := preload("res://assets/audio/sfx/kenney_run/firework_pop_soft_000.ogg")
-## Muted palette: amber, blue-grey, dusty rose. Never neon (GDD §9 art rule).
+## Muted palette: amber, dusty rose, pale gold and one cool violet. Never neon (GDD §9 art rule).
 const GLOW_COLORS: Array[Color] = [
-	Color(0.95, 0.62, 0.38),
-	Color(0.6, 0.7, 0.92),
-	Color(0.86, 0.46, 0.6),
+	Color(0.95, 0.6, 0.36),
+	Color(0.88, 0.5, 0.62),
+	Color(0.92, 0.76, 0.5),
+	Color(0.5, 0.56, 0.9),
 ]
 const MIN_ANGLE_DEG := 70.0
 const DIRECTION_TRIES := 12
@@ -43,13 +44,15 @@ const SERIES_EXTRA := Vector2i(1, 3)
 const WAVE_NEAR_DELAY := Vector2(0.0, 3.0)
 const GLOW_POOL := 3
 const VOICE_POOL := 2
-const SPARK_AMOUNT := 16
-const SPARK_LIFE := 1.2
-const GLOW_RADIUS := {Kind.FAR: 26.0, Kind.NEAR: 14.0}
+const SPARK_AMOUNT := 10
+const SPARK_LIFE := 1.0
+const GLOW_RADIUS := {Kind.FAR: 40.0, Kind.NEAR: 12.0}
+## How strong the expanding shell is at the start, per kind.
+const SHELL_GAIN := {Kind.FAR: 0.35, Kind.NEAR: 0.6}
 const GLOW_LIFE := {Kind.FAR: 2.4, Kind.NEAR: 1.8}
 const GLOW_RISE := 0.18
 const GLOW_DECAY := 0.7
-const NEAR_GLOW_BOOST := 2.2
+const NEAR_GLOW_BOOST := 1.3
 const LOG_LIMIT := 200
 
 ## Last bursts, newest last. Tests read it; the game keeps only LOG_LIMIT entries.
@@ -105,17 +108,17 @@ func _ready() -> void:
 	_spark_mat = ShaderMaterial.new()
 	_spark_mat.shader = GLOW_SHADER
 	var spark_quad := QuadMesh.new()
-	spark_quad.size = Vector2(0.9, 0.9)
+	spark_quad.size = Vector2(0.6, 0.6)
 	var particles := ParticleProcessMaterial.new()
 	particles.direction = Vector3.UP
 	particles.spread = 60.0
-	particles.initial_velocity_min = 1.5
-	particles.initial_velocity_max = 4.0
+	particles.initial_velocity_min = 1.0
+	particles.initial_velocity_max = 3.0
 	particles.gravity = Vector3(0.0, -2.2, 0.0)
 	particles.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
 	particles.emission_sphere_radius = 4.0
-	particles.scale_min = 0.6
-	particles.scale_max = 1.0
+	particles.scale_min = 0.5
+	particles.scale_max = 0.8
 	_sparks = GPUParticles3D.new()
 	_sparks.name = "Sparks"
 	_sparks.amount = SPARK_AMOUNT
@@ -197,10 +200,13 @@ func fire_intro_burst() -> Dictionary:
 
 
 ## One burst now. [param show_glow] = false keeps the sound and skips the visuals.
+## [param at_azimuth] aims it (radians, 0 = straight ahead of the player; screenshots).
 ## Returns what happened (kind, distance, azimuth, height, delay, ...).
-func fire(kind: int, show_glow: bool = true) -> Dictionary:
+func fire(kind: int, show_glow: bool = true, at_azimuth: float = NAN) -> Dictionary:
 	var origin := player.global_position if player != null else Vector3.ZERO
-	var azimuth := _pick_azimuth()
+	var azimuth := at_azimuth if not is_nan(at_azimuth) else _pick_azimuth()
+	if not is_nan(at_azimuth):
+		_remember_azimuth(azimuth)
 	var dir := Vector3(sin(azimuth), 0.0, -cos(azimuth))
 	var dist := 0.0
 	var height := 0.0
@@ -319,10 +325,14 @@ func _pick_azimuth() -> float:
 		if gap > best_gap:
 			best = a
 			best_gap = gap
-	_last_azimuths.append(best)
+	_remember_azimuth(best)
+	return best
+
+
+func _remember_azimuth(azimuth: float) -> void:
+	_last_azimuths.append(azimuth)
 	if _last_azimuths.size() > 2:
 		_last_azimuths.pop_front()
-	return best
 
 
 func _start_glow(at: Vector3, color: Color, peak: float, kind: int) -> void:
@@ -344,7 +354,8 @@ func _start_glow(at: Vector3, color: Color, peak: float, kind: int) -> void:
 	glow.visible = true
 	_glow_mats[pick].set_shader_parameter("tint", Color(color.r, color.g, color.b, 1.0))
 	_glow_mats[pick].set_shader_parameter("intensity", 0.0)
-	_glow_mats[pick].set_shader_parameter("ring", 0.5 if kind == Kind.NEAR else 0.3)
+	_glow_mats[pick].set_shader_parameter("shell_radius", 0.0)
+	_glow_mats[pick].set_shader_parameter("shell_gain", 0.0)
 	_face_player(glow)
 
 
@@ -360,14 +371,17 @@ func _update_glows(delta: float) -> void:
 			_glows[i].visible = false
 			_glow_mats[i].set_shader_parameter("intensity", 0.0)
 			continue
-		# Quick rise, then a long soft fade; the bloom edge widens as it goes.
+		# Quick rise, then a long soft fade. A shell of light opens out from the core
+		# and dies away as it grows, the way a shell blooms in the sky.
 		var rise := clampf(age / GLOW_RISE, 0.0, 1.0)
 		var env := rise * rise * (3.0 - 2.0 * rise)
 		if age > GLOW_RISE:
 			env *= exp(-(age - GLOW_RISE) / GLOW_DECAY)
+		var t := clampf(age / GLOW_LIFE[kind], 0.0, 1.0)
 		_glow_mats[i].set_shader_parameter("intensity", _glow_peak[i] * env)
-		var grow := 0.7 + 0.3 * clampf(age / GLOW_LIFE[kind], 0.0, 1.0)
-		_glows[i].scale = Vector3.ONE * GLOW_RADIUS[kind] * grow
+		_glow_mats[i].set_shader_parameter("shell_radius", 0.15 + 0.75 * t)
+		_glow_mats[i].set_shader_parameter("shell_gain", SHELL_GAIN[kind] * (1.0 - t) * (1.0 - t))
+		_glows[i].scale = Vector3.ONE * GLOW_RADIUS[kind]
 		_face_player(_glows[i])
 
 
@@ -383,8 +397,8 @@ func _face_player(glow: Node3D) -> void:
 func _start_sparks(at: Vector3, color: Color, flash: float) -> void:
 	_sparks.global_position = at
 	_spark_mat.set_shader_parameter("tint", Color(color.r, color.g, color.b, 1.0))
-	_spark_mat.set_shader_parameter("intensity", flash)
-	_spark_mat.set_shader_parameter("ring", 0.0)
+	_spark_mat.set_shader_parameter("intensity", flash * 0.25)
+	_spark_mat.set_shader_parameter("shell_gain", 0.0)
 	_sparks.restart()
 	_sparks.emitting = true
 

@@ -1,6 +1,6 @@
 extends Node
 ## Boot splash screenshots (windowed, not headless): the HANABI film at its
-## burst, the NANJO film, and the handover into the intro, on the desktop rig.
+## burst, the NANJO film, the D18 title plate and the handover into the intro, on the desktop rig.
 ## With `--vr` it frames the fixed VR panel in a headset-sized view instead (about
 ## 107 degrees across, as the desktop camera at 16:9). Run with
 ## `-- --desktop --shots <dir>` or `-- --vr --shots <dir>`.
@@ -39,6 +39,8 @@ func _desktop() -> void:
 	await _shot("desktop_hanabi_wordmark")
 	await _until(splash, "nanjo", NANJO_HOLD)
 	await _shot("desktop_nanjo_hold")
+	await _title_at(splash, 4.0)
+	await _shot("desktop_title_plate")
 	while splash.is_active():
 		await get_tree().process_frame
 	await _frames(12)
@@ -69,6 +71,14 @@ func _vr_framing() -> void:
 	await _shot("vr_hanabi_wordmark")
 	await _until(splash, "nanjo", NANJO_HOLD)
 	await _shot("vr_nanjo_hold")
+
+
+## Steps frames until the title plate (D18) has run [param seconds] (capped).
+func _title_at(splash: RunSplash, seconds: float) -> void:
+	for _i in 2000:
+		if splash.current_board() == "title" and splash._phase_t >= seconds:
+			return
+		await get_tree().process_frame
 
 
 ## Steps frames until [param film] has played [param seconds] of its clip (capped).
