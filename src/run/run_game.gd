@@ -59,6 +59,7 @@ var shrine_offering: ShrineOffering = null
 var buffs := RunBuffs.new()
 
 var wave_director: WaveDirector
+var anchor_guards: AnchorGuards
 var pause_controller: PauseController
 var diegetic_hud: DiegeticHud
 ## Estimated kilocalories of this run (D14), shown inside the wrist ring.
@@ -356,6 +357,11 @@ func _setup_run_nodes() -> void:
 		wave_director.ground_height = forest_world.height_at
 	add_child(wave_director)
 
+	anchor_guards = AnchorGuards.new()
+	anchor_guards.name = "AnchorGuards"
+	add_child(anchor_guards)
+	anchor_guards.setup(wave_director, forest_world, forest_world.torii_manager if forest_world else null, hokora_manager)
+
 	diegetic_hud = DiegeticHud.new()
 	diegetic_hud.name = "DiegeticHud"
 	# The wrist plate keeps tracking the raised hand while a menu pauses the game.
@@ -612,6 +618,7 @@ func _physics_process(delta: float) -> void:
 		if (element_system and element_system.current_element != Elements.NONE) or (katana and katana.element != Elements.NONE):
 			element_active_seconds += delta
 		wave_director.step_director(delta, p_pos, _view_forward())
+		anchor_guards.step(delta, p_pos, _view_forward())
 		for enemy in wave_director.alive_enemies():
 			enemy.apply_distance_lod(p_pos.distance_to(enemy.root_part().global_position))
 		score = compute_score()
