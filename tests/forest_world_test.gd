@@ -186,6 +186,15 @@ func _run_all() -> void:
 				break
 	_check("Sakura focal trees use dedicated emissive neon shader", has_sakura_mm and valid_sakura_shader)
 
+	# D5_fix: leaf cards cut out their background. The foliage shader (cherry, sequoia,
+	# pine) and any future fern or undergrowth leaf card share one alpha scissor.
+	var foliage_src := FileAccess.get_file_as_string("res://src/shaders/forest_diffuse.gdshader")
+	var has_uniform := false
+	for u in load("res://src/shaders/forest_diffuse.gdshader").get_shader_uniform_list():
+		has_uniform = has_uniform or u.name == "cut_level"
+	_check("Foliage shader cuts leaf-card backgrounds out (alpha scissor from cut_level)",
+		foliage_src.contains("ALPHA_SCISSOR_THRESHOLD = fading ? dither : cut_level;") and has_uniform)
+
 	# Walking inside one chunk toward the treeline must reveal trees without
 	# waiting for a chunk-border crossing.
 	player.teleport(Vector3(0.0, forest.height_at(0.0, 26.0) + 0.5, 26.0), 0.0)
@@ -203,6 +212,7 @@ func _run_all() -> void:
 	_check("Tree-spot cache stays bounded while roaming (%d entries)" % forest._tree_spot_cache.size(),
 		forest._tree_spot_cache.size() <= 30)
 	await _lod_checks(run, forest, player)
+	await _layout_after_clearance_checks(run, forest, player)
 	run.queue_free()
 
 
@@ -379,3 +389,57 @@ func _drawn_trees(forest: ForestWorld) -> int:
 		if inst and inst.multimesh:
 			total += inst.multimesh.instance_count
 	return total
+
+
+## D5_fix: lanterns and undergrowth keep their clearance from the layout-after trunks
+## (sequoia, pine) too, not only from the base trunks. Walks to spots across the forest
+## so the ring is checked far from spawn, where most of the trunks are.
+func _layout_after_clearance_checks(run: RunGame, forest: ForestWorld, player: DesktopPlayer) -> void:
+	var extra_total := 0
+	var lantern_gap := INF
+	var under_gap := INF
+	var lantern_props := 0
+	var under_props := 0
+	for stop in [Vector2(60.0, 0.0), Vector2(-90.0, 40.0), Vector2(20.0, -110.0), Vector2(150.0, 120.0), Vector2(-160.0, -90.0), Vector2(260.0, -40.0)]:
+		player.teleport(Vector3(stop.x, forest.height_at(stop.x, stop.y) + 0.5, stop.y), 0.0)
+		await _frames(6)
+		forest.finish_pending()
+		for key in forest._chunks:
+			var chunk := forest._chunks[key] as Node3D
+			var trunks := _ring_layout_after_trunks(forest, key)
+			extra_total += trunks.size()
+			for p in chunk.get_meta("lantern_world_positions", []):
+				lantern_props += 1
+				lantern_gap = minf(lantern_gap, _nearest_trunk_distance(trunks, p))
+			for p in chunk.get_meta("undergrowth_world_positions", []):
+				under_props += 1
+				under_gap = minf(under_gap, _nearest_trunk_distance(trunks, p))
+	_check("Layout-after trunks exist in the ring to test against (%d)" % extra_total, extra_total > 0)
+	# The placement rule is distance >= tree_clear + scale * grow; the smallest scale gives the floor.
+	var lantern_spec := forest._lantern_spec()
+	var under_spec := forest._undergrowth_spec(forest.profile.undergrowth[0])
+	var lantern_floor := float(lantern_spec.tree_clear) + float(lantern_spec.scale_min) * float(lantern_spec.grow)
+	var under_floor := float(under_spec.tree_clear) + float(under_spec.scale_min) * float(under_spec.grow)
+	_check("Lanterns stand clear of layout-after trunks (%d placed, nearest %.2f m, floor %.2f m)" % [lantern_props, lantern_gap, lantern_floor],
+		lantern_gap >= lantern_floor - 0.001)
+	_check("Undergrowth stands clear of layout-after trunks (%d placed, nearest %.2f m, floor %.2f m)" % [under_props, under_gap, under_floor],
+		under_gap >= under_floor - 0.001)
+
+
+## Layout-after trunk positions (x, z) of the 3×3 ring around a chunk.
+func _ring_layout_after_trunks(forest: ForestWorld, coord: Vector2i) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for ox in range(-1, 2):
+		for oz in range(-1, 2):
+			for s in forest._extra_tree_spots(coord + Vector2i(ox, oz)).get("spots", []):
+				var spot: Vector4 = s
+				out.append(Vector2(spot.x, spot.y))
+	return out
+
+
+## Distance from a prop (world position, y up) to the nearest trunk in [param trunks].
+func _nearest_trunk_distance(trunks: Array[Vector2], at: Vector3) -> float:
+	var best := INF
+	for t in trunks:
+		best = minf(best, Vector2(at.x - t.x, at.z - t.y).length())
+	return best

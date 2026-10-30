@@ -504,6 +504,10 @@ func _rebuild_active_chunks(build_now := true) -> void:
 		var c: Vector2i = key
 		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 2:
 			_potential_cache.erase(key)
+	for key in _extra_spot_cache.keys():
+		var c: Vector2i = key
+		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 1:
+			_extra_spot_cache.erase(key)
 	for key in _path_field_cache.keys():
 		var c: Vector2i = key
 		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 2:
@@ -664,7 +668,8 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 	# chunks' spots are already cached (their meshes queried mounds), so gates
 	# near a border respect them too. Gates in one group stay close (they form
 	# corridors), so torii check trees wide but each other narrow.
-	var tree_keep := _tree_trunk_points(coord)
+	# Gates keep to the base trunks only: layout-after trunks come after the gate plan.
+	var tree_keep := _tree_trunk_points(coord) if kind == KIND_TORII else _prop_trunk_points(coord)
 	var field := _path_field(coord)
 	# Boulders keep the same clearance from the trail as trunks do (see _tree_spots).
 	var path_keep := _path_half_width() + profile.path_tree_clearance
@@ -857,6 +862,19 @@ func _tree_trunk_points(coord: Vector2i) -> Array:
 		for oz in range(-1, 2):
 			var packed: Dictionary = _tree_spots(coord + Vector2i(ox, oz))
 			for s in packed.get("spots", []):
+				var spot: Vector4 = s
+				out.append(Vector3(spot.x, spot.y, 0.0))
+	return out
+
+
+## Keep-out trunks for lanterns and boulders: the base trunks plus the layout-after
+## trunks (sequoia, pine) of the 3×3 ring. Kept apart from _tree_trunk_points, which
+## the layout-after spots themselves are built from.
+func _prop_trunk_points(coord: Vector2i) -> Array:
+	var out := _tree_trunk_points(coord)
+	for ox in range(-1, 2):
+		for oz in range(-1, 2):
+			for s in _extra_tree_spots(coord + Vector2i(ox, oz)).get("spots", []):
 				var spot: Vector4 = s
 				out.append(Vector3(spot.x, spot.y, 0.0))
 	return out
