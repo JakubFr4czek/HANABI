@@ -22,6 +22,11 @@ const SKIN_BASE := Color(0.18, 0.17, 0.26)
 ## Elite eyes, sigil and claws burn this much brighter than a swarm's, so the
 ## element still reads from across the fog.
 const ELITE_LIFT := 1.3
+## Eye light of a swarm yōkai with a school: a few pixels at 8 m, so a bit brighter than plain red.
+const SCHOOL_EYE_GLOW := 1.4
+## The hit flash of a plain or same-school blow (ember red); a counter flashes in its school's light.
+const EMBER_FLASH_SKIN := Color(1.0, 0.36, 0.22)
+const EMBER_FLASH_MASK := Color(0.9, 0.3, 0.16)
 
 @export var profile: EnemyProfile
 ## A cut severs the limb it lands on only when all of these hold: the edge
@@ -239,6 +244,9 @@ func _ready() -> void:
 		add_child(brain)
 	brain.setup(self, profile)
 	snap_pose("stalk")
+	# configure_kind runs before add_child (spawn_enemy_at), so the ready look above
+	# would overwrite a school's eyes: apply the kind's look once more, last.
+	_apply_kind_visuals()
 
 
 ## While standing, the height spring carries the body and the parts ignore
@@ -327,7 +335,8 @@ func _apply_kind_visuals() -> void:
 		# A swarm yōkai of a school reads it in the eyes and the mask sigil only:
 		# no skin tint and no sash, so it never looks like an elite from afar.
 		if body_element != Elements.NONE:
-			_apply_element_eyes(Elements.accent_color(body_element))
+			_apply_element_eyes(Elements.eye_color(body_element))
+			EyeGlow.set_glow(_eye_glows, SCHOOL_EYE_GLOW)
 		return
 	# No node scaling: scaling the Yokai node moves rigid-body parts away
 	# from their joint anchors (shapes do not scale with the node), so elite
@@ -338,7 +347,7 @@ func _apply_kind_visuals() -> void:
 	var accent := Elements.accent_color(body_element)
 	var ember := _elite_ember(accent)
 	_skin.set_shader_parameter("base_color", SKIN_BASE.lerp(accent, 0.18))
-	_apply_element_eyes(accent)
+	_apply_element_eyes(Elements.eye_color(body_element))
 	_sash.set_shader_parameter("base_color", accent.darkened(0.55))
 	_claw_mat.emission = ember * 1.2
 
@@ -348,6 +357,13 @@ func _apply_kind_visuals() -> void:
 ## white. More saturation and a value cap keep the hue once it blooms.
 static func _elite_ember(accent: Color) -> Color:
 	return Color.from_hsv(accent.h, clampf(accent.s * 1.6, 0.0, 1.0), minf(accent.v, 0.75))
+
+
+## D17: a counter blow flashes the body in the attacker's school light (docs/ELEMENT_COUNTERS.md §3.8).
+func _flash_for_matchup(matchup: float, attacker: String) -> void:
+	var counter := matchup > 1.0 and attacker != Elements.NONE
+	_skin.set_shader_parameter("flash_color", Elements.accent_color(attacker) if counter else EMBER_FLASH_SKIN)
+	_mask_mat.set_shader_parameter("flash_color", Elements.accent_color(attacker) if counter else EMBER_FLASH_MASK)
 
 
 ## The school's light in the eyes, the EyeGlow points and the mask sigil (shared by swarm and elite).
@@ -710,6 +726,7 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	hit["hp_left"] = hp
 	# The counter stage, for the blade's feedback (held_weapon): >1 counter, <1 same school.
 	hit["matchup"] = profile.matchup(element)
+	_flash_for_matchup(float(hit["matchup"]), element)
 
 	var kb: Vector3 = hit.get("knockback", Vector3.ZERO)
 	if kb.length_squared() > 1e-6:
@@ -838,6 +855,7 @@ func receive_element_damage(amount: float, element: String, point: Vector3, dire
 		return 0.0
 	last_kill_element = element
 	var damage := snappedf(amount * profile.damage_multiplier("torso", element), 0.1)
+	_flash_for_matchup(profile.matchup(element), element)
 	hp = maxf(hp - damage, 0.0)
 	var chest := parts.get("chest") as RagdollPart
 	if chest and direction.length_squared() > 1e-6:
