@@ -24,6 +24,10 @@ const HALO_COLORS := {
 	Elements.INK: Color(0.14, 0.18, 0.62),
 	Elements.SHADOW: Color(0.62, 0.18, 0.95),
 }
+## Halo growth cap and alpha ceilings (near / far), see torii_lantern_halo.gdshader.
+const HALO_MAX_SCALE := 2.4
+const HALO_NEAR_ALPHA := 0.3
+const HALO_FAR_ALPHA := 0.8
 const HALO_CORES := {
 	Elements.SAKURA: Color(1.0, 0.86, 0.92),
 	Elements.STORM: Color(0.88, 0.97, 1.0),
@@ -197,6 +201,9 @@ func _build_components() -> void:
 	_halo_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_halo_mat = ShaderMaterial.new()
 	_halo_mat.shader = HALO_SHADER
+	_halo_mat.set_shader_parameter("max_scale", HALO_MAX_SCALE)
+	_halo_mat.set_shader_parameter("near_alpha_cap", HALO_NEAR_ALPHA)
+	_halo_mat.set_shader_parameter("far_alpha_cap", HALO_FAR_ALPHA)
 	_halo_mesh.material_override = _halo_mat
 	lantern_anchor.add_child(_halo_mesh)
 

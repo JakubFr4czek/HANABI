@@ -15,6 +15,11 @@ uniform float phase = 0.0;
 uniform float halo_radius = 1.0;
 uniform vec2 half_size = vec2(1.2, 2.6);
 uniform float shaft_width = 0.17;
+// Distance growth cap (the quad scales with dist / 12 up to this) and the alpha
+// ceiling up close and far, blended by far_k. The shared shrine lantern keeps the defaults.
+uniform float max_scale : hint_range(1.0, 3.0) = 1.6;
+uniform float near_alpha_cap : hint_range(0.0, 1.0) = 0.5;
+uniform float far_alpha_cap : hint_range(0.0, 1.0) = 0.5;
 
 varying float v_dist;
 
@@ -27,9 +32,10 @@ void vertex() {
 		MODEL_MATRIX[3]
 	);
 	v_dist = length(MODEL_MATRIX[3].xyz - INV_VIEW_MATRIX[3].xyz);
-	// Past ~9 m the glow grows with distance so a far gate keeps its apparent
-	// size in the fog (a fixed 2 m halo shrinks to a speck at 28 m).
-	VERTEX.xy *= clamp(v_dist / 12.0, 1.0, 1.6);
+	// Up to ~12 m the halo keeps its size; past it the glow grows with distance (up to
+	// max_scale) so a far gate keeps its apparent size in the fog (a fixed halo
+	// shrinks to a speck at 28 m).
+	VERTEX.xy *= clamp(v_dist / 12.0, 1.0, max_scale);
 }
 
 void fragment() {
@@ -49,6 +55,8 @@ void fragment() {
 	ALBEDO = mix(glow_color.rgb, core_color.rgb, clamp(core * intensity, 0.0, 1.0) * 0.8);
 	// Past ~18 m the glow thins a little more: the trunks and crowns in front of it
 	// read through the milk, and the far gates stay a light rather than a blob.
+	// The ceiling is low close up (no solid disc at 3 m) and high far away (the
+	// gate must still read as a light at 28-35 m); see tests/torii_halo_test.gd.
 	float far_thin = mix(1.0, 0.72, smoothstep(18.0, 36.0, v_dist));
-	ALPHA = clamp(a * far_thin, 0.0, 0.5);
+	ALPHA = clamp(a * far_thin, 0.0, mix(near_alpha_cap, far_alpha_cap, far_k));
 }
