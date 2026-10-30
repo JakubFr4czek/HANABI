@@ -2,13 +2,6 @@ class_name EnemyCatalog
 extends RefCounted
 ## Data-driven enemy builds for the run loop (docs/GDD.md §7, NIGHT_PLAN.md §4).
 
-const ELITE_COUNTER_ELEMENT := {
-	Elements.STORM: Elements.INK,
-	Elements.INK: Elements.STORM,
-	Elements.SAKURA: Elements.SHADOW,
-	Elements.SHADOW: Elements.SAKURA,
-}
-
 const ELITE_NAMES := {
 	Elements.STORM: "Storm Warden",
 	Elements.INK: "Ink Shikigami",
@@ -17,9 +10,11 @@ const ELITE_NAMES := {
 }
 
 
-static func make_swarm_profile(max_hp: float) -> EnemyProfile:
+## A swarm yōkai; [param element] is its school (Elements.NONE = plain, the default).
+static func make_swarm_profile(max_hp: float, element: String = Elements.NONE) -> EnemyProfile:
 	var p := EnemyProfile.new()
 	p.display_name = "Yokai"
+	p.element = element
 	p.max_hp = max_hp
 	p.poise_per_impulse = 0.045
 	p.poise_damage_scale = 0.018
@@ -30,19 +25,16 @@ static func make_swarm_profile(max_hp: float) -> EnemyProfile:
 	return p
 
 
+## An elite. Its weakness is the school that beats it on the counter ring (D17); the
+## ring carries the element stages, so only the plain-steel resistance is listed here.
 static func make_elite_profile(element: String, max_hp: float) -> EnemyProfile:
-	var p := make_swarm_profile(max_hp * 2.35)
+	var p := make_swarm_profile(max_hp * 2.35, element)
 	p.display_name = String(ELITE_NAMES.get(element, "Elite Yokai"))
 	p.poise_per_impulse = 0.028
 	p.poise_damage_scale = 0.012
 	p.balance_regen = 0.45
-	var weak := String(ELITE_COUNTER_ELEMENT.get(element, Elements.STORM))
-	var resist := {}
-	resist[element] = 0.34
-	resist[weak] = 1.72
-	resist["physical"] = 0.42
-	p.resistances = resist
-	p.tactics = {"kind": "elite", "element": element, "weak_element": weak, "parry_armor": true}
+	p.resistances = {"physical": 0.42}
+	p.tactics = {"kind": "elite", "element": element, "weak_element": ElementBalance.countered_by(element), "parry_armor": true}
 	return p
 
 

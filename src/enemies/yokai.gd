@@ -39,7 +39,8 @@ var brain: YokaiBrain
 var is_dead := false
 var last_kill_element := Elements.NONE
 var kind := Kind.SWARM
-var elite_element := Elements.NONE
+## The body's school: rolled per swarm yōkai (WaveProfile), fixed for an elite. Plain = NONE.
+var body_element := Elements.NONE
 var use_pathfinding := false
 
 var _nav_agent: NavigationAgent3D
@@ -255,12 +256,12 @@ func _on_ragdoll_state_changed(new_state: State) -> void:
 
 func configure_kind(p_kind: Kind, element: String = Elements.NONE, max_hp: float = -1.0) -> void:
 	kind = p_kind
-	elite_element = element if p_kind == Kind.ELITE else Elements.NONE
+	body_element = element
 	var hp_val := max_hp if max_hp > 0.0 else profile.max_hp
 	if p_kind == Kind.ELITE:
 		profile = EnemyCatalog.make_elite_profile(element, hp_val)
 	else:
-		profile = EnemyCatalog.make_swarm_profile(hp_val)
+		profile = EnemyCatalog.make_swarm_profile(hp_val, element)
 	hp = profile.max_hp
 	_apply_kind_visuals()
 	if brain:
@@ -323,6 +324,10 @@ func _reset_spawn_look() -> void:
 func _apply_kind_visuals() -> void:
 	if kind != Kind.ELITE:
 		_reset_spawn_look()
+		# A swarm yōkai of a school reads it in the eyes and the mask sigil only:
+		# no skin tint and no sash, so it never looks like an elite from afar.
+		if body_element != Elements.NONE:
+			_apply_element_eyes(Elements.accent_color(body_element))
 		return
 	# No node scaling: scaling the Yokai node moves rigid-body parts away
 	# from their joint anchors (shapes do not scale with the node), so elite
@@ -330,12 +335,10 @@ func _apply_kind_visuals() -> void:
 	# as elite from the element in the eyes, sigil, sash, claws and skin, not
 	# from a ring drawn around them (a ring showed through trees and bodies).
 	scale = Vector3.ONE
-	var accent := Elements.accent_color(elite_element)
+	var accent := Elements.accent_color(body_element)
 	var ember := _elite_ember(accent)
 	_skin.set_shader_parameter("base_color", SKIN_BASE.lerp(accent, 0.18))
-	_sigil_mat.emission = ember * 1.35
-	_eyes.emission = ember * 1.6
-	EyeGlow.set_color(_eye_glows, ember)
+	_apply_element_eyes(accent)
 	_sash.set_shader_parameter("base_color", accent.darkened(0.55))
 	_claw_mat.emission = ember * 1.2
 
@@ -345,6 +348,14 @@ func _apply_kind_visuals() -> void:
 ## white. More saturation and a value cap keep the hue once it blooms.
 static func _elite_ember(accent: Color) -> Color:
 	return Color.from_hsv(accent.h, clampf(accent.s * 1.6, 0.0, 1.0), minf(accent.v, 0.75))
+
+
+## The school's light in the eyes, the EyeGlow points and the mask sigil (shared by swarm and elite).
+func _apply_element_eyes(accent: Color) -> void:
+	var ember := _elite_ember(accent)
+	_sigil_mat.emission = ember * 1.35
+	_eyes.emission = ember * 1.6
+	EyeGlow.set_color(_eye_glows, ember)
 
 
 # --- 7-body lightweight ragdoll ------------------------------------------------
@@ -697,6 +708,8 @@ func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	hit["target"] = profile.display_name
 	hit["damage"] = dmg
 	hit["hp_left"] = hp
+	# The counter stage, for the blade's feedback (held_weapon): >1 counter, <1 same school.
+	hit["matchup"] = profile.matchup(element)
 
 	var kb: Vector3 = hit.get("knockback", Vector3.ZERO)
 	if kb.length_squared() > 1e-6:

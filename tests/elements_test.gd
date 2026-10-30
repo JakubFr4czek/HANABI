@@ -37,6 +37,7 @@ func _run_all() -> void:
 	await _test_ink()
 	await _test_sakura()
 	await _test_shadow()
+	_test_counter_ring()
 	run.queue_free()
 
 
@@ -204,6 +205,54 @@ func _test_shadow() -> void:
 	trunk.queue_free()
 	_check("Spawn seal lights the Shadow quadrant",
 		int((run.get_node("Arena/SpawnSeal") as MeshInstance3D).material_override.get_shader_parameter("active_elements_mask")) == 8)
+
+
+## D17 (docs/ELEMENT_COUNTERS.md): the counter ring and its multipliers. Pure math, no frames.
+func _test_counter_ring() -> void:
+	var names := Elements.COMBAT_ELEMENTS
+	var same_ok := true
+	var beaten_once := true
+	var countered_once := true
+	for a: String in names:
+		var counters := 0
+		var same := ElementBalance.matchup(a, a) == ElementBalance.SAME_MULTIPLIER
+		for d: String in names:
+			if ElementBalance.matchup(a, d) == ElementBalance.COUNTER_MULTIPLIER:
+				counters += 1
+		beaten_once = beaten_once and counters == 1
+		same_ok = same_ok and same
+	for d: String in names:
+		var countered := 0
+		for a: String in names:
+			if ElementBalance.matchup(a, d) == ElementBalance.COUNTER_MULTIPLIER:
+				countered += 1
+		countered_once = countered_once and countered == 1
+	_check("counter ring: each school beats exactly one and is beaten by exactly one", beaten_once and countered_once)
+	_check("same school is ×0.5 for every school", same_ok)
+	_check("counter pairs are ×1.5 and the two diagonals are neutral ×1.0",
+		is_equal_approx(ElementBalance.matchup(Elements.INK, Elements.STORM), 1.5)
+		and is_equal_approx(ElementBalance.matchup(Elements.INK, Elements.SAKURA), 1.0)
+		and is_equal_approx(ElementBalance.matchup(Elements.STORM, Elements.SHADOW), 1.0))
+	var plain_ok := true
+	for d: String in Elements.ALL:
+		plain_ok = plain_ok and ElementBalance.matchup(Elements.NONE, d) == 1.0 and ElementBalance.matchup("physical", d) == 1.0
+	_check("plain steel is ×1.0 against every enemy school (baseline)", plain_ok)
+	var swarm_plain := true
+	var elite_plain := true
+	for e: String in names:
+		swarm_plain = swarm_plain and EnemyCatalog.make_swarm_profile(100.0, e).damage_multiplier("torso", Elements.NONE) == 1.0
+		elite_plain = elite_plain and is_equal_approx(EnemyCatalog.make_elite_profile(e, 100.0).damage_multiplier("torso", Elements.NONE), 1.0)
+	_check("plain steel on a swarm or an elite of any school is ×1.0", swarm_plain and elite_plain)
+	_check("elite weakness is the school that beats it (Storm ← Ink, Sakura ← Storm, Ink ← Shadow)",
+		ElementBalance.countered_by(Elements.STORM) == Elements.INK
+		and ElementBalance.countered_by(Elements.SAKURA) == Elements.STORM
+		and ElementBalance.countered_by(Elements.INK) == Elements.SHADOW)
+	# Order (docs §3): zone × counter ring × resistance, in one product.
+	var prof := EnemyProfile.new()
+	prof.element = Elements.STORM
+	prof.resistances = {Elements.INK: 0.8}
+	_check("elite: zone × counter ring × resistance multiply in order (head 1.5 × 1.5 × 0.8)",
+		is_equal_approx(prof.damage_multiplier("head", Elements.INK), 1.5 * 1.5 * 0.8))
 
 
 func _check(label: String, ok: bool) -> void:

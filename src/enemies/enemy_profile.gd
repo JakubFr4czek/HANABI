@@ -8,8 +8,11 @@ extends Resource
 @export var max_hp := 100.0
 ## Damage multiplier per hit zone ("head", "torso", "limb").
 @export var zone_multipliers := {"head": 1.5, "torso": 1.0, "limb": 0.7}
-## Damage multiplier per element ("sakura", "storm", "ink", "shadow", "physical").
-## Below 1 = resistant, above 1 = weak. Missing = 1.
+## The body's own school (Elements.NONE = plain yōkai). The counter ring
+## (ElementBalance.matchup) reads it against the attacker's element.
+@export var element := Elements.NONE
+## Extra damage multiplier per attacker element ("sakura", "storm", "ink", "shadow", "physical"),
+## applied after the counter ring. Below 1 = resistant, above 1 = weak. Missing = 1.
 @export var resistances := {}
 ## How much balance one point of damage removes (0..1 scale). Higher = staggers easier.
 @export var poise_damage_scale := 0.010
@@ -35,5 +38,12 @@ extends Resource
 @export var difficulty: DuelistDifficulty
 
 
-func damage_multiplier(zone: String, element: String = "physical") -> float:
-	return float(zone_multipliers.get(zone, 1.0)) * float(resistances.get(element, 1.0))
+## Counter-ring multiplier of an attack by [param attacker] on this body (D17).
+func matchup(attacker: String) -> float:
+	return ElementBalance.matchup(attacker, element)
+
+
+## Order of the stages (docs/ELEMENT_COUNTERS.md §3): zone × counter ring × resistance.
+## Parry-armour, kirisute and severing come after this in Yokai.receive_hit.
+func damage_multiplier(zone: String, attacker: String = "physical") -> float:
+	return float(zone_multipliers.get(zone, 1.0)) * matchup(attacker) * float(resistances.get(attacker, 1.0))

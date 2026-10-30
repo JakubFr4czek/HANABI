@@ -145,7 +145,7 @@ func spawn_in_fog_ring(target_pos: Vector3 = Vector3.ZERO, view_forward: Vector3
 	var pos := find_spawn_point(target_pos, view_forward)
 	if elite:
 		return spawn_elite_at(pos, target_pos, EnemyCatalog.elite_element_for_roll(_rng))
-	return spawn_enemy_at(pos, target_pos)
+	return spawn_enemy_at(pos, target_pos, get_profile().roll_swarm_element(run_seconds, _rng))
 
 
 ## A spawn point on the ring round [param center]: outside the view cone of
@@ -226,11 +226,12 @@ func recall_stragglers(player_pos: Vector3) -> void:
 		yokai.place_at(pos, atan2(dir.x, dir.z))
 
 
-func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO) -> Yokai:
+## One swarm yōkai at [param pos]; [param element] is its school (plain by default).
+func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO, element: String = Elements.NONE) -> Yokai:
 	var yokai := _acquire_yokai()
 	var p := get_profile()
 	var hp_val := p.hp_for(maxi(wave, 1), run_seconds)
-	yokai.configure_kind(Yokai.Kind.SWARM, Elements.NONE, hp_val)
+	yokai.configure_kind(Yokai.Kind.SWARM, element, hp_val)
 	yokai.enable_pathfinding()
 	yokai.ground_probe = ground_height
 
