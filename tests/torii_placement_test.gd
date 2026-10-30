@@ -1,6 +1,8 @@
 extends Node
 ## Unit tests for Torii gate placement, collider clearance (3.2m),
-## gate spacing (18–32m), and elemental uptime ratio >= 0.65 in a 120s run.
+## gate spacing (18–32m from the player, 40m between gates), gates running along
+## the footpaths (passage within 25° of the tangent), and elemental uptime ratio
+## >= 0.65 in a 120s run.
 ##   godot --headless --path . --fixed-fps 90 res://tests/torii_placement_test.tscn -- --desktop
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
@@ -117,6 +119,41 @@ func _run_all() -> void:
 	_check("MultiMesh instances maintain >= 3.2m clearance from gate center (min=%.2f m)" % min_multimesh_clearance,
 		min_multimesh_clearance >= ToriiGate.CLEARANCE_RADIUS - 0.05)
 
+	# 2b. Active gates keep MIN_GATE_SEPARATION from each other.
+	var sep := _min_active_separation(tm)
+	_check("Active gates keep >= %.0f m apart (closest pair=%.1f m)" % [ToriiManager.MIN_GATE_SEPARATION, sep],
+		sep >= ToriiManager.MIN_GATE_SEPARATION - 0.01)
+
+	# 2c. A gate beside a footpath runs along it: the passage direction is within 25° of
+	# the path tangent, so the posts stand across the path. Checked on the live gates,
+	# then on a gate placed on a footpath sample; off the paths the yaw is not path-based.
+	var paths := run.forest_world.paths
+	_check("The run builds the forest with its footpaths", paths != null)
+	if paths != null:
+		var worst_deg := 0.0
+		var beside := 0
+		for g in tm.get_active_gates():
+			var tangent := _nearest_tangent(paths, Vector2(g.global_position.x, g.global_position.z), ToriiManager.PATH_ALIGN_RADIUS)
+			if tangent != Vector2.ZERO:
+				beside += 1
+				worst_deg = maxf(worst_deg, _passage_angle_deg(g, tangent))
+		_check("Gates beside a footpath run along it (%d beside, worst %.1f°)" % [beside, worst_deg],
+			worst_deg < 25.0)
+
+		var on_path := _footpath_sample_free_of_gates(paths, tm, p_pos)
+		_check("Found a footpath sample away from the live gates", on_path.z != 0.0 or on_path.w != 0.0)
+		if on_path.z != 0.0 or on_path.w != 0.0:
+			var placed := tm.spawn_gate_at(on_path.x, on_path.y, Elements.SAKURA)
+			var angle := _passage_angle_deg(placed, Vector2(on_path.z, on_path.w))
+			_check("Gate placed on a footpath runs along its tangent (%.1f°)" % angle, angle < 25.0)
+			tm.active_gates.erase(placed)
+			tm.remove_child(placed)
+			placed.free()
+
+		var off := _off_path_spot(paths, p_pos)
+		_check("Off the footpaths the gate yaw stays slope/player based (no path yaw)",
+			off != Vector2.INF and is_nan(tm._path_yaw(off.x, off.y)))
+
 	# 3. Uptime ratio >= 0.65 in 120s test with time stepping
 	# We simulate a 120-second run traversal: player advances along a heading,
 	# crossing gates, maintaining realistic movement speed (~1.5 m/s).
@@ -130,7 +167,10 @@ func _run_all() -> void:
 	for g in tm.get_active_gates():
 		g.gate_crossed.connect(func(elem, gate): print("CROSSED GATE elem=", elem, " time=", run.run_time))
 	var current_target_gate: ToriiGate = null
+	var min_pair_sep := INF
 	for _i in total_steps:
+		if _i % 10 == 0:
+			min_pair_sep = minf(min_pair_sep, _min_active_separation(tm))
 		if _i % 20 == 0 and current_target_gate:
 			print("STEP %d: p_pos=%s gate=%s dist=%.2f active=%s" % [_i, p_pos, current_target_gate.global_position, p_pos.distance_to(current_target_gate.global_position), current_target_gate.is_active])
 		if current_target_gate == null or not is_instance_valid(current_target_gate) or not current_target_gate.is_active:
@@ -175,8 +215,67 @@ func _run_all() -> void:
 		run.element_active_seconds, run.run_time, uptime
 	])
 	_check("Elemental uptime ratio >= 0.65 in 120s run (actual=%.2f)" % uptime, uptime >= 0.65)
+	_check("Active gates stayed >= %.0f m apart through the 120s run (closest pair=%.1f m)" % [
+		ToriiManager.MIN_GATE_SEPARATION, min_pair_sep], min_pair_sep >= ToriiManager.MIN_GATE_SEPARATION - 0.01)
 
 	run.queue_free()
+
+
+## Closest distance between two active gates (INF with fewer than two).
+func _min_active_separation(tm: ToriiManager) -> float:
+	var best := INF
+	var active: Array[ToriiGate] = []
+	for g in tm.get_active_gates():
+		if g.is_active:
+			active.append(g)
+	for i in active.size():
+		for j in range(i + 1, active.size()):
+			best = minf(best, active[i].global_position.distance_to(active[j].global_position))
+	return best
+
+
+## Unit tangent of the footpath nearest to [param p] within [param reach] (ZERO if none).
+func _nearest_tangent(paths: ForestPaths, p: Vector2, reach: float) -> Vector2:
+	var best := INF
+	var tangent := Vector2.ZERO
+	var segs := paths.segments_in_rect(Rect2(p - Vector2(reach, reach), Vector2(reach, reach) * 2.0))
+	for k in range(0, segs.size() - 1, 2):
+		if segs[k].distance_squared_to(segs[k + 1]) < 1e-9:
+			continue
+		var d := ForestPaths.segment_distance(p, segs[k], segs[k + 1])
+		if d < best:
+			best = d
+			tangent = (segs[k + 1] - segs[k]).normalized()
+	return tangent if best <= reach else Vector2.ZERO
+
+
+## Angle in degrees between the gate's passage direction (local Z) and [param tangent].
+func _passage_angle_deg(gate: ToriiGate, tangent: Vector2) -> float:
+	var pass_dir := gate.global_transform.basis.z
+	var v := Vector2(pass_dir.x, pass_dir.z).normalized()
+	return rad_to_deg(acos(clampf(absf(v.dot(tangent.normalized())), 0.0, 1.0)))
+
+
+## A footpath sample (x, z, tangent.x, tangent.y) near the player, more than 10 m away
+## from it and 12 m from every live gate; all zero when there is none.
+func _footpath_sample_free_of_gates(paths: ForestPaths, tm: ToriiManager, p_pos: Vector3) -> Vector4:
+	var c := Vector2(p_pos.x, p_pos.z)
+	for s in paths.samples_in_rect(Rect2(c - Vector2(40.0, 40.0), Vector2(80.0, 80.0)), 1.0):
+		var q := Vector2(s.x, s.y)
+		if q.distance_to(c) > 10.0 and not tm.is_near_gate(q.x, q.y, 12.0):
+			return s
+	return Vector4.ZERO
+
+
+## A point 40 m from the player with no footpath within the alignment radius; INF if none.
+func _off_path_spot(paths: ForestPaths, p_pos: Vector3) -> Vector2:
+	var c := Vector2(p_pos.x, p_pos.z)
+	for i in 24:
+		var ang := TAU * float(i) / 24.0
+		var q := c + Vector2(sin(ang), cos(ang)) * 40.0
+		if _nearest_tangent(paths, q, ToriiManager.PATH_ALIGN_RADIUS) == Vector2.ZERO:
+			return q
+	return Vector2.INF
 
 
 func _check(label: String, ok: bool) -> void:

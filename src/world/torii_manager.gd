@@ -1,7 +1,8 @@
 class_name ToriiManager
 extends Node3D
 ## Manages elemental Torii gates streaming in the endless forest (docs/ELEMENTS_PLAN.md).
-## Guarantees gate spacing within 18–32 m of the player, collision clearance (3.2 m),
+## Guarantees gate spacing within 18–32 m of the player, 40 m between active gates,
+## collision clearance (3.2 m), gates beside a footpath running along it (never across),
 ## 4-item shuffle bag rotation, and integration with chunk streaming.
 
 signal gate_spawned(gate: ToriiGate)
@@ -10,7 +11,10 @@ const TORII_GATE_SCENE := preload("res://scenes/world/torii_gate.tscn")
 const MIN_SPAWN_DIST: float = 18.0
 const MAX_SPAWN_DIST: float = 32.0
 const IDEAL_SPAWN_DIST: float = 24.0
-const MIN_GATE_SEPARATION: float = 22.0
+## Minimum distance between active gates, so gates never bunch up in the walk.
+const MIN_GATE_SEPARATION: float = 40.0
+## A gate centre this close to a footpath axis takes the path's direction.
+const PATH_ALIGN_RADIUS: float = 3.5
 const CLEARANCE_RADIUS: float = 3.2
 const SHRINE_CLEARING_RADIUS: float = 8.5
 const COMBAT_SPAWN_SEPARATION: float = 14.0
@@ -85,6 +89,16 @@ func is_near_gate(wx: float, wz: float, clearance: float = CLEARANCE_RADIUS) -> 
 			if Vector2(gate.global_position.x - wx, gate.global_position.z - wz).length() < clearance:
 				return true
 	return false
+
+
+## A spent gate may come back in place (45 m rule) only when no other active gate
+## stands within MIN_GATE_SEPARATION of it; otherwise it stays spent.
+func can_reactivate(gate: ToriiGate) -> bool:
+	for g in active_gates:
+		if g != gate and is_instance_valid(g) and g.is_active:
+			if g.global_position.distance_to(gate.global_position) < MIN_GATE_SEPARATION:
+				return false
+	return true
 
 
 func get_active_gates() -> Array[ToriiGate]:
@@ -232,20 +246,23 @@ func spawn_gate_at(wx: float, wz: float, elem: String = "") -> ToriiGate:
 	var chosen_elem := elem if not elem.is_empty() else next_element()
 	var hy := forest_world.height_at(wx, wz) if forest_world else 0.0
 
-	# Align gate perpendicular to slope gradient
-	var yaw := 0.0
-	if forest_world:
-		var gx := forest_world.height_at(wx + 1.0, wz) - forest_world.height_at(wx - 1.0, wz)
-		var gz := forest_world.height_at(wx, wz + 1.0) - forest_world.height_at(wx, wz - 1.0)
-		var grad := Vector2(gx, gz)
-		if grad.length() > 0.04:
-			# Perpendicular to slope
-			yaw = atan2(-gz, gx)
-		else:
-			# Face roughly toward center or player
-			var p_pos := _player_pos()
-			if p_pos != Vector3.INF:
-				yaw = atan2(p_pos.x - wx, p_pos.z - wz)
+	# Beside a footpath the gate runs along it; elsewhere it is perpendicular to the
+	# slope, or faces the player.
+	var yaw := _path_yaw(wx, wz)
+	if is_nan(yaw):
+		yaw = 0.0
+		if forest_world:
+			var gx := forest_world.height_at(wx + 1.0, wz) - forest_world.height_at(wx - 1.0, wz)
+			var gz := forest_world.height_at(wx, wz + 1.0) - forest_world.height_at(wx, wz - 1.0)
+			var grad := Vector2(gx, gz)
+			if grad.length() > 0.04:
+				# Perpendicular to slope
+				yaw = atan2(-gz, gx)
+			else:
+				# Face roughly toward center or player
+				var p_pos := _player_pos()
+				if p_pos != Vector3.INF:
+					yaw = atan2(p_pos.x - wx, p_pos.z - wz)
 
 	if forest_world and forest_world.has_method("suppress_props_near"):
 		forest_world.suppress_props_near(wx, wz, CLEARANCE_RADIUS + 0.3)
@@ -261,6 +278,32 @@ func spawn_gate_at(wx: float, wz: float, elem: String = "") -> ToriiGate:
 	active_gates.append(gate)
 	gate_spawned.emit(gate)
 	return gate
+
+
+## Yaw that runs the gate's passage (local Z) along the nearest footpath within
+## PATH_ALIGN_RADIUS, or NAN when no path is that close. The posts (local X) then
+## cross the path outside its strip, so a walker passes through the middle.
+func _path_yaw(wx: float, wz: float) -> float:
+	if forest_world == null or forest_world.paths == null:
+		return NAN
+	var p := Vector2(wx, wz)
+	var reach := Vector2(PATH_ALIGN_RADIUS, PATH_ALIGN_RADIUS)
+	var segments := forest_world.paths.segments_in_rect(Rect2(p - reach, reach * 2.0))
+	var best := INF
+	var tangent := Vector2.ZERO
+	for k in range(0, segments.size() - 1, 2):
+		var a := segments[k]
+		var b := segments[k + 1]
+		if (b - a).length_squared() < 1e-9:
+			continue
+		var d := ForestPaths.segment_distance(p, a, b)
+		if d < best:
+			best = d
+			tangent = (b - a).normalized()
+	if best > PATH_ALIGN_RADIUS:
+		return NAN
+	# The passage direction is (sin yaw, cos yaw), the convention of the player-facing branch.
+	return atan2(tangent.x, tangent.y)
 
 
 func _player_pos() -> Vector3:
