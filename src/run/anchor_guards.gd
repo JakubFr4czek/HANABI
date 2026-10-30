@@ -6,8 +6,9 @@ extends Node
 ## ring 6–12 m from it, off the footpath axis (no guard within 3 m of the path network), clear
 ## of trunks and rocks, preferably outside the player's view cone and never within 8 m of
 ## the player. The guards are ordinary WaveDirector yōkai: they fight and pay out kills, and
-## recall_stragglers leaves them at their post. They sit outside the planner's cap, so the
-## live total is at most the cap plus one group (MAX_GUARDS).
+## recall_stragglers leaves them at their post. They COUNT toward the planner cap, so the live
+## total never exceeds it: a group takes only the free slots, and waits while fewer than
+## MIN_GUARDS are free (the waves then have the slots back as the guards die).
 ##
 ## Budget: only ONE guard post is live at a time. A new group is planned only when no guard
 ## is alive, and the group is released when its anchor is more than GUARD_RANGE from the
@@ -56,18 +57,23 @@ func setup(p_director: WaveDirector, p_forest: ForestWorld, p_torii: ToriiManage
 ## groups out of the player's view where the ring allows, so they do not pop in on screen.
 func step(delta: float, player_pos: Vector3, view_forward: Vector3) -> void:
 	if wave_director == null or not wave_director.active:
+		if wave_director != null:
+			wave_director.reserved_slots = 0
 		return
 	_tick += delta
 	if _tick < TICK:
 		return
 	_tick = 0.0
 	_prune(player_pos)
+	wave_director.reserved_slots = 0
 	# One post at a time: the next anchor waits until the live group is gone.
 	if _live_guards() > 0:
 		return
 	for anchor in _anchors():
 		if _post_for(anchor).is_empty() and _distance_xz(anchor.global_position, player_pos) <= GUARD_RANGE:
-			_plan_group(anchor, player_pos, view_forward)
+			if not _plan_group(anchor, player_pos, view_forward):
+				# No room yet: the planner holds back the slots this group needs.
+				wave_director.reserved_slots = MIN_GUARDS
 			return
 
 
@@ -130,9 +136,12 @@ func _fill_spots(spots: PackedVector3Array, anchor: Vector3, count: int, player_
 	return spots
 
 
-func _plan_group(anchor: Node3D, player_pos: Vector3, view_forward: Vector3) -> void:
+func _plan_group(anchor: Node3D, player_pos: Vector3, view_forward: Vector3) -> bool:
 	var id := anchor.get_instance_id()
-	var count := _rng.randi_range(MIN_GUARDS, MAX_GUARDS)
+	var free := wave_director.concurrent_cap() - wave_director.alive_count()
+	if free < MIN_GUARDS:
+		return false
+	var count := mini(_rng.randi_range(MIN_GUARDS, MAX_GUARDS), free)
 	var spots := plan_spots(anchor.global_position, count, player_pos, view_forward)
 	var profile := wave_director.get_profile()
 	var guards: Array[Yokai] = []
@@ -140,6 +149,7 @@ func _plan_group(anchor: Node3D, player_pos: Vector3, view_forward: Vector3) -> 
 		var element := profile.roll_swarm_element(wave_director.run_seconds, _rng)
 		guards.append(wave_director.spawn_enemy_at(pos, anchor.global_position, element, id))
 	_posts.append({"anchor": anchor, "id": id, "guards": guards, "spots": spots, "released": false})
+	return true
 
 
 ## Drops the records of anchors that were freed or streamed away, and releases the groups
