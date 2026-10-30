@@ -40,7 +40,7 @@ const PROFILES := {
 ## with probability chance × valid share: spacing = S² / (band × chance × valid).
 static func hokora_spacing() -> float:
 	var world := WorldGenProfile.load_active()
-	var side := float(world.shrine_slot_chunks) * world.chunk_size
+	var side := world.shrine_slot_size
 	var band := 2.0 * ElementBalance.HOKORA_SPAWN_RADIUS
 	return side * side / (band * world.shrine_slot_chance * ElementBalance.HOKORA_VALID_SHARE)
 

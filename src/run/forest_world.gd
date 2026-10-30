@@ -12,9 +12,6 @@ extends Node3D
 ## docs/WORLDGEN_TOOL.md). What stays here is geometry: crown clumps, root
 ## ribbons, gate frames. The same profile and seed give the same forest.
 
-## Chunk ring: the loaded ring must keep >= 14 m around the player, and
-## everything is fully fogged by VIEW_RANGE_END (the profile's fog_end <= it).
-const VIEW_RANGE_END := 14.0
 ## Shader layer -> Poly Haven texture set in assets/textures/forest_ground/.
 const GROUND_LAYERS := {"soil": "forrest_ground_01", "grass": "leafy_grass", "stone": "rocky_trail"}
 const SHAFT_SHADER := preload("res://src/shaders/moon_shaft.gdshader")
@@ -37,6 +34,8 @@ const SHRINE_SPUR_REACH := 40.0
 ## Senbon rows: axis threshold and the spacing from the corridor noise.
 const SENBON_AXIS_THRESHOLD := 0.72
 const CORRIDOR_SCALE := 1.7
+## Candidate sites per wanted prop: the rest are rejected by trees and props.
+const SITE_OVERSAMPLE := 3
 ## Kinds seed the per-chunk streams: gates 1, lanterns 2, undergrowth
 ## 3 + its index in the profile (trees use PoissonDisk, see _potential_trunks).
 const KIND_TORII := 1
@@ -88,6 +87,17 @@ var _path_field_cache: Dictionary = {}
 ## The footpath network (null when the profile turns paths off).
 var paths: ForestPaths = null
 var _spots_ready := false
+## Height of the terrain lattice at integer (ix, iz), world = index × step. Shared by
+## the terrain mesh, the tree planting and the mound queries; cleared when the spots change.
+var _lattice_heights: Dictionary = {}
+## Chunks of the ring that wait for their turn to be built (one per physics frame).
+var _pending_chunks: Array[Vector2i] = []
+var _wanted_chunks: Dictionary = {}
+## The chunk whose terrain is being sampled a few rows per frame (walking only).
+var _building: TerrainBuild = null
+var _building_key := Vector2i.ZERO
+## Poisson samples started on worker threads: Vector3i(chunk x, z, entry) -> [task id, out].
+var _poisson_jobs: Dictionary = {}
 ## Trees reveal as the player approaches, not only at chunk borders.
 var _last_tree_draw_pos := Vector3.INF
 var _height_noise := FastNoiseLite.new()
@@ -98,6 +108,14 @@ var _corridor_noise := FastNoiseLite.new()
 ## Per profile tree entry: mesh, material, trunk hulls and chest radius.
 var _tree_meshes: Array[Mesh] = []
 var _tree_mats: Array[Material] = []
+## Far crowns (see _build_far_tree_mesh) and their material, per profile tree entry.
+var _tree_far_meshes: Array[Mesh] = []
+var _tree_far_mats: Array[Material] = []
+## One MultiMesh per ordinary entry for every far crown in the ring (one draw call for the forest, not one per chunk).
+var _far_tree_nodes: Dictionary = {}
+## World origins of the crowns the last refresh drew (what the camera sees; tests read them).
+var drawn_full_origins := PackedVector3Array()
+var drawn_far_origins := PackedVector3Array()
 var _tree_shapes: Array = []
 var _tree_chest: Array[float] = []
 ## Per profile undergrowth entry: mesh, material and collider shape.
@@ -116,7 +134,6 @@ var _torii_shapes: Array[ConvexPolygonShape3D] = []
 var _ground_mat: ShaderMaterial
 var _torii_mat: ShaderMaterial
 var _lantern_mat: ShaderMaterial
-var _tree_material_cache: ShaderMaterial = null
 var _rock_material_cache: ShaderMaterial = null
 ## Profile numbers the height and clearance queries read on every call (a
 ## gate search asks for hundreds of heights). Copied once per profile in _apply_profile.
@@ -185,10 +202,16 @@ func reset(anchor: Vector3 = Vector3.INF, facing: Vector3 = Vector3.ZERO) -> voi
 		remove_child(old)
 		old.free()
 	_chunks.clear()
+	_pending_chunks.clear()
+	_building = null
+	for key in _poisson_jobs.keys():
+		WorkerThreadPool.wait_for_task_completion(_poisson_jobs[key][0])
+	_poisson_jobs.clear()
 	_trunk_cells.clear()
 	_tree_spot_cache.clear()
 	_potential_cache.clear()
 	_path_field_cache.clear()
+	_lattice_heights.clear()
 	_last_tree_draw_pos = Vector3.INF
 	center_chunk = _world_to_chunk(anchor) if anchor != Vector3.INF else Vector2i.ZERO
 	chunk_count = 0
@@ -218,6 +241,7 @@ func _apply_profile() -> void:
 	_tree_spot_cache.clear()
 	_potential_cache.clear()
 	_path_field_cache.clear()
+	_lattice_heights.clear()
 	_spots_ready = false
 	_height_noise.seed = 0x464F52455354 ^ seed_mix
 	_height_noise.frequency = profile.hill_frequency
@@ -252,14 +276,26 @@ func _anchor_position() -> Vector3:
 	return follow.global_position
 
 
+func _exit_tree() -> void:
+	# Prefetched samples still on worker threads finish before the forest is gone.
+	for key in _poisson_jobs.keys():
+		WorkerThreadPool.wait_for_task_completion(_poisson_jobs[key][0])
+	_poisson_jobs.clear()
+
+
 func _physics_process(_delta: float) -> void:
 	if follow == null or not is_instance_valid(follow):
 		return
 	var anchor := _anchor_position()
 	var next := _world_to_chunk(anchor)
 	if next != center_chunk:
+		# Walking moves one chunk at a time and the next ring is already loaded, so
+		# the new ring builds over frames. A jump (teleport) has no floor under it
+		# yet, so that one is built at once.
+		var jump := maxi(absi(next.x - center_chunk.x), absi(next.y - center_chunk.y)) > 1
 		center_chunk = next
-		_rebuild_active_chunks()
+		_rebuild_active_chunks(jump)
+	_build_next_pending()
 	# Trees reveal while walking inside a chunk; a full 9-chunk rescan is a few
 	# hundred distance checks, so only redo it after a couple of metres.
 	if _last_tree_draw_pos == Vector3.INF or anchor.distance_to(_last_tree_draw_pos) > 2.0:
@@ -285,13 +321,25 @@ func _mesh_height(wx: float, wz: float) -> float:
 	var iz := int(floor(fz))
 	var tx := fx - float(ix)
 	var tz := fz - float(iz)
-	var h00 := height_at(float(ix) * step, float(iz) * step)
-	var h10 := height_at(float(ix + 1) * step, float(iz) * step)
-	var h01 := height_at(float(ix) * step, float(iz + 1) * step)
-	var h11 := height_at(float(ix + 1) * step, float(iz + 1) * step)
+	var h00 := _lattice_height(ix, iz)
+	var h10 := _lattice_height(ix + 1, iz)
+	var h01 := _lattice_height(ix, iz + 1)
+	var h11 := _lattice_height(ix + 1, iz + 1)
 	if tx + tz <= 1.0:
 		return h00 + (h10 - h00) * tx + (h01 - h00) * tz
 	return h11 * (tx + tz - 1.0) + h10 * (1.0 - tz) + h01 * (1.0 - tx)
+
+
+## Terrain height on the global lattice, cached: a chunk's trees read the same
+## points its mesh already sampled (36 height queries per tree otherwise).
+func _lattice_height(ix: int, iz: int) -> float:
+	var key := Vector2i(ix, iz)
+	if _lattice_heights.has(key):
+		return _lattice_heights[key]
+	var step := _chunk_size / float(_terrain_res - 1)
+	var h := height_at(float(ix) * step, float(iz) * step)
+	_lattice_heights[key] = h
+	return h
 
 
 ## Lowest rendered ground within [param radius] of (wx, wz): planting the
@@ -399,23 +447,39 @@ func props_in_clearing() -> int:
 	return count
 
 
-func _rebuild_active_chunks() -> void:
+## Builds the ring. [param build_now] false (walking) queues the new chunks and
+## [method _build_next_pending] builds one per physics frame, so a border crossing
+## never stalls a frame on three chunks at once.
+func _rebuild_active_chunks(build_now := true) -> void:
 	var wanted: Dictionary = {}
 	var radius := profile.chunk_radius
 	for ox in range(-radius, radius + 1):
 		for oz in range(-radius, radius + 1):
 			wanted[center_chunk + Vector2i(ox, oz)] = true
+	_wanted_chunks = wanted
 	for key in _chunks.keys():
 		if not wanted.has(key):
 			_forget_trunks(_chunks[key] as Node3D)
 			(_chunks[key] as Node3D).queue_free()
 			_chunks.erase(key)
 	active_chunk_keys.clear()
+	var still_wanted: Array[Vector2i] = []
+	for key in _pending_chunks:
+		if wanted.has(key) and not _chunks.has(key):
+			still_wanted.append(key)
+	_pending_chunks = still_wanted
 	for key in wanted.keys():
 		active_chunk_keys.append(key)
 		if not _chunks.has(key):
-			_chunks[key] = _make_chunk(key)
+			if build_now:
+				_chunks[key] = _make_chunk(key)
+			elif not _pending_chunks.has(key):
+				_pending_chunks.append(key)
 	chunk_count = _chunks.size()
+	if not build_now:
+		for ox in range(-radius - 2, radius + 3):
+			for oz in range(-radius - 2, radius + 3):
+				_prefetch_potentials(center_chunk + Vector2i(ox, oz))
 	# The soil mounds query tree spots of the ±1 neighbourhood, so keep that
 	# halo cached and drop everything further: roaming must not grow memory.
 	for key in _tree_spot_cache.keys():
@@ -439,7 +503,38 @@ func _rebuild_active_chunks() -> void:
 		_refresh_tree_draw(_anchor_position())
 
 
-func _make_chunk(coord: Vector2i) -> Node3D:
+## Terrain rows sampled per physics frame while walking (a row is 41 height queries).
+const TERRAIN_ROWS_PER_FRAME := 2
+
+## Builds the queued chunks a slice per physics frame, nearest-first (the ring is queued in order).
+func _build_next_pending() -> void:
+	if _building == null:
+		while not _pending_chunks.is_empty():
+			var key: Vector2i = _pending_chunks.pop_front()
+			if _wanted_chunks.has(key) and not _chunks.has(key):
+				_building = TerrainBuild.new(self, key)
+				_building_key = key
+				break
+		if _building == null:
+			return
+	if not _building.sample(TERRAIN_ROWS_PER_FRAME):
+		return
+	var key := _building_key
+	var terrain := _building.mesh()
+	_building = null
+	if _wanted_chunks.has(key) and not _chunks.has(key):
+		_chunks[key] = _make_chunk(key, terrain)
+		chunk_count = _chunks.size()
+
+
+## Builds every queued chunk now (tests and the forest's own checks; play builds them over frames).
+func finish_pending() -> void:
+	while _building != null or not _pending_chunks.is_empty():
+		_build_next_pending()
+	chunk_count = _chunks.size()
+
+
+func _make_chunk(coord: Vector2i, terrain_mesh: ArrayMesh = null) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Chunk_%d_%d" % [coord.x, coord.y]
 	add_child(root)
@@ -447,7 +542,7 @@ func _make_chunk(coord: Vector2i) -> Node3D:
 
 	var terrain := MeshInstance3D.new()
 	terrain.name = "Terrain"
-	terrain.mesh = _build_terrain_mesh(coord)
+	terrain.mesh = terrain_mesh if terrain_mesh != null else _build_terrain_mesh(coord)
 	terrain.material_override = _ground_mat
 	terrain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	terrain.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
@@ -540,7 +635,8 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 	# corridors), so torii check trees wide but each other narrow.
 	var tree_keep := _tree_trunk_points(coord)
 	var field := _path_field(coord)
-	var path_keep := _path_half_width() + 0.6
+	# Boulders keep the same clearance from the trail as trunks do (see _tree_spots).
+	var path_keep := _path_half_width() + profile.path_tree_clearance
 	var placed: Array = []
 	var gates_here: Array = root.get_meta("torii_world_positions", []) if kind == KIND_LANTERN else []
 	for p in _sites_for(rng, coord, spec):
@@ -590,6 +686,8 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 		var basis := Basis.from_euler(Vector3(0.0, angle, 0.0)) * Basis.from_scale(Vector3.ONE * scale)
 		var xf := Transform3D(basis, Vector3(lx, hy, lz))
 		transforms.append(xf)
+		if transforms.size() >= int(spec.max):
+			break
 		var props: Array = root.get_meta("prop_world_positions", [])
 		props.append(Vector3(wx, hy, wz))
 		root.set_meta("prop_world_positions", props)
@@ -680,9 +778,7 @@ func _potential_trunks(coord: Vector2i) -> Dictionary:
 	var path_gap := _path_half_width() + profile.path_tree_clearance
 	for e in _ordinary_entries():
 		var entry := profile.trees[e]
-		var rng := RandomNumberGenerator.new()
-		rng.seed = hash([coord.x, coord.y, e, 0x50495353]) ^ profile.world_seed
-		var sample := PoissonDisk.sample(rng, centre - Vector2(size, size) * 0.5, Vector2(size, size), entry.min_spacing)
+		var sample := _take_poisson(coord, e)
 		for p in sample:
 			if _in_clearing(p.x, p.y):
 				clearing += 1
@@ -696,6 +792,49 @@ func _potential_trunks(coord: Vector2i) -> Dictionary:
 	var result := {"points": points, "clearing": clearing}
 	_potential_cache[coord] = result
 	return result
+
+
+## The Poisson points of one ordinary kind in one chunk. The sampler is pure
+## (its own rng, no shared state), so a prefetched sample from a worker thread is
+## the same points as one computed here.
+static func _poisson_samples(seed_value: int, origin: Vector2, size: Vector2, spacing: float, out: Array) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	out[0] = PoissonDisk.sample(rng, origin, size, spacing)
+
+
+func _poisson_seed(coord: Vector2i, e: int) -> int:
+	return hash([coord.x, coord.y, e, 0x50495353]) ^ profile.world_seed
+
+
+func _take_poisson(coord: Vector2i, e: int) -> PackedVector2Array:
+	var key := Vector3i(coord.x, coord.y, e)
+	if _poisson_jobs.has(key):
+		var job: Array = _poisson_jobs[key]
+		_poisson_jobs.erase(key)
+		WorkerThreadPool.wait_for_task_completion(job[0])
+		return (job[1] as Array)[0]
+	var size := _chunk_size
+	var origin := Vector2(coord.x * size, coord.y * size) - Vector2(size, size) * 0.5
+	var out := [null]
+	_poisson_samples(_poisson_seed(coord, e), origin, Vector2(size, size), profile.trees[e].min_spacing, out)
+	return out[0]
+
+
+## Starts the Poisson samples of a chunk on worker threads, ahead of the build.
+func _prefetch_potentials(coord: Vector2i) -> void:
+	if _potential_cache.has(coord):
+		return
+	var size := _chunk_size
+	var origin := Vector2(coord.x * size, coord.y * size) - Vector2(size, size) * 0.5
+	for e in _ordinary_entries():
+		var key := Vector3i(coord.x, coord.y, e)
+		if _poisson_jobs.has(key):
+			continue
+		var out := [null]
+		var task := WorkerThreadPool.add_task(_poisson_samples.bind(_poisson_seed(coord, e), origin,
+			Vector2(size, size), profile.trees[e].min_spacing, out), false, "poisson %d,%d" % [coord.x, coord.y])
+		_poisson_jobs[key] = [task, out]
 
 
 ## Tree spot set for a chunk, cached. Returns {spots, ids, clearing, cells}.
@@ -714,19 +853,27 @@ func _tree_spots(coord: Vector2i) -> Dictionary:
 			halo.append_array(_potential_trunks(Vector2i(coord.x + ox, coord.y + oz)).points)
 	var spots: Array[Vector4] = []
 	var ids := PackedInt32Array()
+	# Bucketed by spacing cells: a neighbour test looks at 3×3 cells instead of
+	# every accepted spot and every halo candidate (the same answer, far fewer reads).
+	var cell := _spacing_cell()
+	var halo_grid := {}
+	for h in halo:
+		_grid_add(halo_grid, cell, h)
+	var accepted_grid := {}
 	for c in own.points:
 		var cand: Vector4 = c
 		var wx := cand.x
 		var wz := cand.y
 		if torii_manager and torii_manager.is_near_gate(wx, wz, GATE_CLEAR_OF_LIVE_GATE):
 			continue
-		if _too_close_to_trees(spots, ids, halo, wx, wz, cand.w):
+		if _too_close_to_trees(accepted_grid, halo_grid, cell, wx, wz, cand.w):
 			continue
 		var entry := profile.trees[int(cand.z)]
 		var scale := lerpf(entry.scale_min, entry.scale_max, _point_random(wx, wz, 2))
 		var yaw := _point_random(wx, wz, 3) * TAU
 		spots.append(Vector4(wx, wz, scale, yaw if entry.random_yaw else 0.0))
 		ids.append(int(cand.z))
+		_grid_add(accepted_grid, cell, Vector4(wx, wz, 0.0, _spacing_of(int(cand.z))))
 	# Focal kinds (sakura): one tree per chunk now and then, on the highest
 	# spot near the chunk's middle. Chance per focal kind from its own hash.
 	var focal_rank := 0
@@ -772,17 +919,50 @@ func _spacing_of(entry_index: int) -> float:
 	return profile.trees[entry_index].min_spacing
 
 
+## Grid cell for the spacing test: the largest spacing of any tree kind, so a
+## pair that is closer than its radius always sits in neighbouring cells.
+func _spacing_cell() -> float:
+	var widest := 1.0
+	for entry in profile.trees:
+		widest = maxf(widest, entry.min_spacing)
+	return widest
+
+
+static func _grid_key(cell: float, x: float, z: float) -> Vector2i:
+	return Vector2i(floori(x / cell), floori(z / cell))
+
+
+## Entries carry (x, z, _, spacing) so the test reads each kind's own radius.
+static func _grid_add(grid: Dictionary, cell: float, entry: Vector4) -> void:
+	var key := _grid_key(cell, entry.x, entry.y)
+	if not grid.has(key):
+		grid[key] = [] as Array[Vector4]
+	(grid[key] as Array[Vector4]).append(entry)
+
+
 ## True when a candidate at (wx, wz) would sit closer than its kind's spacing
 ## to an accepted trunk or to a neighbour's candidate. A pair keeps the larger
 ## of the two kinds' spacing.
-func _too_close_to_trees(spots: Array[Vector4], ids: PackedInt32Array, halo: Array[Vector4],
+static func _too_close_to_trees(accepted: Dictionary, halo: Dictionary, cell: float,
 		wx: float, wz: float, spacing: float) -> bool:
-	for i in spots.size():
-		var spot: Vector4 = spots[i]
-		if Vector2(wx - spot.x, wz - spot.y).length() < maxf(spacing, _spacing_of(ids[i])):
-			return true
-	for h in halo:
-		if Vector2(wx - h.x, wz - h.y).length() < maxf(spacing, h.w):
+	var centre := _grid_key(cell, wx, wz)
+	for ox in range(-1, 2):
+		for oz in range(-1, 2):
+			var key := Vector2i(centre.x + ox, centre.y + oz)
+			if _any_closer(accepted.get(key, []), wx, wz, spacing):
+				return true
+			if _any_closer(halo.get(key, []), wx, wz, spacing):
+				return true
+	return false
+
+
+static func _any_closer(entries: Array, wx: float, wz: float, spacing: float) -> bool:
+	for e in entries:
+		var other: Vector4 = e
+		var r := maxf(spacing, other.w)
+		var dx := wx - other.x
+		var dz := wz - other.y
+		if dx * dx + dz * dz < r * r:
 			return true
 	return false
 
@@ -830,6 +1010,8 @@ func suppress_props_near(wx: float, wz: float, radius: float) -> void:
 			packed["cells"] = _cells_of(spots)
 			_tree_spot_cache[c] = packed
 			affected_coords.append(c)
+	if not affected_coords.is_empty():
+		_lattice_heights.clear()
 	for c in affected_coords:
 		if _chunks.has(c):
 			_rebuild_chunk(c)
@@ -1024,7 +1206,9 @@ func _sites_for(rng: RandomNumberGenerator, coord: Vector2i, spec: Dictionary) -
 	var path_only: bool = spec.get("path_only", false)
 	var poisson: Array[Vector2] = []
 	if not path_only:
-		poisson = _prop_sites(rng, count, spacing)
+		# More candidates than kept: trees and props reject some, and a chunk of
+		# 40 m needs room to place its full count (see the accept cap in _populate_props).
+		poisson = _prop_sites(rng, count * SITE_OVERSAMPLE, spacing)
 	if paths == null or share <= 0.0 or count <= 0:
 		return poisson
 	var size := _chunk_size
@@ -1050,7 +1234,7 @@ func _sites_for(rng: RandomNumberGenerator, coord: Vector2i, spec: Dictionary) -
 	if path_only:
 		return picks
 	for site in poisson:
-		if picks.size() >= count:
+		if picks.size() >= count * SITE_OVERSAMPLE:
 			break
 		if _spaced(picks, site, spacing):
 			picks.append(site)
@@ -1309,13 +1493,25 @@ static func _is_tree_node(node_name: String) -> bool:
 	return node_name.begins_with("Trees") or node_name.begins_with("Focal")
 
 
-## Trees past the fog are the fog. Keep their colliders; drop the draw.
+## Which tree crowns are drawn, by distance from the camera. Full crowns within
+## lod_near_radius, far crowns from there to tree_draw_radius, and the sakura to its
+## own reach. Near and far overlap by lod_fade and cross-fade in the shader, so a
+## tree changes crown without a pop. Colliders stay on every tree.
 func _refresh_tree_draw(origin: Vector3) -> void:
-	var r2 := profile.tree_draw_radius * profile.tree_draw_radius
-	var focal_r2 := profile.focal_draw_radius * profile.focal_draw_radius
-	var far_start2 := profile.tree_far_start * profile.tree_far_start
+	var near_r := profile.lod_near_radius
+	var half_fade := profile.lod_fade * 0.5
+	# Nothing is drawn past tree_draw_radius, even a full crown inside the LOD band.
+	var near_hi2 := minf((near_r + half_fade) * (near_r + half_fade), profile.tree_draw_radius * profile.tree_draw_radius)
+	var far_lo2 := (near_r - half_fade) * (near_r - half_fade)
+	var draw2 := profile.tree_draw_radius * profile.tree_draw_radius
+	var focal2 := profile.focal_draw_radius * profile.focal_draw_radius
+	# Far crowns of the whole ring, in world space, per ordinary entry.
+	var far_all: Dictionary = {}
+	drawn_full_origins.clear()
+	drawn_far_origins.clear()
 	for key in _chunks:
 		var chunk := _chunks[key] as Node3D
+		var base := chunk.position
 		for child in chunk.get_children():
 			if not (child is MultiMeshInstance3D) or not _is_tree_node(String(child.name)):
 				continue
@@ -1323,30 +1519,59 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 			if inst.multimesh == null:
 				continue
 			var label := String(inst.name)
-			var focal := label.begins_with("Focal")
 			var all: Array = chunk.get_meta("xfs_" + label, [])
 			var mm := inst.multimesh
 			var near: Array[Transform3D] = []
-			var base := chunk.position
-			var idx := 0
+			var focal := label.begins_with("Focal")
 			for xf in all:
 				var placed := xf as Transform3D
 				var dx := base.x + placed.origin.x - origin.x
 				var dz := base.z + placed.origin.z - origin.z
 				var d2 := dx * dx + dz * dz
-				if d2 > (focal_r2 if focal else r2):
-					idx += 1
-					continue
-				if not focal and d2 > far_start2 and _hash01(idx, 7) >= profile.tree_far_keep:
-					idx += 1
-					continue
-				near.append(placed)
-				idx += 1
-			# instance_count is what the headless perf probe counts. A visibility
-			# cap on top of the full buffer still submitted every tree.
+				if focal and d2 <= focal2 or not focal and d2 <= near_hi2:
+					near.append(placed)
+					if not focal:
+						drawn_full_origins.append(base + placed.origin)
+				if not focal and d2 >= far_lo2 and d2 <= draw2:
+					var e := int(label.trim_prefix("Trees"))
+					if not far_all.has(e):
+						far_all[e] = [] as Array[Transform3D]
+					(far_all[e] as Array[Transform3D]).append(Transform3D(placed.basis, placed.origin + base))
+					drawn_far_origins.append(base + placed.origin)
+			# instance_count is what the headless perf probe counts; it is the only
+			# draw limit on a MultiMesh (the buffer is written in full above).
 			mm.instance_count = near.size()
 			for i in near.size():
 				mm.set_instance_transform(i, near[i])
+	for e in profile.trees.size():
+		if profile.trees[e].is_focal():
+			continue
+		var far_list: Array = far_all.get(e, [])
+		var node := _far_tree_node(e)
+		node.multimesh.instance_count = far_list.size()
+		for i in far_list.size():
+			node.multimesh.set_instance_transform(i, far_list[i])
+
+
+## The far-crown MultiMesh of one ordinary entry, created on first use under the forest.
+func _far_tree_node(e: int) -> MultiMeshInstance3D:
+	if _far_tree_nodes.has(e):
+		return _far_tree_nodes[e]
+	var inst := MultiMeshInstance3D.new()
+	inst.name = "FarTrees%d" % e
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = _tree_far_meshes[e]
+	mm.instance_count = 0
+	inst.multimesh = mm
+	inst.material_override = _tree_far_mats[e]
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	_set_view_range(inst)
+	inst.custom_aabb = AABB(Vector3(-400.0, -2.0, -400.0), Vector3(800.0, 24.0, 800.0))
+	add_child(inst)
+	_far_tree_nodes[e] = inst
+	return inst
 
 
 ## Senbon rows: short lines of gates in chunks where the corridor noise runs high.
@@ -1403,42 +1628,82 @@ func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 ## Ground mesh of a chunk. Vertex colour R is the path weight (1 on the
 ## trodden centre line, 0 off it); the ground shader lays the stone layer there.
 func _build_terrain_mesh(coord: Vector2i) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var size := _chunk_size
-	var res := _terrain_res
-	var step := size / float(res - 1)
-	var field := _path_field(coord)
-	var half_width := _path_half_width()
-	# Each lattice height is sampled once; a quad's corners are shared with its
-	# neighbours, so sampling per quad did the same work four times over.
+	var build := TerrainBuild.new(self, coord)
+	build.sample(build.res * build.res)
+	return build.mesh()
+
+
+## The terrain of one chunk, sampled in slices: the heights are one query per
+## lattice point (the costly part) and the quads follow. Walking spreads a chunk
+## over a few frames; setup builds it in one go.
+class TerrainBuild extends RefCounted:
+	var res := 0
+	var lattice_step := 0.0
+	var size := 0.0
 	var heights := PackedFloat32Array()
-	heights.resize(res * res)
-	for j in res:
-		for i in res:
-			heights[j * res + i] = height_at(coord.x * size - size * 0.5 + float(i) * step,
-				coord.y * size - size * 0.5 + float(j) * step)
-	for z in res - 1:
+	var field := PackedFloat32Array()
+	var half_width := 0.0
+	var height_row := 0
+	var quad_row := 0
+	var _forest: ForestWorld
+	var _lattice_x := 0
+	var _lattice_z := 0
+	var _st := SurfaceTool.new()
+
+	func _init(forest: ForestWorld, coord: Vector2i) -> void:
+		_forest = forest
+		size = forest._chunk_size
+		res = forest._terrain_res
+		lattice_step = size / float(res - 1)
+		field = forest._path_field(coord)
+		half_width = forest._path_half_width()
+		heights.resize(res * res)
+		# The chunk's corner sits on the global lattice (res is odd, so half a chunk is a whole number of steps).
+		_lattice_x = coord.x * (res - 1) - (res - 1) / 2
+		_lattice_z = coord.y * (res - 1) - (res - 1) / 2
+		_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	## Samples up to [param budget] rows (lattice rows, then quad rows). True when done.
+	func sample(budget: int) -> bool:
+		while height_row < res and budget > 0:
+			# Each lattice height is sampled once; a quad's corners are shared with its
+			# neighbours, so sampling per quad did the same work four times over.
+			for i in res:
+				heights[height_row * res + i] = _forest._lattice_height(_lattice_x + i, _lattice_z + height_row)
+			height_row += 1
+			budget -= 1
+		if height_row < res:
+			return false
+		while quad_row < res - 1 and budget > 0:
+			_quad_row(quad_row)
+			quad_row += 1
+			budget -= 1
+		return quad_row >= res - 1
+
+	func _quad_row(z: int) -> void:
 		for x in res - 1:
-			var x0 := -size * 0.5 + float(x) * step
-			var z0 := -size * 0.5 + float(z) * step
-			var x1 := x0 + step
-			var z1 := z0 + step
+			var x0 := -size * 0.5 + float(x) * lattice_step
+			var z0 := -size * 0.5 + float(z) * lattice_step
+			var x1 := x0 + lattice_step
+			var z1 := z0 + lattice_step
 			var p00 := Vector3(x0, heights[z * res + x], z0)
 			var p10 := Vector3(x1, heights[z * res + x + 1], z0)
 			var p01 := Vector3(x0, heights[(z + 1) * res + x], z1)
 			var p11 := Vector3(x1, heights[(z + 1) * res + x + 1], z1)
-			var c00 := _path_colour(field, z * res + x, half_width)
-			var c10 := _path_colour(field, z * res + x + 1, half_width)
-			var c01 := _path_colour(field, (z + 1) * res + x, half_width)
-			var c11 := _path_colour(field, (z + 1) * res + x + 1, half_width)
-			_add_tri(st, p00, p10, p11, c00, c10, c11)
-			_add_tri(st, p00, p11, p01, c00, c11, c01)
-	# Shared vertices, then one normal per point, so a root reads as a mound
-	# instead of a faceted plate.
-	st.index()
-	st.generate_normals()
-	return st.commit()
+			var c00 := ForestWorld._path_colour(field, z * res + x, half_width)
+			var c10 := ForestWorld._path_colour(field, z * res + x + 1, half_width)
+			var c01 := ForestWorld._path_colour(field, (z + 1) * res + x, half_width)
+			var c11 := ForestWorld._path_colour(field, (z + 1) * res + x + 1, half_width)
+			ForestWorld._add_tri(_st, p00, p10, p11, c00, c10, c11)
+			ForestWorld._add_tri(_st, p00, p11, p01, c00, c11, c01)
+
+	## The finished mesh (call once [method sample] has returned true).
+	func mesh() -> ArrayMesh:
+		# Shared vertices, then one normal per point, so a root reads as a mound
+		# instead of a faceted plate.
+		_st.index()
+		_st.generate_normals()
+		return _st.commit()
 
 
 func _build_terrain_collider(mesh: ArrayMesh) -> StaticBody3D:
@@ -1473,6 +1738,12 @@ func nearest_sakura_position(from: Vector3) -> Vector3:
 			if best == Vector3.INF or p.distance_to(from) < best.distance_to(from):
 				best = p
 	return best
+
+
+## Distance the loaded ring guarantees around the player (profile.loaded_range()).
+## The fog must end inside it (fog_end), so no chunk edge is ever seen.
+func loaded_range() -> float:
+	return profile.loaded_range()
 
 
 ## World position of the generated gate nearest to [param from] (INF if none).
@@ -1600,13 +1871,21 @@ func _build_meshes() -> void:
 	_shaft_mat.set_shader_parameter("intensity", 0.2)
 	_tree_meshes.clear()
 	_tree_mats.clear()
+	_tree_far_meshes.clear()
+	_tree_far_mats.clear()
+	for node in _far_tree_nodes.values():
+		(node as Node).free()
+	_far_tree_nodes.clear()
 	_tree_shapes.clear()
 	_tree_chest.clear()
 	for entry in profile.trees:
 		var key := "tree|%s|%d" % [_scene_key(entry.scene), entry.crown]
 		var built := _built_once(key, _build_tree_parts.bind(entry)) as Dictionary
 		_tree_meshes.append(built.mesh)
-		_tree_mats.append(_sakura_material(entry) if entry.crown == TreeEntry.Crown.SAKURA else _tree_material())
+		_tree_mats.append(_sakura_material(entry) if entry.crown == TreeEntry.Crown.SAKURA else _tree_material(0.0))
+		var far_key := "tree_far|%s|%d" % [_scene_key(entry.scene), entry.crown]
+		_tree_far_meshes.append(_built_once(far_key, _build_far_tree_mesh.bind(entry)) as Mesh)
+		_tree_far_mats.append(_tree_material(1.0))
 		_tree_shapes.append(built.hulls)
 		_tree_chest.append(float(built.chest))
 	if not _tree_chest.is_empty():
@@ -1638,13 +1917,17 @@ func _build_undergrowth_parts(entry: UndergrowthEntry) -> Dictionary:
 	return {"mesh": mesh, "shape": _hull(mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX])}
 
 
-func _tree_material() -> ShaderMaterial:
-	if _tree_material_cache == null:
-		_tree_material_cache = ShaderMaterial.new()
-		_tree_material_cache.shader = TREE_DIFFUSE
-		_tree_material_cache.set_shader_parameter("albedo_texture", TREE_ALBEDO)
-		_tree_material_cache.set_shader_parameter("normal_texture", TREE_NORMAL)
-	return _tree_material_cache
+## The ordinary tree material. [param far] 0 is the full crown (fades out past the
+## LOD band), 1 is the far crown (fades in). Both use the band from the profile.
+func _tree_material(far: float) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = TREE_DIFFUSE
+	mat.set_shader_parameter("albedo_texture", TREE_ALBEDO)
+	mat.set_shader_parameter("normal_texture", TREE_NORMAL)
+	mat.set_shader_parameter("lod_far", far)
+	var half := profile.lod_fade * 0.5
+	mat.set_shader_parameter("lod_band", Vector2(profile.lod_near_radius - half, profile.lod_near_radius + half))
+	return mat
 
 
 func _rock_material() -> ShaderMaterial:
@@ -1677,6 +1960,44 @@ func _sakura_material(entry: TreeEntry) -> ShaderMaterial:
 	mat.set_shader_parameter("emission_strength", entry.emission)
 	mat.set_shader_parameter("neon_sparsity", entry.neon_sparsity)
 	return mat
+
+
+## Far crown of one entry (the LOD beyond lod_near_radius): the same crown
+## centres as the full one, as coarse blobs, on a plain trunk. About 400
+## triangles against the scan's ~2 000, so a forest of them stays in budget to
+## tree_draw_radius. Sakura and scanned SCENE crowns keep their own mesh (see D5).
+func _build_far_tree_mesh(entry: TreeEntry) -> Mesh:
+	if entry.crown != TreeEntry.Crown.CEDAR:
+		return _tree_mesh_for(entry)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_add_far_trunk(st, 0.8)
+	var noise := FastNoiseLite.new()
+	noise.seed = 0x4C454146
+	noise.frequency = 0.9
+	for c in CROWN_CLUMPS.size():
+		_add_foliage_clump(st, CROWN_CLUMPS[c][0], float(CROWN_CLUMPS[c][1]) * 1.18, noise, c, 5, 2)
+	st.generate_normals()
+	return st.commit()
+
+
+## A six-sided trunk from the ground to the fork, bark UVs (the tree shader reads
+## UV for bark, leaf and root). [param chest] is the bark radius at chest height.
+static func _add_far_trunk(st: SurfaceTool, chest: float) -> void:
+	var bark := Vector2(0.2, 0.8)
+	var rings := [[0.0, chest * 1.25], [7.3, chest * 0.7]]
+	for k in 6:
+		var a0 := TAU * float(k) / 6.0
+		var a1 := TAU * float(k + 1) / 6.0
+		var d0 := Vector3(cos(a0), 0.0, sin(a0))
+		var d1 := Vector3(cos(a1), 0.0, sin(a1))
+		var b0: Vector3 = d0 * float(rings[0][1]) + Vector3(0.0, float(rings[0][0]), 0.0)
+		var b1: Vector3 = d1 * float(rings[0][1]) + Vector3(0.0, float(rings[0][0]), 0.0)
+		var t0: Vector3 = d0 * float(rings[1][1]) + Vector3(0.0, float(rings[1][0]), 0.0)
+		var t1: Vector3 = d1 * float(rings[1][1]) + Vector3(0.0, float(rings[1][0]), 0.0)
+		for p in [b0, b1, t1, b0, t1, t0]:
+			st.set_uv(bark)
+			st.add_vertex(p)
 
 
 ## The tree mesh for one entry: its scene with a rebuilt crown (CEDAR,
@@ -2281,12 +2602,13 @@ func _branch_vert(st: SurfaceTool, v: Dictionary, vcoord: float) -> void:
 ## A lumpy, slightly flattened foliage mass with smooth normals. UV.y = 2
 ## marks it for the foliage branch of the tree shader; UV.x carries a
 ## per-vertex random shade.
-func _add_foliage_clump(st: SurfaceTool, center: Vector3, radius: float, noise: FastNoiseLite, seed_i: int) -> void:
+func _add_foliage_clump(st: SurfaceTool, center: Vector3, radius: float, noise: FastNoiseLite, seed_i: int,
+		segments := 11, rings := 6) -> void:
 	var sphere := SphereMesh.new()
 	sphere.radius = 1.0
 	sphere.height = 2.0
-	sphere.radial_segments = 11
-	sphere.rings = 6
+	sphere.radial_segments = segments
+	sphere.rings = rings
 	var a := sphere.get_mesh_arrays()
 	var sv: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
 	var si: PackedInt32Array = a[Mesh.ARRAY_INDEX]

@@ -33,8 +33,11 @@ func _dense_dusk() -> WorldGenProfile:
 	p.trees[1].focal_chance = 0.3
 	p.torii_chunk_chance = 0.5
 	p.lantern_max_per_chunk = 8
-	p.tree_draw_radius = 13.0
 	p.fog_start = 2.0
+	p.fog_end = 13.0
+	p.tree_draw_radius = 13.0
+	p.focal_draw_radius = 13.0
+	p.lod_near_radius = 7.0
 	return p
 
 
@@ -43,8 +46,10 @@ func _quest_perf() -> WorldGenProfile:
 	var p := WorldGenProfile.make_default()
 	p.tree_keep_min = 0.35
 	p.tree_keep_max = 0.8
-	p.tree_draw_radius = 8.0
-	p.focal_draw_radius = 10.0
+	p.fog_end = 24.0
+	p.tree_draw_radius = 24.0
+	p.focal_draw_radius = 24.0
+	p.lod_near_radius = 6.0
 	p.terrain_resolution = 33
 	p.torii_chunk_chance = 0.25
 	p.lantern_max_per_chunk = 3
