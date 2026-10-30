@@ -16,6 +16,8 @@ signal toggle_attacks_requested
 signal reset_requested
 signal ability_1_requested(direction: Vector3)
 signal ability_2_requested(direction: Vector3)
+## L key: spend the oldest Torii charge (D21). The run decides whether it lands.
+signal charge_activation_requested
 signal menu_requested
 
 const EYE_HEIGHT := 1.65
@@ -176,6 +178,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				trigger_ability_1()
 			KEY_K:
 				trigger_ability_2()
+			KEY_L:
+				trigger_charge_activation()
 			KEY_TAB, KEY_M:
 				menu_requested.emit()
 			KEY_R:
@@ -194,6 +198,10 @@ func trigger_ability_1() -> void:
 
 func trigger_ability_2() -> void:
 	ability_2_requested.emit(get_look_direction())
+
+
+func trigger_charge_activation() -> void:
+	charge_activation_requested.emit()
 
 
 ## Move the player instantly; the held weapon comes along instead of flying

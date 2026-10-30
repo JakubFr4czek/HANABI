@@ -6,11 +6,15 @@ extends Node3D
 ## All VFX/SFX are strictly bounded for Quest 3 (zero dynamic OmniLight3D nodes).
 
 signal effect_triggered(type: String, data: Dictionary)
+## Emitted with a copy of the charge buffer whenever it changes (D21).
+signal charges_changed(charges: Array[String])
 
 const PETAL_SHADER := preload("res://src/shaders/sakura_petal.gdshader")
 const INK_SHADER := preload("res://src/shaders/ink_pool.gdshader")
 const SHADOW_SHADER := preload("res://src/shaders/shadow_darkness.gdshader")
 
+## Elemental charges the player can carry from Torii gates (D21).
+const MAX_CHARGES: int = 3
 const MAX_PETALS := 12
 const MAX_INK_POOLS := 6
 const MAX_TRANSIENT_MESHES := 18
@@ -43,6 +47,8 @@ var element_time_remaining: float = 0.0
 ## Length of the current imbue (the wrist arc is remaining / this).
 var imbue_total: float = ElementBalance.IMBUE_SECONDS
 var is_fade_warning: bool = false
+## Elements collected at Torii gates, oldest first (FIFO); spent with [method activate_charge].
+var charges: Array[String] = []
 
 var ability_1_cooldown: float = 0.0
 var ability_2_cooldown: float = 0.0
@@ -158,6 +164,8 @@ func setup(p_run_game: RunGame, p_weapon: HeldWeapon) -> void:
 
 
 func reset() -> void:
+	charges.clear()
+	charges_changed.emit(get_charges())
 	current_element = Elements.NONE
 	element_time_remaining = 0.0
 	is_fade_warning = false
@@ -208,6 +216,36 @@ func imbue(element_name: String, duration: float = -1.0) -> void:
 		weapon.imbue_element(element_name, dur)
 	_play_imbue_cue(element_name, false)
 	effect_triggered.emit("imbue", {"element": element_name, "duration": dur})
+
+
+## Stores an element collected at a Torii gate. Returns false when the buffer is full.
+func add_charge(element_name: String) -> bool:
+	if charges.size() >= MAX_CHARGES:
+		return false
+	charges.append(element_name)
+	charges_changed.emit(get_charges())
+	effect_triggered.emit("charge_added", {"element": element_name, "count": charges.size()})
+	return true
+
+
+## A charge can be spent only while the blade is plain steel: one active element at a time.
+func can_activate_charge() -> bool:
+	return charges.size() > 0 and current_element == Elements.NONE
+
+
+## Spends the oldest charge (FIFO) and saturates the katana with its element.
+func activate_charge() -> bool:
+	if not can_activate_charge():
+		return false
+	var elem: String = charges.pop_front()
+	charges_changed.emit(get_charges())
+	imbue(elem)
+	return true
+
+
+## A copy of the charge buffer, oldest first.
+func get_charges() -> Array[String]:
+	return charges.duplicate()
 
 
 ## The sound of the school taking hold of the blade (quiet, from the hand), or a
