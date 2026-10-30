@@ -7,7 +7,7 @@ mkdir -p $OUT
 name=$1
 ARGS="--desktop"
 # Tests that drive the real XRPlayer through XrSim need --xr-sim instead.
-if [[ $name == xr_play_test || $name == vr_menu_pause_test || $name == boot_splash_xr_test ]]; then ARGS="--xr-sim"; fi
+if [[ $name == xr_play_test || $name == vr_menu_pause_test || $name == boot_splash_xr_test || $name == element_charges_xr_test ]]; then ARGS="--xr-sim"; fi
 # Project rule: every test runs headless (no window, no GUI editor). Pixel checks
 # that need a framebuffer must SKIP explicitly in headless, never open a window.
 HEADLESS="--headless"

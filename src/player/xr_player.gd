@@ -11,6 +11,8 @@ signal reset_requested
 signal toggle_attacks_requested
 signal ability_1_requested(direction: Vector3)
 signal ability_2_requested(direction: Vector3)
+## Off-hand trigger while the other hand holds the blade: spend the oldest Torii charge (D21).
+signal charge_activation_requested
 signal menu_requested
 
 ## Standard collision layer for player body (layer 20, 1 << 19). Shared across
@@ -37,6 +39,7 @@ const RECENTER_HOLD_SEC := 0.6
 const TAP_MAX_SEC := 0.35
 const HEIGHT_LIMIT := 0.45
 const HEIGHT_RATE := 0.3  # m/s while the stick is held
+const CHARGE_TRIGGER_THRESHOLD := 0.6  # off-hand trigger pull that counts as a press (D21)
 ## Extra eye height on top of the real tracked height (XR Tools'
 ## player_height_offset: the body stands this far below the origin).
 var height_offset := 0.0
@@ -141,6 +144,16 @@ func _process(delta: float) -> void:
 		ability_2_requested.emit(_ability_direction(left_controller))
 	elif run_element_mode and (by_r or by_l) and (right_holder.held != null or left_holder.held != null):
 		ability_2_requested.emit(_ability_direction(get_dominant_controller()))
+
+	# Charge activation (D21): the off-hand trigger spends the oldest Torii charge,
+	# only while the other hand holds the blade. Edges are read every frame so
+	# the trigger state never sticks.
+	var charge_r := _pressed_once("charge_r", right_controller.get_float("trigger") > CHARGE_TRIGGER_THRESHOLD)
+	var charge_l := _pressed_once("charge_l", left_controller.get_float("trigger") > CHARGE_TRIGGER_THRESHOLD)
+	if charge_r and left_holder.held != null and right_holder.held == null:
+		charge_activation_requested.emit()
+	elif charge_l and right_holder.held != null and left_holder.held == null:
+		charge_activation_requested.emit()
 
 	for c in [left_controller, right_controller]:
 		var holder := left_holder if c == left_controller else right_holder

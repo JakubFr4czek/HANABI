@@ -390,6 +390,8 @@ func _setup_run_nodes() -> void:
 		player.ability_1_requested.connect(_on_ability_1_requested)
 	if player.has_signal("ability_2_requested") and not player.ability_2_requested.is_connected(_on_ability_2_requested):
 		player.ability_2_requested.connect(_on_ability_2_requested)
+	if player.has_signal("charge_activation_requested") and not player.charge_activation_requested.is_connected(_on_charge_activation_requested):
+		player.charge_activation_requested.connect(_on_charge_activation_requested)
 	if player is XRPlayer:
 		var xr := player as XRPlayer
 		xr.run_element_mode = true
@@ -869,6 +871,12 @@ func _on_ability_1_requested(direction: Vector3) -> void:
 func _on_ability_2_requested(direction: Vector3) -> void:
 	if state == RunState.PLAYING and element_system and not get_tree().paused:
 		element_system.execute_ability_2(direction)
+
+
+## Spends the oldest Torii charge on the blade (D21); ElementSystem refuses while an element still burns.
+func _on_charge_activation_requested() -> void:
+	if state == RunState.PLAYING and element_system and not get_tree().paused:
+		element_system.activate_charge()
 
 
 func _player_forward_direction() -> Vector3:
