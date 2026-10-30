@@ -52,3 +52,12 @@ Ostatni przebieg `quest_perf_test`: prymitywy lasu 302 768 (limit ¼ budżetu 31
 4. Mgła/paleta: lokalny róż/cyjan (punkt 6), jaśniejsza noc, emisja latarni (teraz ciemna).
 5. Decymacja bez łamania części (np. dekompozycja na szczelne siatki) i wtedy latarnia/redwood ≤ 3k.
 6. Oni/maska/troll (punkty 7–8) i kapliczka (D1).
+
+## Runda 2: mgła i paleta, próby reszty
+
+- **Mgła i paleta (punkt 6), zrobione częściowo.** `night_blue` przesunięty w teal/indygo (0.12, 0.26, 0.34), `dusk_pink` w mauve-róż (0.46, 0.22, 0.42), `fog_curve` 1.8 → 2.1 (mgła rzednie między 15 a 30 m zamiast gęstnieć). Zrzut: `docs/d5/after/` jest sprzed tej rundy; nowy stan w zrzutach z konceptem. Brakuje lokalnego różu i cyjanu mieszających się w mgle (`dusk_mix` 0.3 zostawia niebiesko-indygo bez różu). Testy palety porównują z wartościami profilu, więc nie wymagały zmian.
+- **Latarnia i redwood bez zmian** względem rundy 1.
+- **Torii_rusted (punkt 9): nieudane, wycofane.** Model ma 7.2k tris i cienkie, otwarte powłoki (słupy, deski, lina). Decymacja do 1.5k i do 3k usuwa słupy w renderze (ta sama przyczyna co latarnia: spójność nawinięcia). Pełnej rozdzielczości nie da się zmieścić w budżecie ¼ (≈12 bram w scenie perf × 7.2k). Model wycofany z repo, a `tools/prep_forest_assets.py` dostał opcję `--rotate-y` (zostaje do późniejszego użycia).
+- **Scots pine (punkt 4) i paprocie: nie zrobione.** Każdy nowy zwykły rodzaj drzew (także redwood) i nowy rodzaj ozdobnika (paprocie jako undergrowth) przesuwa układ torii. `forest_world_test` (brama 20–36 m od spawnu) wtedy przestaje znajdować bramę, a progu nie wolno zmieniać. Rozwiązanie wymaga zmiany reguł torii (D6/D8), nie podmiany assetu.
+- **Ścieżki (punkt 2): nie zrobione.** Generator (`forest_paths.gd`) już łączy bramy i kapliczkę; nie zmieniałem go w tej rundzie.
+- **Oni: maska i ciało (punkty 7, 8): nie zrobione.** Podmiana zmienia testy wrogów (`enemy_variants`, `ragdoll`) i wymaga porównania na zrzutach z obecnym proceduralnym Oni, którego nie wykonałem.
