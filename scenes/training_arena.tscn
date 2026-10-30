@@ -63,6 +63,7 @@ fog_height_density = 0.45
 [sub_resource type="ShaderMaterial" id="Mat_SkyDome"]
 render_priority = -100
 shader = ExtResource("7_sky_shader")
+shader_parameter/cloud_base_deg = 75.0
 
 [sub_resource type="SphereMesh" id="Mesh_SkyDome"]
 radius = 125.0

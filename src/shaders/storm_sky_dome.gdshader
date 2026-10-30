@@ -5,12 +5,23 @@ render_mode unshaded, cull_front, depth_draw_never, fog_disabled;
 // slow cloud bands, a cold moon veiled by the clouds, and lightning lighting the
 // cloud undersides from inside. The horizon is locked to the world fog color so
 // the water and the sky melt into one haze. Same on Quest (Compatibility) and PC.
+//
+// P1b: the only clouds in the run are this shader. It runs on the SkyDome sphere
+// (r = 125 m, Arena/SkyDome in scenes/training_arena.tscn, inherited by run.tscn). The
+// Environment sky (storm_sky.gdshader) has no clouds. The fog is uniform. Crowns are
+// opaque depth-writing geometry (forest_diffuse: depth_draw_opaque + ALPHA_SCISSOR), so
+// the deck can only show above or between them. The cloud base is therefore set in
+// elevation (cloud_base_deg), not as a height band.
 
 global uniform vec3 moon_direction;
 global uniform vec4 storm_fog_color;
 global uniform float storm_flash;
 global uniform vec2 storm_flash_dir;
 
+// Elevation (degrees) of the cloud deck's lower edge. Below it there are no clouds at all,
+// only the fog haze and zenith dark. P1b: the forest crowns reach up to ~70 degrees as seen
+// from the paths (tests/forest_world_test.gd, cloud base check), so the deck sits above them.
+uniform float cloud_base_deg : hint_range(0.0, 89.0) = 75.0;
 uniform vec3 zenith_color : source_color = vec3(0.012, 0.012, 0.03);
 uniform vec3 cloud_dark : source_color = vec3(0.025, 0.024, 0.05);
 uniform vec3 cloud_lit : source_color = vec3(0.30, 0.31, 0.42);
@@ -56,13 +67,14 @@ void fragment() {
 
 	vec3 sky = mix(fog, zenith_color, smoothstep(0.02, 0.5, h));
 
-	// Cloud deck projected on a plane, drifting slowly. The deck starts well above
-	// the tree line (its lower edge is high, so no band lies behind the crowns)
-	// and thins toward the top, so the clouds stay high, soft and far.
-	vec2 cloud_uv = dir.xz / (h + 0.25) * 0.7;
+	// Cloud deck projected on a plane, drifting slowly. The deck starts at cloud_base_deg,
+	// above every crown seen from the paths, and thins toward the zenith, so the clouds
+	// stay high, soft and far. The UV scale is raised so the cap keeps the same cloud size.
+	float base_h = sin(radians(cloud_base_deg));
+	vec2 cloud_uv = dir.xz / (h + 0.25) * 4.0;
 	float c1 = fbm(cloud_uv + vec2(TIME * 0.004, -TIME * 0.003));
 	float c2 = fbm(cloud_uv * 2.3 - vec2(TIME * 0.003, TIME * 0.005) + 4.7);
-	float altitude = smoothstep(0.2, 0.5, h) * (1.0 - smoothstep(0.8, 1.0, h) * 0.6);
+	float altitude = smoothstep(base_h, base_h + 0.06, h) * (1.0 - smoothstep(0.8, 1.0, h) * 0.6);
 	float density = smoothstep(0.38, 0.8, c1 * 0.7 + c2 * 0.3) * altitude;
 	float thickness = c2;
 
