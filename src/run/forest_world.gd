@@ -31,7 +31,7 @@ const CROWN_DISC_MARGIN := 0.1
 ## Lowest height a scanned crown counts for the sky rule: below it is trunk and root flare.
 const SCENE_CROWN_FLOOR := 2.5
 ## Clearance of a layout-after tree from base trunks and from gates (metres).
-const EXTRA_BASE_CLEAR := 3.0
+const EXTRA_BASE_CLEAR := 4.5
 const EXTRA_GATE_CLEAR := 5.0
 ## Trunks and gate pillars collide on their own layer: the player walks into
 ## them, yōkai ragdolls do not (their limbs snag and topple them); yōkai steer
@@ -1029,7 +1029,8 @@ func _tree_spots(coord: Vector2i) -> Dictionary:
 			continue
 		var chance_hash := _hash01(_hash_coord(coord, 4 + focal_rank, 101) ^ profile.world_seed, 0)
 		focal_rank += 1
-		if chance_hash >= entry.focal_chance or spots.is_empty():
+		# The spawn chunk stays open: no focal tree in it, as the opening glade needs.
+		if chance_hash >= entry.focal_chance or spots.is_empty() or coord == Vector2i.ZERO:
 			continue
 		var idx := _pick_focal_spot(coord, spots, ids, e, entry.focal_scale_boost)
 		if idx < 0:
@@ -2822,12 +2823,14 @@ const SAKURA_CLUMPS := [
 	[Vector3(-1.6, 8.2, -2.2), 1.9],
 ]
 
+## Compact on purpose: clump centres lie within ~2 m of the trunk, so a crown reaches ~4 m across
+## (with CROWN_OVERSIZE). The old 9-14 m crowns covered their neighbours (V1: 59 % severe).
 const CROWN_CLUMPS := [
-	[Vector3(0.08, 10.14, -3.36), 2.2], [Vector3(4.03, 9.42, -0.61), 2.1],
-	[Vector3(-0.14, 11.66, 0.19), 2.3], [Vector3(5.80, 10.63, -2.85), 2.0],
-	[Vector3(-6.12, 10.48, 2.53), 1.9], [Vector3(1.21, 9.88, 3.24), 2.1],
-	[Vector3(3.41, 11.44, 4.86), 2.0], [Vector3(-1.83, 11.55, -5.30), 1.9],
-	[Vector3(-4.06, 9.37, 0.38), 2.1],
+	[Vector3(0.10, 10.14, -0.85), 1.25], [Vector3(1.60, 9.42, -0.35), 1.2],
+	[Vector3(-0.14, 11.66, 0.16), 1.35], [Vector3(1.30, 10.63, -1.45), 1.15],
+	[Vector3(-1.60, 10.48, 0.95), 1.2], [Vector3(0.85, 9.88, 1.60), 1.25],
+	[Vector3(1.25, 11.44, 1.20), 1.15], [Vector3(-1.10, 11.55, -1.45), 1.15],
+	[Vector3(-1.60, 9.37, -0.45), 1.25],
 ]
 
 

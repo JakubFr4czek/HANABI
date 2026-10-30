@@ -203,11 +203,12 @@ func _run_all() -> void:
 	player.teleport(Vector3(0.0, forest.height_at(0.0, 26.0) + 0.5, 26.0), 0.0)
 	await _frames(10)
 	var chunk_before: Vector2i = forest.center_chunk
-	var drawn_before := _drawn_trees(forest)
+	var origins_before: PackedVector3Array = forest.drawn_full_origins.duplicate()
 	player.teleport(Vector3(8.0, forest.height_at(8.0, 34.0) + 0.5, 34.0), 0.0)
 	await _frames(10)
+	# The drawn set itself, not its count: two spots can draw the same number of trees.
 	_check("Tree visibility refreshes while walking inside one chunk (not only at borders)",
-		forest.center_chunk == chunk_before and _drawn_trees(forest) != drawn_before)
+		forest.center_chunk == chunk_before and forest.drawn_full_origins != origins_before)
 
 	# Roaming far must not accumulate one tree-spot cache entry per visited chunk.
 	player.teleport(Vector3(500.0, forest.height_at(500.0, 500.0) + 0.5, 500.0), 0.0)
@@ -495,15 +496,6 @@ func _check(label: String, ok: bool) -> void:
 func _frames(count: int) -> void:
 	for i in count:
 		await get_tree().physics_frame
-
-
-func _drawn_trees(forest: ForestWorld) -> int:
-	var total := 0
-	for key in forest._chunks:
-		var inst := (forest._chunks[key] as Node3D).get_node_or_null("Trees0") as MultiMeshInstance3D
-		if inst and inst.multimesh:
-			total += inst.multimesh.instance_count
-	return total
 
 
 ## D5_fix: lanterns and undergrowth keep their clearance from the layout-after trunks
