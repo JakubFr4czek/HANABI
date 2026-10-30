@@ -51,9 +51,17 @@ func _run_all() -> void:
 	_check("The rest of the splash runs the films and the gap, %.2f s (expected %.2f s)" % [elapsed, expected],
 		absf(elapsed - expected) < 0.2)
 	_check("Splash never touches Engine.time_scale", _time_scale_held and Engine.time_scale == 1.0)
-	_check("Intro starts exactly once, right after the splash", run.run_intro.is_active()
+	# D11: the opening strike follows the splash on the same board; the intro waits for it.
+	var cin := run.run_cinematic
+	_check("The opening strike follows the splash and the intro waits for it",
+		cin.is_active() and not run.run_intro.is_active())
+	var cinematic_frames := 0
+	while cin.is_active() and cinematic_frames < 600:
+		await get_tree().physics_frame
+		cinematic_frames += 1
+	_check("Intro starts exactly once, right after the opening strike", run.run_intro.is_active()
 		and GameEvents.recent(20, "run_intro_started").size() == 1)
-	_check("World and camera are restored after the splash", cam.cull_mask != RunSplash.SPLASH_LAYER
+	_check("World and camera are restored after the opening strike", cam.cull_mask != RunSplash.SPLASH_LAYER
 		and cam.environment == null)
 	_check("Ambience and World buses are back on once the intro starts",
 		not _bus_muted(Sfx.AMBIENCE_BUS) and not _bus_muted(Sfx.WORLD_BUS))
