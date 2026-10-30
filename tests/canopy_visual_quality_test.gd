@@ -11,9 +11,10 @@ extends Node
 ##   godot --headless --path . --fixed-fps 90 res://tests/canopy_visual_quality_test.tscn
 
 const OVERLAP_LIMIT := 0.75
-## Baseline tolerance for severe overlap (current world ~59 %). Guards against regressions above 60 %;
-## lowering it is the crown-reduction decision (options A/B/C) still open with Jakub.
-const SEVERE_MAX := 0.60
+## Tolerance for severe overlap. V4 compacted the cedar crowns (reach ~4 m, trunk spacing 6 m, straight
+## trunks): 59 % -> ~38 %. Scanned redwoods (reach ~4 m) still stand close to cedars; the remaining share
+## is that cross-kind spacing. Guards against regressions above 40 %; the target is < 25 %.
+const SEVERE_MAX := 0.40
 const EYE_HEIGHT := 1.65
 const CONE_MIN_ELEVATION := 50.0
 const CONE_BANDS := 5
@@ -103,9 +104,9 @@ func _check_overlap(trees: Array) -> void:
 	for line in worst:
 		print(line)
 	if severe > 0:
-		print("  cause: crown reach (~9-14 m) against trunk spacing (cedar min_spacing 5 m): crowns reach past 25% of their radius into each other")
-	if share > 0.0:
-		print("NOTE  severe crown overlap is %.1f%% (baseline tolerance %.0f%%); awaiting project decision on crown reduction (A/B/C)" % [
+		print("  cause: crown reach (~4-5 m) against trunk spacing (cedar min_spacing 6 m, scanned redwood ~4 m): crowns reach past 25% of their radius into each other")
+	if share > 0.25:
+		print("NOTE  severe crown overlap is %.1f%% (target < 25%%, tolerance %.0f%%): remaining share is cedar-to-redwood spacing" % [
 			share * 100.0, SEVERE_MAX * 100.0])
 	_check("Crowns do not form a mass: severe overlap %.1f%% (%d pairs), baseline max %.0f%%" % [share * 100.0, severe, SEVERE_MAX * 100.0],
 		share <= SEVERE_MAX)

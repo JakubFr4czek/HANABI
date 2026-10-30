@@ -396,7 +396,9 @@ func _cedar_entry() -> TreeEntry:
 	t.label = "Cedar (sugi)"
 	t.crown = TreeEntry.Crown.CEDAR
 	t.weight = 1.0
-	t.min_spacing = 5.0
+	t.min_spacing = 6.0
+	t.hill_lean = 0.3  # stands straight: the crown is not carried sideways up the slope
+	t.scale_max = 1.2
 	return t
 
 
