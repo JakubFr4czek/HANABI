@@ -59,7 +59,9 @@ func _check_density_and_trees() -> void:
 	var many := await _forest_stats(dense)
 	_check("Denser keep chance gives more trees (%d → %d)" % [few.trees, many.trees], many.trees > few.trees * 2)
 	var none := WorldGenProfile.make_default()
-	none.trees[0].weight = 0.0
+	for tree in none.trees:
+		if not tree.is_focal():
+			tree.weight = 0.0  # every ordinary kind (cedar and D5 redwood)
 	none.trees[1].focal_chance = 0.0
 	var empty := await _forest_stats(none)
 	_check("No ordinary weight and no focal leaves an empty forest (%d)" % empty.trees, empty.trees == 0)

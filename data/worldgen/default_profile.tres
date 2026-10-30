@@ -4,6 +4,8 @@
 [ext_resource type="PackedScene" path="res://assets/models/environment/forest_quaternius/torii_gate_polyfork.glb" id="2_ueymx"]
 [ext_resource type="Script" path="res://src/forest/tree_entry.gd" id="3_0trhh"]
 [ext_resource type="PackedScene" path="res://assets/models/environment/forest_trees/cherry_forest.gltf" id="4_q7a5t"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/forest_trees/giant_redwood.glb" id="6_redwd"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/lanterns/stone_lantern_sahir.glb" id="7_lantn"]
 [ext_resource type="Script" path="res://src/forest/undergrowth_entry.gd" id="5_pi1ht"]
 
 [sub_resource type="Resource" id="Resource_sclpf"]
@@ -17,6 +19,16 @@ crown = 1
 weight = 0.0
 focal_chance = 0.18
 
+[sub_resource type="Resource" id="Resource_redwd"]
+script = ExtResource("3_0trhh")
+label = "Giant redwood (sugi, CC BY 4.0)"
+crown = 2
+scene = ExtResource("6_redwd")
+weight = 0.0
+min_spacing = 8.0
+scale_min = 0.9
+scale_max = 1.25
+
 [sub_resource type="Resource" id="Resource_8gio6"]
 script = ExtResource("5_pi1ht")
 label = "Boulder (moss)"
@@ -25,7 +37,7 @@ scale_max = 3.2
 
 [resource]
 script = ExtResource("1_00oye")
-trees = Array[ExtResource("3_0trhh")]([SubResource("Resource_sclpf"), SubResource("Resource_7iial")])
+trees = Array[ExtResource("3_0trhh")]([SubResource("Resource_sclpf"), SubResource("Resource_7iial"), SubResource("Resource_redwd")])
 undergrowth = Array[ExtResource("5_pi1ht")]([SubResource("Resource_8gio6")])
 chunk_size = 40.0
 fog_start = 5.0
@@ -36,3 +48,4 @@ focal_draw_radius = 40.0
 lod_near_radius = 8.0
 lod_fade = 2.0
 shrine_slot_size = 112.0
+lantern_scene = ExtResource("7_lantn")

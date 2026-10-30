@@ -12,6 +12,14 @@ uniform sampler2D grass_albedo : source_color, filter_linear_mipmap, repeat_enab
 uniform sampler2D grass_normal : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform sampler2D stone_albedo : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D stone_normal : hint_normal, filter_linear_mipmap, repeat_enable;
+// Moss (Moss002, ambientCG CC0): dense green cover on the slopes and in damp patches (D5).
+uniform sampler2D moss_albedo : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D moss_normal : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform float moss_tile = 3.0;
+uniform vec3 moss_tint : source_color = vec3(0.9, 1.0, 0.92);
+// How much of the free ground the moss may take, and how it breaks up.
+uniform float moss_slope_share : hint_range(0.0, 1.0) = 0.55;
+uniform float moss_patch_share : hint_range(0.0, 1.0) = 0.9;
 uniform float soil_tile = 2.6;
 uniform float grass_tile = 2.2;
 uniform float stone_tile = 3.2;
@@ -79,8 +87,12 @@ void fragment() {
 	float kerb = beside * smoothstep(0.7, 0.8, vnoise(p * 1.9 + 3.0));
 	float free = clamp(1.0 - trail - kerb, 0.0, 1.0);
 	float w_stone = clamp(smoothstep(0.07, 0.19, slope) + smoothstep(0.74, 0.86, beds) * 0.85, 0.0, 1.0) * free;
-	float w_grass = smoothstep(0.44, 0.6, broad) * max(free - w_stone, 0.0);
-	float w_soil = max(free - w_stone - w_grass, 0.0);
+	// Moss takes the slopes and the damp patches, before the grass and soil share the rest.
+	float patches = vnoise(p * 0.23 + 5.0);
+	float w_moss = clamp(smoothstep(0.05, 0.2, slope) * moss_slope_share + smoothstep(0.42, 0.62, patches) * moss_patch_share, 0.0, 1.0)
+		* max(free - w_stone, 0.0);
+	float w_grass = smoothstep(0.44, 0.6, broad) * max(free - w_stone - w_moss, 0.0);
+	float w_soil = max(free - w_stone - w_moss - w_grass, 0.0);
 
 	// A second, tighter sample so needles and grit stay visible at the feet.
 	vec3 soil = mix(texture(soil_albedo, p / soil_tile).rgb,
@@ -88,17 +100,21 @@ void fragment() {
 	vec3 grass = mix(texture(grass_albedo, p / grass_tile).rgb,
 		texture(grass_albedo, p / (grass_tile * 0.45) + vec2(8.0, 1.0)).rgb, 0.38);
 	vec3 stone = texture(stone_albedo, p / stone_tile).rgb;
+	vec3 moss = mix(texture(moss_albedo, p / moss_tile).rgb,
+		texture(moss_albedo, p / (moss_tile * 0.4) + vec2(4.0, 9.0)).rgb, 0.4);
 	// Packed earth of the trail; a coarser second sample breaks the tiling.
 	vec3 path = mix(texture(path_albedo, p / path_tile).rgb,
 		texture(path_albedo, p / (path_tile * 0.4) + vec2(3.0, 7.0)).rgb, 0.35) * path_tint * path_gain;
 	vec3 flat_stone = texture(stone_albedo, p / (stone_tile * 0.6)).rgb * vec3(0.9, 0.92, 0.96) * 1.1;
-	vec3 nrm = texture(soil_normal, p / soil_tile).rgb * w_soil
+	vec3 nrm = texture(moss_normal, p / moss_tile).rgb * w_moss
+		+ texture(soil_normal, p / soil_tile).rgb * w_soil
 		+ texture(grass_normal, p / grass_tile).rgb * w_grass
 		+ texture(stone_normal, p / stone_tile).rgb * w_stone
 		+ texture(path_normal, p / path_tile).rgb * trail;
 	// Soil stays brown, grass stays green, stone stays cool. One grey tint
 	// was turning the whole floor into a single sheet.
-	vec3 alb = soil * vec3(0.58, 0.50, 0.44) * w_soil
+	vec3 alb = moss * moss_tint * w_moss
+		+ soil * vec3(0.58, 0.50, 0.44) * w_soil
 		+ grass * vec3(0.42, 0.52, 0.40) * w_grass
 		+ stone * vec3(0.50, 0.52, 0.54) * w_stone
 		+ path * trail

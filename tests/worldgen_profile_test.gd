@@ -81,7 +81,9 @@ func _check_validation() -> void:
 	_check("An empty tree list is an error", not _errors(empty.validate()).is_empty())
 
 	var no_ordinary := WorldGenProfile.make_default()
-	no_ordinary.trees[0].weight = 0.0
+	for tree in no_ordinary.trees:
+		if not tree.is_focal():
+			tree.weight = 0.0  # every ordinary kind (cedar and D5 redwood), not just the first
 	_check("Only focal kinds is an error (no forest)", not _errors(no_ordinary.validate()).is_empty())
 
 	var inverted := WorldGenProfile.make_default()
