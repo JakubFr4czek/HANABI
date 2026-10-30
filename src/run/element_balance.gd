@@ -143,8 +143,8 @@ const XP_ONI := 64
 const ORBS_PER_KILL := 4
 ## XP to climb from level L to L+1: linear, 150 + 45 × (L − 1). Gives one skill point
 ## per level (SkillTreeData costs 1/1/1/2/3). Measured in tools/balance_model.gd.
-const XP_FIRST_LEVEL := 150
-const XP_LEVEL_STEP := 45
+const XP_FIRST_LEVEL := 60
+const XP_LEVEL_STEP := 40
 
 # --- Hokora shrine and the yellow Ofuda choice (D12) ----------------------------------
 ## Walking into the shrine's reach is not enough: the player places a hand on the
