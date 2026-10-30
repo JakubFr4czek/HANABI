@@ -25,6 +25,8 @@ const ROOF_COLOR := Color(0.16, 0.15, 0.16)
 ## Where the offering table stands, in shrine space (metres).
 const ALTAR_LOCAL := Vector3(0.0, 0.46, 0.78)
 const LANTERN_LOCAL := Vector3(0.44, 0.7, 0.8)
+## Halo strength when lit: a warm glow for the lantern, not a floodlight in the fog.
+const LANTERN_INTENSITY := 0.8
 const SUZU_RANGE := 14.0
 const SUZU_INTERVAL := 6.0
 
@@ -102,7 +104,7 @@ func step(delta: float, player_pos: Vector3) -> void:
 		return
 	if lit:
 		var flicker := 1.0 + 0.07 * sin(_clock * 3.1 + float(slot.x) * 0.7) + 0.04 * sin(_clock * 7.3)
-		_halo_mat.set_shader_parameter("intensity", 1.45 * flicker)
+		_halo_mat.set_shader_parameter("intensity", LANTERN_INTENSITY * flicker)
 		var to_player := player_pos - _halo.global_position
 		to_player.y = 0.0
 		if to_player.length_squared() > 0.01:
@@ -124,7 +126,7 @@ func _apply_lit() -> void:
 		_altar_cloth_mat.albedo_color = Color(0.85, 0.30, 0.16) if lit else Color(0.20, 0.12, 0.10)
 	if _halo and _halo_mat:
 		_halo.visible = lit
-		_halo_mat.set_shader_parameter("intensity", 1.45 if lit else 0.0)
+		_halo_mat.set_shader_parameter("intensity", LANTERN_INTENSITY if lit else 0.0)
 
 
 func _build_halo() -> void:
@@ -138,7 +140,7 @@ func _build_halo() -> void:
 	_halo_mat.set_shader_parameter("halo_radius", 0.9)
 	_halo_mat.set_shader_parameter("shaft_width", 0.06)
 	var quad := QuadMesh.new()
-	quad.size = Vector2(3.4, 3.4)
+	quad.size = Vector2(2.0, 2.0)
 	_halo = MeshInstance3D.new()
 	_halo.name = "LanternHalo"
 	_halo.mesh = quad

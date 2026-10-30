@@ -35,7 +35,7 @@ const GLOW_COLORS: Array[Color] = [
 	Color(0.5, 0.56, 0.9),
 ]
 const MIN_ANGLE_DEG := 70.0
-const DIRECTION_TRIES := 12
+const DIRECTION_TRIES := 64
 const FAR_ELEVATION_DEG := Vector2(4.0, 9.0)
 const FAR_HEIGHT := Vector2(18.0, 60.0)
 const NEAR_HEIGHT := Vector2(14.0, 30.0)
@@ -310,7 +310,8 @@ func _far_event() -> void:
 
 
 ## A new direction at least MIN_ANGLE_DEG from the last two bursts. If the tries run
-## out, the best one found is used (never seen in practice: 12 tries at 39% each).
+## out, the best one found is used. With the far bursts this frequent, 12 tries
+## failed about once in a hundred bursts; 64 makes the fallback practically unreachable.
 func _pick_azimuth() -> float:
 	var best := 0.0
 	var best_gap := -1.0

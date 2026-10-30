@@ -8,7 +8,6 @@ extends Node3D
 ##   Hashira (uchikorobi), and carved octagonal granite Daiishi foundation plinths.
 ## - Distinct element aesthetics in GDD palette (Sakura, Storm, Ink, Shadow).
 ## - Unshaded additive volumetric lantern halo piercing 10.5m milk fog up to 35m (fog_disabled).
-## - Spatialized 3D wind chime (fūrin) for natural audio localization without UI arrows.
 ## - Plane crossing detection by player body (filtering out weapons and hands).
 ## - 45.0m distance reactivation rule.
 
@@ -16,7 +15,6 @@ signal gate_crossed(element: String, gate: ToriiGate)
 
 const WET_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const HALO_SHADER := preload("res://src/shaders/torii_lantern_halo.gdshader")
-const CHIME_AUDIO := preload("res://assets/audio/sfx/hanabi_proc/torii_furin_chime.wav")
 
 ## Lantern light per element. The halo is mixed over the pale fog (not added), so
 ## these are saturated, and the ink gate's is darker than the fog it sits in.
@@ -60,7 +58,6 @@ var _lantern_core: MeshInstance3D
 var _halo_mesh: MeshInstance3D
 var _crossing_area: Area3D
 var _static_body: StaticBody3D
-var _chime_player: AudioStreamPlayer3D
 
 var _gate_mat: ShaderMaterial
 var _stone_mat: ShaderMaterial
@@ -70,7 +67,6 @@ var _halo_mat: ShaderMaterial
 var _tracked_bodies: Dictionary = {} # Node -> Vector3 (previous pos)
 var _player_ref: Node3D = null
 var _prev_player_pos: Vector3 = Vector3.INF
-var _chime_cooldown: float = 0.5
 ## Lantern light: 0 dormant .. 1 awake, plus a short flare when the gate is crossed.
 var _glow: float = 1.0
 var _flare: float = 0.0
@@ -203,18 +199,6 @@ func _build_components() -> void:
 	_halo_mat.shader = HALO_SHADER
 	_halo_mesh.material_override = _halo_mat
 	lantern_anchor.add_child(_halo_mesh)
-
-	# 5. Spatialized 3D Wind Chime (fūrin)
-	if _chime_player == null:
-		_chime_player = AudioStreamPlayer3D.new()
-		_chime_player.name = "ChimePlayer"
-		_chime_player.stream = CHIME_AUDIO
-		_chime_player.unit_size = 3.5
-		_chime_player.max_distance = 40.0
-		_chime_player.max_polyphony = 1
-		_chime_player.bus = "Ambience"
-		_chime_player.position = Vector3(0.0, 2.8, 0.0)
-		add_child(_chime_player)
 
 	# 6. Crossing Trigger Volume (detects player body layer 2 + weapons layer 4/16)
 	if _crossing_area == null:
@@ -534,8 +518,6 @@ func _apply_active_state() -> void:
 		set_process(true)
 	else:
 		set_process(true)  # waking up: rises over WAKE_SECONDS
-	if not is_active and _chime_player:
-		_chime_player.stop()
 
 
 ## Spent gates drain and wake gently (real time, not slow-mo), then stop processing.
@@ -609,17 +591,10 @@ func _on_body_exited(body: Node3D) -> void:
 	_tracked_bodies.erase(body)
 
 
-func _physics_process(delta: float) -> void:
+func _physics_process(_delta: float) -> void:
 	var player_pos := _resolve_player_pos()
 
 	if is_active:
-		if player_pos != Vector3.INF and global_position.distance_to(player_pos) <= 40.0:
-			_chime_cooldown -= delta
-			if _chime_cooldown <= 0.0:
-				_chime_cooldown = randf_range(3.2, 5.0)
-				if _chime_player and not _chime_player.playing:
-					_chime_player.play()
-
 		# Check plane crossing for tracked bodies
 		for body in _tracked_bodies.keys():
 			if not is_instance_valid(body):
@@ -721,7 +696,6 @@ func _store_charge(es: ElementSystem) -> void:
 func reactivate() -> void:
 	if not is_active:
 		is_active = true
-		_chime_cooldown = 0.5
 
 
 var run_game: RunGame = null
