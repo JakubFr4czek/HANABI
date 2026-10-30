@@ -123,6 +123,12 @@ rozłożenia na klatki (zob. „Ograniczenia”).
   `forest_world_test` sprawdza wierzchołki narysowanych koron, nie same dyski.
   Cedr ma `min_spacing` 5 m (było 2,7 m), żeby korony nie zlewały się w jedną
   masę: otwarte niebo nad podłożem lasu ~34 % (asercja ≥ 30 %).
+- **Korony w zmierzonym lesie (`canopy_visual_quality_test`, bez okna):** zasięg
+  korony liczony z kęp i skali to 9–14 m. Niebo w stożku zenitalnym nad ścieżką
+  ~97 % otwarte, zenit czysty (przechodzi). Skłębienie nie: 59 % sąsiednich par
+  ma korony wchodzące głębiej niż 25 % promienia (cedr 0/0, sekwoje 0/2). Próg
+  0 % wymagałby odstępu ~15 m zamiast 5 m, czyli ~9× mniej drzew: to zmiana
+  gęstości z GDD, a nie strojenie. Decyzja otwarta; test jest czerwony do tego czasu.
 - **Determinizm:** losowania per punkt to `hash([x, z, sól, seed])`, per chunk
   to `hash([coord, rodzaj, seed])`. Brak zależności od kolejności ładowania.
 
