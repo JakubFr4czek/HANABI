@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://anchor_guards_budget_test_scene"]
+
+[ext_resource type="Script" path="res://tests/anchor_guards_budget_test.gd" id="1_test"]
+
+[node name="AnchorGuardsBudgetTest" type="Node"]
+script = ExtResource("1_test")
