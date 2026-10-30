@@ -2,7 +2,7 @@ class_name HokoraManager
 extends Node3D
 ## Places hokora shrines in the endless forest (docs/ELEMENTS_PLAN.md, D1).
 ##
-## The forest is cut into square slots of profile.shrine_slot_chunks chunks
+## The forest is cut into square slots of profile.shrine_slot_size metres
 ## (WorldGenProfile, docs/WORLDGEN_TOOL.md). A slot holds at most one shrine
 ## (profile.shrine_slot_chance). Its
 ## candidate points come from a seed that depends only on the slot, so the same
@@ -31,7 +31,7 @@ const WORLD_SEED := 0x484F4B4F  # "HOKO"
 const OPENING_DISTANCE := ElementBalance.HOKORA_OPENING_DISTANCE
 
 var forest_world: ForestWorld
-## Edge of one slot, metres (profile.shrine_slot_chunks × chunk_size, set in setup).
+## Edge of one slot, metres (profile.shrine_slot_size, set in setup).
 var slot_size := 112.0
 var follow: Node3D
 var torii_manager: ToriiManager
@@ -51,7 +51,7 @@ var _clearance_shape: CylinderShape3D = null
 
 func setup(p_forest: ForestWorld, p_follow: Node3D, p_torii: ToriiManager) -> void:
 	forest_world = p_forest
-	slot_size = p_forest.profile.shrine_slot_chunks * p_forest.profile.chunk_size
+	slot_size = p_forest.profile.shrine_slot_size
 	follow = p_follow
 	torii_manager = p_torii
 

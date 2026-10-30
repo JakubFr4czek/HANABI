@@ -154,7 +154,7 @@ const XP_LEVEL_STEP := 40
 const HOKORA_HAND_RADIUS := 0.35
 const HOKORA_TOUCH_RADIUS := 2.2
 const HOKORA_REFUSE_ENEMY_RADIUS := 3.5
-## The forest is cut into square slots of profile.shrine_slot_chunks chunks on a
+## The forest is cut into square slots of profile.shrine_slot_size metres on a
 ## side, and a slot holds one shrine with profile.shrine_slot_chance (both in the
 ## WorldGenProfile: placement is world generation, not balance). The player only
 ## meets a shrine inside the spawn radius, a 68 m band across the walk.
@@ -162,8 +162,8 @@ const HOKORA_REFUSE_ENEMY_RADIUS := 3.5
 ## tools/balance_model.gd hokora_spacing): ~215 m, about 80 s of walking at an
 ## average pace, roughly 8× rarer than the 18–32 m torii spacing.
 ## Share of slots whose candidates include a spot that passes the placement rules
-## (measured headless: tests/hokora_test.gd walks 1.5 km and meets 7 shrines, ~214 m
-## apart, which this share reproduces).
+## (the balance model's spacing; tests/hokora_test.gd walks 1.5 km and meets 7–9
+## shrines, which the 5–11 range there accepts).
 const HOKORA_VALID_SHARE := 0.95
 ## The first shrine stands this far in front of the spawn, so the economy starts
 ## inside the first minute (≈12 s of walking) and the mechanic is in view at once.

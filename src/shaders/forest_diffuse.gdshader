@@ -12,8 +12,30 @@ uniform vec3 night_tint : source_color = vec3(0.82, 0.86, 0.84);
 uniform float albedo_gain = 1.0;
 uniform float normal_depth = 0.55;
 uniform vec3 foliage_color : source_color = vec3(0.30, 0.36, 0.32);
+// Level of detail cross-fade (D6): 0 is the full crown, which dissolves out
+// across lod_band (metres from the camera), 1 is the far crown, which dissolves
+// in over the same band. The dither is an ordered pattern on the screen, so the
+// fade has no popping edge and does not shimmer while the camera stands still.
+uniform float lod_far = 0.0;
+uniform vec2 lod_band = vec2(9.0, 11.0);
+// The far crown's trunk is a plain bark colour: the atlas sample at its UV is pale.
+uniform vec3 far_bark_color : source_color = vec3(0.16, 0.12, 0.10);
+
+varying vec3 world_pos;
+
+void vertex() {
+	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+
+float interleaved_gradient(vec2 p) {
+	return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+}
 
 void fragment() {
+	float dist = distance(world_pos, CAMERA_POSITION_WORLD);
+	float in_band = smoothstep(lod_band.x, lod_band.y, dist);
+	float lod_alpha = mix(1.0 - in_band, in_band, lod_far);
+	float dither = interleaved_gradient(FRAGCOORD.xy);
 	// UV.x above 1 is the root flare: bark at the trunk, soil at the tip.
 	float root = step(1.5, UV.x);
 	float along = clamp(UV.x - 2.0, 0.0, 1.0);
@@ -39,15 +61,23 @@ void fragment() {
 	vec3 alb_leaf = foliage_color * mix(0.78, 1.12, UV.x) * mix(0.55, 1.0, open_sky);
 	alb = mix(alb, alb_leaf, leaf);
 
-	ALBEDO = mix(alb, alb_root, root);
+	// Distance haze: the crowns lose their dark body into the milk before the fog takes them.
+	float haze = smoothstep(14.0, 40.0, distance(world_pos, CAMERA_POSITION_WORLD)) * 0.5;
+	vec3 body = mix(alb, alb_root, root);
+	if (lod_far > 0.5 && leaf < 0.5) {
+		body = far_bark_color * night_tint * mix(0.84, 1.06, grain);
+	}
+	ALBEDO = mix(body, storm_fog_color.rgb, haze);
 	ROUGHNESS = 1.0;
 	METALLIC = 0.0;
 	// Bark grooves and leaf clumps catch the moon on the diffuse lobe only.
 	NORMAL_MAP = texture(normal_texture, UV).rgb;
 	NORMAL_MAP_DEPTH = normal_depth * (1.0 - root) * (1.0 - leaf);
 	// Canopy gaps cut away; the root flare and foliage clumps are solid.
-	ALPHA = mix(cover, 1.0, max(root, leaf));
-	ALPHA_SCISSOR_THRESHOLD = 0.05;
+	ALPHA = mix(cover, 1.0, max(root, leaf)) * lod_alpha;
+	// Inside the band the scissor is the dither; outside it stays the usual cut-out.
+	bool fading = lod_alpha > 0.0 && lod_alpha < 1.0;
+	ALPHA_SCISSOR_THRESHOLD = fading ? dither : 0.05;
 	// Shadowed bark takes a little of the fog, so a trunk fades into the air.
 	EMISSION = storm_fog_color.rgb * 0.05 * (0.65 + 0.35 * open_sky);
 }

@@ -17,8 +17,9 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_group("Seed")
 ## Same seed + same profile = the same forest, chunk for chunk, in every run.
 @export_range(0, 999999, 1) var world_seed := 0
-## Chunk edge in metres. The 3×3 ring around the player is nine of these.
-@export_range(12.0, 64.0, 0.5) var chunk_size := 28.0
+## Chunk edge in metres. The 3×3 ring around the player is nine of these, so the
+## forest is loaded at least chunk_size metres around the player (see loaded_range()).
+@export_range(12.0, 64.0, 0.5) var chunk_size := 40.0
 ## Chunks loaded around the player's chunk (1 = 3×3 ring).
 @export_range(0, 3, 1) var chunk_radius := 1
 ## Glade around the spawn with no trees and no hills.
@@ -104,7 +105,7 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 
 @export_group("Shrines")
 ## A hokora shrine slot is this many chunks on a side (see HokoraManager).
-@export_range(1, 12, 1) var shrine_slot_chunks := 4
+@export_range(40.0, 400.0, 1.0) var shrine_slot_size := 112.0
 ## Chance that a slot holds a shrine at all. Shrines must stay rarer than the torii (validate()).
 @export_range(0.0, 1.0, 0.01) var shrine_slot_chance := 0.9
 
@@ -114,13 +115,14 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Length of a moonlight shaft through the canopy, metres.
 @export_range(4.0, 40.0, 0.5) var shaft_length := 15.0
 ## Depth fog: where the milk starts and how fast it thickens. Fog reaches full
-## strength at fog_end, which must stay inside the loaded chunks (VIEW_RANGE_END).
+## strength at fog_end, which must stay inside the loaded chunks (loaded_range()).
 ## A later start thins the mist near the player; the far edge stays opaque.
-@export_range(0.0, 20.0, 0.1) var fog_start := 3.5
-## Distance where the fog is full strength, metres. Must stay inside the loaded ring (14 m at most).
-@export_range(4.0, 14.0, 0.1) var fog_end := 11.0
+@export_range(0.0, 20.0, 0.1) var fog_start := 5.0
+## Distance where the fog is full strength, metres. Must stay inside the loaded ring (loaded_range()).
+@export_range(4.0, 60.0, 0.1) var fog_end := 40.0
 ## How the fog thickens between fog_start and fog_end: 1 is linear, higher is later.
-@export_range(0.2, 4.0, 0.05) var fog_curve := 1.0
+## At 1.8 the trees 11 m away are still ~6 % milk and the ones at 30 m ~55 %.
+@export_range(0.2, 4.0, 0.05) var fog_curve := 1.8
 ## Dusk palette: rose and blue, mixed by dusk_mix (0 = night blue, 1 = dusk rose).
 ## fog, ambient and moon colours all follow the mix (see fog_color()).
 @export var dusk_pink := Color(0.42, 0.24, 0.38)
@@ -207,14 +209,17 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(-40.0, 0.0, 0.5) var firework_near_db := -11.0
 
 @export_group("Distance and LOD")
-## Trees are drawn out to this distance from the camera; past it they are fog.
-@export_range(4.0, 60.0, 0.5) var tree_draw_radius := 11.0
-## Focal (sakura) trees keep their longer reach so the neon reads from far off.
-@export_range(4.0, 80.0, 0.5) var focal_draw_radius := 14.0
-## Beyond this distance every second tree is skipped (stable per tree, no shimmer).
-@export_range(0.0, 60.0, 0.5) var tree_far_start := 9.5
-## Share of trees kept beyond tree_far_start (every other one at 0.5).
-@export_range(0.0, 1.0, 0.01) var tree_far_keep := 0.5
+## Ordinary trees are drawn out to this distance from the camera. Keep it at or
+## beyond the point where the fog is (nearly) full, or trees pop in at the edge
+## (validate() warns).
+@export_range(4.0, 60.0, 0.5) var tree_draw_radius := 40.0
+## Focal (sakura) trees: drawn to the same reach, so the neon never pops at a radius.
+@export_range(4.0, 80.0, 0.5) var focal_draw_radius := 40.0
+## Full-detail crowns (the scan, about 2 000 triangles each) within this distance.
+## Beyond it a far crown of about 400 triangles takes over, cross-faded over lod_fade.
+@export_range(2.0, 40.0, 0.5) var lod_near_radius := 8.0
+## Width of the dithered cross-fade between the full and the far crown, metres.
+@export_range(0.5, 12.0, 0.1) var lod_fade := 2.0
 ## Ground fade from the camera: start and full fade, metres.
 @export_range(5.0, 200.0, 0.5) var ground_fade_start := 60.0
 ## Distance where the ground fades out fully, metres.
@@ -223,6 +228,19 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Set in the editor (a fresh seed each click) or by randomize_seed().
 func randomize_seed() -> void:
 	world_seed = randi() % 1000000
+
+
+## Distance (metres) the loaded ring guarantees around the player: the centre
+## chunk is the one nearest the player, so the ring reaches chunk_radius chunks
+## beyond it. Everything the fog leaves visible must sit inside this.
+func loaded_range() -> float:
+	return float(chunk_radius) * chunk_size
+
+
+## Share of the fog at [param distance] metres (0 clear, 1 full milk), as the depth fog computes it.
+func fog_factor_at(distance: float) -> float:
+	var t := clampf((distance - fog_start) / maxf(fog_end - fog_start, 0.001), 0.0, 1.0)
+	return pow(t, fog_curve)
 
 
 ## Milk fog and background colour (sRGB) at the current dusk mix.
@@ -308,12 +326,19 @@ func validate() -> Array[String]:
 		out.append("UWAGA: polana (%.1f m) jest szersza niż połowa chunka (%.1f m)." % [clearing_radius, chunk_size])
 	if fog_start >= fog_end:
 		out.append("BŁĄD: mgła zaczyna się (%.1f m) za późno, skoro kończy się w %.1f m." % [fog_start, fog_end])
+	if fog_end > loaded_range():
+		out.append("BŁĄD: mgła kończy się w %.1f m, a załadowany las ma tylko %.1f m – krawędź pierścienia by wisiała w mgle." % [fog_end, loaded_range()])
+	if lod_near_radius + lod_fade * 0.5 >= tree_draw_radius:
+		out.append("BŁĄD: pełne drzewa (do %.1f m) sięgają krawędzi rysowania (%.1f m)." % [lod_near_radius, tree_draw_radius])
+	if fog_factor_at(tree_draw_radius) < 0.97:
+		out.append("UWAGA: drzewa są rysowane tylko do %.1f m, a mgła przy tym dystansie to %d %% – drzewa wyskoczą na krawędzi." % [tree_draw_radius, roundi(fog_factor_at(tree_draw_radius) * 100.0)])
 	if torii_height_min > torii_height_max:
 		out.append("BŁĄD: wysokość bram: min > max.")
 	if torii_row_min > torii_row_max:
 		out.append("BŁĄD: rzędy bram: min > max.")
 	# Shrines must stay rarer than gates: compare the expected count per chunk.
-	var shrines_per_chunk := shrine_slot_chance / float(shrine_slot_chunks * shrine_slot_chunks)
+	var slot_chunks := shrine_slot_size / chunk_size
+	var shrines_per_chunk := shrine_slot_chance / (slot_chunks * slot_chunks)
 	var torii_per_chunk := torii_chunk_chance * float(torii_max_per_chunk) * torii_group_keep
 	if shrines_per_chunk >= torii_per_chunk and torii_per_chunk > 0.0:
 		out.append("BŁĄD: kapliczki (%.3f na chunk) nie są rzadsze niż torii (%.3f na chunk)." % [shrines_per_chunk, torii_per_chunk])
