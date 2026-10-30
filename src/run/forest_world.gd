@@ -118,6 +118,8 @@ var _building_key := Vector2i.ZERO
 var _poisson_jobs: Dictionary = {}
 ## Trees reveal as the player approaches, not only at chunk borders.
 var _last_tree_draw_pos := Vector3.INF
+## Physics frames a chunk that arrives while walking takes to grow its trees to full size.
+const TREE_GROW_FRAMES := 30
 var _height_noise := FastNoiseLite.new()
 var _bump_noise := FastNoiseLite.new()
 var _floor_noise := FastNoiseLite.new()
@@ -141,6 +143,10 @@ var drawn_full_origins := PackedVector3Array()
 var drawn_far_origins := PackedVector3Array()
 ## Scene crowns (D5 redwood) drawn to tree_draw_radius: no LOD band, so kept apart from the cedar's full crowns.
 var drawn_scene_origins := PackedVector3Array()
+## Growth (0 just planted .. 1 full size) of each drawn crown, parallel to the origins above.
+var drawn_full_growth := PackedFloat32Array()
+var drawn_far_growth := PackedFloat32Array()
+var drawn_scene_growth := PackedFloat32Array()
 var _tree_shapes: Array = []
 var _tree_chest: Array[float] = []
 ## Per profile undergrowth entry: mesh, material and collider shape.
@@ -323,10 +329,11 @@ func _physics_process(_delta: float) -> void:
 		var jump := maxi(absi(next.x - center_chunk.x), absi(next.y - center_chunk.y)) > 1
 		center_chunk = next
 		_rebuild_active_chunks(jump)
-	_build_next_pending()
+	_build_next_pending(true)
 	# Trees reveal while walking inside a chunk; a full 9-chunk rescan is a few
-	# hundred distance checks, so only redo it after a couple of metres.
-	if _last_tree_draw_pos == Vector3.INF or anchor.distance_to(_last_tree_draw_pos) > 2.0:
+	# hundred distance checks, so only redo it after a couple of metres. A chunk
+	# that is still growing its trees is rescanned every frame until it is full size.
+	if _last_tree_draw_pos == Vector3.INF or anchor.distance_to(_last_tree_draw_pos) > 2.0 or _any_tree_growing():
 		_last_tree_draw_pos = anchor
 		_refresh_tree_draw(anchor)
 
@@ -539,7 +546,8 @@ func _rebuild_active_chunks(build_now := true) -> void:
 const TERRAIN_ROWS_PER_FRAME := 2
 
 ## Builds the queued chunks a slice per physics frame, nearest-first (the ring is queued in order).
-func _build_next_pending() -> void:
+## [param walking] stamps the chunk so its trees grow in (see _tree_growth); finish_pending builds whole.
+func _build_next_pending(walking: bool) -> void:
 	if _building == null:
 		while not _pending_chunks.is_empty():
 			var key: Vector2i = _pending_chunks.pop_front()
@@ -556,13 +564,15 @@ func _build_next_pending() -> void:
 	_building = null
 	if _wanted_chunks.has(key) and not _chunks.has(key):
 		_chunks[key] = _make_chunk(key, terrain)
+		if walking:
+			(_chunks[key] as Node3D).set_meta("grow_from", Engine.get_physics_frames())
 		chunk_count = _chunks.size()
 
 
 ## Builds every queued chunk now (tests and the forest's own checks; play builds them over frames).
 func finish_pending() -> void:
 	while _building != null or not _pending_chunks.is_empty():
-		_build_next_pending()
+		_build_next_pending(false)
 	chunk_count = _chunks.size()
 
 
@@ -1738,6 +1748,32 @@ static func _is_tree_node(node_name: String) -> bool:
 	return node_name.begins_with("Trees") or node_name.begins_with("Focal")
 
 
+## Growth of the trees of one chunk: 0 at the physics frame it arrived, 1 once grown.
+## Chunks that are built with the player already standing by (jumps, the start) have no
+## "grow_from" stamp and are full size at once.
+func _tree_growth(chunk: Node3D) -> float:
+	if not chunk.has_meta("grow_from"):
+		return 1.0
+	var t := clampf(float(Engine.get_physics_frames() - int(chunk.get_meta("grow_from"))) / float(TREE_GROW_FRAMES), 0.0, 1.0)
+	return smoothstep(0.0, 1.0, t)
+
+
+## True while a walked-in chunk is still growing, including the frame it reaches full size.
+func _any_tree_growing() -> bool:
+	for key in _chunks:
+		var chunk := _chunks[key] as Node3D
+		if chunk.has_meta("grow_from") and Engine.get_physics_frames() - int(chunk.get_meta("grow_from")) <= TREE_GROW_FRAMES:
+			return true
+	return false
+
+
+## The tree transform as drawn: the planted transform scaled about its root by [param growth].
+static func _grown(placed: Transform3D, growth: float) -> Transform3D:
+	if growth >= 1.0:
+		return placed
+	return Transform3D(placed.basis * growth, placed.origin)
+
+
 ## Which tree crowns are drawn, by distance from the camera. Full crowns within
 ## lod_near_radius, far crowns from there to tree_draw_radius, and the sakura to its
 ## own reach. Near and far overlap by lod_fade and cross-fade in the shader, so a
@@ -1756,9 +1792,13 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 	drawn_full_origins.clear()
 	drawn_far_origins.clear()
 	drawn_scene_origins.clear()
+	drawn_full_growth.clear()
+	drawn_far_growth.clear()
+	drawn_scene_growth.clear()
 	for key in _chunks:
 		var chunk := _chunks[key] as Node3D
 		var base := chunk.position
+		var growth := _tree_growth(chunk)
 		for child in chunk.get_children():
 			if not (child is MultiMeshInstance3D) or not _is_tree_node(String(child.name)):
 				continue
@@ -1778,16 +1818,19 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 				var dx := base.x + placed.origin.x - origin.x
 				var dz := base.z + placed.origin.z - origin.z
 				var d2 := dx * dx + dz * dz
+				var drawn := _grown(placed, growth)
 				if focal and d2 <= focal2 or not focal and d2 <= full_hi2:
-					near.append(placed)
+					near.append(drawn)
 					if not focal:
 						drawn_full_origins.append(base + placed.origin)
+						drawn_full_growth.append(growth)
 				if not focal and not full_only and d2 >= far_lo2 and d2 <= draw2:
 					var e := int(label.trim_prefix("Trees"))
 					if not far_all.has(e):
 						far_all[e] = [] as Array[Transform3D]
-					(far_all[e] as Array[Transform3D]).append(Transform3D(placed.basis, placed.origin + base))
+					(far_all[e] as Array[Transform3D]).append(Transform3D(drawn.basis, placed.origin + base))
 					drawn_far_origins.append(base + placed.origin)
+					drawn_far_growth.append(growth)
 			# instance_count is what the headless perf probe counts; it is the only
 			# draw limit on a MultiMesh (the buffer is written in full above).
 			mm.instance_count = near.size()
@@ -1804,8 +1847,9 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 				if sx * sx + sz * sz <= draw2:
 					if not scene_all.has(e):
 						scene_all[e] = [] as Array[Transform3D]
-					(scene_all[e] as Array[Transform3D]).append(Transform3D(placed.basis, placed.origin + base))
+					(scene_all[e] as Array[Transform3D]).append(Transform3D(_grown(placed, growth).basis, placed.origin + base))
 					drawn_scene_origins.append(base + placed.origin)
+					drawn_scene_growth.append(growth)
 	for e in profile.trees.size():
 		if profile.trees[e].is_focal() or profile.trees[e].crown == TreeEntry.Crown.SCENE:
 			continue
