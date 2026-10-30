@@ -4,8 +4,10 @@ extends Node3D
 ## - a transparent HP ring: its length is the health share, its colour runs teal
 ##   (full) -> amber (half) -> red (a quarter and below), and it breathes gently
 ##   when critical. No panel, no frame behind it;
-## - inside the ring a small fire and the white kcal estimate ([CalorieMeter]);
+## - inside the ring, the white kcal estimate ([CalorieMeter]) over a clear centre;
 ## - outside the ring, a hairline for the time left on the imbued element;
+## - over the ring's top-right, three charge orbs (D21, D22): an empty orb is a grey
+##   outline, a filled one takes its element's colour. Oldest charge first;
 ## - under the ring: the element and its seconds, the two ability glyphs (bright
 ##   when ready) and the run line (rank, kills, points, XP, buffs).
 ## It is drawn only while the wrist is raised to the face (the check-the-watch
@@ -28,7 +30,11 @@ const RING_RADIUS := 0.0170
 const RING_WIDTH := 0.0042
 const ELEMENT_RADIUS := 0.0236
 const ELEMENT_WIDTH := 0.0014
-const FLAME_RADIUS := 0.0136
+## The three charge orbs (D22): centre radius, orb radius, and clockwise angles from 12 o'clock.
+const CHARGE_RADIUS := 0.0277
+const CHARGE_SIZE := 0.0019
+const CHARGE_ANGLES := Vector3(0.17, 0.61, 1.05)
+const CHARGE_EMPTY_COLOR := Color(0.3, 0.3, 0.34)
 ## Text rows, as plate-up offsets from the ring centre (negative is below the ring).
 const ELEMENT_ROW_UP := -0.0300
 const ABILITY_ROW_UP := -0.0366
@@ -37,6 +43,10 @@ const ABILITY_SPREAD := 0.0075
 const STATUS_ROW_UP := -0.0432
 const LABEL_Y := 0.0021
 const KCAL_FONT := 34
+const KCAL_UNIT_FONT := 14
+## Kcal figure and unit, as plate-up offsets from the ring centre: the pair is centred on it.
+const KCAL_ROW_UP := 0.0017
+const KCAL_UNIT_ROW_UP := -0.0053
 const ELEMENT_FONT := 22
 const ABILITY_FONT := 18
 const STATUS_FONT := 19
@@ -57,15 +67,10 @@ const AMBER := Color(0.98, 0.64, 0.24)
 const RED := Color(0.95, 0.2, 0.16)
 const HP_WARN_RATIO := 0.5
 const HP_CRITICAL_RATIO := 0.25
-## The fire's palette (edge, middle, core). The middle sits behind the white figure, so
-## it is kept dark enough for the figure to read (see wrist_hud_test).
 ## D9: the SANDBOX mark, amber, in the plate's top-left corner. The top is the only free edge:
 ## the element, ability and status rows all hang below the ring, and the ring keeps its clearance.
 const SANDBOX_FONT := 18
 const SANDBOX_COLOR := Color(1.0, 0.7, 0.3)
-const FLAME_EDGE := Color(0.5, 0.05, 0.02)
-const FLAME_MID := Color(0.78, 0.18, 0.04)
-const FLAME_CORE := Color(1.0, 0.66, 0.2)
 const KCAL_COLOR := Color(1.0, 1.0, 1.0)
 const PARRY_GLOW_SECONDS := 0.42
 const LEVEL_FLASH_SECONDS := 0.6
@@ -76,6 +81,8 @@ var wrist_face: Node3D
 var ring: MeshInstance3D
 ## The white kcal figure inside the ring.
 var kcal_label: Label3D
+## The small "kcal" under the figure.
+var kcal_unit_label: Label3D
 ## The imbued element: its kanji and the seconds left, under the ring.
 var element_label: Label3D
 ## The ability glyphs: A and B, each bright when its ability is ready.
@@ -91,6 +98,8 @@ var sandbox_label: Label3D
 var _sandbox_run := false
 
 var _ring_mat := ShaderMaterial.new()
+## The charges held (D21), oldest first, as the orbs show them. Set from charges_changed.
+var _charges: Array[String] = []
 var _ring_cache := {}
 var _presence := 0.0
 var _raised := false
@@ -166,10 +175,12 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	_ring_mat.set_shader_parameter("ring_width", RING_WIDTH)
 	_ring_mat.set_shader_parameter("element_radius", ELEMENT_RADIUS)
 	_ring_mat.set_shader_parameter("element_width", ELEMENT_WIDTH)
-	_ring_mat.set_shader_parameter("flame_radius", FLAME_RADIUS)
-	_ring_mat.set_shader_parameter("flame_edge", FLAME_EDGE)
-	_ring_mat.set_shader_parameter("flame_mid", FLAME_MID)
-	_ring_mat.set_shader_parameter("flame_core", FLAME_CORE)
+	_ring_mat.set_shader_parameter("charge_radius", CHARGE_RADIUS)
+	_ring_mat.set_shader_parameter("charge_size", CHARGE_SIZE)
+	_ring_mat.set_shader_parameter("charge_angles", CHARGE_ANGLES)
+	_ring_mat.set_shader_parameter("charge_0", _charge_slot(0))
+	_ring_mat.set_shader_parameter("charge_1", _charge_slot(1))
+	_ring_mat.set_shader_parameter("charge_2", _charge_slot(2))
 	wrist_face.add_child(ring)
 
 	# Figures in Godot's built-in sans (the brush font's "1" reads as "7"), kanji
@@ -179,9 +190,13 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	if ResourceLoader.exists(HUD_FONT_PATH):
 		font.fallbacks = [load(HUD_FONT_PATH)]
 	font.variation_embolden = 0.35
-	kcal_label = _make_label("KcalLabel", font, KCAL_FONT, Vector3(0.0, LABEL_Y, 0.0))
+	kcal_label = _make_label("KcalLabel", font, KCAL_FONT, _row(KCAL_ROW_UP))
 	kcal_label.modulate = KCAL_COLOR
 	kcal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	kcal_unit_label = _make_label("KcalUnitLabel", font, KCAL_UNIT_FONT, _row(KCAL_UNIT_ROW_UP))
+	kcal_unit_label.text = "kcal"
+	kcal_unit_label.modulate = KCAL_COLOR
+	kcal_unit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	element_label = _make_label("ElementLabel", font, ELEMENT_FONT, _row(ELEMENT_ROW_UP))
 	element_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ability_a_label = _make_label("AbilityALabel", font, ABILITY_FONT, _row(ABILITY_ROW_UP) - Vector3(ABILITY_SPREAD, 0.0, 0.0))
@@ -193,7 +208,7 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	wrist_label.line_spacing = -2.0
 	for l in _labels():
-		# The figures sit on the fire and the ring: draw them after the quad.
+		# The figures sit on the ring and the orbs: draw them after the quad.
 		l.render_priority = 2
 		wrist_face.add_child(l)
 
@@ -240,7 +255,7 @@ func _row(up: float) -> Vector3:
 
 
 func _labels() -> Array[Label3D]:
-	return [kcal_label, element_label, ability_a_label, ability_b_label, wrist_label]
+	return [kcal_label, kcal_unit_label, element_label, ability_a_label, ability_b_label, wrist_label]
 
 
 func _no_shadow(mi: GeometryInstance3D) -> void:
@@ -353,7 +368,6 @@ func _set_ring(key: String, value: Variant) -> void:
 func _refresh_ring() -> void:
 	_set_ring("presence", snappedf(_presence, 0.01))
 	var flash := _level_flash / LEVEL_FLASH_SECONDS
-	_set_ring("flame_gain", snappedf(1.0 + 1.5 * flash, 0.02))
 	_set_ring("glow", snappedf(clampf(maxf(_parry_glow / PARRY_GLOW_SECONDS, flash), 0.0, 1.0), 0.02))
 
 
@@ -423,9 +437,28 @@ func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, 
 	_refresh_status()
 
 
-## Hands the HUD the element system it mirrors (called once by RunGame).
+## Hands the HUD the element system it mirrors (called once by RunGame). The charge orbs
+## follow its charges_changed signal, so they change the moment a charge is taken or spent.
 func bind_elements(es: ElementSystem) -> void:
 	_elements = es
+	if not es.charges_changed.is_connected(_on_charges_changed):
+		es.charges_changed.connect(_on_charges_changed)
+	_on_charges_changed(es.get_charges())
+
+
+## The orbs take the charges' colours, oldest first; the slots past the last charge are empty.
+func _on_charges_changed(charges: Array[String]) -> void:
+	_charges = charges.duplicate()
+	for i in ElementSystem.MAX_CHARGES:
+		_ring_mat.set_shader_parameter("charge_%d" % i, _charge_slot(i))
+
+
+## One orb's shader value: its element's colour, and alpha as the fill (1 charged, 0 empty).
+func _charge_slot(index: int) -> Color:
+	if index < _charges.size():
+		var accent := Elements.accent_color(_charges[index])
+		return Color(accent.r, accent.g, accent.b, 1.0)
+	return Color(CHARGE_EMPTY_COLOR, 0.0)
 
 
 ## Hands the HUD the calorie meter it shows inside the ring (called once by RunGame).
@@ -468,7 +501,7 @@ func on_parry() -> void:
 	_parry_glow = PARRY_GLOW_SECONDS
 
 
-## A level-up (D12): a short flash in the fire and the new level for the run line.
+## A level-up (D12): a short glow on the ring and the new level for the run line.
 func flash_level_up(new_level: int) -> void:
 	_level_flash = LEVEL_FLASH_SECONDS
 	_level_text = "位 LV %d  ·  +1 点" % new_level

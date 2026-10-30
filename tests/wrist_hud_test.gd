@@ -6,7 +6,11 @@ extends Node
 ## - Gesture: shown only when the wrist is close to the eyes, its face turned to them and
 ##   in view; hysteresis at both edges; a 0.15 s fade; nothing drawn while hidden.
 ## - Ring: fill = HP share; colour teal -> amber -> red; pulse only when critical.
-## - Figure: the white kcal figure has enough contrast over the fire's middle colour.
+## - No flame (D22): the ring's shader has no fire; the clear centre holds the kcal figure.
+## - Figure (D22): the white kcal number, with its unit under it, is centred in the clear ring,
+##   fits inside it at the widest figure, and has enough contrast against its outline.
+## - Charges (D22): three orbs on the ring's top-right, empty grey until a charge is taken;
+##   each filled orb takes its element's colour, oldest first; a spent or reset charge empties.
 ## - Kcal (run.tscn): rises with movement, the resting rate standing still, not in a pause,
 ##   and the desktop H key raises the readout.
 ## - SANDBOX mark (D9, run.tscn): drawn on the plate, in view and clear of the ring, only in a
@@ -33,6 +37,7 @@ func _run() -> void:
 	await _clearance_and_gesture()
 	await _ring_and_figure()
 	await _kcal_in_run()
+	await _charges_in_run()
 	await _sandbox_mark_in_run()
 
 
@@ -228,6 +233,20 @@ func _readout_hits(verts: PackedVector3Array, hud: DiegeticHud) -> int:
 	return hits
 
 
+## A label's text box on the plate: its x and z extent in the plate's frame (the plate's up is -z).
+func _plate_box(hud: DiegeticHud, label: Label3D) -> Rect2:
+	var aabb := label.get_aabb()
+	var xs: Array[float] = []
+	var zs: Array[float] = []
+	for c: Vector3 in [aabb.position, aabb.end, Vector3(aabb.position.x, aabb.end.y, 0.0), Vector3(aabb.end.x, aabb.position.y, 0.0)]:
+		var p := hud.wrist_face.to_local(label.to_global(c))
+		xs.append(p.x)
+		zs.append(p.z)
+	var x0: float = xs.min()
+	var z0: float = zs.min()
+	return Rect2(x0, z0, xs.max() - x0, zs.max() - z0)
+
+
 ## Readout nodes drawn right now (zero when hidden: the subtree is not rendered).
 func _drawn_under(hud: DiegeticHud) -> int:
 	var n := 0
@@ -274,10 +293,35 @@ func _ring_and_figure() -> void:
 	health.hp = health.max_hp
 	run._refresh_hud()
 
-	# The white figure over the fire: WCAG-style contrast of white against the fire's middle.
-	var ratio := _contrast(DiegeticHud.KCAL_COLOR, DiegeticHud.FLAME_MID)
-	_check("kcal figure contrast over the fire is at least 4.5:1 (%.1f)" % ratio, ratio >= 4.5)
-	_check("kcal figure is white", DiegeticHud.KCAL_COLOR == Color(1.0, 1.0, 1.0))
+	# No flame: the ring's shader has no fire uniforms and no fire code.
+	var uniforms: Array[String] = []
+	for u in DiegeticHud.RING_SHADER.get_shader_uniform_list():
+		uniforms.append(u.name)
+	var has_flame := uniforms.any(func(n: String) -> bool: return n.contains("flame"))
+	_check("no flame: the ring shader has no flame uniform", not has_flame)
+	_check("no flame: the ring shader has no fire noise or tongue", not (DiegeticHud.RING_SHADER.code.contains("fbm") or DiegeticHud.RING_SHADER.code.contains("tongue")))
+
+	# The kcal figure: white, the unit under it, the pair centred in the clear ring.
+	await _frames(2)
+	var hud_kcal := hud.kcal_label
+	var unit := hud.kcal_unit_label
+	_check("kcal figure is white", DiegeticHud.KCAL_COLOR == Color(1.0, 1.0, 1.0) and hud_kcal.modulate.r > 0.9)
+	_check("kcal unit reads 'kcal' under the figure (%s)" % unit.text, unit.text == "kcal" and unit.position.z > hud_kcal.position.z)
+	var inner := DiegeticHud.RING_RADIUS - DiegeticHud.RING_WIDTH * 0.5
+	var block := _plate_box(hud, hud_kcal).merge(_plate_box(hud, unit))
+	var off := block.get_center().length()
+	_check("kcal figure is centred in the ring (%.4f m off centre: x %.4f, z %.4f)" % [off, block.get_center().x, block.get_center().y], off < 0.0012)
+	var corners := [block.position, block.end, Vector2(block.position.x, block.end.y), Vector2(block.end.x, block.position.y)]
+	var reach := 0.0
+	for c: Vector2 in corners:
+		reach = maxf(reach, c.length())
+	_check("kcal figure sits inside the clear ring (reach %.4f m, inner %.4f m)" % [reach, inner], reach < inner)
+	# The widest figure the meter can show still fits: four digits at the figure's font size.
+	var wide := hud_kcal.font.get_string_size("9999", HORIZONTAL_ALIGNMENT_CENTER, -1, DiegeticHud.KCAL_FONT) * hud_kcal.pixel_size
+	var wide_reach := Vector2(wide.x, wide.y).length() * 0.5
+	_check("four-digit kcal fits inside the clear ring (reach %.4f m)" % wide_reach, wide_reach < inner)
+	var ratio := _contrast(DiegeticHud.KCAL_COLOR, Color(hud_kcal.outline_modulate.r, hud_kcal.outline_modulate.g, hud_kcal.outline_modulate.b))
+	_check("kcal figure contrast against its outline is at least 4.5:1 (%.1f)" % ratio, ratio >= 4.5 and hud_kcal.outline_size > 0)
 	run.queue_free()
 	await _frames(2)
 
@@ -408,6 +452,61 @@ func _sandbox_mark_in_run() -> void:
 	plain.queue_free()
 	await _frames(2)
 	VrComfortSettings.settings_path = real_path
+
+
+## D22: the three charge orbs follow the element system's charges (oldest first, FIFO), the
+## spent charge empties at once, and a reset empties them all. Checked in the real run scene.
+func _charges_in_run() -> void:
+	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
+	run.high_score_path = "user://test_wrist_charges_save.cfg"
+	add_child(run)
+	await _frames(8)
+	var hud := run.diegetic_hud
+	var es := run.element_system
+	es.reset()
+	await _frames(1)
+	_check("charges: nothing held, all three orbs empty", _orbs_filled(hud) == [false, false, false])
+	_check("charges: an empty orb is a grey outline (fill %.1f)" % _orb(hud, 0).a, _orb(hud, 0).a == 0.0)
+
+	es.add_charge(Elements.SAKURA)
+	await _frames(1)
+	_check("charges: one Sakura charge fills the first orb with Sakura's colour", _orbs_filled(hud) == [true, false, false] and _same_rgb(_orb(hud, 0), Elements.accent_color(Elements.SAKURA)))
+	es.add_charge(Elements.STORM)
+	await _frames(1)
+	_check("charges: Storm fills the second orb in Storm's colour", _orbs_filled(hud) == [true, true, false] and _same_rgb(_orb(hud, 1), Elements.accent_color(Elements.STORM)))
+	es.add_charge(Elements.INK)
+	await _frames(1)
+	_check("charges: Ink fills the third orb in Ink's colour", _orbs_filled(hud) == [true, true, true] and _same_rgb(_orb(hud, 2), Elements.accent_color(Elements.INK)))
+	_check("charges: a full buffer refuses a fourth charge", not es.add_charge(Elements.SHADOW))
+
+	# Spending the oldest (Sakura) takes the first orb; Storm moves to the front, Ink to the second.
+	var spent := es.activate_charge()
+	await _frames(1)
+	_check("charges: spending the oldest empties the buffer's front (spent %s)" % spent,
+		spent and _orbs_filled(hud) == [true, true, false] and _same_rgb(_orb(hud, 0), Elements.accent_color(Elements.STORM)) and _same_rgb(_orb(hud, 1), Elements.accent_color(Elements.INK)))
+
+	es.reset()
+	await _frames(1)
+	_check("charges: a reset empties every orb", _orbs_filled(hud) == [false, false, false])
+	run.queue_free()
+	await _frames(2)
+
+
+func _orb(hud: DiegeticHud, index: int) -> Color:
+	var v = hud._ring_mat.get_shader_parameter("charge_%d" % index)
+	return v if v is Color else Color(v.x, v.y, v.z, v.w)
+
+
+func _orbs_filled(hud: DiegeticHud) -> Array:
+	var out: Array = []
+	for i in ElementSystem.MAX_CHARGES:
+		out.append(_orb(hud, i).a > 0.5)
+	return out
+
+
+func _same_rgb(c: Color, want: Color) -> bool:
+	return absf(c.r - want.r) < 0.001 and absf(c.g - want.g) < 0.001 and absf(c.b - want.b) < 0.001
 
 
 func _check(label: String, ok: bool) -> void:
