@@ -69,6 +69,7 @@ const RUN_COMBAT_FOG := preload("res://src/run/run_combat_fog.gd")
 
 var combat_fog: Node
 var run_intro: RunIntro
+var distant_fireworks: DistantFireworks = null
 var run_splash: RunSplash
 var restart_ema: VotiveTablet = null
 var _boot_splash_played := false
@@ -100,6 +101,7 @@ func _ready() -> void:
 
 	_prepare_run_arena()
 	_setup_run_nodes()
+	_connect_distant_fireworks()
 	load_high_score()
 	start_run()
 
@@ -261,6 +263,11 @@ func _configure_run_forest() -> void:
 		var forest_amb := RunForestAmbience.new()
 		forest_amb.name = "RunForestAmbience"
 		add_child(forest_amb)
+	if distant_fireworks == null:
+		distant_fireworks = DistantFireworks.new()
+		distant_fireworks.name = "DistantFireworks"
+		add_child(distant_fireworks)
+		distant_fireworks.setup(world, player)
 	if get_node_or_null("StormMusic") == null:
 		var music := StormMusic.new()
 		music.name = "StormMusic"
@@ -405,6 +412,29 @@ func _setup_run_nodes() -> void:
 	run_splash.finished.connect(_on_boot_splash_finished)
 
 
+## D18: far matsuri fireworks run from the first step of play to the death screen.
+## Waves and the title plate only send hooks to them.
+func _connect_distant_fireworks() -> void:
+	if distant_fireworks == null:
+		return
+	if not run_started.is_connected(_on_fireworks_run_started):
+		run_started.connect(_on_fireworks_run_started)
+	if wave_director and not wave_director.wave_started.is_connected(distant_fireworks.on_wave_started):
+		wave_director.wave_started.connect(distant_fireworks.on_wave_started)
+	if run_splash and not run_splash.title_started.is_connected(_on_title_plate_started):
+		run_splash.title_started.connect(_on_title_plate_started)
+
+
+func _on_fireworks_run_started() -> void:
+	if distant_fireworks:
+		distant_fireworks.set_enabled(true)
+
+
+func _on_title_plate_started() -> void:
+	if distant_fireworks:
+		distant_fireworks.fire_intro_burst()
+
+
 func start_run() -> void:
 	# R during the boot splash waits for it: the splash then hands over to the intro.
 	if run_splash and run_splash.is_active():
@@ -417,6 +447,8 @@ func start_run() -> void:
 	wave_director.clear_enemies()
 	wave_director.stop_director()
 	wave_director.started_this_run = false
+	if distant_fireworks:
+		distant_fireworks.set_enabled(false)
 
 	state = RunState.INTRO
 	run_time = 0.0
@@ -838,6 +870,8 @@ func _on_player_died() -> void:
 	if state == RunState.GAME_OVER:
 		return
 	state = RunState.GAME_OVER
+	if distant_fireworks:
+		distant_fireworks.set_enabled(false)
 	# Per-run progression ends with the run (E2c, D12): points, unlocks and buffs reset.
 	skill_points = 0
 	if skill_tree:
