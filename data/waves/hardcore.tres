@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WaveProfile" format=3]
+
+[ext_resource type="Script" path="res://src/run/wave_profile.gd" id="1_uoyn1"]
+
+[resource]
+script = ExtResource("1_uoyn1")
+calm_seconds = 45.0
+ramp_seconds = 420.0
+initial_wave_delay = 3.0
+rest_calm = 8.0
+wave_credits_full = 14.0
+peak_budget_mult = 1.7
+cap_step_seconds = 30.0
+elite_from_seconds = 120.0
+elite_chance_full = 0.35
+hp_per_wave = 0.16
+hp_per_second = 0.005
+oni_first_seconds = 150.0
+oni_interval = 80.0

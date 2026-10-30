@@ -547,7 +547,7 @@ func _physics_process(delta: float) -> void:
 		run_time += delta
 		if (element_system and element_system.current_element != Elements.NONE) or (katana and katana.element != Elements.NONE):
 			element_active_seconds += delta
-		wave_director.step_director(delta, p_pos)
+		wave_director.step_director(delta, p_pos, _view_forward())
 		for enemy in wave_director.alive_enemies():
 			enemy.apply_distance_lod(p_pos.distance_to(enemy.root_part().global_position))
 		score = compute_score()
@@ -1074,6 +1074,17 @@ func _ui_ground(p: Vector3) -> float:
 ## knees on a rise, or into the ground), never sunk into a slope under it.
 func _ui_height(viewer: Vector3, at: Vector3, offset: float) -> float:
 	return maxf(_ui_ground(viewer) + offset, _ui_ground(at) + 0.6)
+
+
+## Horizontal direction the player looks in (zero before the head exists). The
+## wave director keeps yōkai out of this cone.
+func _view_forward() -> Vector3:
+	var head := get_tree().get_first_node_in_group("player_head") as Node3D
+	if head == null:
+		return Vector3.ZERO
+	var forward := -head.global_transform.basis.z
+	forward.y = 0.0
+	return forward.normalized() if forward.length_squared() > 0.0001 else Vector3.ZERO
 
 
 func _player_center() -> Vector3:

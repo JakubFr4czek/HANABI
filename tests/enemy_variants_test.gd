@@ -57,12 +57,12 @@ func _run_all() -> void:
 	_check("Swarm yōkai use NavigationAgent3D pathing",
 		elite._nav_agent != null and elite.use_pathfinding)
 
+	# The Oni's timing is the planner's cue (tests/run_loop_test.gd); here the director
+	# just has to summon a working duelist when asked.
 	run.wave_director.active = true
-	run.wave_director.run_seconds = run.wave_director.oni_spawn_min_run_time + 5.0
-	run.wave_director._oni_cooldown = 0.05
-	run.wave_director.step_director(0.1, player.global_position)
+	run.wave_director.spawn_oni_boss(player.global_position)
 	await _frames(4)
-	_check("Wave director spawns a duelist Oni boss on a timer", run.wave_director.has_active_oni())
+	_check("Wave director summons a duelist Oni boss", run.wave_director.has_active_oni())
 	var oni: RunOniBoss = run.wave_director.get_active_oni()
 	_check("Oni uses DuelistBrain with attacks enabled",
 		oni.brain is DuelistBrain and oni.attacks_enabled())
