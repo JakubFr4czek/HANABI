@@ -41,11 +41,12 @@ func _run_all() -> void:
 
 	# The first film has already played for clip_position() seconds.
 	var expected := splash.total_seconds() - splash.clip_position()
-	var elapsed := await _run_until_idle(splash, 1200)
+	# 17.4 s of splash at 90 fps is about 1570 frames; the cap leaves room for the title plate (D18).
+	var elapsed := await _run_until_idle(splash, 2000)
 	var boards: Array = []
 	for ev in GameEvents.recent(20, "boot_splash_board"):
 		boards.append(ev["board"])
-	_check("Films play HANABI then NANJO, once each", boards == ["hanabi", "nanjo"])
+	_check("Films play HANABI then NANJO, once each, then the title plate (D18)", boards == ["hanabi", "nanjo", "title"])
 	_check("The black gap between the films is seen on screen", _gap_seen)
 	_check("The rest of the splash runs the films and the gap, %.2f s (expected %.2f s)" % [elapsed, expected],
 		absf(elapsed - expected) < 0.2)
