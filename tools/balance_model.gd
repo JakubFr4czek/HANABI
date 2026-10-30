@@ -52,17 +52,11 @@ static func hokora_spacing() -> float:
 ## so far with a shrine buff running (union of the 60 s windows).
 static func economy(profile_name: String, seconds: float = 600.0, seed_value: int = 7) -> Dictionary:
 	var prof: Dictionary = PROFILES[profile_name]
-	var wd := WaveDirector.new()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_value
+	var plan := WavePlanner.new(WaveProfile.load_default(), seed_value)
+	var profile := plan.profile
 	var dt := 0.1
 	var t := 0.0
 	var wave := 0
-	var pending := 0
-	var wave_timer := 0.0
-	var next_wave_cd := wd.initial_wave_delay
-	var spawn_timer := 0.0
-	var oni_cd := wd.oni_spawn_interval * 0.55
 	var alive: Array[Dictionary] = []   # {hp, kind}
 	var target: Dictionary = {}
 	var engage := 0.0
@@ -87,7 +81,6 @@ static func economy(profile_name: String, seconds: float = 600.0, seed_value: in
 				"buff": buff_seconds / maxf(t, 1.0)})
 			next_sample += 10.0
 		t += dt
-		wave_timer += dt
 		walked += float(prof.walk_speed) * float(prof.walk_share) * dt
 		while walked >= next_shrine_at:
 			shrines += 1
@@ -95,30 +88,14 @@ static func economy(profile_name: String, seconds: float = 600.0, seed_value: in
 			buff_seconds += until - maxf(t, buff_covered_until)
 			buff_covered_until = maxf(buff_covered_until, until)
 			next_shrine_at += hokora_spacing()
-		var ramp := clampf(t / wd.ramp_seconds, 0.0, 1.0)
-		var cap := clampi(wd.start_concurrent_enemies + int(t / wd.seconds_per_extra_enemy),
-			wd.start_concurrent_enemies, wd.max_concurrent_enemies)
-		if pending > 0 and alive.size() < cap:
-			spawn_timer -= dt
-			if spawn_timer <= 0.0:
-				spawn_timer = lerpf(1.3, 0.35, ramp)
-				pending -= 1
-				alive.append(_spawn(wd, rng, wave, t))
-		if pending == 0 and (alive.is_empty() or wave_timer >= wd.max_wave_duration):
-			next_wave_cd -= dt
-			if next_wave_cd <= 0.0:
-				wave += 1
-				wave_timer = 0.0
-				next_wave_cd = lerpf(wd.between_wave_delay, 2.0, ramp)
-				pending = wd.wave_enemy_count(wave, t)
-				var batch := mini(pending, 1 if ramp < 0.35 else maxi(1, cap - alive.size()) / 2)
-				for i in batch:
-					pending -= 1
-					alive.append(_spawn(wd, rng, wave, t))
-		oni_cd -= dt
-		if oni_cd <= 0.0 and t >= wd.oni_spawn_min_run_time and not _has_kind(alive, "oni"):
-			alive.append({"hp": wd.scaled_hp(maxi(wave, 1), t) * 6.5, "kind": "oni"})
-			oni_cd = wd.oni_spawn_interval
+		# The same planner that paces the game (WavePlanner): yōkai and the Oni.
+		var yokai_alive := alive.size() - (1 if _has_kind(alive, "oni") else 0)
+		var out := plan.step(dt, yokai_alive, _has_kind(alive, "oni"))
+		wave = plan.wave
+		if out.kind != "":
+			alive.append({"hp": profile.hp_for(maxi(wave, 1), t, out.kind == "elite"), "kind": out.kind})
+		if out.oni:
+			alive.append({"hp": profile.hp_for(maxi(wave, 1), t) * profile.oni_hp_mult, "kind": "oni"})
 
 		# The player fights one yōkai at a time.
 		if target.is_empty() and not alive.is_empty():
@@ -149,7 +126,6 @@ static func economy(profile_name: String, seconds: float = 600.0, seed_value: in
 						level += 1
 						points += 1
 					target = {}
-	wd.free()
 	return {"timeline": timeline, "kills": kills, "oni_kills": oni_kills, "elites": elites,
 		"level": level, "points": points, "shrines": shrines, "wave": wave,
 		"buff_uptime": buff_seconds / maxf(seconds, 1.0)}
@@ -195,13 +171,6 @@ static func _has_kind(list: Array[Dictionary], kind: String) -> bool:
 		if e.kind == kind:
 			return true
 	return false
-
-
-static func _spawn(wd: WaveDirector, rng: RandomNumberGenerator, wave: int, t: float) -> Dictionary:
-	var hp := wd.scaled_hp(maxi(wave, 1), t)
-	if rng.randf() < wd.elite_spawn_chance(maxi(wave, 1)):
-		return {"hp": hp * 2.35, "kind": "elite"}
-	return {"hp": hp, "kind": "swarm"}
 
 
 ## Seconds until the run has earned [param cumulative_cost] skill points, per the
