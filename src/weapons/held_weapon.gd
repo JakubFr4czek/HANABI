@@ -1005,10 +1005,10 @@ func _handle_hit(c: Dictionary) -> void:
 	# D17: a school that beats the yōkai rings bright, in its own colour; the same school clinks dully.
 	if matchup > 1.0:
 		Sfx.play_at("blade_ring", c.point, linear_to_db(0.5))
-		SparkBurst.spawn(get_tree().current_scene, c.point, c.direction, Elements.color(school), 16, 3.4)
+		SparkBurst.spawn(get_tree().current_scene, c.point, c.direction, Elements.eye_color(school), 16, 3.4)
 	elif matchup < 1.0:
 		Sfx.play_at("impact_light", c.point, loud - 8.0)
-		SparkBurst.spawn(get_tree().current_scene, c.point, c.direction, Elements.color(school), 4, 1.6)
+		SparkBurst.spawn(get_tree().current_scene, c.point, c.direction, Elements.eye_color(school), 4, 1.6)
 	var counter := matchup > 1.0
 	if dmg >= hit_stop_damage or (counter and dmg >= micro_stop_damage):
 		# 50 ms for a solid hit, up to 80 ms for the heaviest ones; a flick

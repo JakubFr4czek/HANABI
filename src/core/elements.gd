@@ -29,6 +29,15 @@ static func accent_color(element: String) -> Color:
 	return Color(0.85, 0.88, 0.96)
 
 
+## Light in a yōkai's eyes and mask sigil (D17). Ink's pale indigo accent reads as
+## storm's blue through the fog at 8 m, so ink's eye light leans to bone-white with an
+## indigo cast; the other schools keep their accent.
+static func eye_color(element: String) -> Color:
+	if element == INK:
+		return Color(0.78, 0.84, 1.0)
+	return accent_color(element)
+
+
 ## Quadrant bit index on the floor spawn seal: 0=Sakura, 1=Storm, 2=Ink, 3=Shadow.
 static func seal_index(element: String) -> int:
 	match element:
