@@ -47,5 +47,8 @@ void fragment() {
 		discard;
 	}
 	ALBEDO = mix(glow_color.rgb, core_color.rgb, clamp(core * intensity, 0.0, 1.0) * 0.8);
-	ALPHA = clamp(a, 0.0, 0.92);
+	// Past ~18 m the glow thins a little more: the trunks and crowns in front of it
+	// read through the milk, and the far gates stay a light rather than a blob.
+	float far_thin = mix(1.0, 0.72, smoothstep(18.0, 36.0, v_dist));
+	ALPHA = clamp(a * far_thin, 0.0, 0.92);
 }

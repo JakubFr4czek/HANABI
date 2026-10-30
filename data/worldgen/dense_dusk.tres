@@ -33,4 +33,7 @@ undergrowth = Array[ExtResource("5_olx28")]([SubResource("Resource_i8506")])
 torii_chunk_chance = 0.5
 lantern_max_per_chunk = 8
 fog_start = 2.0
+fog_end = 13.0
 tree_draw_radius = 13.0
+focal_draw_radius = 13.0
+lod_near_radius = 7.0
