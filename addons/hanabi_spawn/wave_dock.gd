@@ -57,6 +57,14 @@ const FIELDS := {
 		["oni_interval", "Oni co (s)", 20.0, 900.0, 5.0],
 		["oni_hp_mult", "Mnożnik HP Oni", 1.0, 20.0, 0.1],
 	],
+	"Elements": [
+		["plain_share_start", "Gola stal na starcie", 0.0, 1.0, 0.01],
+		["plain_share_full", "Gola stal na pełnym napory", 0.0, 1.0, 0.01],
+		["weight_sakura", "Waga Sakura 桜", 0.0, 5.0, 0.05],
+		["weight_storm", "Waga Storm 雷", 0.0, 5.0, 0.05],
+		["weight_ink", "Waga Ink 墨", 0.0, 5.0, 0.05],
+		["weight_shadow", "Waga Shadow 影", 0.0, 5.0, 0.05],
+	],
 }
 
 var profile: WaveProfile = null

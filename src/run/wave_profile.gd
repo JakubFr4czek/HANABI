@@ -20,6 +20,7 @@ const GROUP_RING := "Spawn ring"
 const GROUP_ENEMIES := "Enemies"
 const GROUP_SCALING := "Scaling"
 const GROUP_ONI := "Oni"
+const GROUP_ELEMENTS := "Elements"
 const GROUP_SIM := "Simulation"
 
 ## Seconds of run time before the first yōkai of the calm opening wave.
@@ -94,6 +95,17 @@ const GROUP_SIM := "Simulation"
 
 ## Only the editor simulation uses these: a stand-in player who kills one yōkai
 ## at a time. Mirrors the "average" profile of tools/balance_model.gd.
+## Which yōkai carry a school (D17, docs/ELEMENT_COUNTERS.md). The plain share (no
+## school) eases from start to full over the ramp; the rest is split by the four weights.
+## Elites always carry a school and do not use these weights.
+@export_group(GROUP_ELEMENTS)
+@export_range(0.0, 1.0, 0.01) var plain_share_start := 0.70
+@export_range(0.0, 1.0, 0.01) var plain_share_full := 0.35
+@export_range(0.0, 5.0, 0.05) var weight_sakura := 1.0
+@export_range(0.0, 5.0, 0.05) var weight_storm := 1.0
+@export_range(0.0, 5.0, 0.05) var weight_ink := 1.0
+@export_range(0.0, 5.0, 0.05) var weight_shadow := 1.0
+
 @export_group(GROUP_SIM)
 @export_range(1.0, 300.0, 1.0) var sim_player_dps := 51.0
 @export_range(0.0, 5.0, 0.1, "suffix:s") var sim_gap := 1.4
@@ -137,6 +149,41 @@ func elite_chance(t: float) -> float:
 		return 0.0
 	var span := maxf(ramp_seconds - elite_from_seconds, 1.0)
 	return clampf(elite_chance_full * (t - elite_from_seconds) / span, 0.0, elite_chance_full)
+
+
+## Share of swarm yōkai with no school at run time [param t] (D17).
+func plain_share(t: float) -> float:
+	return lerpf(plain_share_start, plain_share_full, ramp_share(t))
+
+
+## Weights of the four schools for a swarm yōkai at run time [param t] (the plain share
+## is not in here: see [method plain_share]).
+func school_weights() -> Dictionary:
+	return {
+		Elements.SAKURA: maxf(weight_sakura, 0.0),
+		Elements.STORM: maxf(weight_storm, 0.0),
+		Elements.INK: maxf(weight_ink, 0.0),
+		Elements.SHADOW: maxf(weight_shadow, 0.0),
+	}
+
+
+## Rolls the school of one swarm yōkai spawned at run time [param t]: plain with the
+## plain share, otherwise a school by weight. Elements.NONE when every weight is zero.
+func roll_swarm_element(t: float, rng: RandomNumberGenerator) -> String:
+	if rng.randf() < plain_share(t):
+		return Elements.NONE
+	var weights := school_weights()
+	var total := 0.0
+	for school: String in weights:
+		total += float(weights[school])
+	if total <= 0.0:
+		return Elements.NONE
+	var pick := rng.randf() * total
+	for school: String in weights:
+		pick -= float(weights[school])
+		if pick < 0.0:
+			return school
+	return Elements.NONE
 
 
 func hp_for(wave_num: int, t: float, elite: bool = false) -> float:

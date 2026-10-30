@@ -189,3 +189,46 @@ const BUFF_HEAL_NOW := 0.35
 const BUFF_HEAL_OVER_TIME := 0.15
 const BUFF_HEAL_SECONDS := 10.0
 
+# --- Counter ring (D17, docs/ELEMENT_COUNTERS.md): who hurts whom more ----------------
+## Each school beats exactly one other and is beaten by exactly one:
+## Ink gasi Storm, Storm rozwiewa Sakurę, Sakura przebija Shadow, Shadow omija Ink.
+## The two pairs across the ring (Ink–Sakura, Storm–Shadow) are neutral.
+const BEATS := {
+	Elements.INK: Elements.STORM,
+	Elements.STORM: Elements.SAKURA,
+	Elements.SAKURA: Elements.SHADOW,
+	Elements.SHADOW: Elements.INK,
+}
+## Damage multiplier of an attack on a defender it beats, the same school, and any other pair.
+## Plain steel (Elements.NONE) and the non-school "physical" are always neutral.
+const COUNTER_MULTIPLIER := 1.5
+const SAME_MULTIPLIER := 0.5
+const NEUTRAL_MULTIPLIER := 1.0
+## A countering blade hit holds the world this much longer (seconds, capped by the hit-stop limit).
+const COUNTER_HIT_STOP_EXTRA := 0.02
+
+
+## Damage multiplier of an attack by [param attacker] on a body of [param defender].
+## The one place where the element table turns into numbers (enemy profiles call it).
+static func matchup(attacker: String, defender: String) -> float:
+	if not Elements.COMBAT_ELEMENTS.has(attacker) or not Elements.COMBAT_ELEMENTS.has(defender):
+		return NEUTRAL_MULTIPLIER
+	if attacker == defender:
+		return SAME_MULTIPLIER
+	if beats(attacker, defender):
+		return COUNTER_MULTIPLIER
+	return NEUTRAL_MULTIPLIER
+
+
+## True when [param attacker] is the school on the ring that [param defender] loses to.
+static func beats(attacker: String, defender: String) -> bool:
+	return String(BEATS.get(attacker, Elements.NONE)) == defender
+
+
+## The school that beats [param defender] (for a weakness label, or the matchup test).
+static func countered_by(defender: String) -> String:
+	for attacker: String in BEATS:
+		if BEATS[attacker] == defender:
+			return attacker
+	return Elements.NONE
+

@@ -23,7 +23,7 @@ func _run_all() -> void:
 	var player := run.player as DesktopPlayer
 
 	var elite := run.wave_director.spawn_elite_at(Vector3(2.0, 0.0, -3.0), player.global_position, Elements.STORM)
-	_check("Elite yōkai spawn with an element identity", elite.is_elite() and elite.elite_element == Elements.STORM)
+	_check("Elite yōkai spawn with an element identity", elite.is_elite() and elite.body_element == Elements.STORM)
 	var chest := elite.parts["chest"] as RagdollPart
 	var storm_hit := {
 		"base_damage": 20.0, "zone": "torso", "element": Elements.STORM,
@@ -56,6 +56,38 @@ func _run_all() -> void:
 
 	_check("Swarm yōkai use NavigationAgent3D pathing",
 		elite._nav_agent != null and elite.use_pathfinding)
+
+	# D17: swarm yōkai roll a school by the wave's weights (plain share eases over the ramp),
+	# and the spawner hands that school to the body and its profile.
+	var weights := WaveProfile.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 17
+	var start_counts := {}
+	for i in 4000:
+		var school := weights.roll_swarm_element(0.0, rng)
+		start_counts[school] = int(start_counts.get(school, 0)) + 1
+	var plain_start := float(start_counts.get(Elements.NONE, 0)) / 4000.0
+	_check("calm start: about 70 %% of swarm yōkai are plain steel (got %.2f)" % plain_start,
+		absf(plain_start - 0.70) < 0.03)
+	var schools_even := true
+	for e: String in Elements.COMBAT_ELEMENTS:
+		var share := float(start_counts.get(e, 0)) / 4000.0
+		schools_even = schools_even and absf(share - 0.075) < 0.02
+	_check("schools share the rest evenly at equal weights", schools_even)
+	var full_counts := {}
+	for i in 4000:
+		var school := weights.roll_swarm_element(weights.ramp_seconds, rng)
+		full_counts[school] = int(full_counts.get(school, 0)) + 1
+	var plain_full := float(full_counts.get(Elements.NONE, 0)) / 4000.0
+	_check("ramp end: about 35 %% of swarm yōkai are plain (got %.2f)" % plain_full, absf(plain_full - 0.35) < 0.03)
+
+	var school_bodies_ok := true
+	for e: String in Elements.COMBAT_ELEMENTS:
+		var swarm := run.wave_director.spawn_enemy_at(Vector3(-3.0, 0.0, -4.0), player.global_position, e)
+		school_bodies_ok = school_bodies_ok and swarm.kind == Yokai.Kind.SWARM \
+			and swarm.body_element == e and swarm.profile.element == e
+	_check("spawner gives a swarm yōkai of each school its element (body and profile)", school_bodies_ok)
+	run.wave_director.clear_enemies()
 
 	# The Oni's timing is the planner's cue (tests/run_loop_test.gd); here the director
 	# just has to summon a working duelist when asked.
