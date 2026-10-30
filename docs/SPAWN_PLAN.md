@@ -189,3 +189,25 @@ na scenie `run.tscn`, a nie dane.
   szczyt może trwać krótko; zmierzyć w grze.
 - Liczba fal rośnie przy szybkiej grze; HP rośnie z numerem fali. Patrz §3.
 - Weryfikacja cyklu L4D w PDF Valve jest niedokończona (patrz §2).
+
+## 10. Decyzje podjęte w trakcie wdrożenia
+
+- **Budżet kredytów zamiast liczby per fala.** Fala ma pulę kredytów (zwykły
+  yōkai 1, elita 4). Pula rośnie krzywą w czasie. Stary wzór (fala × czas) znika.
+- **Cap 8 (Quest), nie 12.** Zmierzona baza stresu to 8 yōkai i 338 wywołań
+  rysowania przy limicie 345. Presety różnią się krzywą i HP, nie liczbą ciał.
+- **Przerwy i budżet startowy.** Cisza na start: 1 kredyt na falę, przerwa 14 s,
+  pierwszy yōkai po 5 s. Test z §7 pilnuje, że w pierwszej minucie jest ≤ 4.
+- **Progresja drzewka (D12) zmieniona w ślad za ciszą.** Mniej zabójstw na
+  starcie oznacza, że pierwszy poziom (150 XP, 7 zabójstw) nie wypada w minutę.
+  Zmieniono progi poziomów na 60 + 40 za poziom. XP za wroga (24/48/64) bez zmian.
+  Cele drzewka z `tests/skill_tree_data_test.gd` przechodzą bez zmiany asercji.
+- **Symulacja gracza ze stałym DPS.** Panel i testy używają 51 DPS (profil
+  „average”), bez wzrostu mocy ostrza z poziomem. Stąd płaski szczyt przy capie
+  po ~5 min: w grze moc rośnie z poziomem, więc to przybliżenie zawyża napór
+  późnego runu. Do sprawdzenia na prawdziwym playtestcie.
+- **Zamknięcie fali przy timeoucie 18 s.** Fala nie czeka na zabicie wszystkich,
+  bo bez tego (stary błąd) przerwy nie istniały.
+- **Cykl L4D potwierdzony tylko jako model.** Cyklu build-up/peak/relax nie
+  znaleziono w tekście slajdów Valve dostępnym przez wyszukiwarkę; przyjęto go
+  jako ogólny wzorzec i zrealizowano jako deterministyczny sawtooth (co 3. fala).
