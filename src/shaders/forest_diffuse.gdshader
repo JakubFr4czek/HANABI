@@ -24,6 +24,9 @@ uniform vec3 far_bark_color : source_color = vec3(0.16, 0.12, 0.10);
 // Alpha-cut level of the canopy gaps: the cherry atlas is black between blossoms (0.05);
 // a scanned crown's navy card background sits below 0.3 and its leaves above.
 uniform float cut_level = 0.05;
+// Leaf cards with their own alpha (ferns, RGBA atlases) cut out on the alpha channel.
+// Off by default: the cherry atlas has no alpha and is cut out on its brightness.
+uniform bool alpha_from_texture = false;
 
 varying vec3 world_pos;
 
@@ -51,10 +54,11 @@ void fragment() {
 	alb_root *= mix(1.0, 0.8, smoothstep(0.72, 1.0, along));
 	alb_root *= night_tint;
 
-	vec3 tex = texture(albedo_texture, UV).rgb;
+	vec4 texel = texture(albedo_texture, UV);
+	vec3 tex = texel.rgb;
 	// The atlas paints blossoms on black. The black is the gap between leaves,
 	// not bark, so it is cut away and the crown stays a cloud instead of a solid cone.
-	float cover = max(tex.r, max(tex.g, tex.b));
+	float cover = alpha_from_texture ? texel.a : max(tex.r, max(tex.g, tex.b));
 	vec3 alb = tex * night_tint * albedo_gain;
 	vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	float open_sky = clamp(wn.y * 0.45 + 0.5, 0.0, 1.0);

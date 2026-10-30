@@ -194,6 +194,9 @@ func _run_all() -> void:
 		has_uniform = has_uniform or u.name == "cut_level"
 	_check("Foliage shader cuts leaf-card backgrounds out (alpha scissor from cut_level)",
 		foliage_src.contains("ALPHA_SCISSOR_THRESHOLD = fading ? dither : cut_level;") and has_uniform)
+	_check("Foliage shader can cut out on the texture alpha (ferns), off by default",
+		foliage_src.contains("float cover = alpha_from_texture ? texel.a : max(tex.r, max(tex.g, tex.b));")
+		and foliage_src.contains("uniform bool alpha_from_texture = false;"))
 
 	# Walking inside one chunk toward the treeline must reveal trees without
 	# waiting for a chunk-border crossing.
