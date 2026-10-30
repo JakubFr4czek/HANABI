@@ -36,7 +36,9 @@ Dźwięki są podpięte pod punkt widza (scena ma własną przestrzeń), a `Ambi
 
 ## Lokacja (ograniczenie)
 
-Kinowa scena stoi na polanie startu (origin, promień ~5,2 m, bez drzew), z układem skalowanym do 0,7. Próby przeniesienia w głąb lasu nie wyszły: w (30, 18) pień zasłaniał kamerę, w (-36, -30) kamera stawała w pniu (zrzut w rundzie, odrzucony). Sonda 9 m czystego miejsca nie znalazła kandydatów w siatce co 6 m. Skutek: w kadrze brak lasu z konceptu. Do zrobienia: maska wycinki drzew w strefie sceny (ForestWorld bez zmian w generatorze) albo ręcznie wybrana, zweryfikowana lokacja.
+Kinowa scena stoi na polanie startu (origin, promień ~5,2 m, bez drzew), z układem skalowanym do 0,7. Próby przeniesienia w głąb lasu nie wyszły: w (30, 18) pień zasłaniał kamerę, w (-36, -30) kamera stawała w pniu (zrzut w rundzie, odrzucony). Sonda 9 m czystego miejsca nie znalazła kandydatów w siatce co 6 m. Ostatnia próba (42, −18), jedna runda: las jest w kadrze (`docs/d11/forest_attempt_glade_42_-18_cut1.png`), ale pień stoi za finiszerem i przy szóstym cięciu zasłania cel (`..._finisher.png`), więc wersja została cofnięta na polanę startu. Skutek: w kadrze brak lasu z konceptu.
+
+**Świecenie przekroju** nie jest rozwiązane: 1,6× glow nie przebija się na zrzutach z kamery sceny. Ograniczenie, do rozwiązania przy następnej iteracji (emisja krawędzi). Do zrobienia: maska wycinki drzew w strefie sceny (ForestWorld bez zmian w generatorze) albo ręcznie wybrana, zweryfikowana lokacja.
 
 ## Decyzje podjęte bez pytania (do przeglądu)
 
