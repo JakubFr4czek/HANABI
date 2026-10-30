@@ -45,6 +45,7 @@ odtwarzalny z kodu.
 | **Lights and sky** | światło, mgła, paleta | `shafts_*` (promienie księżyca), `fog_start`, `fog_end` (≤ zasięg pierścienia, `loaded_range()`), `fog_curve`, `dusk_pink`, `night_blue`, `dusk_mix` (0 = noc, 1 = róż), `ambient_energy`, `moon_*`, `exposure`, `glow_intensity`, `volumetric_fog` (tylko PC) |
 | **Ground** | materiał terenu | `ground_wetness`, `ground_cavity_ao`, `ground_normal_strength`, `ground_roughness_wet` |
 | **Paths** | ścieżki | `paths_enabled`, `path_node_spacing`, `path_width`, `path_loop_chance`, `path_curviness`, `path_tree_clearance`, `torii_on_path`, `lantern_on_path` |
+| **Sky** | niebo nad ścieżkami i polaną (D19) | `sky_path_half` (pas otwartego nieba od osi ścieżki), `sky_glade_radius` (koło nad polaną startową) |
 | **Distance and LOD** | zasięg rysowania | `tree_draw_radius`, `focal_draw_radius`, `lod_near_radius`, `lod_fade`, `ground_fade_start/end` |
 
 **Mgła i „gęstość”:** gęstość mgły to `fog_start` (gdzie mgła zaczyna gęstnieć)
@@ -114,6 +115,14 @@ rozłożenia na klatki (zob. „Ograniczenia”).
 - **Korytarz:** szerokość `path_width` = 2,0 m, prześwit od pni `path_tree_clearance`
   = 2,0 m (pnie i głazy stoją poza pasem plus prześwit). Odnoga kapliczki
   jest trasowana tym samym A* i próbkowana co metr, więc leży na zboczu.
+- **Niebo (D19):** korona nie może wejść w pas `sky_path_half` (2,0 m) od osi
+  ścieżki ani w koło `sky_glade_radius` (3,5 m) nad polaną. Reguła liczy
+  kępy korony (`_crown_discs_for`) w przestrzeni pnia i przekłada je przez tę
+  samą bazę co sadzenie (`_trunk_basis`: pochylenie ze zboczem, obrót, skala).
+  Pole ścieżki (`_path_field`) ma zasięg na najszerszą koronę. Test
+  `forest_world_test` sprawdza wierzchołki narysowanych koron, nie same dyski.
+  Cedr ma `min_spacing` 5 m (było 2,7 m), żeby korony nie zlewały się w jedną
+  masę: otwarte niebo nad podłożem lasu ~34 % (asercja ≥ 30 %).
 - **Determinizm:** losowania per punkt to `hash([x, z, sól, seed])`, per chunk
   to `hash([coord, rodzaj, seed])`. Brak zależności od kolejności ładowania.
 
