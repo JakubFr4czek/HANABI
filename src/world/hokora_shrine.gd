@@ -10,8 +10,14 @@ extends Node3D
 ## near, and when a touch is accepted or refused. No lights: the Quest 3 light budget
 ## is untouched.
 ##
+## The suzu (P8) hangs beside the offering table. A hand or the blade tip on it, with the
+## player close, rings it for one elemental charge (D21) and it rests for
+## ElementBalance.HOKORA_BELL_COOLDOWN. It glows faintly while the player stands in reach.
+## The bell works whether the shrine is lit or used: it is separate from the Ofuda choice.
+##
 ## The model is procedural and lives under the "ModelSlot" node. D5 replaces its
-## children with a real asset; nothing else in this script changes.
+## children with a real asset; nothing else in this script changes. The suzu is its
+## own child of this node, so it survives that swap.
 
 ## Seconds after a refused touch before the same hand can try again (no bell spam).
 const REFUSE_COOLDOWN := 1.5
@@ -29,17 +35,27 @@ const LANTERN_LOCAL := Vector3(0.44, 0.7, 0.8)
 const LANTERN_INTENSITY := 0.8
 const SUZU_RANGE := 14.0
 const SUZU_INTERVAL := 6.0
+## The suzu hangs from the front eave, beside the offering table (shrine space, metres).
+const BELL_LOCAL := Vector3(-0.42, 0.98, 0.7)
+const BELL_COLOR := Color(0.62, 0.48, 0.2)
+## Emission while the player stands in reach of a ready bell: a faint glow, the hint.
+const BELL_HINT_GLOW := 0.9
 
 ## Which forest slot this shrine belongs to (set by HokoraManager).
 var slot := Vector2i.ZERO
 var lit := true
 ## Counts down after a refused touch; the shrine ignores touches until it reaches 0.
 var touch_cooldown := 0.0
+## Counts down after a rung (or refused) bell; the bell ignores touches until it reaches 0.
+var bell_cooldown := 0.0
+## Bells rung accepted this run at this shrine; picks the element of the next charge.
+var bell_rings := 0
 
 var _halo: MeshInstance3D
 var _halo_mat: ShaderMaterial
 var _flame_mat: StandardMaterial3D
 var _altar_cloth_mat: StandardMaterial3D
+var _bell_mat: StandardMaterial3D
 var _suzu_cd := 0.0
 var _clock := 0.0
 
@@ -50,6 +66,7 @@ func _ready() -> void:
 	if slot_root and slot_root.get_child_count() == 0:
 		_build_model(slot_root)
 	_build_halo()
+	_build_bell()
 	_apply_lit()
 
 
@@ -85,6 +102,49 @@ func refuse() -> void:
 		Sfx.play_at("hokora_suzu", altar_position(), -12.0, 10.0, 0.95)
 
 
+## Where the suzu hangs, world space: where a hand or the blade tip has to reach.
+func bell_position() -> Vector3:
+	return global_transform * BELL_LOCAL
+
+
+## The element the next bell charge stores: the combat elements in turn, offset by the
+## slot so neighbouring shrines do not all start on the same one.
+func bell_element() -> String:
+	return Elements.COMBAT_ELEMENTS[posmod(slot.x + slot.y + bell_rings, Elements.COMBAT_ELEMENTS.size())]
+
+
+## True when [param point] (a hand or the blade tip) touches the suzu and the player
+## stands in its reach (P8). A bell still resting ignores it. Nothing here changes
+## state: [RunGame] stores the charge and then calls [method ring_bell].
+func is_bell_touched_by(point: Vector3, player_pos: Vector3) -> bool:
+	if bell_cooldown > 0.0:
+		return false
+	if point.distance_to(bell_position()) > ElementBalance.HOKORA_BELL_HAND_RADIUS:
+		return false
+	return _in_bell_reach(player_pos)
+
+
+## The charge was stored: the suzu rings, the next charge changes element, the bell rests.
+func ring_bell() -> void:
+	bell_rings += 1
+	bell_cooldown = ElementBalance.HOKORA_BELL_COOLDOWN
+	if Sfx:
+		Sfx.play_at("hokora_suzu", bell_position(), -2.0, 12.0, 1.3)
+
+
+## The charge was not stored (the buffer is full): a quiet ring and a short rest only
+## (REFUSE_COOLDOWN), not the full bell cooldown, so the next real charge comes soon after.
+func refuse_bell() -> void:
+	bell_cooldown = REFUSE_COOLDOWN
+	if Sfx:
+		Sfx.play_at("hokora_suzu", bell_position(), -12.0, 10.0, 1.1)
+
+
+func _in_bell_reach(player_pos: Vector3) -> bool:
+	var d := player_pos - bell_position()
+	return Vector2(d.x, d.z).length() <= ElementBalance.HOKORA_BELL_TOUCH_RADIUS and absf(d.y) <= 2.0
+
+
 ## The choice was taken: the shrine goes dark for the rest of the run.
 func consume() -> void:
 	set_lit(false)
@@ -100,6 +160,10 @@ func set_lit(value: bool) -> void:
 func step(delta: float, player_pos: Vector3) -> void:
 	_clock += delta
 	touch_cooldown = maxf(touch_cooldown - delta, 0.0)
+	bell_cooldown = maxf(bell_cooldown - delta, 0.0)
+	if _bell_mat:
+		var hint := bell_cooldown <= 0.0 and _in_bell_reach(player_pos)
+		_bell_mat.emission_energy_multiplier = BELL_HINT_GLOW if hint else 0.0
 	if _halo == null:
 		return
 	if lit:
@@ -148,6 +212,29 @@ func _build_halo() -> void:
 	_halo.position = LANTERN_LOCAL
 	_halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_halo)
+
+
+## The suzu: a small bronze bell on a cord under the front eave. Its glow is the hint
+## that a bell is ready and in reach. It is not a collider: touches are distance checks.
+func _build_bell() -> void:
+	_bell_mat = StandardMaterial3D.new()
+	_bell_mat.albedo_color = BELL_COLOR
+	_bell_mat.metallic = 0.6
+	_bell_mat.roughness = 0.35
+	_bell_mat.emission_enabled = true
+	_bell_mat.emission = Color(1.0, 0.78, 0.4)
+	_bell_mat.emission_energy_multiplier = 0.0
+	var bell := MeshInstance3D.new()
+	bell.name = "Suzu"
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.035
+	cyl.bottom_radius = 0.06
+	cyl.height = 0.07
+	bell.mesh = cyl
+	bell.material_override = _bell_mat
+	bell.position = BELL_LOCAL
+	bell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(bell)
 
 
 ## Plain procedural hokora: stone plinth, wooden house with a dark door, a
