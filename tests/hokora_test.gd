@@ -257,6 +257,7 @@ func _test_used_shrine_stays_dark() -> void:
 	await _frames(40)
 	_check("Walking 1.2 km away culls the shrine", run.hokora_manager.shrine_at(Vector2i.ZERO) == null)
 	player.teleport(Vector3(slot_pos.x + 4.0, run.forest_world.height_at(slot_pos.x + 4.0, slot_pos.z), slot_pos.z), 0.0)
+	run.forest_world.finish_pending()
 	await _frames(40)
 	var back := run.hokora_manager.shrine_at(Vector2i.ZERO)
 	_check("Walking back shows exactly one shrine in the slot (no duplicate)",
@@ -314,6 +315,7 @@ func _test_density_along_a_walk() -> void:
 	for i in range(1, steps + 1):
 		var x := 30.0 * float(i)
 		player.teleport(Vector3(x, run.forest_world.height_at(x, 0.0), 0.0), 0.0)
+		run.forest_world.finish_pending()
 		await _frames(24)
 		for s in run.hokora_manager.alive_shrines():
 			seen[s.slot] = true
@@ -479,6 +481,7 @@ func _ahead(meters: float) -> Vector3:
 func _teleport_next_to(shrine: HokoraShrine) -> void:
 	var a := shrine.altar_position()
 	player.teleport(Vector3(a.x + 0.9, run.forest_world.height_at(a.x + 0.9, a.z), a.z), 0.0)
+	run.forest_world.finish_pending()
 
 
 func _check(label: String, ok: bool) -> void:
