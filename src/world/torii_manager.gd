@@ -1,8 +1,8 @@
 class_name ToriiManager
 extends Node3D
 ## Manages elemental Torii gates streaming in the endless forest (docs/ELEMENTS_PLAN.md).
-## Guarantees gate spacing within 18–32 m of the player, 40 m between active gates,
-## collision clearance (3.2 m), gates beside a footpath running along it (never across),
+## Guarantees gate spacing within 18–32 m of the player, 70 m between active gates,
+## collision clearance (3.2 m), gates standing over a footpath running along it (never across),
 ## 4-item shuffle bag rotation, and integration with chunk streaming.
 
 signal gate_spawned(gate: ToriiGate)
@@ -11,10 +11,15 @@ const TORII_GATE_SCENE := preload("res://scenes/world/torii_gate.tscn")
 const MIN_SPAWN_DIST: float = 18.0
 const MAX_SPAWN_DIST: float = 32.0
 const IDEAL_SPAWN_DIST: float = 24.0
+## Gates kept in the 18–32 m ring ahead. Two cannot fit 70 m apart in that ring (its widest
+## span is 64 m), so the density target is one.
+const IN_RANGE_TARGET: int = 1
 ## Minimum distance between active gates, so gates never bunch up in the walk.
-const MIN_GATE_SEPARATION: float = 40.0
+const MIN_GATE_SEPARATION: float = 70.0
 ## A gate centre this close to a footpath axis takes the path's direction.
 const PATH_ALIGN_RADIUS: float = 3.5
+## Every gate centre lies within this distance of the footpath network (on it, in practice).
+const GATE_PATH_REACH: float = 8.0
 const CLEARANCE_RADIUS: float = 3.2
 const SHRINE_CLEARING_RADIUS: float = 8.5
 const COMBAT_SPAWN_SEPARATION: float = 14.0
@@ -30,9 +35,8 @@ var _rng := RandomNumberGenerator.new()
 var _spawn_check_timer: float = 0.0
 var _clearance_query: PhysicsShapeQueryParameters3D = null
 var _clearance_cyl: CylinderShape3D = null
-## Pose override while placing gates for a reset (see ensure_gates_ahead).
+## Position override while placing gates for a reset (see ensure_gates_ahead).
 var _pose_at := Vector3.INF
-var _pose_facing := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -91,7 +95,7 @@ func is_near_gate(wx: float, wz: float, clearance: float = CLEARANCE_RADIUS) -> 
 	return false
 
 
-## A spent gate may come back in place (45 m rule) only when no other active gate
+## A spent gate may come back in place (MIN_GATE_SEPARATION rule) only when no other active gate
 ## stands within MIN_GATE_SEPARATION of it; otherwise it stays spent.
 func can_reactivate(gate: ToriiGate) -> bool:
 	for g in active_gates:
@@ -147,14 +151,13 @@ func _cull_distant_gates() -> void:
 
 
 ## Places gates ahead of the player up to the target count (run start and reset).
-## [param at] and [param facing] stand in for the player's pose when the player is
-## not yet on the spawn (a reset happens before the player is placed).
-func ensure_gates_ahead(at: Vector3 = Vector3.INF, facing: Vector3 = Vector3.ZERO) -> void:
+## [param at] stands in for the player's position when the player is not yet on the
+## spawn (a reset happens before the player is placed). [param _facing] is still passed
+## by callers but placement follows the footpath, not the view direction.
+func ensure_gates_ahead(at: Vector3 = Vector3.INF, _facing: Vector3 = Vector3.ZERO) -> void:
 	_pose_at = at
-	_pose_facing = facing
 	_ensure_gates_ahead()
 	_pose_at = Vector3.INF
-	_pose_facing = Vector3.ZERO
 
 
 func _ensure_gates_ahead() -> void:
@@ -170,7 +173,7 @@ func _ensure_gates_ahead() -> void:
 			if d >= MIN_SPAWN_DIST and d <= MAX_SPAWN_DIST:
 				in_range_count += 1
 
-	while in_range_count < 2 and active_gates.size() < 8:
+	while in_range_count < IN_RANGE_TARGET and active_gates.size() < 8:
 		var spawned := _attempt_spawn_gate_in_range(p_pos)
 		if spawned == null:
 			break
@@ -185,25 +188,24 @@ func _attempt_spawn_gate_in_range(p_pos: Vector3) -> ToriiGate:
 
 
 ## The first valid place for a gate around the player, or Vector2.INF. Only
-## searches: it spawns nothing, so it can be timed on its own.
+## searches: it spawns nothing, so it can be timed on its own. Candidates are footpath
+## points 18–32 m from the player, nearest to IDEAL_SPAWN_DIST first, so a gate stands
+## over the path rather than beside it in the trees.
 func find_gate_spot(p_pos: Vector3) -> Vector2:
-	var fwd := _player_forward()
-	var base_angle := atan2(fwd.x, fwd.z)
-
-	# Sweep 24 angles around player facing direction and multiple distances in [18.5, 31.5]
-	var angle_count := 24
-	var distances: Array[float] = [22.0, 24.0, 20.0, 26.0, 18.5, 28.0, 30.0, 31.5]
-
-	for dist in distances:
-		for i in angle_count:
-			var sign_mult := 1.0 if (i % 2 == 0) else -1.0
-			var off := (float(i) / float(angle_count)) * PI * sign_mult
-			var ang := base_angle + off
-			var cand_x := p_pos.x + sin(ang) * dist
-			var cand_z := p_pos.z + cos(ang) * dist
-
-			if _is_valid_location(cand_x, cand_z, p_pos):
-				return Vector2(cand_x, cand_z)
+	if forest_world == null or forest_world.paths == null:
+		return Vector2.INF
+	var c := Vector2(p_pos.x, p_pos.z)
+	var half := Vector2(MAX_SPAWN_DIST, MAX_SPAWN_DIST)
+	var candidates: Array[Vector4] = []
+	for s in forest_world.paths.samples_in_rect(Rect2(c - half, half * 2.0), 1.0):
+		var d := Vector2(s.x, s.y).distance_to(c)
+		if d >= MIN_SPAWN_DIST and d <= MAX_SPAWN_DIST:
+			candidates.append(s)
+	candidates.sort_custom(func(a: Vector4, b: Vector4) -> bool:
+		return absf(Vector2(a.x, a.y).distance_to(c) - IDEAL_SPAWN_DIST) < absf(Vector2(b.x, b.y).distance_to(c) - IDEAL_SPAWN_DIST))
+	for s in candidates:
+		if _is_valid_location(s.x, s.y, p_pos):
+			return Vector2(s.x, s.y)
 	return Vector2.INF
 
 
@@ -314,14 +316,3 @@ func _player_pos() -> Vector3:
 			return follow.call("feet_position")
 		return follow.global_position
 	return Vector3.INF
-
-
-func _player_forward() -> Vector3:
-	if _pose_facing != Vector3.ZERO:
-		return _pose_facing
-	if follow and is_instance_valid(follow):
-		var f := -follow.global_transform.basis.z
-		f.y = 0.0
-		if f.length_squared() > 0.01:
-			return f.normalized()
-	return Vector3.FORWARD
