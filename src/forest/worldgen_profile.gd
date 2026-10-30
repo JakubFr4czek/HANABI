@@ -110,7 +110,9 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## A hokora shrine slot is this many chunks on a side (see HokoraManager).
 @export_range(40.0, 400.0, 1.0) var shrine_slot_size := 112.0
 ## Chance that a slot holds a shrine at all. Shrines must stay rarer than the torii (validate()).
-@export_range(0.0, 1.0, 0.01) var shrine_slot_chance := 0.9
+## Shrines stand on footpaths now (uwaga 8), so a walk along a path meets nearly every
+## slot that holds one: 0.85 keeps the met spacing near the design's ~215 m.
+@export_range(0.0, 1.0, 0.01) var shrine_slot_chance := 0.85
 
 @export_group("Lights and sky")
 ## Moonlight through canopy gaps: shafts per chunk.
