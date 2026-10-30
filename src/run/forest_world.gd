@@ -16,6 +16,8 @@ extends Node3D
 const GROUND_LAYERS := {"soil": "forrest_ground_01", "grass": "leafy_grass", "stone": "rocky_trail"}
 const SHAFT_SHADER := preload("res://src/shaders/moon_shaft.gdshader")
 const GROUND_SHADER := preload("res://src/shaders/forest_ground.gdshader")
+const MOSS_ALBEDO := preload("res://assets/textures/forest_ground/moss002/moss002_diff_1k.jpg")
+const MOSS_NORMAL := preload("res://assets/textures/forest_ground/moss002/moss002_nor_gl_1k.jpg")
 const WET_SHADER := preload("res://src/shaders/wet_surface.gdshader")
 const TREE_DIFFUSE := preload("res://src/shaders/forest_diffuse.gdshader")
 const TREE_ALBEDO := preload("res://assets/models/environment/forest_trees/cherry_forest_albedo.jpg")
@@ -53,6 +55,8 @@ const LANTERN_PARTS := [
 ]
 ## Lanterns keep this far from a gate of their chunk (metres, from its centre).
 const LANTERN_CLEAR_OF_TORII := 3.5
+## Height slices for a scanned lantern's collider (one convex hull each).
+const LANTERN_SLICES := 10
 ## Trunk hull top (mesh space): above the reach of a raised blade. The
 ## trunk is hulled in slices this tall (overlapping a little), so the
 ## hull follows the taper and flare instead of bridging them.
@@ -113,9 +117,12 @@ var _tree_far_meshes: Array[Mesh] = []
 var _tree_far_mats: Array[Material] = []
 ## One MultiMesh per ordinary entry for every far crown in the ring (one draw call for the forest, not one per chunk).
 var _far_tree_nodes: Dictionary = {}
+var _scene_tree_nodes: Dictionary = {}
 ## World origins of the crowns the last refresh drew (what the camera sees; tests read them).
 var drawn_full_origins := PackedVector3Array()
 var drawn_far_origins := PackedVector3Array()
+## Scene crowns (D5 redwood) drawn to tree_draw_radius: no LOD band, so kept apart from the cedar's full crowns.
+var drawn_scene_origins := PackedVector3Array()
 var _tree_shapes: Array = []
 var _tree_chest: Array[float] = []
 ## Per profile undergrowth entry: mesh, material and collider shape.
@@ -126,6 +133,7 @@ var _shaft_mesh: QuadMesh
 var _shaft_mat: ShaderMaterial
 var _torii_mesh: Mesh
 var _lantern_mesh: Mesh
+var _lantern_hulls: Array[ConvexPolygonShape3D] = []
 ## Collision shapes measured from the meshes above (see _build_prop_shapes):
 ## convex hulls of the visible surface, shared by every instance and placed
 ## with the instance's own transform, so bodies and the blade stop where the
@@ -610,7 +618,9 @@ func _populate_trees(root: Node3D, coord: Vector2i) -> int:
 		var entry := profile.trees[e]
 		var label := ("Focal%d" if entry.is_focal() else "Trees%d") % e
 		root.set_meta("xfs_" + label, xfs)
-		_commit_multimesh(root, label, _tree_meshes[e], _tree_mats[e], xfs)
+		# A scene crown is drawn ring-wide (see _scene_tree_node), not once per chunk.
+		if entry.crown != TreeEntry.Crown.SCENE:
+			_commit_multimesh(root, label, _tree_meshes[e], _tree_mats[e], xfs)
 		if entry.obstacle:
 			root.add_child(_build_tree_colliders(xfs, e, root))
 	return int(packed.clearing)
@@ -1376,15 +1386,37 @@ func _build_torii_colliders(xfs: Array[Transform3D], root: Node3D) -> StaticBody
 	return body
 
 
+## Convex hulls of horizontal slices of a mesh (LANTERN_SLICES bands, overlapping a little).
+static func _lantern_slices(mesh: Mesh) -> Array[ConvexPolygonShape3D]:
+	var out: Array[ConvexPolygonShape3D] = []
+	var verts: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var box := mesh.get_aabb()
+	var band := box.size.y / float(LANTERN_SLICES)
+	for k in LANTERN_SLICES:
+		var lo := box.position.y + band * float(k) - 0.02
+		var hi := box.position.y + band * float(k + 1) + 0.02
+		var pts := PackedVector3Array()
+		for v in verts:
+			if v.y >= lo and v.y <= hi:
+				pts.append(v)
+		if pts.size() >= 4:
+			out.append(_hull(pts))
+	return out
+
+
 func _build_lantern_colliders(xfs: Array[Transform3D], root: Node3D) -> StaticBody3D:
 	var body := _new_collider("LanternColliders", "stone")
 	var registered: Array = root.get_meta("trunk_entries", [])
 	for xf in xfs:
 		var s := xf.basis.get_scale().x
-		for part in LANTERN_PARTS:
-			var box := BoxShape3D.new()
-			box.size = part[0]
-			_add_shape(body, box, xf * Transform3D(Basis.IDENTITY, part[1]))
+		if not _lantern_hulls.is_empty():
+			for hull in _lantern_hulls:
+				_add_shape(body, hull, xf)
+		else:
+			for part in LANTERN_PARTS:
+				var box := BoxShape3D.new()
+				box.size = part[0]
+				_add_shape(body, box, xf * Transform3D(Basis.IDENTITY, part[1]))
 		registered.append(_remember_trunk(root.position + xf.origin, 0.24 * s))
 	root.set_meta("trunk_entries", registered)
 	return body
@@ -1507,8 +1539,10 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 	var focal2 := profile.focal_draw_radius * profile.focal_draw_radius
 	# Far crowns of the whole ring, in world space, per ordinary entry.
 	var far_all: Dictionary = {}
+	var scene_all: Dictionary = {}
 	drawn_full_origins.clear()
 	drawn_far_origins.clear()
+	drawn_scene_origins.clear()
 	for key in _chunks:
 		var chunk := _chunks[key] as Node3D
 		var base := chunk.position
@@ -1523,16 +1557,19 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 			var mm := inst.multimesh
 			var near: Array[Transform3D] = []
 			var focal := label.begins_with("Focal")
+			# A scene crown (D5 redwood) is one full-detail mesh out to tree_draw_radius: no LOD band, no far copy.
+			var full_only := not focal and profile.trees[int(label.trim_prefix("Trees"))].crown == TreeEntry.Crown.SCENE
+			var full_hi2 := draw2 if full_only else near_hi2
 			for xf in all:
 				var placed := xf as Transform3D
 				var dx := base.x + placed.origin.x - origin.x
 				var dz := base.z + placed.origin.z - origin.z
 				var d2 := dx * dx + dz * dz
-				if focal and d2 <= focal2 or not focal and d2 <= near_hi2:
+				if focal and d2 <= focal2 or not focal and d2 <= full_hi2:
 					near.append(placed)
 					if not focal:
 						drawn_full_origins.append(base + placed.origin)
-				if not focal and d2 >= far_lo2 and d2 <= draw2:
+				if not focal and not full_only and d2 >= far_lo2 and d2 <= draw2:
 					var e := int(label.trim_prefix("Trees"))
 					if not far_all.has(e):
 						far_all[e] = [] as Array[Transform3D]
@@ -1543,14 +1580,56 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 			mm.instance_count = near.size()
 			for i in near.size():
 				mm.set_instance_transform(i, near[i])
+		# Scene crowns (D5 redwood): full detail to tree_draw_radius, one MultiMesh for the whole ring.
+		for e in profile.trees.size():
+			if profile.trees[e].is_focal() or profile.trees[e].crown != TreeEntry.Crown.SCENE:
+				continue
+			for xf in chunk.get_meta("xfs_Trees%d" % e, []):
+				var placed := xf as Transform3D
+				var sx := base.x + placed.origin.x - origin.x
+				var sz := base.z + placed.origin.z - origin.z
+				if sx * sx + sz * sz <= draw2:
+					if not scene_all.has(e):
+						scene_all[e] = [] as Array[Transform3D]
+					(scene_all[e] as Array[Transform3D]).append(Transform3D(placed.basis, placed.origin + base))
+					drawn_scene_origins.append(base + placed.origin)
 	for e in profile.trees.size():
-		if profile.trees[e].is_focal():
+		if profile.trees[e].is_focal() or profile.trees[e].crown == TreeEntry.Crown.SCENE:
 			continue
 		var far_list: Array = far_all.get(e, [])
 		var node := _far_tree_node(e)
 		node.multimesh.instance_count = far_list.size()
 		for i in far_list.size():
 			node.multimesh.set_instance_transform(i, far_list[i])
+	for e in profile.trees.size():
+		if profile.trees[e].is_focal() or profile.trees[e].crown != TreeEntry.Crown.SCENE:
+			continue
+		var scene_list: Array = scene_all.get(e, [])
+		var scene_node := _scene_tree_node(e)
+		scene_node.multimesh.instance_count = scene_list.size()
+		for i in scene_list.size():
+			scene_node.multimesh.set_instance_transform(i, scene_list[i])
+
+
+## Scene crowns of one entry, drawn across the whole ring in one MultiMesh (created on first use).
+func _scene_tree_node(e: int) -> MultiMeshInstance3D:
+	if _scene_tree_nodes.has(e):
+		return _scene_tree_nodes[e]
+	var inst := MultiMeshInstance3D.new()
+	inst.name = "SceneTrees%d" % e
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = _tree_meshes[e]
+	mm.instance_count = 0
+	inst.multimesh = mm
+	inst.material_override = _tree_mats[e]
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	_set_view_range(inst)
+	inst.custom_aabb = AABB(Vector3(-400.0, -2.0, -400.0), Vector3(800.0, 24.0, 800.0))
+	add_child(inst)
+	_scene_tree_nodes[e] = inst
+	return inst
 
 
 ## The far-crown MultiMesh of one ordinary entry, created on first use under the forest.
@@ -1804,6 +1883,9 @@ func _build_materials() -> void:
 	# Pale gravel (Poly Haven rocky_trail): lighter than the duff either side of it.
 	_ground_mat.set_shader_parameter("path_albedo", load("res://assets/textures/forest_ground/rocky_trail/rocky_trail_diff_1k.jpg"))
 	_ground_mat.set_shader_parameter("path_normal", load("res://assets/textures/forest_ground/rocky_trail/rocky_trail_nor_gl_1k.jpg"))
+	# Moss on slopes and damp patches (D5, Moss002 CC0), before the grass and soil share the rest.
+	_ground_mat.set_shader_parameter("moss_albedo", MOSS_ALBEDO)
+	_ground_mat.set_shader_parameter("moss_normal", MOSS_NORMAL)
 	_ground_mat.set_shader_parameter("path_tint", profile.path_tint)
 	_ground_mat.set_shader_parameter("path_gain", profile.path_gain)
 	_ground_mat.set_shader_parameter("fog_fade_end", profile.ground_fade_end)
@@ -1824,7 +1906,10 @@ func _build_materials() -> void:
 
 	_lantern_mat = ShaderMaterial.new()
 	_lantern_mat.shader = WET_SHADER
-	_lantern_mat.set_shader_parameter("base_color", Color(0.42, 0.4, 0.36))
+	# A baked scan carries its own colour (atlas in the albedo, see tools/prep_forest_assets.py).
+	var lantern_albedo := _scene_albedo(profile.lantern_scene)
+	_lantern_mat.set_shader_parameter("base_color", Color.WHITE if lantern_albedo != null else Color(0.42, 0.4, 0.36))
+	_lantern_mat.set_shader_parameter("albedo_texture", lantern_albedo)
 	_lantern_mat.set_shader_parameter("roughness_dry", 0.88)
 	_lantern_mat.set_shader_parameter("roughness_wet", 0.75)
 	_lantern_mat.set_shader_parameter("wetness", 0.25)
@@ -1876,16 +1961,21 @@ func _build_meshes() -> void:
 	for node in _far_tree_nodes.values():
 		(node as Node).free()
 	_far_tree_nodes.clear()
+	for node in _scene_tree_nodes.values():
+		(node as Node).free()
+	_scene_tree_nodes.clear()
 	_tree_shapes.clear()
 	_tree_chest.clear()
 	for entry in profile.trees:
 		var key := "tree|%s|%d" % [_scene_key(entry.scene), entry.crown]
 		var built := _built_once(key, _build_tree_parts.bind(entry)) as Dictionary
 		_tree_meshes.append(built.mesh)
-		_tree_mats.append(_sakura_material(entry) if entry.crown == TreeEntry.Crown.SAKURA else _tree_material(0.0))
+		# A scene crown (D5 redwood) brings its own atlas, with a higher cut level for its card background.
+		var own_albedo: Texture2D = _scene_albedo(entry.scene) if entry.crown == TreeEntry.Crown.SCENE else null
+		_tree_mats.append(_sakura_material(entry) if entry.crown == TreeEntry.Crown.SAKURA else _tree_material(0.0, own_albedo))
 		var far_key := "tree_far|%s|%d" % [_scene_key(entry.scene), entry.crown]
 		_tree_far_meshes.append(_built_once(far_key, _build_far_tree_mesh.bind(entry)) as Mesh)
-		_tree_far_mats.append(_tree_material(1.0))
+		_tree_far_mats.append(_tree_material(1.0, own_albedo))
 		_tree_shapes.append(built.hulls)
 		_tree_chest.append(float(built.chest))
 	if not _tree_chest.is_empty():
@@ -1893,6 +1983,9 @@ func _build_meshes() -> void:
 	_torii_mesh = _built_once("torii|%s" % _scene_key(profile.torii_scene), _build_torii_mesh) as Mesh
 	_torii_shapes = _built_once("torii_hulls|%s" % _scene_key(profile.torii_scene), _torii_hulls) as Array[ConvexPolygonShape3D]
 	_lantern_mesh = _built_once("lantern|%s" % _scene_key(profile.lantern_scene), _build_lantern_mesh) as Mesh
+	# A scanned lantern collides as a stack of convex slices (the procedural boxes do not match
+	# its shape, and one hull over the pagoda roof would stand well off the drawn lantern).
+	_lantern_hulls = _lantern_slices(_lantern_mesh) if profile.lantern_scene != null else []
 	_under_meshes.clear()
 	_under_mats.clear()
 	_under_shapes.clear()
@@ -1919,14 +2012,21 @@ func _build_undergrowth_parts(entry: UndergrowthEntry) -> Dictionary:
 
 ## The ordinary tree material. [param far] 0 is the full crown (fades out past the
 ## LOD band), 1 is the far crown (fades in). Both use the band from the profile.
-func _tree_material(far: float) -> ShaderMaterial:
+func _tree_material(far: float, own_albedo: Texture2D = null) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
 	mat.shader = TREE_DIFFUSE
-	mat.set_shader_parameter("albedo_texture", TREE_ALBEDO)
+	mat.set_shader_parameter("albedo_texture", TREE_ALBEDO if own_albedo == null else own_albedo)
 	mat.set_shader_parameter("normal_texture", TREE_NORMAL)
+	if own_albedo != null:
+		mat.set_shader_parameter("cut_level", 0.08)
+		mat.set_shader_parameter("normal_depth", 0.0)
 	mat.set_shader_parameter("lod_far", far)
 	var half := profile.lod_fade * 0.5
-	mat.set_shader_parameter("lod_band", Vector2(profile.lod_near_radius - half, profile.lod_near_radius + half))
+	# A scene crown has no LOD dissolve: it stays solid to tree_draw_radius (no far copy is built).
+	var band := Vector2(profile.lod_near_radius - half, profile.lod_near_radius + half)
+	if own_albedo != null:
+		band = Vector2(1.0e5, 1.0e5 + 1.0)
+	mat.set_shader_parameter("lod_band", band)
 	return mat
 
 
@@ -2329,6 +2429,21 @@ func _extract_rock_mesh() -> Mesh:
 		st.add_vertex(verts[idx[i]])
 	st.generate_normals()
 	return st.commit()
+
+
+## Albedo of the first surface of a scene (a baked atlas, see tools/prep_forest_assets.py).
+static func _scene_albedo(scene: PackedScene) -> Texture2D:
+	if scene == null:
+		return null
+	var inst := scene.instantiate()
+	var found: Texture2D = null
+	for mi in inst.find_children("*", "MeshInstance3D", true, false):
+		var mat := (mi as MeshInstance3D).mesh.surface_get_material(0) as BaseMaterial3D if (mi as MeshInstance3D).mesh != null else null
+		if mat != null and mat.albedo_texture != null:
+			found = mat.albedo_texture
+			break
+	inst.free()
+	return found
 
 
 static func _merge_scene_meshes(scene: PackedScene, scale_factor: float) -> ArrayMesh:

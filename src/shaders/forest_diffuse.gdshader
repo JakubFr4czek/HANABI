@@ -20,6 +20,10 @@ uniform float lod_far = 0.0;
 uniform vec2 lod_band = vec2(9.0, 11.0);
 // The far crown's trunk is a plain bark colour: the atlas sample at its UV is pale.
 uniform vec3 far_bark_color : source_color = vec3(0.16, 0.12, 0.10);
+// Cherry atlas: black between the blossoms is a gap, so it is cut away.
+// Alpha-cut level of the canopy gaps: the cherry atlas is black between blossoms (0.05);
+// a scanned crown's navy card background sits below 0.3 and its leaves above.
+uniform float cut_level = 0.05;
 
 varying vec3 world_pos;
 
@@ -77,7 +81,7 @@ void fragment() {
 	ALPHA = mix(cover, 1.0, max(root, leaf)) * lod_alpha;
 	// Inside the band the scissor is the dither; outside it stays the usual cut-out.
 	bool fading = lod_alpha > 0.0 && lod_alpha < 1.0;
-	ALPHA_SCISSOR_THRESHOLD = fading ? dither : 0.05;
+	ALPHA_SCISSOR_THRESHOLD = fading ? dither : cut_level;
 	// Shadowed bark takes a little of the fog, so a trunk fades into the air.
 	EMISSION = storm_fog_color.rgb * 0.05 * (0.65 + 0.35 * open_sky);
 }
