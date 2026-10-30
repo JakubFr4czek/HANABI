@@ -173,6 +173,10 @@ mnożyć pliki:
 3. Spawn nigdy w polu widzenia: na prawdziwej scenie `run.tscn`, dla każdego
    spawnu sprawdzamy `camera.is_position_in_frustum` (zero) i kąt względem
    kierunku widzenia > `view_half_angle`.
+   Za plecami: nic nie spawnuje się w tylnym sektorze 120° (±60° od kierunku
+   przeciwnego do widzenia, `BEHIND_SECTOR_HALF` w `wave_director.gd`). Brak
+   legalnego miejsca = pominięty spawn w tym ticku, bez fallbacku za plecami.
+   Test: `tests/back_spawn_test.gd` (10 min fal, Oni, odzyskiwanie maruderów).
 4. Spawn nigdy w kolizji: zapytanie o kształt (kula 0,5 m) na masce geometrii
    (warstwy 4|8, jak u yōkai) zwraca zero trafień w punkcie spawnu.
 5. Presety przechodzą `validate()` bez błędów; Hardcore ma wyższy szczyt niż Demo.
