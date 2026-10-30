@@ -106,3 +106,37 @@ Windowed (pikselowe, `SKIP` w headless):
 - Zmiana elit (brak element-owych `resistances`) zmienia odczuwalny balans elit. Trzeba zmierzyć w `balance_sim`.
 - Kontra ×1.5 może rozbić „gola stal jest wygrywalna”. Będzie sprawdzone w symulacji i wagach fali.
 - Czytelność koloru w mgle: oczy elity są już jasne (`ELITE_LIFT`); rój z mniejszym liftem może zniknąć w mgle. Patrz zrzuty.
+
+## 7. Realizacja i ocena (D17, 2026-10-30)
+
+### 7.1 Co zrobiono
+- **Krąg i mnożniki:** `ElementBalance.BEATS`, `matchup()`, `beats()`, `countered_by()`, `COUNTER_MULTIPLIER` 1.5, `SAME_MULTIPLIER` 0.5, `NEUTRAL_MULTIPLIER` 1.0.
+- **Pipeline wroga:** `EnemyProfile.element` i `damage_multiplier()` = zone × ring × resistance; parry-armour i kirisute dalej bez zmian. Ability (`receive_element_damage`) też przechodzi przez ring.
+- **Rój z żywiołem:** `WaveProfile.plain_share()`, `school_weights()`, `roll_swarm_element()`; grupa „Elements” w panelu „Fale” (6 wierszy). `WaveDirector` losuje przy każdym spawnie roju. Elity bez zmian (równomiernie).
+- **Wygląd:** żywioł roju w oczach, EyeGlow i sigilu (`Elements.eye_color`, `SCHOOL_EYE_GLOW` 1.4). Skóra i szarfa bez zmian, żeby rój nie wyglądał jak elita z daleka. Naprawiono nadpisywanie wyglądu w `_ready`.
+- **Feedback:** kontra: hit-stop +0.02 s, drugi impuls haptyczny, rozbłysk ciała w akcencie żywiołu, iskry w barwie oczu. Ten sam żywioł: stłumiony „clink” i mało iskier, krótszy impuls.
+- **Balans:** `BalanceModel.draft_matchup()` (plain / blind / read), `READY_COUNTER_SHARE` 0.5 (założenie), `balance_sim` ma blok COUNTER RING.
+- **Testy:** `elements_test` (krąg, mnożniki, neutral, katana ×1.0, kolejność mnożników, draft), `enemy_variants_test` (udział żywiołów w roju, spawner 4 żywiołów). Pikselowy test wizualny `d17_element_visual_test` (okno).
+
+### 7.2 Wyniki (zmierzone)
+- **Hit (prawdziwa ścieżka `HeldWeapon._handle_hit`, wróg Storm, 900 HP):** gola stal 16.9, kontra (Ink) 25.3 = ×1.50, ten sam żywioł (Storm) 8.4 = ×0.50.
+- **Kolor w kadrze, 8 m (`docs/d17/1_four_schools_8m.png`):** najbliższa para 0.22 RGB (próg 0.12). Sakura różowa, Storm cyjanowa, Ink bladoniebieska, Shadow fioletowa.
+- **Balans, 8 min, „average”:** gola stal 39 zabójstw, LV 7, 6 pkt (bez zmian względem przed D17). Blind ×1.000, read ×1.111: 40 zabójstw, ten sam poziom. Czyli ring zmienia tempo walki (≈ −10 % czasu na zabicie), ale w szeregowym modelu ekonomii daje ~1 zabójstwo w 8 min.
+
+### 7.3 Decyzje podjęte bez pytania (do przeglądu)
+1. Krąg jest jednokierunkowy i 4-cykliczny (nie pary wzajemne); przekątne są neutralne. Stare pary elitarne zmieniły się: Ink-elita słaba na Shadow (było Storm), Sakura-elita słaba na Storm (było Shadow).
+2. Elity nie mają już element-owych `resistances` (ring je zastępuje). Zostaje `physical` ×0.42 (bez zmian). Efekt: elita tego samego żywiołu bierze ×0.5 zamiast ×0.34, a na słabość ×1.5 zamiast ×1.72.
+3. Wróg nie zadaje więcej graczowi z kontrującym żywiołem (punkt 3 planu).
+4. Rój: udział gołej stali liniowo 70 % → 35 % w rampie; reszta wagami z panelu.
+5. Oni bez żywiołu w D17 (hak `EnemyProfile.element` gotowy).
+6. Ink w oczach jest bladoniebieski-biały (`Elements.eye_color`), a nie czarny z palety GDD. Powód: czarny/indygo ginie w mgle i zlewa się z cyjanem Storm. Akcent UI i kolory `Elements.color` bez zmian.
+7. Kolor trafienia kontry = akcent żywiołu (nie jasne oczy), bo jasny ink dawał białe ciało.
+
+### 7.4 Ocena surowa (co jest słabe)
+- **Czytelność z 8 m:** światło w oczach to 5–8 px. Kolor czyta się jako kropka, a sigil na masce w mgle nie jest czytelny. Bez zoomu gracz rozpoznaje szkołę tylko dzięki kolorowi oczu. Mocniejsza rozdzielczość wymagałaby większej emisji albo lekkiego tintu skóry (koszt: podobieństwo do elity).
+- **Mylące halo:** pomarańczowa i niebieska poświata latarni (torii) stoi tuż za wrogami i w kadrze 1 wygląda jak żywioł samego wroga. To problem sceny, nie D17, ale psuje czytelność.
+- **Ciężki rozbłysk kontry z bliska:** cała postać na 0.12 s w bladym kolorze (amplituda 0.55). Trzeba zmierzyć w grze, czy nie męczy.
+- **Ink nie wygląda jak ink** (patrz decyzja 6): palety GDD §5 i kolor czarnego tuszu nie są oddane na wrogach.
+- **Balans nieprzetestowany w walce:** ring zmienia tempo walki o ~10 %, ale model jest szeregowy i zakłada 50 % „gotowości” kontry. Dopiero gra pokaże, czy gracz w ogóle czyta żywioł roju.
+- **Ability bez osobnego feedbacku:** trafienie zdolnością kontrującą dostaje rozbłysk ciała, ale nie ma hit-stopu ani haptyki. Świadomie pominięte.
+- **Dźwięk nie był odsłuchany:** `blade_ring` / `impact_light` ciszej o 6–8 dB to wartości z oka, nie z miksu.
