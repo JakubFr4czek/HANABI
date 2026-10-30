@@ -643,8 +643,14 @@ func _physics_process(delta: float) -> void:
 		# 45.0m Reactivation Rule: reactivates iff player moves >= 45.0m away
 		if player_pos != Vector3.INF:
 			var d := global_position.distance_to(player_pos)
-			if d >= REACTIVATION_DISTANCE:
+			if d >= REACTIVATION_DISTANCE and _reactivation_clear():
 				reactivate()
+
+
+## A spent gate stays spent while a live gate stands too close to its spot (ToriiManager).
+func _reactivation_clear() -> bool:
+	var manager := get_parent() as ToriiManager
+	return manager == null or manager.can_reactivate(self)
 
 
 func _eval_crossing(prev_pos: Vector3, curr_pos: Vector3) -> bool:
