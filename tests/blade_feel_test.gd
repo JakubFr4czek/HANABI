@@ -46,6 +46,7 @@ func _run() -> void:
 	await _test_no_wedging()
 	await _test_heavy_body_cannot_tear_it_away()
 	await _test_swing_power()
+	await _test_cut_leaves_trace()
 
 
 # --- 3. Edge alignment ----------------------------------------------------------------
@@ -418,6 +419,19 @@ func _test_heavy_body_cannot_tear_it_away() -> void:
 
 
 # --- Helpers ----------------------------------------------------------------------------
+
+## D13: a landed cut marks the edge for about 3 s, then the mark is gone (checked by
+## stepping the blade's own clock, not by waiting in real time).
+func _test_cut_leaves_trace() -> void:
+	var mat: ShaderMaterial = katana._get_blade_material()
+	katana.mark_trace()
+	katana._process(1.0)
+	var mid: float = float(mat.get_shader_parameter("trace_level"))
+	_check("A landed cut marks the blade: trace still strong after 1 s (%.2f)" % mid, mid > 0.5 and mid < 1.0)
+	katana._process(2.5)
+	_check("The trace fades out within 3 s and leaves the steel clean", katana.trace_left == 0.0
+		and float(mat.get_shader_parameter("trace_level")) == 0.0)
+
 
 func _new_holder(at: Transform3D) -> WeaponHolder:
 	var holder := WeaponHolder.new()
