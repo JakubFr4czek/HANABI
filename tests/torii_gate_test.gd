@@ -1,5 +1,5 @@
 extends Node
-## Unit tests for Torii gate crossing, single-element imbue, 20s expiry,
+## Unit tests for Torii gate crossing (stores a charge, D21), single-element imbue, 20s expiry,
 ## paused-tree immunity, weapon filtering, and 45m distance reactivation.
 ##   godot --headless --path . --fixed-fps 90 res://tests/torii_gate_test.tscn -- --desktop
 
@@ -52,9 +52,12 @@ func _run_all() -> void:
 	fake_body.position = Vector3(0.0, 1.5, -1.0)
 	await _frames(4)
 
-	_check("Crossing plane triggers imbue on katana", katana.element == Elements.SAKURA)
-	_check("ElementSystem current_element is updated", elem_sys.current_element == Elements.SAKURA)
+	_check("Crossing plane stores a Sakura charge; the blade stays plain steel",
+		elem_sys.charges.size() == 1 and elem_sys.charges[0] == Elements.SAKURA and katana.element == Elements.NONE)
 	_check("Gate deactivates after crossing", not gate.is_active)
+	elem_sys.activate_charge()
+	_check("Spending the charge imbues the katana with Sakura", katana.element == Elements.SAKURA)
+	_check("ElementSystem current_element is updated", elem_sys.current_element == Elements.SAKURA)
 	_check("Timer is initialized to ~20.0 s", elem_sys.element_time_remaining >= 19.5 and elem_sys.element_time_remaining <= 20.0)
 
 	# 1b. E3: the gate light. A crossed gate flares and drains to a dormant lantern;
@@ -91,15 +94,17 @@ func _run_all() -> void:
 	gate.trigger_cross(katana)
 	await _frames(4)
 
-	_check("Sword physical touch alone does not trigger gate imbue", katana.element == Elements.NONE and elem_sys.current_element == Elements.NONE)
+	_check("Sword physical touch alone stores no charge", elem_sys.charges.is_empty() and katana.element == Elements.NONE and elem_sys.current_element == Elements.NONE)
 	_check("Gate remains active when sword alone enters aperture", gate.is_active)
 
-	# Now player body enters -> must trigger imbue
+	# Now player body enters -> must store a charge
 	fake_body.position = Vector3(0.0, 1.5, 1.0)
 	await _frames(2)
 	fake_body.position = Vector3(0.0, 1.5, -1.0)
 	await _frames(4)
-	_check("Player body crossing triggers imbue after sword was rejected", katana.element == Elements.SAKURA and not gate.is_active)
+	_check("Player body crossing stores a charge after sword was rejected", elem_sys.charges.size() == 1 and not gate.is_active)
+	elem_sys.activate_charge()
+	_check("The stored charge imbues Sakura on the katana", katana.element == Elements.SAKURA)
 
 	# 3. Single source of truth & pause immunity: 21s paused tree does not decrement element timer
 	elem_sys.imbue(Elements.SAKURA, 20.0)
@@ -112,7 +117,8 @@ func _run_all() -> void:
 		elem_sys.element_time_remaining == t_before and katana.element == Elements.SAKURA)
 	get_tree().paused = false
 
-	# 4. Same gate refreshes timer
+	# 4. A gate crossed while Sakura burns stores a charge but cannot cut in; it waits
+	# until the blade is plain steel, then imbues a fresh 20 s.
 	# Step timer down by 10 seconds in normal time
 	for _i in 100:
 		elem_sys._physics_process(0.1)
@@ -126,8 +132,16 @@ func _run_all() -> void:
 	fake_body.position = Vector3(0.0, 1.5, -1.0)
 	await _frames(4)
 
-	_check("Same gate refreshes timer back to 20.0 s", elem_sys.element_time_remaining >= 19.5 and elem_sys.element_time_remaining <= 20.0)
-	_check("Katana element remains Sakura", katana.element == Elements.SAKURA)
+	_check("Crossing while Sakura burns stores a charge and leaves the timer alone (%.1f s)" % elem_sys.element_time_remaining,
+		elem_sys.charges.size() == 1 and elem_sys.element_time_remaining <= 10.5 and elem_sys.element_time_remaining >= 9.5)
+	_check("The waiting charge cannot be spent while Sakura burns", not elem_sys.can_activate_charge() and not elem_sys.activate_charge())
+	for _i in 110:
+		elem_sys._physics_process(0.1)
+		katana._physics_process(0.1)
+	_check("Sakura burns out to plain steel", katana.element == Elements.NONE)
+	elem_sys.activate_charge()
+	_check("The waiting Sakura charge restarts a full 20 s", elem_sys.element_time_remaining >= 19.5 and elem_sys.element_time_remaining <= 20.0)
+	_check("Katana element is Sakura again", katana.element == Elements.SAKURA)
 
 	# 5. A real level-up card chosen through the RunGame path does NOT grant
 	# an element: the blade element comes only from a Torii gate crossing.
@@ -154,7 +168,7 @@ func _run_all() -> void:
 	if FileAccess.file_exists(TEST_SAVE_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_SAVE_PATH))
 
-	# 6. Different gate replaces element
+	# 6. A different gate's charge replaces the element once spent
 	var storm_gate: ToriiGate = TORII_SCENE.instantiate()
 	storm_gate.element = Elements.STORM
 	storm_gate.position = Vector3(10.0, 0.0, 0.0)
@@ -167,7 +181,9 @@ func _run_all() -> void:
 	fake_body.position = Vector3(10.0, 1.5, -1.0)
 	await _frames(4)
 
-	_check("Different gate replaces element with Storm", katana.element == Elements.STORM)
+	_check("Storm gate stores a Storm charge while the blade is plain steel", elem_sys.charges.size() == 1 and elem_sys.charges[0] == Elements.STORM and katana.element == Elements.NONE)
+	elem_sys.activate_charge()
+	_check("Spent Storm charge replaces the element with Storm", katana.element == Elements.STORM)
 	_check("ElementSystem reflects new element Storm", elem_sys.current_element == Elements.STORM)
 	_check("Timer reset to 20.0 s on new element", elem_sys.element_time_remaining >= 19.5 and elem_sys.element_time_remaining <= 20.0)
 
@@ -202,7 +218,9 @@ func _run_all() -> void:
 	await _frames(2)
 	fake_body.position = Vector3(0.0, 1.5, -1.0)
 	await _frames(4)
-	_check("After Sakura gate crossed, element is SAKURA", elem_sys.current_element == Elements.SAKURA)
+	_check("Sakura gate stores one charge; the blade stays plain steel", elem_sys.charges.size() == 1 and katana.element == Elements.NONE)
+	elem_sys.activate_charge()
+	_check("After the Sakura charge is spent, element is SAKURA", elem_sys.current_element == Elements.SAKURA)
 
 	# Trigger Hanamai (Ability 2)
 	var hanamai_ok := elem_sys.execute_ability_2(Vector3.FORWARD)

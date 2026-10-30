@@ -207,6 +207,9 @@ func _run_all() -> void:
 			g._physics_process(step_dt)
 		if run.element_system:
 			run.element_system._physics_process(step_dt)
+			# D21: gates store charges; the traveller presses the charge button as soon as the blade is plain steel.
+			if run.element_system.can_activate_charge():
+				run.element_system.activate_charge()
 		if run.katana:
 			run.katana._physics_process(step_dt)
 
