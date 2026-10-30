@@ -24,6 +24,12 @@ const TREE_ALBEDO := preload("res://assets/models/environment/forest_trees/cherr
 const TREE_NORMAL := preload("res://assets/models/environment/forest_trees/cherry_forest_normal.jpg")
 const SAKURA_TREE_SHADER := preload("res://src/shaders/sakura_tree.gdshader")
 const TORII_MESH_SCALE := 0.42
+## Foliage clumps are drawn this many times their listed radius, so neighbours merge into one canopy.
+const CROWN_OVERSIZE := 1.18
+## Slack added to every crown disc (metres): covers the far crown, which has fewer segments.
+const CROWN_DISC_MARGIN := 0.1
+## Lowest height a scanned crown counts for the sky rule: below it is trunk and root flare.
+const SCENE_CROWN_FLOOR := 2.5
 ## Clearance of a layout-after tree from base trunks and from gates (metres).
 const EXTRA_BASE_CLEAR := 3.0
 const EXTRA_GATE_CLEAR := 5.0
@@ -113,6 +119,10 @@ var _bump_noise := FastNoiseLite.new()
 var _floor_noise := FastNoiseLite.new()
 var _scatter_noise := FastNoiseLite.new()
 var _corridor_noise := FastNoiseLite.new()
+## Per profile tree entry: crown discs (Vector4: centre xyz in trunk space, reach), read by the sky rule.
+var _crown_discs: Array = []
+## Largest crown disc radius of any kind at its biggest scale (metres): sizes the path field.
+var _crown_reach := 0.0
 ## Per profile tree entry: mesh, material, trunk hulls and chest radius.
 var _tree_meshes: Array[Mesh] = []
 var _tree_mats: Array[Material] = []
@@ -625,8 +635,7 @@ func _place_tree_spots(root: Node3D, spots: Array, ids: PackedInt32Array,
 		var base := _mesh_min_height(wx, wz, reach) - 0.05 * scale
 		# Lean with the hill, not the mound, so the roots lie on the slope
 		# instead of sticking out on the downhill side.
-		var up := Vector3.UP.lerp(_hill_normal(wx, wz), entry.hill_lean).normalized()
-		var basis := _basis_up(up, yaw, scale)
+		var basis := _trunk_basis(Vector2(wx, wz), entry, yaw, scale)
 		var xf := Transform3D(basis, Vector3(wx - root.position.x, base, wz - root.position.z))
 		if not per_kind.has(e):
 			per_kind[e] = [] as Array[Transform3D]
@@ -825,6 +834,8 @@ func _extra_tree_spots(coord: Vector2i) -> Dictionary:
 				continue
 			var scale := lerpf(entry.scale_min, entry.scale_max, _point_random(p.x, p.y, 2))
 			var yaw := _point_random(p.x, p.y, 3) * TAU
+			if not _crown_clear(p, e, scale, yaw if entry.random_yaw else 0.0):
+				continue
 			var spot := Vector4(p.x, p.y, scale, yaw if entry.random_yaw else 0.0)
 			spots.append(spot)
 			ids.append(e)
@@ -872,12 +883,17 @@ func _tree_trunk_points(coord: Vector2i) -> Array:
 ## the layout-after spots themselves are built from. A neighbour's layout-after spots
 ## are read only when already cached: computing them early would fix them before the
 ## gates of that neighbour's ring are planned (the budget test caught a redwood that way).
+## Until then a neighbour keeps out its layout-after candidates (the pure Poisson samples,
+## a superset of its trunks), so a prop never lands beside a trunk that is yet to be planted.
 func _prop_trunk_points(coord: Vector2i) -> Array:
 	var out := _tree_trunk_points(coord)
 	for ox in range(-1, 2):
 		for oz in range(-1, 2):
 			var c := coord + Vector2i(ox, oz)
 			if c != coord and not _extra_spot_cache.has(c):
+				for e in _extra_entries():
+					for p in _take_poisson(c, e):
+						out.append(Vector3(p.x, p.y, 0.0))
 				continue
 			for s in _extra_tree_spots(c).get("spots", []):
 				var spot: Vector4 = s
@@ -909,6 +925,10 @@ func _potential_trunks(coord: Vector2i) -> Dictionary:
 				continue
 			var density := _scatter_noise.get_noise_2d(p.x * profile.density_frequency, p.y * profile.density_frequency) * 0.5 + 0.5
 			if _point_random(p.x, p.y, 1) > lerpf(profile.tree_keep_min, profile.tree_keep_max, density):
+				continue
+			var scale := lerpf(entry.scale_min, entry.scale_max, _point_random(p.x, p.y, 2))
+			var yaw := _point_random(p.x, p.y, 3) * TAU if entry.random_yaw else 0.0
+			if not _crown_clear(p, e, scale, yaw):
 				continue
 			points.append(Vector4(p.x, p.y, float(e), entry.min_spacing))
 	var result := {"points": points, "clearing": clearing}
@@ -1007,7 +1027,7 @@ func _tree_spots(coord: Vector2i) -> Dictionary:
 		focal_rank += 1
 		if chance_hash >= entry.focal_chance or spots.is_empty():
 			continue
-		var idx := _pick_focal_spot(coord, spots, ids)
+		var idx := _pick_focal_spot(coord, spots, ids, e, entry.focal_scale_boost)
 		if idx < 0:
 			continue
 		var s: Vector4 = spots[idx]
@@ -1099,7 +1119,7 @@ static func _any_closer(entries: Array, wx: float, wz: float, spacing: float) ->
 	return false
 
 
-func _pick_focal_spot(coord: Vector2i, spots: Array[Vector4], ids: PackedInt32Array) -> int:
+func _pick_focal_spot(coord: Vector2i, spots: Array[Vector4], ids: PackedInt32Array, focal_e: int, boost: float) -> int:
 	var chunk_center := Vector2(float(coord.x) * _chunk_size, float(coord.y) * _chunk_size)
 	var best_idx := -1
 	var best_score := -INF
@@ -1107,6 +1127,9 @@ func _pick_focal_spot(coord: Vector2i, spots: Array[Vector4], ids: PackedInt32Ar
 		if profile.trees[ids[i]].is_focal():
 			continue
 		var s: Vector4 = spots[i]
+		# A focal tree is bigger and has its own crown: it must pass the sky rule as itself.
+		if not _crown_clear(Vector2(s.x, s.y), focal_e, s.z * boost, s.w):
+			continue
 		var dist_to_center := Vector2(s.x - chunk_center.x, s.y - chunk_center.y).length()
 		var center_penalty := maxf(0.0, dist_to_center - (_chunk_size * 0.35)) * 0.3
 		var h := _hill_height(s.x, s.y)
@@ -1292,7 +1315,9 @@ func _path_field(coord: Vector2i) -> PackedFloat32Array:
 	var step := size / float(res - 1)
 	var half := size * 0.5
 	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
-	var reach := _path_half_width() + maxf(2.0, profile.path_tree_clearance + 1.0)
+	# Reach covers the sky corridor plus the widest crown, so a crown disc never reads a capped distance.
+	var reach := _path_half_width() + maxf(maxf(2.0, profile.path_tree_clearance + 1.0),
+			profile.sky_path_half + _sky_margin() + _crown_reach)
 	var field := PackedFloat32Array()
 	field.resize(res * res)
 	field.fill(reach)
@@ -1325,6 +1350,47 @@ func _field_at(field: PackedFloat32Array, local: Vector2) -> float:
 	var i := clampi(int(round((local.x + half) / step)), 0, res - 1)
 	var j := clampi(int(round((local.y + half) / step)), 0, res - 1)
 	return field[j * res + i]
+
+
+## Lattice margin the sky rule adds: a lattice point sits at most 0.71 cells (a half diagonal) from the true distance.
+func _sky_margin() -> float:
+	return _chunk_size / float(_terrain_res - 1) * 0.71
+
+
+## Distance from a world point to the nearest path centre line, read from the field of the chunk
+## that holds the point (a crown can reach over into the next chunk).
+func _path_distance_at(w: Vector2) -> float:
+	var coord := _world_to_chunk(Vector3(w.x, 0.0, w.y))
+	var field := _path_field(coord)
+	if field.is_empty():
+		return INF
+	return _field_at(field, w - Vector2(coord.x, coord.y) * _chunk_size)
+
+
+## Trunk basis of a tree at world point [param p]: it leans with the hill, turns by yaw and scales.
+## Planting and the sky rule both use it, so a crown is judged where it is drawn.
+func _trunk_basis(p: Vector2, entry: TreeEntry, yaw: float, scale: float) -> Basis:
+	var up := Vector3.UP.lerp(_hill_normal(p.x, p.y), entry.hill_lean).normalized()
+	return _basis_up(up, yaw, scale)
+
+
+## True when a tree of entry [param e] at [param p] keeps its crown out of the open sky: every crown
+## disc stays [member WorldGenProfile.sky_path_half] off each path centre line and clear of the glade disc.
+## [param yaw] and [param scale] are the spot's own values, as planted.
+func _crown_clear(p: Vector2, e: int, scale: float, yaw: float) -> bool:
+	var entry := profile.trees[e]
+	var basis := _trunk_basis(p, entry, yaw, scale)
+	var limit := profile.sky_path_half + _sky_margin()
+	for disc in _crown_discs[e]:
+		var d: Vector4 = disc
+		var off := basis * Vector3(d.x, d.y, d.z)
+		var w := p + Vector2(off.x, off.z)
+		var r := d.w * scale
+		if w.length() - r < profile.sky_glade_radius:
+			return false
+		if _path_distance_at(w) - r < limit:
+			return false
+	return true
 
 
 ## Local sites of one prop kind. A share of [param spec].path_share comes from
@@ -2078,6 +2144,8 @@ func _build_meshes() -> void:
 	_shaft_mat.set_shader_parameter("intensity", 0.2)
 	_tree_meshes.clear()
 	_tree_mats.clear()
+	_crown_discs.clear()
+	_crown_reach = 0.0
 	_tree_far_meshes.clear()
 	_tree_far_mats.clear()
 	for node in _far_tree_nodes.values():
@@ -2092,6 +2160,10 @@ func _build_meshes() -> void:
 		var key := "tree|%s|%d" % [_scene_key(entry.scene), entry.crown]
 		var built := _built_once(key, _build_tree_parts.bind(entry)) as Dictionary
 		_tree_meshes.append(built.mesh)
+		_crown_discs.append(built.discs)
+		for disc in built.discs:
+			var d: Vector4 = disc
+			_crown_reach = maxf(_crown_reach, d.w * entry.scale_max * entry.focal_scale_boost)
 		# A scene crown (D5 redwood) brings its own atlas, with a higher cut level for its card background.
 		var own_albedo: Texture2D = _scene_albedo(entry.scene) if entry.crown == TreeEntry.Crown.SCENE else null
 		_tree_mats.append(_sakura_material(entry) if entry.crown == TreeEntry.Crown.SAKURA else _tree_material(0.0, own_albedo))
@@ -2124,7 +2196,7 @@ func _build_tree_parts(entry: TreeEntry) -> Dictionary:
 	var mesh := _tree_mesh_for(entry)
 	var chest: Array = []
 	var hulls := _trunk_hulls(mesh, chest)
-	return {"mesh": mesh, "hulls": hulls, "chest": float(chest[0])}
+	return {"mesh": mesh, "hulls": hulls, "chest": float(chest[0]), "discs": _crown_discs_for(entry, mesh)}
 
 
 func _build_undergrowth_parts(entry: UndergrowthEntry) -> Dictionary:
@@ -2198,7 +2270,7 @@ func _build_far_tree_mesh(entry: TreeEntry) -> Mesh:
 	noise.seed = 0x4C454146
 	noise.frequency = 0.9
 	for c in CROWN_CLUMPS.size():
-		_add_foliage_clump(st, CROWN_CLUMPS[c][0], float(CROWN_CLUMPS[c][1]) * 1.18, noise, c, 5, 2)
+		_add_foliage_clump(st, CROWN_CLUMPS[c][0], float(CROWN_CLUMPS[c][1]) * CROWN_OVERSIZE, noise, c, 5, 2)
 	st.generate_normals()
 	return st.commit()
 
@@ -2768,7 +2840,7 @@ func _rebuild_crown(scan: Mesh, clumps: Array = CROWN_CLUMPS, fork_y_base: float
 	for c in clumps.size():
 		# Slightly oversized so neighbouring clumps merge into one canopy
 		# mass instead of reading as separate balloons.
-		_add_foliage_clump(st, clumps[c][0], float(clumps[c][1]) * 1.18, noise, c)
+		_add_foliage_clump(st, clumps[c][0], float(clumps[c][1]) * CROWN_OVERSIZE, noise, c)
 	# The scan's own boughs are cut at 8.8 m, well below the clump centres:
 	# without a branch into each clump the crown read as floating balloons
 	# tied to nothing. Grow a tapered bough from the fork into every clump.
@@ -2841,25 +2913,13 @@ func _branch_vert(st: SurfaceTool, v: Dictionary, vcoord: float) -> void:
 ## per-vertex random shade.
 func _add_foliage_clump(st: SurfaceTool, center: Vector3, radius: float, noise: FastNoiseLite, seed_i: int,
 		segments := 11, rings := 6) -> void:
-	var sphere := SphereMesh.new()
-	sphere.radius = 1.0
-	sphere.height = 2.0
-	sphere.radial_segments = segments
-	sphere.rings = rings
-	var a := sphere.get_mesh_arrays()
-	var sv: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-	var si: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+	var si: PackedInt32Array = _clump_sphere(segments, rings)[Mesh.ARRAY_INDEX]
+	var pts := _clump_points(radius, noise, seed_i, segments, rings)
 	var cst := SurfaceTool.new()
 	cst.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var offset := Vector3(seed_i * 7.3, seed_i * 3.1, seed_i * 5.7)
-	for i in sv.size():
-		var d := sv[i]
-		var bump := 1.0 + noise.get_noise_3dv(d * 1.6 + offset) * 0.38
-		# Flatter underside: a canopy mass hangs, it is not a ball.
-		var y := d.y * (0.62 if d.y < 0.0 else 0.8)
-		var p := Vector3(d.x, y, d.z) * radius * bump
+	for i in pts.size():
 		cst.set_uv(Vector2(float(absi(hash(i * 31 + seed_i * 977)) % 1000) / 999.0, 2.0))
-		cst.add_vertex(center + p)
+		cst.add_vertex(center + pts[i])
 	for i in si:
 		cst.add_index(i)
 	cst.generate_normals()
@@ -2868,3 +2928,76 @@ func _add_foliage_clump(st: SurfaceTool, center: Vector3, radius: float, noise: 
 	# the tool to indices and silently drops every bark triangle.
 	cst.deindex()
 	st.append_from(cst.commit(), 0, Transform3D.IDENTITY)
+
+
+## The unit sphere a foliage clump is shaped from (vertices and indices).
+static func _clump_sphere(segments: int, rings: int) -> Array:
+	var sphere := SphereMesh.new()
+	sphere.radius = 1.0
+	sphere.height = 2.0
+	sphere.radial_segments = segments
+	sphere.rings = rings
+	return sphere.get_mesh_arrays()
+
+
+## Local vertex positions of one foliage clump, the same numbers _add_foliage_clump draws:
+## the noise bump, then the flattened underside. The sky rule reads these to size its discs.
+static func _clump_points(radius: float, noise: FastNoiseLite, seed_i: int, segments: int, rings: int) -> PackedVector3Array:
+	var sv: PackedVector3Array = _clump_sphere(segments, rings)[Mesh.ARRAY_VERTEX]
+	var offset := Vector3(seed_i * 7.3, seed_i * 3.1, seed_i * 5.7)
+	var pts := PackedVector3Array()
+	pts.resize(sv.size())
+	for i in sv.size():
+		var d := sv[i]
+		var bump := 1.0 + noise.get_noise_3dv(d * 1.6 + offset) * 0.38
+		# Flatter underside: a canopy mass hangs, it is not a ball.
+		var y := d.y * (0.62 if d.y < 0.0 else 0.8)
+		pts[i] = Vector3(d.x, y, d.z) * radius * bump
+	return pts
+
+
+## Crown discs of one tree kind in trunk space (Vector4: centre xyz, reach). Every drawn crown
+## point lies within its disc's reach of the centre, so the sky rule reads these, not the mesh.
+func _crown_discs_for(entry: TreeEntry, mesh: Mesh) -> PackedVector4Array:
+	if entry.crown == TreeEntry.Crown.SCENE:
+		return _scene_crown_discs(mesh)
+	var clumps: Array = SAKURA_CLUMPS if entry.crown == TreeEntry.Crown.SAKURA else CROWN_CLUMPS
+	var noise := FastNoiseLite.new()
+	noise.seed = 0x4C454146
+	noise.frequency = 0.9
+	var out := PackedVector4Array()
+	for c in clumps.size():
+		var pts := _clump_points(float(clumps[c][1]) * CROWN_OVERSIZE, noise, c, 11, 6)
+		var reach := 0.0
+		for p in pts:
+			reach = maxf(reach, p.length())
+		var centre: Vector3 = clumps[c][0]
+		out.append(Vector4(centre.x, centre.y, centre.z, reach + CROWN_DISC_MARGIN))
+	return out
+
+
+## Crown discs of a scanned tree: its vertices from SCENE_CROWN_FLOOR up, grouped in 3 m cells,
+## each cell a disc around the mean of its vertices.
+func _scene_crown_discs(mesh: Mesh) -> PackedVector4Array:
+	var cells := {}
+	for s in mesh.get_surface_count():
+		var verts: PackedVector3Array = mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]
+		for v in verts:
+			if v.y < SCENE_CROWN_FLOOR:
+				continue
+			var key := Vector3i(floori(v.x / 3.0), floori(v.y / 3.0), floori(v.z / 3.0))
+			if not cells.has(key):
+				cells[key] = []
+			(cells[key] as Array).append(v)
+	var out := PackedVector4Array()
+	for key in cells:
+		var group: Array = cells[key]
+		var mean := Vector3.ZERO
+		for v in group:
+			mean += v
+		mean /= float(group.size())
+		var reach := 0.0
+		for v in group:
+			reach = maxf(reach, (v - mean).length())
+		out.append(Vector4(mean.x, mean.y, mean.z, reach + CROWN_DISC_MARGIN))
+	return out

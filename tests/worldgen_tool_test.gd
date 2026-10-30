@@ -244,7 +244,8 @@ func _check_preview_and_dock() -> void:
 		counts.append(_descendants(preview))
 	_check("Regenerating five times leaves no orphan nodes (%s)" % str(counts), counts.max() == counts.min())
 	var before := _count_trees(preview.forest)
-	var changed := WorldGenProfile.make_default()
+	# A copy of the preview's own profile, so only the density changes (make_default has other trunk spacing).
+	var changed := preview.forest.profile.duplicate() as WorldGenProfile
 	changed.tree_keep_min = 0.1
 	changed.tree_keep_max = 0.2
 	preview.profile = changed

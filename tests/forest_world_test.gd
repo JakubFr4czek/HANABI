@@ -315,24 +315,136 @@ func _lod_checks(run: RunGame, forest: ForestWorld, player: DesktopPlayer) -> vo
 		_check("A torii gate stands 20–36 m from the spawn for the sight-line check", false)
 		return
 	var dir := Vector3(gate.x, 0.0, gate.z).normalized()
-	var stand := gate - dir * 25.0
-	player.teleport(Vector3(stand.x, forest.height_at(stand.x, stand.z) + 0.2, stand.z), 0.0)
+	# Load the ring around a point in front of the gate, so every stand below has its trunks.
+	player.teleport(Vector3(gate.x - dir.x * 6.0, forest.height_at(gate.x, gate.z) + 0.2, gate.z - dir.z * 6.0), 0.0)
 	await _frames(2)
 	forest.finish_pending()
-	var eye := player.camera.global_position
 	var space := run.get_world_3d().direct_space_state
 	var blocked := 0
 	var sight_lines := 0
-	for i in 9:
-		var side := Vector3(-dir.z, 0.0, dir.x) * (-0.6 + 0.15 * float(i))
-		# Stops 2 m short of the gate, so its own posts are not the blocker.
-		var target := gate - dir * 2.0 + Vector3(0.0, 2.2, 0.0) + side
-		var query := PhysicsRayQueryParameters3D.create(eye, target, ForestWorld.TRUNK_LAYER)
-		sight_lines += 1
-		if not space.intersect_ray(query).is_empty():
-			blocked += 1
-	_check("Trunks hide part of a gate's glow 25 m away (%d of %d sight lines blocked)" % [blocked, sight_lines],
+	# Twelve stands 25 m from the gate, all round it: a trunk between any of them and the glow counts.
+	for k in 12:
+		var angle := TAU * float(k) / 12.0
+		var stand := gate + Vector3(cos(angle), 0.0, sin(angle)) * 25.0
+		var eye := Vector3(stand.x, forest.height_at(stand.x, stand.z) + 1.7, stand.z)
+		for i in 9:
+			var side := Vector3(-dir.z, 0.0, dir.x) * (-0.6 + 0.15 * float(i))
+			# Stops 2 m short of the gate, so its own posts are not the blocker.
+			var target := gate - dir * 2.0 + Vector3(0.0, 2.2, 0.0) + side
+			var query := PhysicsRayQueryParameters3D.create(eye, target, ForestWorld.TRUNK_LAYER)
+			sight_lines += 1
+			if not space.intersect_ray(query).is_empty():
+				blocked += 1
+	_check("Trunks hide part of a gate's glow from 25 m away (%d of %d sight lines blocked)" % [blocked, sight_lines],
 		blocked >= 1 and blocked < sight_lines)
+
+	await _check_open_sky(forest)
+
+
+## The sky over every path stays open. Each crown point the ring draws (the real mesh, moved to
+## where it is planted) keeps sky_path_half from the path centre line, and a walk along the paths
+## looks up through no crown at all.
+func _check_open_sky(forest: ForestWorld) -> void:
+	forest.finish_pending()
+	var paths := forest.paths
+	var size := forest.profile.chunk_size
+	var half_gap := forest.profile.sky_path_half
+	# Crown points near a path, bucketed by metre cell (world xz).
+	var crown := {}
+	var nearest := INF
+	var crown_points := 0
+	var crown_verts: Array[PackedVector3Array] = []
+	for e in forest.profile.trees.size():
+		var mesh: Mesh = forest._tree_meshes[e]
+		var verts := PackedVector3Array()
+		for s in mesh.get_surface_count():
+			for v in mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+				if v.y >= ForestWorld.SCENE_CROWN_FLOOR:
+					verts.append(v)
+		crown_verts.append(verts)
+	for key in forest._chunks:
+		var root := forest._chunks[key] as Node3D
+		for e in forest.profile.trees.size():
+			var label := ("Focal%d" if forest.profile.trees[e].is_focal() else "Trees%d") % e
+			for xf in root.get_meta("xfs_" + label, []):
+				var t: Transform3D = xf
+				for v in crown_verts[e]:
+					var wv := root.position + t * v
+					var w := Vector2(wv.x, wv.z)
+					if forest._path_distance_at(w) > 8.0:
+						continue
+					var segments := paths.segments_in_rect(Rect2(w - Vector2(8.0, 8.0), Vector2(16.0, 16.0)))
+					nearest = minf(nearest, ForestPaths.distance_to_segments(segments, w))
+					crown_points += 1
+					var cell := Vector2i(floori(w.x), floori(w.y))
+					if not crown.has(cell):
+						crown[cell] = []
+					(crown[cell] as Array).append(w)
+	var samples := 0
+	var open := 0
+	for key in forest._chunks:
+		var coord: Vector2i = key
+		var rect := Rect2(Vector2(coord) * size - Vector2(size, size) * 0.5, Vector2(size, size))
+		for s in paths.samples_in_rect(rect, 1.0):
+			samples += 1
+			var at := Vector2(s.x, s.y)
+			var hit := false
+			for ox in range(-1, 2):
+				for oz in range(-1, 2):
+					for w in crown.get(Vector2i(floori(s.x) + ox, floori(s.y) + oz), []):
+						if (w as Vector2).distance_to(at) < 0.5:
+							hit = true
+			if not hit:
+				open += 1
+	_check("Path samples stay under open sky (%d of %d open, %d crown points near paths)" % [open, samples, crown_points],
+		samples > 0 and open == samples)
+	_check("Crown points stay %.1f m from every path centre line (nearest %.2f m)" % [half_gap, nearest],
+		crown_points > 0 and nearest >= half_gap - 0.05)
+
+	# Open sky across the ring: the share of forest floor (1 m cells, clearing left out) with no crown overhead.
+	var lo := Vector2i(999999, 999999)
+	var hi := Vector2i(-999999, -999999)
+	for key in forest._chunks:
+		var c: Vector2i = key
+		lo = Vector2i(mini(lo.x, c.x), mini(lo.y, c.y))
+		hi = Vector2i(maxi(hi.x, c.x), maxi(hi.y, c.y))
+	var origin := Vector2(lo) * size - Vector2(size, size) * 0.5
+	var nx := int((hi.x - lo.x + 1) * size)
+	var nz := int((hi.y - lo.y + 1) * size)
+	var covered := PackedByteArray()
+	covered.resize(nx * nz)
+	covered.fill(0)
+	for key in forest._chunks:
+		var root := forest._chunks[key] as Node3D
+		for e in forest.profile.trees.size():
+			var label := ("Focal%d" if forest.profile.trees[e].is_focal() else "Trees%d") % e
+			var discs: PackedVector4Array = forest._crown_discs[e]
+			for xf in root.get_meta("xfs_" + label, []):
+				var t: Transform3D = xf
+				var scale := t.basis.x.length()
+				for disc in discs:
+					var d: Vector4 = disc
+					var centre := root.position + t.origin + t.basis * Vector3(d.x, d.y, d.z)
+					var r := d.w * scale
+					var c2 := Vector2(centre.x, centre.z)
+					for iz in range(maxi(floori(c2.y - r - origin.y), 0), mini(ceili(c2.y + r - origin.y), nz)):
+						for ix in range(maxi(floori(c2.x - r - origin.x), 0), mini(ceili(c2.x + r - origin.x), nx)):
+							var g := origin + Vector2(ix + 0.5, iz + 0.5)
+							if g.distance_to(c2) <= r:
+								covered[iz * nx + ix] = 1
+	var floor_cells := 0
+	var open_cells := 0
+	for iz in nz:
+		for ix in nx:
+			var g := origin + Vector2(ix + 0.5, iz + 0.5)
+			if forest._in_clearing(g.x, g.y):
+				continue
+			floor_cells += 1
+			if covered[iz * nx + ix] == 0:
+				open_cells += 1
+	var open_share := float(open_cells) / float(maxi(floor_cells, 1))
+	_check("Crowns leave open sky between them (%.1f%% of the forest floor, floor 30%%)" % [100.0 * open_share],
+		open_share >= 0.30)
 
 
 ## Origins of every ordinary tree of the loaded ring within [param radius] of [param origin].
