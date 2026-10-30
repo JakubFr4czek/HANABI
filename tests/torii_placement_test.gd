@@ -1,8 +1,8 @@
 extends Node
 ## Unit tests for Torii gate placement, collider clearance (3.2m),
-## gate spacing (18–32m from the player, 40m between gates), gates running along
-## the footpaths (passage within 25° of the tangent), and elemental uptime ratio
-## >= 0.65 in a 120s run.
+## gate spacing (18–32m from the player, 70m between gates), gates standing on or
+## beside the footpaths (centre within 8m of the network, passage within 25° of the
+## tangent), and elemental uptime ratio >= 0.65 in a 120s run.
 ##   godot --headless --path . --fixed-fps 90 res://tests/torii_placement_test.tscn -- --desktop
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
@@ -119,10 +119,10 @@ func _run_all() -> void:
 	_check("MultiMesh instances maintain >= 3.2m clearance from gate center (min=%.2f m)" % min_multimesh_clearance,
 		min_multimesh_clearance >= ToriiGate.CLEARANCE_RADIUS - 0.05)
 
-	# 2b. Active gates keep MIN_GATE_SEPARATION from each other.
+	# 2b. Active gates keep 70 m from each other (the spacing the backlog asks for).
 	var sep := _min_active_separation(tm)
-	_check("Active gates keep >= %.0f m apart (closest pair=%.1f m)" % [ToriiManager.MIN_GATE_SEPARATION, sep],
-		sep >= ToriiManager.MIN_GATE_SEPARATION - 0.01)
+	_check("Active gates keep >= 70 m apart (closest pair=%.1f m)" % sep,
+		sep >= 70.0 - 0.01)
 
 	# 2c. A gate beside a footpath runs along it: the passage direction is within 25° of
 	# the path tangent, so the posts stand across the path. Checked on the live gates,
@@ -139,6 +139,19 @@ func _run_all() -> void:
 				worst_deg = maxf(worst_deg, _passage_angle_deg(g, tangent))
 		_check("Gates beside a footpath run along it (%d beside, worst %.1f°)" % [beside, worst_deg],
 			worst_deg < 25.0)
+
+		# Every live gate stands within 8 m of the footpath network (over it or on a spur).
+		var far_from_path := 0
+		var worst_path_dist := 0.0
+		for g in tm.get_active_gates():
+			var gp := Vector2(g.global_position.x, g.global_position.z)
+			var near_segs := paths.segments_in_rect(Rect2(gp - Vector2(8.0, 8.0), Vector2(16.0, 16.0)))
+			var dist_to_path := ForestPaths.distance_to_segments(near_segs, gp)
+			worst_path_dist = maxf(worst_path_dist, dist_to_path)
+			if dist_to_path > ToriiManager.GATE_PATH_REACH:
+				far_from_path += 1
+		_check("Every gate stands within 8 m of a footpath (%d off-path, worst %.1f m)" % [far_from_path, worst_path_dist],
+			far_from_path == 0 and not tm.get_active_gates().is_empty())
 
 		var on_path := _footpath_sample_free_of_gates(paths, tm, p_pos)
 		_check("Found a footpath sample away from the live gates", on_path.z != 0.0 or on_path.w != 0.0)
@@ -218,8 +231,8 @@ func _run_all() -> void:
 		run.element_active_seconds, run.run_time, uptime
 	])
 	_check("Elemental uptime ratio >= 0.65 in 120s run (actual=%.2f)" % uptime, uptime >= 0.65)
-	_check("Active gates stayed >= %.0f m apart through the 120s run (closest pair=%.1f m)" % [
-		ToriiManager.MIN_GATE_SEPARATION, min_pair_sep], min_pair_sep >= ToriiManager.MIN_GATE_SEPARATION - 0.01)
+	_check("Active gates stayed >= 70 m apart through the 120s run (closest pair=%.1f m)" % min_pair_sep,
+		min_pair_sep >= 70.0 - 0.01)
 
 	run.queue_free()
 
