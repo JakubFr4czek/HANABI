@@ -20,6 +20,7 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Bonshō temple bell (run start toll, Oni boss arrival, Torii gate imbue): authentic field recording at Chōmei-ji (長命寺), Shiga Prefecture, Japan by **Jnn** (Wikimedia Commons, CC BY 2.1 JP / FAL / CC BY-SA / GFDL), modified (DC offset removed, attack trimmed, resampled to 44.1 kHz, volume normalized to -1 dBFS, tuned per cue), `assets/audio/sfx/bonsho/`
 - Forest wind bed, Torii gate fūrin (wind chime) & element imbue cues: procedural WAV in `assets/audio/sfx/hanabi_proc/` (project author, CC0)
 - Storm rain + thunder: Kresiek The Furry, WuxiaScrub, OpenGameArt CC0 in `assets/audio/sfx/cc0_storm/` (see `LICENSE.txt`)
+- Distant matsuri fireworks (D18): the far boom reuses Kenney Impact `thunder_impact_heavy_*` from `cc0_storm/`, and the near pop reuses `firework_pop_soft_000` from `kenney_run/` (both CC0, no new files)
 - Run ambient music: Tozan "Oriental Somber" (OpenGameArt CC0), `assets/audio/music/cc0_run/orientalsomber.ogg`
 - Run music shakuhachi & taiko ensemble layer: balanced arrangement combining CC0 taiko drum rhythm (Scott Harding / **Singapore Wind Symphony Percussion Ensemble**) and shakuhachi flute meditation (**Araki Kodō III**, Public Domain) into a seamless 24s loop on the Music bus, `assets/audio/music/cc0_run/shakuhachi_taiko_layer.wav`
 - Run forest trees: "Cherry Blossom Tree" by **Grab3D** (CC0), crown simplified and the daylight blossoms recolored to night foliage, `assets/models/environment/forest_trees/`
