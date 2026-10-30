@@ -782,7 +782,7 @@ func _sever(part: RagdollPart, hit: Dictionary) -> void:
 	var dir: Vector3 = hit.get("direction", Vector3.ZERO)
 	var impulse := float(hit.get("impulse", 0.0))
 	var ember := Color(1.7, 0.3, 0.16)
-	var scene := get_tree().current_scene if is_inside_tree() else null
+	var scene := _fx_scene()
 	if scene:
 		SeveredLimb.spawn_from(scene, part, dir, impulse, ember)
 		# The wound: a hot spray of spirit embers out of the stump along the
@@ -797,10 +797,22 @@ func _sever(part: RagdollPart, hit: Dictionary) -> void:
 	GameEvents.log_event("enemy_dismembered", {"enemy": profile.display_name, "part": part_name})
 
 
+## Where this yōkai's effects (sparks, fireworks, petals, pieces) go: the scene it is in.
+## A yōkai inside a SubViewport of its own (the opening strike, D11) keeps them in that
+## viewport's world; in the run they go to the current scene, as before.
+func _fx_scene() -> Node:
+	if not is_inside_tree():
+		return null
+	var n := get_parent()
+	while n != null and not (n is SubViewport):
+		n = n.get_parent()
+	return n if n != null else get_tree().current_scene
+
+
 ## Kirisute (D4): the body is already dead; it comes apart along the blade's plane
 ## where it was cut. Returns false when the plane misses it (no split, plain death).
 func _split_into_pieces(hit: Dictionary) -> bool:
-	var scene := get_tree().current_scene if is_inside_tree() else null
+	var scene := _fx_scene()
 	if scene == null:
 		return false
 	var point: Vector3 = hit.get("point", global_position)
@@ -831,7 +843,7 @@ func _finish_split() -> void:
 ## Kirisute (D4): an elite cut that does not kill leaves a glowing wound in the
 ## school's colour, a spray of sparks along the blade and a sharp sound.
 func _kirisute_wound(hit: Dictionary) -> void:
-	var scene := get_tree().current_scene if is_inside_tree() else null
+	var scene := _fx_scene()
 	if scene == null:
 		return
 	KirisuteCut.wound(scene, hit.get("point", global_position), hit.get("direction", Vector3.UP),
@@ -913,9 +925,10 @@ func die(hit: Dictionary = {}) -> void:
 	var col := Elements.color(last_kill_element) if last_kill_element != Elements.NONE else Color(1.8, 0.35, 0.22)
 	if last_kill_element == Elements.INK:
 		col = Color(0.55, 0.68, 1.2)
-	if is_inside_tree() and get_tree().current_scene:
+	var fx := _fx_scene()
+	if fx:
 		Sfx.play_at("yokai_slice", chest_pos, -5.0, 3.5, 1.05)
-		ElementFirework.spawn(get_tree().current_scene, chest_pos, last_kill_element, 1.0 if kind == Kind.SWARM else 1.18)
+		ElementFirework.spawn(fx, chest_pos, last_kill_element, 1.0 if kind == Kind.SWARM else 1.18)
 	GameEvents.log_event("enemy_defeated", {
 		"enemy": profile.display_name,
 		"element": last_kill_element,
@@ -938,7 +951,7 @@ func _body_landed() -> bool:
 
 func _burst_into_petals() -> void:
 	_petal_burst_done = true
-	var scene := get_tree().current_scene if is_inside_tree() else null
+	var scene := _fx_scene()
 	if scene:
 		var push := root_part().linear_velocity if root_part() else Vector3.ZERO
 		var tint := Elements.color(last_kill_element) if last_kill_element != Elements.NONE and last_kill_element != "physical" else Color.WHITE

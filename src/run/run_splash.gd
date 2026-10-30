@@ -57,6 +57,8 @@ const VEIL_FADE := 0.6
 enum Phase { HANABI, GAP, NANJO, TITLE }
 
 var active := false
+## True when the last splash ended by a skip: a skip skips the whole opening (D11).
+var was_skipped := false
 
 var _player: Node3D
 var _camera: Camera3D
@@ -257,6 +259,7 @@ func _exit_tree() -> void:
 
 
 func _finish(skipped: bool) -> void:
+	was_skipped = skipped
 	active = false
 	set_process(false)
 	visible = false
@@ -334,20 +337,26 @@ func _restore_world() -> void:
 ## A black veil on the camera fades out as the intro starts, so the forest
 ## comes up from black instead of popping in.
 func _veil_from_black() -> void:
-	if _camera == null or not is_instance_valid(_camera):
+	fade_veil(_camera, Color.BLACK)
+
+
+## A full-view veil in [param color] on [param camera] that fades out over VEIL_FADE.
+## Shared with the opening strike, which hands over from white.
+static func fade_veil(camera: Camera3D, color: Color) -> void:
+	if camera == null or not is_instance_valid(camera):
 		return
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.no_depth_test = true
-	mat.albedo_color = Color.BLACK
+	mat.albedo_color = color
 	var quad := QuadMesh.new()
 	quad.size = Vector2(2.0, 2.0)
 	var veil := MeshInstance3D.new()
 	veil.mesh = quad
 	veil.material_override = mat
 	veil.position = Vector3(0.0, 0.0, -0.2)
-	_camera.add_child(veil)
+	camera.add_child(veil)
 	var tween := veil.create_tween()
 	tween.tween_method(func(a: float) -> void: mat.albedo_color.a = a, 1.0, 0.0, VEIL_FADE)
 	tween.tween_callback(veil.queue_free)
