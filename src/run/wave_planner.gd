@@ -162,7 +162,7 @@ static func simulate(p_profile: WaveProfile, seconds: float, seed_value: int = 7
 		var out := plan.step(dt, yokai.size(), oni_hp > 0.0)
 		if out.kind != "":
 			var elite: bool = out.kind == "elite"
-			yokai.append(p_profile.hp_for(plan.wave, plan.t, elite))
+			yokai.append(p_profile.hp_for(plan.wave, plan.t, true) if elite else p_profile.swarm_hp_for(plan.wave, plan.t))
 			res.spawned += 1
 			counts[out.kind] = int(counts[out.kind]) + 1
 			if plan.t < 60.0:

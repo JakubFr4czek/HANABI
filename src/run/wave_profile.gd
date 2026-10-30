@@ -87,6 +87,12 @@ const GROUP_SIM := "Simulation"
 @export_range(1.0, 6.0, 0.05) var speed_cap := 3.15
 @export_range(0.0, 0.5, 0.01) var damage_per_wave := 0.08
 @export_range(1.0, 5.0, 0.05) var elite_hp_mult := 2.35
+## Strength of the ordinary (swarm) yōkai, on top of the scaling above. Elites and the
+## Oni are not multiplied by these: they keep the numbers above. The D12 economy model
+## (tools/balance_model.gd) still runs on the stock HP: its master-technique window
+## (6–10 min) does not survive any HP increase, so that window needs a design call.
+@export_range(0.5, 3.0, 0.05) var swarm_hp_mult := 1.4
+@export_range(0.5, 3.0, 0.05) var swarm_damage_mult := 1.25
 
 @export_group(GROUP_ONI)
 @export_range(0.0, 900.0, 1.0, "suffix:s") var oni_first_seconds := 180.0
@@ -192,13 +198,24 @@ func hp_for(wave_num: int, t: float, elite: bool = false) -> float:
 	return hp * elite_hp_mult if elite else hp
 
 
+## HP of an ordinary yōkai: the scaled HP times [member swarm_hp_mult].
+func swarm_hp_for(wave_num: int, t: float) -> float:
+	return hp_for(wave_num, t) * swarm_hp_mult
+
+
 func speed_for(wave_num: int, t: float) -> float:
 	var w := maxi(wave_num, 1)
 	return clampf(base_speed + speed_per_wave * float(w - 1) + t * speed_per_second, base_speed, speed_cap)
 
 
+## Damage of an elite or the Oni's base (without the swarm multiplier).
 func damage_for(wave_num: int) -> float:
 	return base_damage * (1.0 + damage_per_wave * float(maxi(wave_num, 1) - 1))
+
+
+## Damage of an ordinary yōkai: the scaled damage times [member swarm_damage_mult].
+func swarm_damage_for(wave_num: int) -> float:
+	return damage_for(wave_num) * swarm_damage_mult
 
 
 ## Errors (the game refuses to start on them) and warnings (shown in the panel),

@@ -156,7 +156,7 @@ func concurrent_cap() -> int:
 
 
 func scaled_hp(wave_num: int, elapsed: float) -> float:
-	return get_profile().hp_for(wave_num, elapsed)
+	return get_profile().swarm_hp_for(wave_num, elapsed)
 
 
 func scaled_speed(wave_num: int, elapsed: float) -> float:
@@ -164,7 +164,7 @@ func scaled_speed(wave_num: int, elapsed: float) -> float:
 
 
 func scaled_damage(wave_num: int) -> float:
-	return get_profile().damage_for(wave_num)
+	return get_profile().swarm_damage_for(wave_num)
 
 
 ## Null when no legal spot was found this tick: the spawn is skipped, never moved behind.
@@ -269,7 +269,7 @@ func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO, element
 	var yokai := _acquire_yokai()
 	yokai.guard_post = guard_post
 	var p := get_profile()
-	var hp_val := p.hp_for(maxi(wave, 1), run_seconds)
+	var hp_val := p.swarm_hp_for(maxi(wave, 1), run_seconds)
 	yokai.configure_kind(Yokai.Kind.SWARM, element, hp_val)
 	yokai.enable_pathfinding()
 	yokai.ground_probe = ground_height
@@ -286,7 +286,7 @@ func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO, element
 
 	if yokai.brain:
 		yokai.brain.move_speed = p.speed_for(maxi(wave, 1), run_seconds)
-		yokai.brain.base_damage = p.damage_for(maxi(wave, 1))
+		yokai.brain.base_damage = p.swarm_damage_for(maxi(wave, 1))
 
 	if not yokai.died.is_connected(_on_enemy_died):
 		yokai.died.connect(_on_enemy_died)
@@ -299,7 +299,11 @@ func spawn_enemy_at(pos: Vector3, facing_target: Vector3 = Vector3.ZERO, element
 
 func spawn_elite_at(pos: Vector3, facing_target: Vector3, element: String) -> Yokai:
 	var yokai := spawn_enemy_at(pos, facing_target)
-	yokai.configure_kind(Yokai.Kind.ELITE, element, get_profile().hp_for(maxi(wave, 1), run_seconds, true))
+	var p := get_profile()
+	yokai.configure_kind(Yokai.Kind.ELITE, element, p.hp_for(maxi(wave, 1), run_seconds, true))
+	# spawn_enemy_at gave the swarm damage; an elite keeps the stock damage.
+	if yokai.brain:
+		yokai.brain.base_damage = p.damage_for(maxi(wave, 1))
 	yokai.add_to_group("elite_yokai")
 	GameEvents.log_event("elite_spawned", {"element": element, "name": yokai.profile.display_name})
 	return yokai
