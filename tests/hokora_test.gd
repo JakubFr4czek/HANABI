@@ -11,6 +11,8 @@ extends Node
 ##   it streams away and back
 ## - No shrine stands inside a trunk, boulder or lantern collider; a new run lays them
 ##   in the same places; a 1.5 km walk meets a rare number of them
+## - Every shrine, the opening one included, stands on a spur within 8 m of the footpath
+##   network, and the spur is built from the path to its offering table
 ## godot --headless --path . --fixed-fps 90 res://tests/hokora_test.tscn -- --desktop
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
@@ -50,6 +52,7 @@ func _run_all() -> void:
 	await _test_buffs_multiply_and_hold()
 	await _test_choice_reads_on_screen()
 	await _test_placement_clear_of_colliders()
+	await _test_shrines_on_footpath()
 	await _test_density_along_a_walk()
 
 	run.queue_free()
@@ -302,6 +305,32 @@ func _test_placement_clear_of_colliders() -> void:
 		if again[i].global_position.distance_to(positions[i]) > 0.05:
 			same = false
 	_check("A new run places the same shrines in the same places (%d)" % again.size(), same and not again.is_empty())
+
+
+## Shrines never stand in the open forest: each one lies within 8 m of the footpath
+## network (the spur it stands on), and the spur is built from that path to its altar.
+## The opening shrine and a walk of 1.5 km are both checked.
+func _test_shrines_on_footpath() -> void:
+	_fresh_run()
+	await _frames(8)
+	var paths := run.forest_world.paths
+	var opening := run.hokora_manager.shrine_at(Vector2i.ZERO)
+	_check("The opening shrine stands on a spur of the footpath", opening != null and _on_footpath(paths, opening))
+	var all_on_path := true
+	var spurs := 0
+	for s in run.hokora_manager.alive_shrines():
+		if not _on_footpath(paths, s):
+			all_on_path = false
+		if s.get_node_or_null("PathSpur") != null:
+			spurs += 1
+	var count := run.hokora_manager.alive_shrines().size()
+	_check("Every shrine stands within 8 m of the footpath (%d shrines)" % count, all_on_path and count > 0)
+	_check("Every shrine has its spur to the path (%d of %d)" % [spurs, count], spurs == count and count > 0)
+
+
+func _on_footpath(paths: ForestPaths, shrine: HokoraShrine) -> bool:
+	var p := shrine.global_position
+	return paths != null and paths.nearest_point(Vector2(p.x, p.z), 8.0) != Vector2.INF
 
 
 ## The balance model assumes a shrine about every 215 m of walking

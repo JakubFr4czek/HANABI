@@ -4,8 +4,10 @@ extends Node3D
 ##
 ## The forest is cut into square slots of profile.shrine_slot_size metres
 ## (WorldGenProfile, docs/WORLDGEN_TOOL.md). A slot holds at most one shrine
-## (profile.shrine_slot_chance). Its
-## candidate points come from a seed that depends only on the slot, so the same
+## (profile.shrine_slot_chance). A shrine never stands in the open forest: its
+## candidates lie on a short spur off the footpath network (ForestPaths), 4–7 m
+## from a path sample of the slot, and every spot must lie within PATH_REACH of
+## the network. The candidates come from a seed that depends only on the slot, so the same
 ## slot always proposes the same place in every run and the world stays fixed.
 ## The first candidate that passes the placement rules is cached for the run.
 ## Validation runs once, when the player first comes within spawn range (the
@@ -26,6 +28,13 @@ const MAX_ALTERNATES := 40
 ## Footprint radius that must stay free of trunks, boulders and lanterns (the
 ## plinth is ~0.75 m half-width; trunks add their own radius on top).
 const CLEARANCE := 1.6
+## A shrine stands on a spur off the footpath: its centre lies PATH_OFFSET_MIN to
+## PATH_OFFSET_MAX metres from the path axis, and never farther than PATH_REACH.
+const PATH_OFFSET_MIN := 4.0
+const PATH_OFFSET_MAX := 7.0
+const PATH_REACH := 8.0
+## Spacing of the footpath samples the candidates are drawn from (metres).
+const PATH_SAMPLE_STEP := 2.0
 const TICK := 0.25
 const WORLD_SEED := 0x484F4B4F  # "HOKO"
 const OPENING_DISTANCE := ElementBalance.HOKORA_OPENING_DISTANCE
@@ -205,7 +214,8 @@ func _spot_for(slot: Vector2i, p: Vector3) -> Vector3:
 
 
 ## Deterministic candidate points of a slot: first the main pick, then the
-## alternates. Empty when the seed decides this slot gets no shrine.
+## alternates. Each is a spur end beside a footpath sample of the slot. Empty when the
+## seed decides this slot gets no shrine, or the slot has no footpath.
 func _candidate_points(slot: Vector2i) -> Array[Vector3]:
 	var rng := _slot_rng(slot, 0)
 	var out: Array[Vector3] = []
@@ -213,35 +223,66 @@ func _candidate_points(slot: Vector2i) -> Array[Vector3]:
 		return out
 	var center := Vector2(slot.x, slot.y) * slot_size
 	var half := slot_size * 0.5 - SLOT_MARGIN
+	var axis := _footpath_samples(Rect2(center - Vector2(half, half), Vector2(half, half) * 2.0))
+	if axis.is_empty():
+		return out
 	for i in 1 + MAX_ALTERNATES:
-		var x := center.x + rng.randf_range(-half, half)
-		var z := center.y + rng.randf_range(-half, half)
-		out.append(Vector3(x, 0.0, z))
+		var s := axis[rng.randi_range(0, axis.size() - 1)]
+		var side := 1.0 if rng.randf() < 0.5 else -1.0
+		out.append(_spur_end(s, side, rng.randf_range(PATH_OFFSET_MIN, PATH_OFFSET_MAX)))
 	return out
 
 
-## The opening shrine: the first valid spot in a fan in front of the spawn
-## (±90° in 7.5° steps, straight ahead first), at OPENING_DISTANCE and, if that
-## ring is blocked, a little nearer or farther (all within spawn range).
+## The opening shrine: a spur off a footpath 28–32 m from the spawn (so the spur's
+## shrine stays inside spawn range), the one nearest the view direction first (the path
+## arms leave the glade in four directions). Empty when no spot passes the placement rules.
 func _opening_spot() -> Vector3:
-	var order: Array[int] = [0]
-	for k in range(1, 13):
-		order.append(k)
-		order.append(-k)
-	for distance in [OPENING_DISTANCE, OPENING_DISTANCE - 2.0, OPENING_DISTANCE + 2.0, OPENING_DISTANCE - 4.0]:
-		for k in order:
-			var dir := start_forward.rotated(Vector3.UP, deg_to_rad(7.5 * float(k)))
-			var spot: Vector3 = start_position + dir * float(distance)
-			spot.y = 0.0
-			if _is_valid_spot(spot):
-				return spot
+	var origin := Vector2(start_position.x, start_position.z)
+	var ahead := Vector2(start_forward.x, start_forward.z)
+	var reach := Vector2(OPENING_DISTANCE + 2.0, OPENING_DISTANCE + 2.0)
+	var ranked: Array[Vector4] = []
+	for s in _footpath_samples(Rect2(origin - reach, reach * 2.0)):
+		if absf(Vector2(s.x, s.y).distance_to(origin) - OPENING_DISTANCE) <= 2.0:
+			ranked.append(s)
+	ranked.sort_custom(func(a: Vector4, b: Vector4) -> bool:
+		return _opening_rank(a, origin, ahead) < _opening_rank(b, origin, ahead))
+	for s in ranked:
+		for offset: float in [5.0, 4.0, 6.0, 7.0]:
+			for side: float in [1.0, -1.0]:
+				var spot := _spur_end(s, side, offset)
+				if _is_valid_spot(spot):
+					return spot
 	return Vector3.INF
+
+
+## Ranks a footpath sample for the opening shrine: the angle off the view direction
+## first, the distance from OPENING_DISTANCE second (lower is better).
+func _opening_rank(s: Vector4, origin: Vector2, ahead: Vector2) -> float:
+	var to := Vector2(s.x, s.y) - origin
+	return absf(ahead.angle_to(to)) + 0.05 * absf(to.length() - OPENING_DISTANCE)
+
+
+## The shrine centre for footpath sample [param s] (x, z, tangent): pushed [param offset]
+## metres sideways, to one side of the path when [param side] is 1 and the other when -1.
+func _spur_end(s: Vector4, side: float, offset: float) -> Vector3:
+	var normal := Vector2(-s.w, s.z)
+	var at := Vector2(s.x, s.y) + normal * side * offset
+	return Vector3(at.x, 0.0, at.y)
+
+
+## Footpath samples inside [param rect] (world xz), empty when the forest has no paths.
+func _footpath_samples(rect: Rect2) -> Array[Vector4]:
+	if forest_world == null or forest_world.paths == null:
+		return []
+	return forest_world.paths.samples_in_rect(rect, PATH_SAMPLE_STEP)
 
 
 func _is_valid_spot(spot: Vector3) -> bool:
 	if forest_world == null:
 		return false
 	if Vector2(spot.x - start_position.x, spot.z - start_position.z).length() < ElementBalance.HOKORA_MIN_START_DISTANCE:
+		return false
+	if forest_world.paths == null or forest_world.paths.nearest_point(Vector2(spot.x, spot.z), PATH_REACH) == Vector2.INF:
 		return false
 	if torii_manager and torii_manager.is_near_gate(spot.x, spot.z, ElementBalance.HOKORA_TORII_CLEARANCE):
 		return false
