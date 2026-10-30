@@ -26,6 +26,17 @@ func _ready() -> void:
 		print("         kills %d, elites %d, level %d, points %d, shrines %d, buff uptime %.0f%%, wave %d" % [
 			eco.kills, eco.elites, eco.level, eco.points, eco.shrines, float(eco.buff_uptime) * 100.0, eco.wave])
 
+	print("\n=== COUNTER RING (D17): sword multiplier per draft, average player, 8 min ===")
+	var wave_profile := WaveProfile.load_default()
+	var plain := wave_profile.plain_share(wave_profile.ramp_seconds * 0.5)
+	print("plain share at mid-ramp %.0f%%; blind draft mean ×%.3f; read draft ×%.3f (ready counter %.0f%% of fights)" % [
+		plain * 100.0, Model.school_mean_matchup(), Model.draft_matchup("read", plain), Model.READY_COUNTER_SHARE * 100.0])
+	for draft: String in ["plain", "blind", "read"]:
+		var mult := Model.draft_matchup(draft, plain)
+		var eco: Dictionary = Model.economy("average", 480.0, 7, mult)
+		print("%-6s ×%.3f  kills %3d, elites %2d, level %2d, points %2d, shrines %d" % [
+			draft, mult, eco.kills, eco.elites, eco.level, eco.points, eco.shrines])
+
 	print("\n=== KITS: per imbue window, pack of 1 / 4 yōkai, soul rank 1 ===")
 	for school: String in Elements.COMBAT_ELEMENTS:
 		var order: Array = Model.full_order(school)
