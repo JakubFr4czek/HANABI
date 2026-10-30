@@ -11,6 +11,8 @@ extends Resource
 ## ForestWorld: they are geometry, not generation settings.
 
 const DEFAULT_PATH := "res://data/worldgen/default_profile.tres"
+const REDWOOD_SCENE_PATH := "res://assets/models/environment/forest_trees/giant_redwood.glb"
+const LANTERN_SCENE_PATH := "res://assets/models/environment/lanterns/stone_lantern_sahir.glb"
 const SETTING_PATH := "hanabi/worldgen/profile"
 const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/torii_gate_polyfork.glb"
 
@@ -254,9 +256,10 @@ func moon_color() -> Color:
 
 
 func _init() -> void:
-	trees = [_cedar_entry(), _sakura_entry()]
+	trees = [_cedar_entry(), _sakura_entry(), _redwood_entry()]
 	undergrowth = [_boulder_entry()]
 	torii_scene = load(TORII_SCENE_PATH)
+	lantern_scene = load(LANTERN_SCENE_PATH)
 
 
 static func make_default() -> WorldGenProfile:
@@ -385,6 +388,19 @@ func _cedar_entry() -> TreeEntry:
 	t.label = "Cedar (sugi)"
 	t.crown = TreeEntry.Crown.CEDAR
 	t.weight = 1.0
+	return t
+
+
+## Scanned redwood (D5, CC BY 4.0): the mesh as it comes, its own crown and bark.
+func _redwood_entry() -> TreeEntry:
+	var t := TreeEntry.new()
+	t.label = "Giant redwood (sugi, CC BY 4.0)"
+	t.crown = TreeEntry.Crown.SCENE
+	t.scene = load(REDWOOD_SCENE_PATH)
+	t.weight = 0.0  # off by default: it moves the torii layout the sight-line check relies on (docs/D5_ASSETS.md)
+	t.min_spacing = 8.0
+	t.scale_min = 0.9
+	t.scale_max = 1.25
 	return t
 
 

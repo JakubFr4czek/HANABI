@@ -222,6 +222,9 @@ func _lod_checks(run: RunGame, forest: ForestWorld, player: DesktopPlayer) -> vo
 	var full_max := _farthest(forest.drawn_full_origins, player.global_position)
 	_check("Full crowns stay inside the LOD band (farthest %.1f m, band edge %.1f m)" % [full_max, near_r],
 		full_max <= near_r + 0.01)
+	var scene_max := _farthest(forest.drawn_scene_origins, player.global_position)
+	_check("Scanned crowns (redwood) stand to tree_draw_radius, no LOD band (farthest %.1f m)" % scene_max,
+		scene_max <= profile.tree_draw_radius + 0.01 and (forest.drawn_scene_origins.is_empty() or scene_max > near_r))
 	var all_max := maxf(full_max, _farthest(forest.drawn_far_origins, player.global_position))
 	_check("Nothing is drawn past tree_draw_radius (farthest %.1f m)" % all_max,
 		all_max <= profile.tree_draw_radius + 0.01)
@@ -256,6 +259,8 @@ func _lod_checks(run: RunGame, forest: ForestWorld, player: DesktopPlayer) -> vo
 		for o in forest.drawn_full_origins:
 			drawn[o] = true
 		for o in forest.drawn_far_origins:
+			drawn[o] = true
+		for o in forest.drawn_scene_origins:
 			drawn[o] = true
 		var expected := _ring_trees_within(forest, player.global_position, profile.tree_draw_radius)
 		for o in expected:
