@@ -1183,6 +1183,8 @@ const KIRISUTE_HAPTICS := [[1.0, 0.03], [0.0, 0.03], [0.8, 0.05], [0.35, 0.12]]
 
 
 func _school_haptics(steps: Array, matchup: float, school: String = Elements.NONE) -> Array:
+	if steps.is_empty():
+		return []
 	if matchup > 1.0:
 		return steps + [[0.0, 0.03], [0.7, 0.06]]
 	if matchup < 1.0:

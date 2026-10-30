@@ -39,6 +39,7 @@ func _run() -> void:
 	player.left_holder.release()
 	player.teleport(Vector3(3.5, 0, 3.5))
 	_test_strike_classification()
+	_test_school_haptics_empty_steps()
 	await _test_fixed_handle_grip()
 	await _test_xr_fist_grip()
 	await _test_edge_vs_flat_on_the_dummy()
@@ -50,6 +51,15 @@ func _run() -> void:
 
 
 # --- 3. Edge alignment ----------------------------------------------------------------
+
+## D13 regression: an empty pattern (a blow below the haptic thresholds) must come
+## back as an empty array, not index steps[0] and crash the frame.
+func _test_school_haptics_empty_steps() -> void:
+	var weak: Array = katana._school_haptics([], 0.5)
+	_check("a sub-threshold blow with no pattern gives no haptics (weak matchup, %d steps)" % weak.size(), weak.is_empty())
+	var school: Array = katana._school_haptics([], 1.0, Elements.STORM)
+	_check("a school tail with no pattern gives no haptics (storm, %d steps)" % school.size(), school.is_empty())
+
 
 func _test_strike_classification() -> void:
 	katana.global_transform = Transform3D(Basis.IDENTITY, Vector3(-3.0, 1.2, 3.0))
