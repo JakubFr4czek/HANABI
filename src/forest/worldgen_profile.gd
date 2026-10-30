@@ -180,6 +180,32 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## about every 15 to 25 m, so the trail reads as a lit walk, not a row of posts.
 @export_range(5.0, 40.0, 0.5) var path_lantern_spacing := 15.0
 
+@export_group("Distant fireworks")
+## Shortest and longest wait between far bursts (or between series), seconds (D18).
+@export_range(5.0, 120.0, 0.5) var firework_interval_min := 20.0
+@export_range(5.0, 120.0, 0.5) var firework_interval_max := 60.0
+## Share of far gaps that open a short series of 2–4 bursts.
+@export_range(0.0, 1.0, 0.01) var firework_series_chance := 0.3
+## Far band from the player, metres (horizontal). Always behind the fog.
+@export_range(60.0, 800.0, 1.0) var firework_far_min := 150.0
+@export_range(60.0, 800.0, 1.0) var firework_far_max := 400.0
+## Near escalation band, metres. Never closer than firework_near_min.
+@export_range(20.0, 200.0, 1.0) var firework_near_min := 40.0
+@export_range(20.0, 200.0, 1.0) var firework_near_max := 80.0
+## Gap between near escalations, seconds (rare, never on a schedule).
+@export_range(30.0, 600.0, 1.0) var firework_near_interval_min := 120.0
+@export_range(30.0, 600.0, 1.0) var firework_near_interval_max := 240.0
+## Chance that a wave start brings a near burst within 3 s (hook to waves, D10).
+@export_range(0.0, 1.0, 0.01) var firework_wave_chance := 0.3
+## Glow strength of far bursts, 0..1. Near bursts are brighter.
+@export_range(0.0, 1.0, 0.01) var firework_glow := 0.35
+## Low-pass cutoff of the Fireworks bus at the sound, Hz: far bursts sit low, near ones a little brighter.
+@export_range(200.0, 2000.0, 10.0) var firework_far_cutoff_hz := 450.0
+@export_range(200.0, 2000.0, 10.0) var firework_near_cutoff_hz := 1100.0
+## Volume of the sound at the listener, dB.
+@export_range(-40.0, 0.0, 0.5) var firework_far_db := -21.0
+@export_range(-40.0, 0.0, 0.5) var firework_near_db := -11.0
+
 @export_group("Distance and LOD")
 ## Trees are drawn out to this distance from the camera; past it they are fog.
 @export_range(4.0, 60.0, 0.5) var tree_draw_radius := 11.0
@@ -293,6 +319,12 @@ func validate() -> Array[String]:
 		out.append("BŁĄD: kapliczki (%.3f na chunk) nie są rzadsze niż torii (%.3f na chunk)." % [shrines_per_chunk, torii_per_chunk])
 	if paths_enabled and path_width > path_node_spacing * 0.25:
 		out.append("UWAGA: ścieżka (%.1f m) jest szersza niż ćwierć odstępu węzłów (%.1f m)." % [path_width, path_node_spacing])
+	if firework_interval_min > firework_interval_max or firework_near_interval_min > firework_near_interval_max:
+		out.append("BŁĄD: przedział fajerwerków ma min większe niż max.")
+	if firework_far_min > firework_far_max or firework_near_min > firework_near_max:
+		out.append("BŁĄD: przedział dystansu fajerwerków ma min większe niż max.")
+	if firework_near_max >= firework_far_min:
+		out.append("UWAGA: bliski wybuch (do %.0f m) sięga daleko (od %.0f m); eskalacja straci sens." % [firework_near_max, firework_far_min])
 	if volumetric_fog:
 		out.append("UWAGA: volumetric fog jest włączony – na Quest 3 to za drogo (tylko PC / nagrania).")
 	return out

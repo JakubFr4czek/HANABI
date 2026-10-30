@@ -11,8 +11,15 @@ extends Node3D
 ## through. The rain, forest wind and thunder buses are muted while the films
 ## play, so the splash is silent until the intro. Time advances by the frame
 ## delta only; nothing here touches Engine.time_scale.
+##
+## After the NANJO film comes the title plate (D18, docs/INTRO_TEXT.md): two or three
+## English lines on black, fading in and out over TITLE_SEC. A far firework is heard
+## at its start (DistantFireworks, through title_started). The Fireworks bus is not
+## muted here, so the boom comes through the films' silence.
 
 signal finished
+## The title plate starts (D18): the far firework's cue.
+signal title_started
 
 ## Distance from the eye to the board, in metres.
 const BOARD_DISTANCE := 3.5
@@ -31,12 +38,23 @@ const POP_SFX := preload("res://assets/audio/sfx/kenney_run/firework_pop_soft_00
 const BURST_AT := 0.93
 ## Black between the two films, in seconds.
 const BLACK_GAP := 0.3
+## Title plate (D18): fade in, hold and fade out, in seconds. About 9 s in all.
+const TITLE_FADE_IN := 2.0
+const TITLE_HOLD := 5.0
+const TITLE_FADE_OUT := 2.0
+const TITLE_SEC := TITLE_FADE_IN + TITLE_HOLD + TITLE_FADE_OUT
+const TITLE_TEXT_SIZE := 38
+const TITLE_COLOR := Color(0.86, 0.84, 0.8)
+const INTRO_TEXT_PATH := "res://docs/INTRO_TEXT.md"
+const INTRO_TEXT_BEGIN := "<!-- INTRO -->"
+const INTRO_TEXT_END := "<!-- /INTRO -->"
+const TITLE_MAX_LINES := 3
 ## A skip (trigger, A/X, Space, Enter, Esc or mouse) fades the board out this fast.
 const SKIP_FADE := 0.4
 ## The intro fades up from black over this long after the splash hands over.
 const VEIL_FADE := 0.6
 
-enum Phase { HANABI, GAP, NANJO }
+enum Phase { HANABI, GAP, NANJO, TITLE }
 
 var active := false
 
@@ -49,6 +67,8 @@ var _skip_t := -1.0
 var _popped := false
 var _viewport: SubViewport
 var _video: VideoStreamPlayer
+var _title_black: ColorRect
+var _title_label: Label
 var _quad: QuadMesh
 var _board: MeshInstance3D
 var _board_mat: StandardMaterial3D
@@ -79,7 +99,23 @@ func is_active() -> bool:
 func current_board() -> String:
 	if not active:
 		return ""
-	return ["hanabi", "gap", "nanjo"][_phase]
+	return ["hanabi", "gap", "nanjo", "title"][_phase]
+
+
+## The title plate's lines, read from docs/INTRO_TEXT.md between its markers:
+## one line per non-empty line, at most TITLE_MAX_LINES. Empty when the file is missing.
+static func title_lines(path: String = INTRO_TEXT_PATH) -> PackedStringArray:
+	var out := PackedStringArray()
+	var inside := false
+	for raw in FileAccess.get_file_as_string(path).split("\n"):
+		var line := raw.strip_edges()
+		if line == INTRO_TEXT_BEGIN:
+			inside = true
+		elif line == INTRO_TEXT_END:
+			break
+		elif inside and line != "" and out.size() < TITLE_MAX_LINES:
+			out.append(line)
+	return out
 
 
 ## Seconds of the current film that have played.
@@ -153,6 +189,9 @@ func _step(delta: float) -> void:
 		_phase_t += delta
 		if _phase == Phase.GAP and _phase_t >= BLACK_GAP:
 			_enter_phase(Phase.NANJO)
+		elif _phase == Phase.TITLE and _phase_t >= TITLE_SEC:
+			_finish(false)
+			return
 		elif _phase == Phase.HANABI and not _popped and _video.stream_position >= BURST_AT:
 			_popped = true
 			_pop.play()
@@ -167,7 +206,7 @@ func _on_clip_finished() -> void:
 		Phase.HANABI:
 			_enter_phase(Phase.GAP)
 		Phase.NANJO:
-			_finish(false)
+			_enter_phase(Phase.TITLE)
 
 
 func _enter_phase(next: Phase) -> void:
@@ -182,6 +221,10 @@ func _enter_phase(next: Phase) -> void:
 		Phase.NANJO:
 			GameEvents.log_event("boot_splash_board", {"board": "nanjo"})
 			_play_clip(NANJO_CLIP)
+		Phase.TITLE:
+			GameEvents.log_event("boot_splash_board", {"board": "title"})
+			_video.stop()
+			title_started.emit()
 
 
 func _play_clip(clip: VideoStream) -> void:
@@ -191,9 +234,21 @@ func _play_clip(clip: VideoStream) -> void:
 
 func _show_phase() -> void:
 	_board.visible = _phase != Phase.GAP
-	# The skip fade darkens the film; the films themselves end on black.
-	var brightness := 1.0 if _skip_t < 0.0 else clampf(1.0 - _skip_t / SKIP_FADE, 0.0, 1.0)
+	var on_title := _phase == Phase.TITLE
+	_title_black.visible = on_title
+	_title_label.visible = on_title
+	# The title plate fades in from black and out again; the skip fade darkens any board.
+	var brightness := title_brightness(_phase_t) if on_title else 1.0
+	if _skip_t >= 0.0:
+		brightness *= clampf(1.0 - _skip_t / SKIP_FADE, 0.0, 1.0)
 	_board_mat.albedo_color = Color(brightness, brightness, brightness)
+
+
+## Brightness of the title plate at [param t] seconds into it (0 = black, 1 = full).
+static func title_brightness(t: float) -> float:
+	var fade_in := clampf(t / TITLE_FADE_IN, 0.0, 1.0)
+	var fade_out := clampf((TITLE_SEC - t) / TITLE_FADE_OUT, 0.0, 1.0)
+	return minf(fade_in, fade_out)
 
 
 func _exit_tree() -> void:
@@ -324,7 +379,24 @@ func _build_visuals() -> void:
 	_video.expand = true
 	_video.finished.connect(_on_clip_finished)
 	_viewport.add_child(_video)
-	_total_seconds = _film_length(HANABI_CLIP) + BLACK_GAP + _film_length(NANJO_CLIP)
+	# The title plate: black behind the lines, drawn over the (idle) video.
+	_title_black = ColorRect.new()
+	_title_black.color = Color.BLACK
+	_title_black.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title_black.visible = false
+	_viewport.add_child(_title_black)
+	_title_label = Label.new()
+	_title_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_title_label.text = "\n".join(title_lines())
+	_title_label.add_theme_font_override("font", UiTypography.font(400))
+	_title_label.add_theme_font_size_override("font_size", TITLE_TEXT_SIZE)
+	_title_label.add_theme_color_override("font_color", TITLE_COLOR)
+	_title_label.visible = false
+	_viewport.add_child(_title_label)
+	_total_seconds = _film_length(HANABI_CLIP) + BLACK_GAP + _film_length(NANJO_CLIP) + TITLE_SEC
 
 	_board_mat = StandardMaterial3D.new()
 	_board_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
