@@ -32,9 +32,9 @@ func _run_all() -> void:
 	_check_plugin_compiles()
 
 
-## Counts of one forest of [param profile], built alone and freed again. The
-## sensitivity checks use a single chunk (chunk_radius 0): the counts scale with
-## the chunk, and one chunk builds in a fraction of the 3×3 ring.
+## Counts of one forest of [param profile], built alone and freed again. Counts
+## also hold the sakura of the spawn chunk (0,0) on its own: its glade keeps the
+## sky open, so a focal tree there can fail the sky rule while the others pass.
 func _forest_stats(profile: WorldGenProfile, radius: int = 0) -> Dictionary:
 	var sized := profile.duplicate(true) as WorldGenProfile
 	sized.chunk_radius = radius
@@ -43,6 +43,8 @@ func _forest_stats(profile: WorldGenProfile, radius: int = 0) -> Dictionary:
 	stats["trees"] = _count_trees(forest)
 	stats["gates"] = _count_meta(forest, "torii_world_positions")
 	stats["sakura"] = _count_meta(forest, "sakura_tree_local_xfs")
+	var spawn := forest._chunks.get(Vector2i.ZERO) as Node3D
+	stats["spawn_sakura"] = spawn.get_meta("sakura_tree_local_xfs", []).size() if spawn else 0
 	stats["lanterns"] = _count_meta(forest, "lantern_world_positions")
 	_release(forest)
 	return stats
@@ -55,8 +57,8 @@ func _check_density_and_trees() -> void:
 	var dense := WorldGenProfile.make_default()
 	dense.tree_keep_min = 0.9
 	dense.tree_keep_max = 1.0
-	var few := await _forest_stats(sparse)
-	var many := await _forest_stats(dense)
+	var few := await _forest_stats(sparse, 1)
+	var many := await _forest_stats(dense, 1)
 	_check("Denser keep chance gives more trees (%d → %d)" % [few.trees, many.trees], many.trees > few.trees * 2)
 	var none := WorldGenProfile.make_default()
 	for tree in none.trees:
@@ -83,8 +85,9 @@ func _check_gates_and_sakura() -> void:
 	_check("Focal chance 0 gives no sakura", (await _forest_stats(sakura_off)).sakura == 0)
 	var sakura_all := WorldGenProfile.make_default()
 	sakura_all.trees[1].focal_chance = 1.0
-	var every := await _forest_stats(sakura_all)
-	_check("Focal chance 1 gives one sakura per chunk (%d)" % every.sakura, every.sakura == 1)
+	var every := await _forest_stats(sakura_all, 1)
+	_check("Focal chance 1 gives one sakura per chunk, the spawn chunk stays open (%d of 9, spawn %d)"
+		% [every.sakura, every.spawn_sakura], every.sakura == 8 and every.spawn_sakura == 0)
 	var default_stats := await _forest_stats(WorldGenProfile.make_default(), 1)
 	_check("Default rarity: sakura in about one chunk in five (%d of 9)" % default_stats.sakura,
 		default_stats.sakura <= 4)
