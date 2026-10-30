@@ -154,6 +154,14 @@ const XP_LEVEL_STEP := 40
 const HOKORA_HAND_RADIUS := 0.35
 const HOKORA_TOUCH_RADIUS := 2.2
 const HOKORA_REFUSE_ENEMY_RADIUS := 3.5
+
+# --- Hokora suzu bell: one elemental charge (D21, P8) ---------------------------------
+## A hand or the blade tip within HOKORA_BELL_HAND_RADIUS of the suzu, with the player
+## within HOKORA_BELL_TOUCH_RADIUS of it, rings the bell and stores one charge in
+## ElementSystem. The bell then rests for HOKORA_BELL_COOLDOWN seconds (per shrine).
+const HOKORA_BELL_HAND_RADIUS := 0.3
+const HOKORA_BELL_TOUCH_RADIUS := 2.0
+const HOKORA_BELL_COOLDOWN := 60.0
 ## The forest is cut into square slots of profile.shrine_slot_size metres on a
 ## side, and a slot holds one shrine with profile.shrine_slot_chance (both in the
 ## WorldGenProfile: placement is world generation, not balance). The player only
