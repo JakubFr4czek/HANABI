@@ -124,12 +124,12 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(4.0, 60.0, 0.1) var fog_end := 40.0
 ## How the fog thickens between fog_start and fog_end: 1 is linear, higher is later.
 ## At 1.8 the trees 11 m away are still ~6 % milk and the ones at 30 m ~55 %.
-@export_range(0.2, 4.0, 0.05) var fog_curve := 1.8
+@export_range(0.2, 4.0, 0.05) var fog_curve := 2.1
 ## Dusk palette: rose and blue, mixed by dusk_mix (0 = night blue, 1 = dusk rose).
 ## fog, ambient and moon colours all follow the mix (see fog_color()).
-@export var dusk_pink := Color(0.42, 0.24, 0.38)
+@export var dusk_pink := Color(0.46, 0.22, 0.42)
 ## Night colour of the palette (fog, ambient and moon at dusk_mix 0).
-@export var night_blue := Color(0.2, 0.25, 0.38)
+@export var night_blue := Color(0.12, 0.26, 0.34)
 ## 0 = night blue, 1 = dusk rose. Fog, ambient and moon follow it.
 @export_range(0.0, 1.0, 0.01) var dusk_mix := 0.3
 ## Light the fog gives the forest floor and trunks.
