@@ -51,6 +51,8 @@ const FIELDS := {
 		["hp_per_wave", "HP za falę (ułamek)", 0.0, 1.0, 0.01],
 		["hp_per_second", "HP za sekundę (ułamek)", 0.0, 0.05, 0.001],
 		["elite_hp_mult", "Mnożnik HP elity", 1.0, 5.0, 0.05],
+		["swarm_hp_mult", "Mnożnik HP roju", 0.5, 3.0, 0.05],
+		["swarm_damage_mult", "Mnożnik obrażeń roju", 0.5, 3.0, 0.05],
 	],
 	"Oni": [
 		["oni_first_seconds", "Oni pierwszy raz po (s)", 0.0, 900.0, 5.0],

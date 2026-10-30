@@ -40,7 +40,7 @@ Zasady i uzasadnienie: `docs/SPAWN_PLAN.md`.
 | **Caps** | ile yōkai może żyć naraz: start, co ile sekund cap rośnie, twardy sufit | *Cap twardy* 8 = zmierzona baza Quest |
 | **Spawn ring** | pierścień wokół gracza i kąt poza kadrem | *Kąt poza kadrem* 60° |
 | **Enemies** | od kiedy elity i jaka szansa na końcu rampy | *Elity od* (150 s) |
-| **Scaling** | HP i jego wzrost (na falę i na sekundę), mnożnik elity | *HP za sekundę* 0,004 |
+| **Scaling** | HP i jego wzrost (na falę i na sekundę), mnożnik elity, siła zwykłych yōkai (mnożnik HP i obrażeń) | *HP za sekundę* 0,004; zwykłe yōkai ×1,4 HP i ×1,25 obrażeń |
 | **Oni** | pierwszy Oni, odstęp, mnożnik HP | *Oni pierwszy raz po* (180 s), potem co 100 s |
 
 Oni pojawia się zawsze na początku fali **szczytu** (nie w środku relaksu),
