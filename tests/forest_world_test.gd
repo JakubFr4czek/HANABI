@@ -340,6 +340,60 @@ func _lod_checks(run: RunGame, forest: ForestWorld, player: DesktopPlayer) -> vo
 		blocked >= 1 and blocked < sight_lines)
 
 	await _check_open_sky(forest)
+	_check_cloud_base_above_crowns(forest, run)
+
+
+## P1b: the cloud deck lies over the crowns. From every path sample (eye 1.6 m above the
+## ground, every 2 m), the highest crown point within the fog's reach (40 m) stands below the
+## cloud base (SkyDome shader, cloud_base_deg). Max over all directions, so it holds in each.
+func _check_cloud_base_above_crowns(forest: ForestWorld, run: RunGame) -> void:
+	var dome := run.get_node("Arena/SkyDome") as MeshInstance3D
+	var base_deg: float = (dome.material_override as ShaderMaterial).get_shader_parameter("cloud_base_deg")
+	const REACH := 40.0
+	const CELL := 8.0
+	var buckets := {}
+	var crown_points := 0
+	for key in forest._chunks:
+		var root := forest._chunks[key] as Node3D
+		for e in forest.profile.trees.size():
+			var mesh: Mesh = forest._tree_meshes[e]
+			var label := ("Focal%d" if forest.profile.trees[e].is_focal() else "Trees%d") % e
+			var crown_local := PackedVector3Array()
+			for s in mesh.get_surface_count():
+				for v in mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+					if v.y >= ForestWorld.SCENE_CROWN_FLOOR:
+						crown_local.append(v)
+			for xf in root.get_meta("xfs_" + label, []):
+				var t: Transform3D = xf
+				for v in crown_local:
+					var wv := root.position + t * v
+					var cell := Vector2i(floori(wv.x / CELL), floori(wv.z / CELL))
+					if not buckets.has(cell):
+						buckets[cell] = []
+					(buckets[cell] as Array).append(wv)
+					crown_points += 1
+	var size := forest.profile.chunk_size
+	var samples := 0
+	var worst_deg := -INF
+	for key in forest._chunks:
+		var coord: Vector2i = key
+		var rect := Rect2(Vector2(coord) * size - Vector2(size, size) * 0.5, Vector2(size, size))
+		for s in forest.paths.samples_in_rect(rect, 2.0):
+			samples += 1
+			var eye := Vector3(s.x, forest.height_at(s.x, s.y) + 1.6, s.y)
+			var span := int(ceil(REACH / CELL))
+			var cx := floori(s.x / CELL)
+			var cz := floori(s.y / CELL)
+			for ox in range(-span, span + 1):
+				for oz in range(-span, span + 1):
+					for p in buckets.get(Vector2i(cx + ox, cz + oz), []):
+						var d := Vector2(p.x - eye.x, p.z - eye.z).length()
+						if d < 0.5 or d > REACH:
+							continue
+						worst_deg = maxf(worst_deg, rad_to_deg(atan2(p.y - eye.y, d)))
+	_check("Cloud base (%.1f°) stands above every crown seen from the paths (highest %.1f° over %d samples, %d crown points)"
+			% [base_deg, worst_deg, samples, crown_points],
+		samples > 0 and crown_points > 0 and worst_deg < base_deg)
 
 
 ## The sky over every path stays open. Each crown point the ring draws (the real mesh, moved to
