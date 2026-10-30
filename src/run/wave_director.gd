@@ -34,6 +34,10 @@ var _yokai_pool: Array[Yokai] = []
 var _view_forward := Vector3.ZERO
 ## Set by AnchorGuards while a guard group waits for free slots under the cap (see step_director).
 var reserved_slots := 0
+## The planner's Oni cue, held until spawn_oni_boss places the Oni (see step_director).
+var _oni_due := false
+## Test seam: refuse this many Oni placements in a row, as if no legal spot came up.
+var _oni_refusals := 0
 const YOKAI_POOL_CAP := 14
 ## Nothing spawns behind the player: the back sector is 120° wide, centred on the
 ## opposite of the view direction, so anything within 60° of "behind" is refused.
@@ -62,6 +66,7 @@ func get_profile() -> WaveProfile:
 
 func start_director() -> void:
 	clear_enemies()
+	_oni_due = false
 	wave = 0
 	run_seconds = 0.0
 	_planner.profile = get_profile()
@@ -102,6 +107,16 @@ func has_active_oni() -> bool:
 	return is_instance_valid(_active_oni) and not _active_oni.is_dead
 
 
+## True while the planner's Oni cue is still waiting for a legal placement.
+func oni_due() -> bool:
+	return _oni_due
+
+
+## Test seam: the next [param count] Oni placements are refused.
+func refuse_oni_placements(count: int) -> void:
+	_oni_refusals = count
+
+
 func get_active_oni() -> RunOniBoss:
 	return _active_oni
 
@@ -127,8 +142,12 @@ func step_director(delta: float, player_pos: Vector3, view_forward: Vector3 = Ve
 		wave_started.emit(wave, int(_planner.credits))
 	if result.kind != "":
 		spawn_in_fog_ring(player_pos, view_forward, result.kind == "elite")
+	# The planner cues the Oni once per interval and does not repeat it: a cue the spawner
+	# cannot place stays due here and is retried on every following tick until it lands.
 	if result.oni:
-		spawn_oni_boss(player_pos, view_forward)
+		_oni_due = true
+	if _oni_due and spawn_oni_boss(player_pos, view_forward) != null:
+		_oni_due = false
 
 
 ## The live cap at the current run time (what the planner enforces).
@@ -287,10 +306,13 @@ func spawn_elite_at(pos: Vector3, facing_target: Vector3, element: String) -> Yo
 
 
 ## The Oni stands on the ring round the player, never in the back sector. Null when no
-## legal spot came up this tick (the planner cues it again).
+## legal spot came up this call; step_director keeps the cue and calls again next tick.
 func spawn_oni_boss(facing_target: Vector3, view_forward: Vector3 = Vector3.ZERO) -> RunOniBoss:
 	if has_active_oni():
 		return _active_oni
+	if _oni_refusals > 0:
+		_oni_refusals -= 1
+		return null
 	var p := get_profile()
 	var has_view := view_forward.length_squared() > 0.0001
 	var yaw_view := atan2(view_forward.x, view_forward.z)

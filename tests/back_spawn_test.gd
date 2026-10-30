@@ -9,6 +9,7 @@ const RUN_SCENE := preload("res://scenes/run.tscn")
 const SIM_SECONDS := 600.0
 const STEP := 0.1
 const BACK_LIMIT_DEG := 60.0
+const ONI_REFUSALS := 3
 
 var failures := 0
 
@@ -80,6 +81,33 @@ func _run() -> void:
 		recalled.distance_to(far) > 10.0)
 	_check("Recalled yōkai is not in the back sector (closest to dead behind %.1f°)" % recall_closest,
 		recall_closest >= BACK_LIMIT_DEG)
+	# A refused Oni cue is retried every tick, not dropped for the whole oni_interval. The
+	# refusals are injected: the first ONI_REFUSALS placements find no legal spot.
+	director.stop_director()
+	director.clear_enemies()
+	director.start_director()
+	director.refuse_oni_placements(ONI_REFUSALS)
+	var oni_at := {"tick": -1}
+	director.oni_spawned.connect(func(_oni: RunOniBoss) -> void:
+		if oni_at.tick < 0:
+			oni_at.tick = sim.get("tick", -1)
+		)
+	var due_tick := -1
+	var interval_ticks := int(director.get_profile().oni_interval / STEP)
+	# The Oni is cued when a PEAK wave opens, so run until one does (up to 20 min).
+	for tick in int(SIM_SECONDS * 2.0 / STEP):
+		sim.tick = tick
+		sim.yaw = tick * STEP * 0.45
+		director.step_director(STEP, center, Vector3(sin(sim.yaw), 0.0, cos(sim.yaw)))
+		if due_tick < 0 and director.oni_due():
+			due_tick = tick
+		if oni_at.tick >= 0:
+			break
+		if tick % 30 == 29:
+			director.clear_enemies()
+	var waited: int = oni_at.tick - due_tick if oni_at.tick >= 0 and due_tick >= 0 else -1
+	_check("Oni cue refused %d times, then placed %d ticks after it was due (limit %d)" % [ONI_REFUSALS, waited, ONI_REFUSALS],
+		waited >= 0 and waited <= ONI_REFUSALS and waited <= interval_ticks)
 	director.stop_director()
 	director.clear_enemies()
 	run.queue_free()
