@@ -68,6 +68,18 @@ func to_real_speed(sim_speed: float) -> float:
 	return sim_speed / compensation()
 
 
+## Death (D13): the world sinks into a slow fall over [param ramp] s and holds
+## there. Never 0: the end screen, the wrist HUD and the blade keep moving.
+const DEATH_FALL_SCALE := 0.12
+
+
+func death_fall(ramp: float = 1.2) -> void:
+	_effects.append({"kind": "death_fall", "scale": 1.0, "until": INF, "compensate": false,
+		"start": _clock, "ramp": maxf(ramp, 0.05)})
+	effect_started.emit("death_fall", DEATH_FALL_SCALE, ramp)
+	_apply()
+
+
 func is_active(kind: String = "") -> bool:
 	for e in _effects:
 		if kind == "" or e.kind == kind:
@@ -119,6 +131,10 @@ func _physics_process(_delta: float) -> void:
 	_clock += 1.0 / Engine.physics_ticks_per_second
 	if _effects.is_empty():
 		return
+	for e in _effects:
+		if e.kind == "death_fall":
+			var k := clampf((_clock - float(e.start)) / float(e.ramp), 0.0, 1.0)
+			e.scale = lerpf(1.0, DEATH_FALL_SCALE, smoothstep(0.0, 1.0, k))
 	var kept: Array[Dictionary] = []
 	for e in _effects:
 		if e.until > _clock:
