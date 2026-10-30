@@ -71,6 +71,9 @@ var combat_fog: Node
 var run_intro: RunIntro
 var distant_fireworks: DistantFireworks = null
 var run_splash: RunSplash
+## The opening strike (D11): the cinematic between the splash and the intro.
+const OPENING_STRIKE_SCENE := preload("res://scenes/cinematic/opening_strike.tscn")
+var run_cinematic: OpeningStrike
 var forest_ambience: RunForestAmbience
 var restart_ema: VotiveTablet = null
 var _boot_splash_played := false
@@ -413,6 +416,12 @@ func _setup_run_nodes() -> void:
 	run_splash.setup(player)
 	run_splash.finished.connect(_on_boot_splash_finished)
 
+	# D11: the opening strike plays after the splash and before the intro.
+	run_cinematic = OPENING_STRIKE_SCENE.instantiate() as OpeningStrike
+	add_child(run_cinematic)
+	run_cinematic.setup(player)
+	run_cinematic.finished.connect(_on_opening_strike_finished)
+
 
 ## D18: far matsuri fireworks run from the first step of play to the death screen.
 ## Waves and the title plate only send hooks to them.
@@ -435,11 +444,16 @@ func _on_fireworks_run_started() -> void:
 func _on_title_plate_started() -> void:
 	if distant_fireworks:
 		distant_fireworks.fire_intro_burst()
+	# The title plate is black for seconds: the opening strike's stage is built under it.
+	if run_cinematic:
+		run_cinematic.prepare()
 
 
 func start_run() -> void:
-	# R during the boot splash waits for it: the splash then hands over to the intro.
+	# R during the boot splash or the opening strike waits for them: they hand over to the intro.
 	if run_splash and run_splash.is_active():
+		return
+	if run_cinematic and run_cinematic.is_active():
 		return
 	TimeController.clear()
 	Sfx.set_pause_ducking(false, 0.0)
@@ -560,9 +574,19 @@ func _on_run_intro_finished() -> void:
 	_begin_play_after_intro()
 
 
-## The boot splash hands over to the intro, which starts only now, so the press
-## that ended the splash cannot also skip the intro.
+## The boot splash hands over to the opening strike, which starts only now, so the press
+## that ended the splash cannot also skip it. A skipped splash skips the whole opening
+## (D11), straight to the intro.
 func _on_boot_splash_finished() -> void:
+	if run_splash.was_skipped:
+		run_intro.start()
+	else:
+		run_cinematic.start()
+	_refresh_hud()
+
+
+## The opening strike ends on white and hands over to the intro, which fades up from it.
+func _on_opening_strike_finished() -> void:
 	run_intro.start()
 	_refresh_hud()
 
