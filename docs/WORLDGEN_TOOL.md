@@ -41,17 +41,18 @@ odtwarzalny z kodu.
 | **Undergrowth** | podszycie (kamienie, a od D5 paprocie, pniaki, kłody) | `undergrowth` (lista `UndergrowthEntry`) |
 | **Torii** | bramy w lesie | `torii_scene`, `torii_chunk_chance` (rzadkość), `torii_max_per_chunk`, `torii_group_keep`, `torii_height_*`, `torii_min_spacing`, `torii_row_*` (rzędy senbon), `torii_glow_*` |
 | **Lanterns** | tōrō wzdłuż ścieżek | `lantern_scene`, `lantern_max_per_chunk`, `path_lantern_spacing`, `lantern_clearance` |
-| **Shrines** | kapliczki z ofudą (D1) | `shrine_slot_chunks` (rozmiar slotu), `shrine_slot_chance` (rzadkość). Musi być rzadziej niż torii – sprawdza walidacja |
-| **Lights and sky** | światło, mgła, paleta | `shafts_*` (promienie księżyca), `fog_start`, `fog_end` (≤ 14 m), `fog_curve`, `dusk_pink`, `night_blue`, `dusk_mix` (0 = noc, 1 = róż), `ambient_energy`, `moon_*`, `exposure`, `glow_intensity`, `volumetric_fog` (tylko PC) |
+| **Shrines** | kapliczki z ofudą (D1) | `shrine_slot_size` (rozmiar slotu w metrach; rytm kapliczek, niezależny od chunka), `shrine_slot_chance` (rzadkość). Musi być rzadziej niż torii – sprawdza walidacja |
+| **Lights and sky** | światło, mgła, paleta | `shafts_*` (promienie księżyca), `fog_start`, `fog_end` (≤ zasięg pierścienia, `loaded_range()`), `fog_curve`, `dusk_pink`, `night_blue`, `dusk_mix` (0 = noc, 1 = róż), `ambient_energy`, `moon_*`, `exposure`, `glow_intensity`, `volumetric_fog` (tylko PC) |
 | **Ground** | materiał terenu | `ground_wetness`, `ground_cavity_ao`, `ground_normal_strength`, `ground_roughness_wet` |
 | **Paths** | ścieżki | `paths_enabled`, `path_node_spacing`, `path_width`, `path_loop_chance`, `path_curviness`, `path_tree_clearance`, `torii_on_path`, `lantern_on_path` |
-| **Distance and LOD** | zasięg rysowania | `tree_draw_radius`, `focal_draw_radius`, `tree_far_start`, `tree_far_keep`, `ground_fade_start/end` |
+| **Distance and LOD** | zasięg rysowania | `tree_draw_radius`, `focal_draw_radius`, `lod_near_radius`, `lod_fade`, `ground_fade_start/end` |
 
 **Mgła i „gęstość”:** gęstość mgły to `fog_start` (gdzie mgła zaczyna gęstnieć)
 i `fog_curve`. Gęstość `Environment.fog_density` zostaje 1,0: przy 1,0 krawędź
 załadowanego pierścienia jest nieprzezroczysta, a test Quest tego pilnuje.
-`fog_end` musi zostać w obrębie załadowanego pierścienia (≤ 14 m), inaczej
-widać krawędź chunków.
+`fog_end` musi zostać w obrębie załadowanego pierścienia (`loaded_range()` =
+`chunk_radius × chunk_size`, domyślnie 40 m), inaczej widać krawędź chunków.
+Od D6 mgła nie jest pełna od razu: `fog_curve` 1,8 rozpuszcza las stopniowo.
 
 **Paleta:** jeden miks między nocnym błękitem a zmierzchowym różem (`dusk_mix`).
 Mgła, tło, ambient i światło księżyca idą razem. Gradientu nieba nie ma:
@@ -218,11 +219,9 @@ Porównanie `default_profile` z konceptem (zrzuty z 28.10.2026):
   były turkusowe); sakura jako różowy blask w rzucie z góry; nocna paleta
   z różem i błękitem; podgląd i gra rysują ten sam las.
 - **Słabe, ważne:**
-  1. **Dystans.** Mgła jest pełna już przy ~11 m, więc nie ma sylwetek 30 m
-     jak w koncepcie. To konsekwencja pierścienia 3×3 (krawędź musi być
-     nieprzezroczysta przy ≤ 14 m) i budżetu Quest. Lekarstwem są LOD i
-     impostory (D6) oraz większy pierścień, czyli nie da się tego domknąć
-     samym profilem.
+  1. **Dystans.** Od D6 (docs/D6_FOREST_LOD.md) las czyta się do 40 m: chunki
+     40 m w pierścieniu 3×3, daleka korona przy 8–40 m, mgła pełna przy 40 m.
+     Daleka korona jest jeszcze prosta i ciemna (docs/D6_FOREST_LOD.md, ocena).
   2. **Korony drzew** (skan cedru + skupiska kulek) wyglądają jak ciemne
      bryły, a nie jak igliwie. To stary wygląd sprzed D8; poprawią go
      assety D5 (`crown = SCENE`).
@@ -234,18 +233,18 @@ Porównanie `default_profile` z konceptem (zrzuty z 28.10.2026):
 
 ## Ograniczenia i decyzje
 
-- **Pierścień 3×3 i `fog_end ≤ 14 m`:** zostaje, bo tak działa budżet Quest.
+- **Pierścień 3×3 i `fog_end ≤ loaded_range()`:** od D6 pierścień ma 40 m (chunk 40 m), a mgła kończy się na jego krawędzi.
 - **Kapliczki i ścieżki:** węzły sieci leżą na siatce, nie na kapliczkach.
   Kapliczka dostaje krótki odcinek (spur) do najbliższej ścieżki w zasięgu
   40 m. To spełnia „połączone”, ale nie gwarantuje, że ścieżka prowadzi
   dokładnie do drzwi kapliczki.
 - **Wrogowie** nie są w profilu: należą do `WaveDirector` (rozgrywka, nie
   generacja). Decyzja świadoma.
-- **LOD (D6) i assety (D5):** w D8 są punkty podpięcia (`tree_far_*`,
-  `tree_draw_radius`, `scene`/`crown = SCENE`, lista `undergrowth`), ale
-  impostorów i integracji assetów jeszcze nie ma.
-- **Budowa chunków** jest synchroniczna (~80–120 ms na nowy chunk). Do
-  rozłożenia na klatki po D5.
+- **LOD (D6) i assety (D5):** daleka korona jest proceduralna (`lod_near_radius`,
+  `lod_fade`); integracji assetów D5 jeszcze nie ma. Impostorów sakury też nie.
+- **Budowa chunków:** przy przejściu granicy nowy pierścień powstaje w kilku
+  klatkach (wiersze wysokości, `TERRAIN_ROWS_PER_FRAME`); skok o więcej niż jeden
+  chunk buduje od razu. Próbkowanie Poissona idzie na wątkach.
 - **Zmiany wyglądu względem przed-D8:** drzewa rozstawione Poissonem (średnio
   41 na chunk przy 43 wcześniej), ścieżki wycinają drzewa i kamienie, mgła
   zaczyna się później (3,5 m zamiast 0,4 m), paleta ciemniejsza, bramy z lekką

@@ -72,12 +72,13 @@ func _run_all() -> void:
 	_check("Shared MultiMesh props stay within a Quest-friendly budget", props > 24 and props < 980)
 
 	# Chunks are centered on coord * chunk_size, so the mapping must round.
+	var half := forest.profile.chunk_size * 0.5
 	_check("Chunk mapping matches centered chunks",
-		forest._world_to_chunk(Vector3(13.9, 0.0, 0.0)) == Vector2i(0, 0)
-		and forest._world_to_chunk(Vector3(14.1, 0.0, 0.0)) == Vector2i(1, 0)
-		and forest._world_to_chunk(Vector3(-14.1, 0.0, 0.0)) == Vector2i(-1, 0))
+		forest._world_to_chunk(Vector3(half - 0.1, 0.0, 0.0)) == Vector2i(0, 0)
+		and forest._world_to_chunk(Vector3(half + 0.1, 0.0, 0.0)) == Vector2i(1, 0)
+		and forest._world_to_chunk(Vector3(-half - 0.1, 0.0, 0.0)) == Vector2i(-1, 0))
 	_check("Fog bubble opened past the 9 m closet (end %.1f m)" % forest.profile.fog_end,
-		forest.profile.fog_end > 9.0 and forest.profile.fog_end <= ForestWorld.VIEW_RANGE_END)
+		forest.profile.fog_end > 9.0 and forest.profile.fog_end <= forest.loaded_range())
 	_check("Trees draw out to the fog (radius %.1f m)" % forest.profile.tree_draw_radius,
 		forest.profile.tree_draw_radius >= forest.profile.fog_end)
 	_check("Chunks hold up to %d torii gates" % forest.profile.torii_max_per_chunk,
@@ -201,7 +202,154 @@ func _run_all() -> void:
 	await _frames(10)
 	_check("Tree-spot cache stays bounded while roaming (%d entries)" % forest._tree_spot_cache.size(),
 		forest._tree_spot_cache.size() <= 30)
+	await _lod_checks(run, forest, player)
 	run.queue_free()
+
+
+## D6: the forest reads out to the fog. Full crowns stand close, far crowns carry on
+## to the fog's end, nothing pops at a chunk border or at the LOD band, the next
+## ring fills over frames, and a trunk can hide a far gate's glow.
+func _lod_checks(run: RunGame, forest: ForestWorld, player: DesktopPlayer) -> void:
+	var profile := forest.profile
+	var near_r := profile.lod_near_radius + profile.lod_fade * 0.5
+	forest.finish_pending()
+	player.teleport(Vector3(0.0, forest.height_at(0.0, 0.0) + 0.2, 0.0), 0.0)
+	await _frames(2)
+	forest.finish_pending()
+	forest._refresh_tree_draw(player.global_position)
+	var far_band := _count_between(forest.drawn_far_origins, player.global_position, 14.0, 40.0)
+	_check("Far crowns stand from 14 m to 40 m, where the fog is nearly full (%d drawn)" % far_band, far_band > 0)
+	var full_max := _farthest(forest.drawn_full_origins, player.global_position)
+	_check("Full crowns stay inside the LOD band (farthest %.1f m, band edge %.1f m)" % [full_max, near_r],
+		full_max <= near_r + 0.01)
+	var all_max := maxf(full_max, _farthest(forest.drawn_far_origins, player.global_position))
+	_check("Nothing is drawn past tree_draw_radius (farthest %.1f m)" % all_max,
+		all_max <= profile.tree_draw_radius + 0.01)
+	var far_tris := _triangles(forest._tree_far_meshes[0])
+	_check("A far crown is at most 500 triangles (%d)" % far_tris, far_tris > 0 and far_tris <= 500)
+	# The far crowns are what the camera sees: some stand in its horizontal view cone.
+	var forward := -player.camera.global_transform.basis.z
+	forward.y = 0.0
+	forward = forward.normalized()
+	var in_view := 0
+	for o in forest.drawn_far_origins:
+		var to := o - player.global_position
+		to.y = 0.0
+		var dist := to.length()
+		if dist >= 14.0 and dist <= 40.0 and forward.dot(to / dist) > cos(deg_to_rad(35.0)):
+			in_view += 1
+	_check("Far crowns fill the view ahead (%d in a 70 degree cone, 14–40 m)" % in_view, in_view > 0)
+
+	# Walking 80 m across two chunk borders: every ordinary tree inside the draw
+	# radius is drawn at every step (full or far crown, never neither), so a
+	# border cannot pop a tree in or out of view.
+	var missing := 0
+	var extra := 0
+	var steps := 0
+	var x := -20.0
+	while x <= 60.0:
+		player.teleport(Vector3(x, forest.height_at(x, 0.0) + 0.2, 0.0), 0.0)
+		await _frames(1)
+		forest.finish_pending()
+		forest._refresh_tree_draw(player.global_position)
+		var drawn := {}
+		for o in forest.drawn_full_origins:
+			drawn[o] = true
+		for o in forest.drawn_far_origins:
+			drawn[o] = true
+		var expected := _ring_trees_within(forest, player.global_position, profile.tree_draw_radius)
+		for o in expected:
+			if not drawn.has(o):
+				missing += 1
+		for o in drawn.keys():
+			if not expected.has(o):
+				extra += 1
+		steps += 1
+		x += 0.25
+	_check("Every tree inside the draw radius is drawn at each of %d steps across two borders (%d missing, %d extra)" % [steps, missing, extra],
+		missing == 0 and extra == 0)
+
+	# Crossing a border queues the new ring; it is built over frames, not in one stall.
+	player.teleport(Vector3(profile.chunk_size * 0.5 - 1.0, forest.height_at(profile.chunk_size * 0.5 - 1.0, 0.0), 0.0), 0.0)
+	forest.finish_pending()
+	await _frames(1)
+	player.teleport(Vector3(profile.chunk_size * 0.5 + 2.0, forest.height_at(profile.chunk_size * 0.5 + 2.0, 0.0), 0.0), 0.0)
+	await _frames(1)
+	var queued := forest._pending_chunks.size() + (1 if forest._building != null else 0)
+	_check("Crossing a border queues the new ring instead of building it at once (%d waiting)" % queued, queued > 0)
+	var frames := 0
+	while (forest._building != null or not forest._pending_chunks.is_empty()) and frames < 300:
+		await _frames(1)
+		frames += 1
+	_check("The queued ring is ready after %d frames, nine chunks loaded" % frames,
+		frames < 300 and forest.chunk_count == 9)
+
+	# A trunk between the eye and a gate 20–36 m away hides part of its glow (the halo is depth-tested).
+	forest.finish_pending()
+	var gate := Vector3.INF
+	for key in forest._chunks:
+		for g in (forest._chunks[key] as Node3D).get_meta("torii_world_positions", []):
+			var gv: Vector3 = g
+			var d := Vector2(gv.x, gv.z).length()
+			if gate == Vector3.INF and d >= 20.0 and d <= 36.0:
+				gate = gv
+	if gate == Vector3.INF:
+		_check("A torii gate stands 20–36 m from the spawn for the sight-line check", false)
+		return
+	var dir := Vector3(gate.x, 0.0, gate.z).normalized()
+	var stand := gate - dir * 25.0
+	player.teleport(Vector3(stand.x, forest.height_at(stand.x, stand.z) + 0.2, stand.z), 0.0)
+	await _frames(2)
+	forest.finish_pending()
+	var eye := player.camera.global_position
+	var space := run.get_world_3d().direct_space_state
+	var blocked := 0
+	var sight_lines := 0
+	for i in 9:
+		var side := Vector3(-dir.z, 0.0, dir.x) * (-0.6 + 0.15 * float(i))
+		# Stops 2 m short of the gate, so its own posts are not the blocker.
+		var target := gate - dir * 2.0 + Vector3(0.0, 2.2, 0.0) + side
+		var query := PhysicsRayQueryParameters3D.create(eye, target, ForestWorld.TRUNK_LAYER)
+		sight_lines += 1
+		if not space.intersect_ray(query).is_empty():
+			blocked += 1
+	_check("Trunks hide part of a gate's glow 25 m away (%d of %d sight lines blocked)" % [blocked, sight_lines],
+		blocked >= 1 and blocked < sight_lines)
+
+
+## Origins of every ordinary tree of the loaded ring within [param radius] of [param origin].
+func _ring_trees_within(forest: ForestWorld, origin: Vector3, radius: float) -> Dictionary:
+	var out := {}
+	for key in forest._chunks:
+		var chunk := forest._chunks[key] as Node3D
+		for xf in chunk.get_meta("tree_local_xfs", []):
+			var w := chunk.position + (xf as Transform3D).origin
+			if Vector2(w.x - origin.x, w.z - origin.z).length() <= radius:
+				out[w] = true
+	return out
+
+
+func _count_between(points: PackedVector3Array, origin: Vector3, lo: float, hi: float) -> int:
+	var n := 0
+	for p in points:
+		var d := Vector2(p.x - origin.x, p.z - origin.z).length()
+		if d >= lo and d <= hi:
+			n += 1
+	return n
+
+
+func _farthest(points: PackedVector3Array, origin: Vector3) -> float:
+	var far := 0.0
+	for p in points:
+		far = maxf(far, Vector2(p.x - origin.x, p.z - origin.z).length())
+	return far
+
+
+static func _triangles(mesh: Mesh) -> int:
+	var total := 0
+	for si in mesh.get_surface_count():
+		total += (mesh.surface_get_arrays(si)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+	return total
 
 
 func _check(label: String, ok: bool) -> void:

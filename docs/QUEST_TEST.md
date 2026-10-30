@@ -12,7 +12,7 @@ Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom 
 
 - [ ] Intro seiza: płynne zejście, katana po touchdown, skip nie psuje runu.
 - [ ] **Nadgarstek (§15, D14):** HUD na nadgarstku z przezroczystym tłem (bez panelu); gładki pierścień HP (teal -> bursztyn -> czerwony + puls przy <25%), w środku animowany ogień i biały licznik kalorii (kcal); żywioł na cienkim zewnętrznym łuku; widoczny TYLKO przy geście spojrzenia na zegarek (dystans <0.35 m, kąt <45°, w polu widzenia, fade 0.15 s; zero draw calls przy opuszczonej ręce); brak clippingu z dłonią/rękawicą/kataną.
-- [ ] **Las CC0:** drzewa/torii do ~12 m; **za wielkim torii** tylko mgła (§14).
+- [ ] **Las CC0:** pełne drzewa do ~8 m, dalej tańsza korona (D6), las do ~40 m; **za wielkim torii** tylko mgła (§14).
 - [ ] Hitodama: po killu lecą, spiralnie wciągane; zbieranie bez lag spike’a.
 - [ ] **Level-up (D12):** bez slow-mo i bez wyboru; haptyka obu dłoni, błysk na nadgarstku (~0.6 s), tekst „位 LV n · +1 点" przez 1.5 s.
 
@@ -89,9 +89,19 @@ Zrzuty menu (okno, nie headless): `$GODOT --path . --fixed-fps 90 res://tests/sk
 - [ ] Ścieżka jest czytelna jako kamienna wstęga, nie wchodzi w pnie; bramy mają czerwony korpus z delikatną cyjanową poświatą.
 - [ ] **Ścieżka widoczna od razu w VR** z spawnu (0,0,1.8) i 20 m dalej, w nocy i mgle, bez szukania wzrokiem. Pulpitowy test renderu tego nie zastępuje (zob. docs/WORLDGEN_TOOL.md, „Ścieżka w grze”).
 - [ ] Tōrō przy ścieżce (co ok. 15–25 m) są widoczne jako kamienie z ciepłą, słabą poświatą, słabszą od bram.
-- [ ] Mgła zaczyna się około 3,5 m i jest pełna przy 11 m; krawędź chunków nie jest widoczna.
+- [ ] Mgła zaczyna się około 5 m i jest pełna przy 40 m (D6, `fog_curve` 1,8); krawędź chunków nie jest widoczna.
 - [ ] Zmierzch: róż i błękit mieszają się bez skoku; nie ma lawendowej mgły.
 - [ ] Sakura (focal) jest jedna co kilka chunków i czytelna z daleka.
+
+## Las z daleka (D6)
+
+Szczegóły i pomiary: docs/D6_FOREST_LOD.md. Na goglach sprawdź:
+
+- [ ] Torii 25–35 m przed tobą: światło widać przez mgłę, a pień między nim a tobą je przesłania (nie „wisi” nad pustką).
+- [ ] Drzewa pojawiają się z mgły płynnie od ~40 m; przy ~8 m pełna korona zmienia się w tańszą bez widocznego skoku (krzyżowe przejście, 2 m).
+- [ ] Przejście przez granicę chunku (40 m): nowy pierścień dochodzi w kilku klatkach, bez zacięcia.
+- [ ] Budżet: draw ≤ 345 z otwartym menu (zmierzone headless 309), trójkąty w normie (headless ~295k „prims”).
+- [ ] Zrzuty: `godot --path . --fixed-fps 90 res://tests/d6_forest_lod_screenshots.tscn -- --desktop --shots /tmp/hanabi_d6` (okno, nie headless).
 
 ## Komfort VR
 
