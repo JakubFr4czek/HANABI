@@ -24,7 +24,7 @@ func _run() -> void:
 	run.wave_director.clear_enemies()
 	var pack: Array[Yokai] = []
 	for i in 4:
-		var y := run.wave_director.spawn_in_fog_ring(player.global_position, float(i) / 4.0)
+		var y := run.wave_director.spawn_in_fog_ring(player.global_position, Vector3.ZERO)
 		y.brain.attacks_enabled = false
 		pack.append(y)
 	# "Walks in, then turns back": distance rising well above the closest it got
@@ -62,7 +62,7 @@ func _run() -> void:
 	run._clear_souls()
 	await _frames(200)
 	TimeController.clear()
-	var reused := run.wave_director.spawn_in_fog_ring(player.global_position, 0.5)
+	var reused := run.wave_director.spawn_in_fog_ring(player.global_position, Vector3.ZERO)
 	reused.brain.attacks_enabled = false
 	var reused_start := _flat_dist(reused, player)
 	await _frames(240)
@@ -76,7 +76,7 @@ func _run() -> void:
 	# Out in the forest: the ring follows the player and bodies follow the hills.
 	player.teleport(Vector3(30.0, run.forest_world.height_at(30.0, 22.0), 22.0), 0.0)
 	await _frames(30)
-	var far := run.wave_director.spawn_in_fog_ring(player.global_position, 0.0)
+	var far := run.wave_director.spawn_in_fog_ring(player.global_position, Vector3.ZERO)
 	far.brain.attacks_enabled = false
 	var far_start := _flat_dist(far, player)
 	await _frames(20)
