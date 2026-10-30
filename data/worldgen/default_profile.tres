@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" path="res://assets/models/environment/forest_trees/cherry_forest.gltf" id="4_q7a5t"]
 [ext_resource type="PackedScene" path="res://assets/models/environment/forest_trees/giant_redwood.glb" id="6_redwd"]
 [ext_resource type="PackedScene" path="res://assets/models/environment/lanterns/stone_lantern_sahir.glb" id="7_lantn"]
+[ext_resource type="PackedScene" path="res://assets/models/environment/forest_trees/scots_pine.glb" id="8_pinea"]
 [ext_resource type="Script" path="res://src/forest/undergrowth_entry.gd" id="5_pi1ht"]
 
 [sub_resource type="Resource" id="Resource_sclpf"]
@@ -24,10 +25,22 @@ script = ExtResource("3_0trhh")
 label = "Giant redwood (sugi, CC BY 4.0)"
 crown = 2
 scene = ExtResource("6_redwd")
-weight = 0.0
+weight = 1.0
 min_spacing = 8.0
 scale_min = 0.9
 scale_max = 1.25
+base_layout = false
+
+[sub_resource type="Resource" id="Resource_pinea"]
+script = ExtResource("3_0trhh")
+label = "Scots pine (CC BY 4.0)"
+crown = 2
+scene = ExtResource("8_pinea")
+weight = 1.0
+min_spacing = 9.0
+scale_min = 0.9
+scale_max = 1.2
+base_layout = false
 
 [sub_resource type="Resource" id="Resource_8gio6"]
 script = ExtResource("5_pi1ht")
@@ -37,7 +50,7 @@ scale_max = 3.2
 
 [resource]
 script = ExtResource("1_00oye")
-trees = Array[ExtResource("3_0trhh")]([SubResource("Resource_sclpf"), SubResource("Resource_7iial"), SubResource("Resource_redwd")])
+trees = Array[ExtResource("3_0trhh")]([SubResource("Resource_sclpf"), SubResource("Resource_7iial"), SubResource("Resource_redwd"), SubResource("Resource_pinea")])
 undergrowth = Array[ExtResource("5_pi1ht")]([SubResource("Resource_8gio6")])
 chunk_size = 40.0
 fog_start = 5.0

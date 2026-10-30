@@ -327,10 +327,14 @@ func _ring_trees_within(forest: ForestWorld, origin: Vector3, radius: float) -> 
 	var out := {}
 	for key in forest._chunks:
 		var chunk := forest._chunks[key] as Node3D
-		for xf in chunk.get_meta("tree_local_xfs", []):
-			var w := chunk.position + (xf as Transform3D).origin
-			if Vector2(w.x - origin.x, w.z - origin.z).length() <= radius:
-				out[w] = true
+		# Every ordinary kind, base and layout-after (D5), each kind's transforms in the chunk meta.
+		for meta_key in chunk.get_meta_list():
+			if not String(meta_key).begins_with("xfs_Trees"):
+				continue
+			for xf in chunk.get_meta(meta_key, []):
+				var w := chunk.position + (xf as Transform3D).origin
+				if Vector2(w.x - origin.x, w.z - origin.z).length() <= radius:
+					out[w] = true
 	return out
 
 

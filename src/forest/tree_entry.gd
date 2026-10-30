@@ -22,6 +22,10 @@ enum Crown {
 @export var crown: Crown = Crown.CEDAR
 ## Mesh source. Empty falls back to the procedural cedar (validation warns).
 @export var scene: PackedScene = preload("res://assets/models/environment/forest_trees/cherry_forest.gltf")
+## Base layout (on): the kind is planned with the chunk's other base trees, before the torii, so
+## its trunks move the gates. Off: the kind is placed after the gates, on the free ground, and
+## never moves the base layout or the torii (scanned pine and redwood, D5).
+@export var base_layout := true
 ## Relative chance of this kind among the ordinary trees. 0 switches it off.
 @export_range(0.0, 10.0, 0.05) var weight := 1.0
 ## Chance per chunk that one tree of this kind becomes the chunk's focal tree. 0 = never.

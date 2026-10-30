@@ -12,6 +12,7 @@ extends Resource
 
 const DEFAULT_PATH := "res://data/worldgen/default_profile.tres"
 const REDWOOD_SCENE_PATH := "res://assets/models/environment/forest_trees/giant_redwood.glb"
+const PINE_SCENE_PATH := "res://assets/models/environment/forest_trees/scots_pine.glb"
 const LANTERN_SCENE_PATH := "res://assets/models/environment/lanterns/stone_lantern_sahir.glb"
 const SETTING_PATH := "hanabi/worldgen/profile"
 const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/torii_gate_polyfork.glb"
@@ -256,7 +257,7 @@ func moon_color() -> Color:
 
 
 func _init() -> void:
-	trees = [_cedar_entry(), _sakura_entry(), _redwood_entry()]
+	trees = [_cedar_entry(), _sakura_entry(), _redwood_entry(), _pine_entry()]
 	undergrowth = [_boulder_entry()]
 	torii_scene = load(TORII_SCENE_PATH)
 	lantern_scene = load(LANTERN_SCENE_PATH)
@@ -397,10 +398,25 @@ func _redwood_entry() -> TreeEntry:
 	t.label = "Giant redwood (sugi, CC BY 4.0)"
 	t.crown = TreeEntry.Crown.SCENE
 	t.scene = load(REDWOOD_SCENE_PATH)
-	t.weight = 0.0  # off by default: it moves the torii layout the sight-line check relies on (docs/D5_ASSETS.md)
+	t.weight = 1.0
+	t.base_layout = false  # placed after the gates: the torii layout does not move (docs/D5_ASSETS.md)
 	t.min_spacing = 8.0
 	t.scale_min = 0.9
 	t.scale_max = 1.25
+	return t
+
+
+## Scanned scots pine (D5, CC BY 4.0): one tree of the pack's set, placed after the gates.
+func _pine_entry() -> TreeEntry:
+	var t := TreeEntry.new()
+	t.label = "Scots pine (CC BY 4.0)"
+	t.crown = TreeEntry.Crown.SCENE
+	t.scene = load(PINE_SCENE_PATH)
+	t.weight = 1.0
+	t.base_layout = false
+	t.min_spacing = 9.0
+	t.scale_min = 0.9
+	t.scale_max = 1.2
 	return t
 
 
