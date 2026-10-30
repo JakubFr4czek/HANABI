@@ -25,8 +25,8 @@ func _run() -> void:
 		_check("Level-up duck returns toward base volume", absf(music._duck_offset_db) < 0.5)
 		await _music_recovers(music)
 	var forest := run.get_node_or_null("RunForestAmbience") as RunForestAmbience
-	if forest and forest._player:
-		_check("Forest wind on Ambience bus (not Music)", forest._player.bus == Sfx.AMBIENCE_BUS)
+	if forest and forest._wind:
+		_check("Forest wind on Ambience bus (not Music)", forest._wind.bus == Sfx.AMBIENCE_BUS)
 	run.queue_free()
 
 
