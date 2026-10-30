@@ -21,15 +21,15 @@ func _run() -> void:
 	var env: Environment = run.get_node("WorldEnvironment").environment
 	_check("Run depth fog is fully opaque before the loaded chunks end (end=%.2f m)" % env.fog_depth_end,
 		env.fog_mode == Environment.FOG_MODE_DEPTH and env.fog_density >= 0.99
-		and env.fog_depth_end <= ForestWorld.VIEW_RANGE_END)
+		and env.fog_depth_end <= run.forest_world.loaded_range())
 	var horizon := run.horizon_fog_color
 	var rendered := env.fog_light_color.srgb_to_linear()
 	_check("Sky horizon takes the color the fog renders, so fogged hills vanish into it",
 		absf(horizon.r - rendered.r) + absf(horizon.g - rendered.g) + absf(horizon.b - rendered.b) < 0.003)
 	# The forest is walkable, so these are measured from the camera: props and
-	# ground dissolve before the 14 m edge of the loaded 3×3 chunk ring.
-	_check("Forest props fade out inside the loaded chunk ring (view end %.1f m)" % ForestWorld.VIEW_RANGE_END,
-		ForestWorld.VIEW_RANGE_END <= WorldGenProfile.load_active().chunk_size * 0.5)
+	# ground dissolve before the edge of the loaded 3×3 chunk ring.
+	_check("Forest props fade out inside the loaded chunk ring (view end %.1f m, ring %.1f m)" % [env.fog_depth_end, run.forest_world.loaded_range()],
+		env.fog_depth_end <= run.forest_world.loaded_range())
 	var mat := run.forest_world._ground_mat as ShaderMaterial
 	_check("Ground is not cut away under props inside the loaded ring (fade from %.0f m)" % float(mat.get_shader_parameter("fog_fade_start")),
 		float(mat.get_shader_parameter("fog_fade_start")) > WorldGenProfile.load_active().chunk_size)

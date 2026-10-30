@@ -76,9 +76,21 @@ func _run_all() -> void:
 	_check("Simultaneous audio voices bounded (%d <= %d)" % [voices, RunPerfBudget.MAX_AUDIO_VOICES],
 		voices <= RunPerfBudget.MAX_AUDIO_VOICES)
 
+	# D6: the forest's own triangles (far crowns to the fog, full crowns close by) keep a quarter of the budget spare.
+	var forest_prims := 0
+	var forest_draws := 0
+	for mmi in run.forest_world.find_children("*", "MultiMeshInstance3D", true, false):
+		var inst := mmi as MultiMeshInstance3D
+		if not inst.is_visible_in_tree() or inst.multimesh.mesh == null:
+			continue
+		forest_draws += 1
+		forest_prims += RunPerfProbe._mesh_primitives(inst.multimesh.mesh) * inst.multimesh.instance_count
+	_check("Forest primitives stay under a quarter of the Quest budget (%d <= %d, %d draws)" % [forest_prims, int(RunPerfBudget.MAX_PRIMITIVES * 0.75), forest_draws],
+		forest_prims <= int(RunPerfBudget.MAX_PRIMITIVES * 0.75))
+
 	var we: Environment = run.get_node("WorldEnvironment").environment
-	_check("Run fog is opaque before the loaded forest ends (depth_end %.1f <= %.1f)" % [we.fog_depth_end, ForestWorld.VIEW_RANGE_END],
-		we.fog_depth_end <= ForestWorld.VIEW_RANGE_END and we.fog_density >= 0.99)
+	_check("Run fog is opaque before the loaded forest ends (depth_end %.1f <= %.1f)" % [we.fog_depth_end, run.forest_world.loaded_range()],
+		we.fog_depth_end <= run.forest_world.loaded_range() and we.fog_density >= 0.99)
 	_check("Forest uses shader baked-look instead of per-chunk LightmapGI",
 		run.forest_world.uses_shader_baked_look())
 

@@ -90,7 +90,7 @@ func _check_validation() -> void:
 	_check("Scale min above max is an error", not _errors(inverted.validate()).is_empty())
 
 	var shrines := WorldGenProfile.make_default()
-	shrines.shrine_slot_chunks = 1
+	shrines.shrine_slot_size = shrines.chunk_size
 	shrines.shrine_slot_chance = 1.0
 	_check("Shrines as common as gates are an error (rarer than torii, D1)",
 		_contains(_errors(shrines.validate()), "kapliczki"))

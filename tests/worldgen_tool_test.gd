@@ -166,7 +166,7 @@ func _check_atmosphere() -> void:
 	var env := Environment.new()
 	WorldGenLook.apply_fog(env, p)
 	_check("Fog depth end comes from the profile (%.1f m)" % env.fog_depth_end,
-		is_equal_approx(env.fog_depth_end, p.fog_end) and env.fog_depth_end <= ForestWorld.VIEW_RANGE_END)
+		is_equal_approx(env.fog_depth_end, p.fog_end) and env.fog_depth_end <= p.loaded_range())
 	_check("Fog starts where the profile says (%.1f m)" % env.fog_depth_begin, is_equal_approx(env.fog_depth_begin, p.fog_start))
 	_check("Fog stays opaque at the far edge (density %.2f)" % env.fog_density, env.fog_density >= 0.99)
 	WorldGenLook.apply_light(env, p)
@@ -196,7 +196,7 @@ func _check_shrines_rarer_than_gates() -> void:
 	# The shrine slots are read through the same manager the game uses.
 	var manager := HokoraManager.new()
 	manager.forest_world = forest
-	var slot_span := wide.shrine_slot_chunks
+	var slot_chunks := wide.shrine_slot_size / wide.chunk_size
 	var slots := 0
 	var shrines := 0
 	for x in range(-10, 10):
@@ -206,7 +206,7 @@ func _check_shrines_rarer_than_gates() -> void:
 				shrines += 1
 	manager.free()
 	_release(forest)
-	var per_chunk_shrines := float(shrines) / float(slots * slot_span * slot_span)
+	var per_chunk_shrines := float(shrines) / (float(slots) * slot_chunks * slot_chunks)
 	var per_chunk_gates := float(gates) / float(chunks)
 	_check("Shrines are rarer than gates on the default profile (%.3f vs %.3f per chunk)" % [per_chunk_shrines, per_chunk_gates],
 		per_chunk_shrines < per_chunk_gates / 2.0 and per_chunk_shrines > 0.0)
