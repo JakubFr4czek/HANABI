@@ -4,6 +4,7 @@ extends Node
 ## seal progress and bounded Quest-oriented VFX.
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
+const BalanceModel := preload("res://tools/balance_model.gd")
 const TEST_SAVE_PATH := "user://test_elements_high_score.cfg"
 
 var failures := 0
@@ -253,6 +254,11 @@ func _test_counter_ring() -> void:
 	prof.resistances = {Elements.INK: 0.8}
 	_check("elite: zone × counter ring × resistance multiply in order (head 1.5 × 1.5 × 0.8)",
 		is_equal_approx(prof.damage_multiplier("head", Elements.INK), 1.5 * 1.5 * 0.8))
+	# Balance model (tools/balance_model.gd): a blind draft averages ×1.0, reading the field pays.
+	_check("blind draft averages ×1.0 over the four schools", is_equal_approx(BalanceModel.school_mean_matchup(), 1.0))
+	_check("read draft beats blind and plain steel stays ×1.0 (the old economy)",
+		BalanceModel.draft_matchup("read", 0.5) > BalanceModel.draft_matchup("blind", 0.5)
+		and is_equal_approx(BalanceModel.draft_matchup("plain", 0.5), 1.0))
 
 
 func _check(label: String, ok: bool) -> void:

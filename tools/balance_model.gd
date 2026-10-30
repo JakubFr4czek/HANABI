@@ -50,7 +50,9 @@ static func hokora_spacing() -> float:
 ## walked. Returns {"timeline": [{t, kills, points, level, wave, shrines, buff}], ...}
 ## with one sample every 10 s up to [param seconds]. "buff" is the share of the run
 ## so far with a shrine buff running (union of the 60 s windows).
-static func economy(profile_name: String, seconds: float = 600.0, seed_value: int = 7) -> Dictionary:
+## [param sword_matchup] scales the sword's damage by the counter ring (D17, see
+## [method draft_matchup]); plain steel is 1.0, so the default is the pre-ring economy.
+static func economy(profile_name: String, seconds: float = 600.0, seed_value: int = 7, sword_matchup: float = 1.0) -> Dictionary:
 	var prof: Dictionary = PROFILES[profile_name]
 	var plan := WavePlanner.new(WaveProfile.load_default(), seed_value)
 	var profile := plan.profile
@@ -106,7 +108,7 @@ static func economy(profile_name: String, seconds: float = 600.0, seed_value: in
 				engage -= dt
 			else:
 				var power := blade_power(level)
-				var dps := SWORD_HIT * float(prof.hits_per_second) * power * (1.0 - float(prof.idle))
+				var dps := SWORD_HIT * float(prof.hits_per_second) * power * (1.0 - float(prof.idle)) * sword_matchup
 				if target.kind == "oni":
 					dps *= 0.7   # a boss parries and moves
 				target.hp = float(target.hp) - dps * dt
@@ -129,6 +131,40 @@ static func economy(profile_name: String, seconds: float = 600.0, seed_value: in
 	return {"timeline": timeline, "kills": kills, "oni_kills": oni_kills, "elites": elites,
 		"level": level, "points": points, "shrines": shrines, "wave": wave,
 		"buff_uptime": buff_seconds / maxf(seconds, 1.0)}
+
+
+## D17 (docs/ELEMENT_COUNTERS.md §3.9): the counter ring as a sword multiplier.
+## A school counters one of the four others, is countered by one and is neutral
+## against the rest, so a blind draft averages ×1.0 over an even mix of schools.
+## A player who reads the field holds the counter some of the time
+## ([constant READY_COUNTER_SHARE] of the fights: an imbue lasts 20 s and a gate
+## comes about every 17 s, so the wanted school is at hand about half the time).
+## Plain steel is ×1.0 against everything, so a plain run is the old economy.
+const READY_COUNTER_SHARE := 0.5
+
+
+## Mean multiplier of a school against an even mix of the four schools (a blind draft).
+static func school_mean_matchup() -> float:
+	var total := 0.0
+	for attacker: String in Elements.COMBAT_ELEMENTS:
+		total += ElementBalance.matchup(attacker, Elements.SAKURA)
+	return total / float(Elements.COMBAT_ELEMENTS.size())
+
+
+## Expected sword multiplier per fight. [param draft] is "plain" (no school), "blind"
+## (a school picked without reading the enemy) or "read" (the counter is ready
+## [constant READY_COUNTER_SHARE] of the time, otherwise the blind average).
+## [param plain_share] is the share of yōkai with no school (WaveProfile.plain_share).
+static func draft_matchup(draft: String, plain_share: float) -> float:
+	match draft:
+		"blind":
+			var mixed := school_mean_matchup()
+			return plain_share + (1.0 - plain_share) * mixed
+		"read":
+			var mixed := school_mean_matchup()
+			var reading := READY_COUNTER_SHARE * float(ElementBalance.COUNTER_MULTIPLIER) + (1.0 - READY_COUNTER_SHARE) * mixed
+			return plain_share + (1.0 - plain_share) * reading
+	return 1.0
 
 
 ## Most nodes a player can own with [param budget] skill points when they always buy the
