@@ -11,6 +11,8 @@ const WALK_SECONDS := 600
 const STEP_METRES := 3.0
 ## Draw calls walk the whole scene tree, so they are read every few frames, not every one.
 const DRAW_EVERY := 15
+## The menu is measured this many frames after the hard cap is full and at its count.
+const MENU_AFTER_HARD_FRAMES := 30
 
 var failures := 0
 var run: RunGame
@@ -38,6 +40,9 @@ func _run_all() -> void:
 	var by_cap := {}
 	var not_playing := 0
 	var over_cap := 0
+	var at_hard := 0
+	var menu_done := false
+	var menu := {}
 	var frames := 0
 	for s in WALK_SECONDS:
 		var x := STEP_METRES * float(s + 1)
@@ -61,6 +66,11 @@ func _run_all() -> void:
 			m.guards = maxi(m.guards, guards)
 			if total > cap:
 				over_cap += 1
+			if cap == wd.get_profile().cap_hard and total >= cap:
+				at_hard += 1
+			if not menu_done and at_hard >= MENU_AFTER_HARD_FRAMES:
+				menu_done = true
+				menu = await _measure_menu()
 			if frames % DRAW_EVERY == 0:
 				m.draws = maxi(m.draws, RunPerfProbe.estimate_scene_cost(run).draw_calls)
 				m.yokai_draws = maxi(m.yokai_draws, RunPerfProbe.estimate_scene_cost(wd).draw_calls)
@@ -78,6 +88,12 @@ func _run_all() -> void:
 	if top.is_empty():
 		return
 	print("BUDGET headroom at the hard cap: %d draw calls (menu test asks for 30)" % (RunPerfBudget.MAX_DRAW_CALLS - top.draws))
+	# The menu measured in one frame, and a bound: the walk's peak without the menu plus the menu's own draws.
+	var menu_own: int = menu.get("menu", 0)
+	var bound: int = top.draws + menu_own
+	print("BUDGET menu sum: peak %d (walk, no menu) + menu %d = %d draw calls (margin %d)" % [top.draws, menu_own, bound, RunPerfBudget.MAX_DRAW_CALLS - bound])
+	_check("Menu open at the hard cap: enemies, forest and menu together stay under the Quest budget (%d <= %d)" % [menu.get("total", -1), RunPerfBudget.MAX_DRAW_CALLS], menu.get("total", INF) <= RunPerfBudget.MAX_DRAW_CALLS)
+	_check("Menu open at the hard cap: the walk peak plus the menu stays under the Quest budget (%d <= %d)" % [bound, RunPerfBudget.MAX_DRAW_CALLS], bound <= RunPerfBudget.MAX_DRAW_CALLS)
 	_check("At the hard cap of %d, draw calls stay under the Quest budget (%d <= %d)" % [hard, top.draws, RunPerfBudget.MAX_DRAW_CALLS],
 		top.draws <= RunPerfBudget.MAX_DRAW_CALLS)
 	_check("At the hard cap of %d, physics bodies stay under the Quest budget (%d <= %d)" % [hard, top.bodies, RunPerfBudget.MAX_YOKAI_PHYSICS_BODIES],
@@ -101,3 +117,26 @@ func _check(label: String, ok: bool) -> void:
 	print("%s  %s" % ["PASS" if ok else "FAIL", label])
 	if not ok:
 		failures += 1
+
+
+## Draw calls with the pause menu open, at the hard cap with a full set of enemies. The menu
+## is read the way the menu test reads it (estimate of the run with the menu open).
+func _measure_menu() -> Dictionary:
+	var pc := run.pause_controller
+	pc.open()
+	if not pc.is_open:
+		print("BUDGET menu: the pause menu did not open (can_open false)")
+		return {}
+	var player := run.player as DesktopPlayer
+	var menu := pc.menu
+	menu.update_pointer("mouse", player.global_position + Vector3(0.0, 1.65, 0.0), -menu.global_basis.z, false, false)
+	await _frames(6)
+	var live := run.wave_director.alive_enemies().size()
+	var total: int = RunPerfProbe.estimate_scene_cost(run).draw_calls
+	var enemies: int = RunPerfProbe.estimate_scene_cost(run.wave_director).draw_calls
+	var menu_draws: int = RunPerfProbe.estimate_scene_cost(menu).draw_calls
+	var forest: int = total - enemies - menu_draws
+	pc.close()
+	print("BUDGET menu at the hard cap (%d live): enemies %d + forest/rest %d + menu %d = %d draw calls (margin %d)"
+		% [live, enemies, forest, menu_draws, total, RunPerfBudget.MAX_DRAW_CALLS - total])
+	return {"live": live, "total": total, "enemies": enemies, "forest": forest, "menu": menu_draws}
