@@ -121,14 +121,16 @@ rozłożenia na klatki (zob. „Ograniczenia”).
   samą bazę co sadzenie (`_trunk_basis`: pochylenie ze zboczem, obrót, skala).
   Pole ścieżki (`_path_field`) ma zasięg na najszerszą koronę. Test
   `forest_world_test` sprawdza wierzchołki narysowanych koron, nie same dyski.
-  Cedr ma `min_spacing` 5 m (było 2,7 m), żeby korony nie zlewały się w jedną
-  masę: otwarte niebo nad podłożem lasu ~34 % (asercja ≥ 30 %).
-- **Korony w zmierzonym lesie (`canopy_visual_quality_test`, bez okna):** zasięg
-  korony liczony z kęp i skali to 9–14 m. Niebo w stożku zenitalnym nad ścieżką
-  ~97 % otwarte, zenit czysty (przechodzi). Skłębienie nie: 59 % sąsiednich par
-  ma korony wchodzące głębiej niż 25 % promienia (cedr 0/0, sekwoje 0/2). Próg
-  0 % wymagałby odstępu ~15 m zamiast 5 m, czyli ~9× mniej drzew: to zmiana
-  gęstości z GDD, a nie strojenie. Decyzja otwarta; test jest czerwony do tego czasu.
+  Cedr ma `min_spacing` 6 m (V4; wcześniej 5 m, a przed D19 2,7 m), żeby korony nie
+  zlewały się w jedną masę: otwarte niebo nad podłożem lasu ~34 % (asercja ≥ 30 %).
+- **Korony w zmierzonym lesie (`canopy_visual_quality_test`, bez okna):** V4 zmniejszył
+  korony cedru: kępy leżą w ~2 m od pnia, cedr ma skalę 0,85–1,2, prosty pień
+  (`hill_lean` 0,3) i `min_spacing` 6 m. Zasięg korony to ~4 m (średnio). Sekwoje
+  (scena, ~4 m) mają `EXTRA_BASE_CLEAR` 4,5 m od pni cedru. Skłębienie spadło z 59 %
+  do 38 % sąsiednich par (próg testu `SEVERE_MAX` 40 %). Cel < 25 % nie jest osiągnięty:
+  zostają pary cedr–sekwoja (0/2) i cedr–cedr. Dalszy spadek wymaga rozsunięcia sekwoi
+  (`EXTRA_BASE_CLEAR` ~6,5 m, czyli ~połowa sekwoi) albo mniejszej korony sekwoi;
+  to decyzja o gęstości lasu, otwarta. Niebo w stożku nad ścieżką ~96 % otwarte, zenit czysty.
 - **Determinizm:** losowania per punkt to `hash([x, z, sól, seed])`, per chunk
   to `hash([coord, rodzaj, seed])`. Brak zależności od kolejności ładowania.
 
