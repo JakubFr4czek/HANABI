@@ -2,18 +2,22 @@ class_name AnchorGuards
 extends Node
 ## Guards for the torii gates and hokora shrines (playtest note 5, backlog P5).
 ##
-## Every gate and every shrine stands with 2–3 yōkai on a ring 6–12 m from it, off the
-## footpath axis (no guard within 3 m of the path network), clear of trunks and rocks,
-## preferably outside the player's view cone and never within 8 m of the player.
-## The guards are ordinary WaveDirector yōkai: they fight, pay out kills and count toward
-## the live cap (so the Quest yōkai budget holds). recall_stragglers leaves them at their
-## post, and they are freed with their anchor when it streams away.
+## A gate or shrine within GUARD_RANGE of the player is guarded by a group of 2–3 yōkai on a
+## ring 6–12 m from it, off the footpath axis (no guard within 3 m of the path network), clear
+## of trunks and rocks, preferably outside the player's view cone and never within 8 m of
+## the player. The guards are ordinary WaveDirector yōkai: they fight and pay out kills, and
+## recall_stragglers leaves them at their post. They sit outside the planner's cap, so the
+## live total is at most the cap plus one group (MAX_GUARDS).
 ##
-## A group is planned once, when the director runs and the anchor stands. A guard that
-## dies is not replaced; a shrine that streams back in gets a new group.
+## Budget: only ONE guard post is live at a time. A new group is planned only when no guard
+## is alive, and the group is released when its anchor is more than GUARD_RANGE from the
+## player (its guards are freed; the anchor is not guarded again). A post is also released
+## with its anchor. A guard that dies is not replaced.
 
 const MIN_GUARDS := 2
 const MAX_GUARDS := 3
+## Anchors further than this from the player get no group, and a group is released past it.
+const GUARD_RANGE := 40.0
 const RING_MIN := 6.0
 const RING_MAX := 12.0
 ## No guard stands within this distance of the footpath network.
@@ -57,10 +61,14 @@ func step(delta: float, player_pos: Vector3, view_forward: Vector3) -> void:
 	if _tick < TICK:
 		return
 	_tick = 0.0
-	_prune()
+	_prune(player_pos)
+	# One post at a time: the next anchor waits until the live group is gone.
+	if _live_guards() > 0:
+		return
 	for anchor in _anchors():
-		if _post_for(anchor).is_empty():
+		if _post_for(anchor).is_empty() and _distance_xz(anchor.global_position, player_pos) <= GUARD_RANGE:
 			_plan_group(anchor, player_pos, view_forward)
+			return
 
 
 ## The live guards of [param anchor] (a gate or a shrine).
@@ -131,18 +139,22 @@ func _plan_group(anchor: Node3D, player_pos: Vector3, view_forward: Vector3) -> 
 	for pos in spots:
 		var element := profile.roll_swarm_element(wave_director.run_seconds, _rng)
 		guards.append(wave_director.spawn_enemy_at(pos, anchor.global_position, element, id))
-	_posts.append({"anchor": anchor, "id": id, "guards": guards, "spots": spots})
+	_posts.append({"anchor": anchor, "id": id, "guards": guards, "spots": spots, "released": false})
 
 
-## Drops the records of anchors that were freed or streamed away. Their guards still at the
-## post go with them; a guard already dead is left to the director.
-func _prune() -> void:
+## Drops the records of anchors that were freed or streamed away, and releases the groups
+## whose anchor the player has left behind. Their guards still at the post are freed; a
+## guard already dead is left to the director.
+func _prune(player_pos: Vector3) -> void:
 	var kept: Array[Dictionary] = []
 	for post in _posts:
-		if is_instance_valid(post.anchor):
-			kept.append(post)
-		else:
+		if not is_instance_valid(post.anchor):
 			_free_guards(post)
+			continue
+		if not post.released and _distance_xz(post.anchor.global_position, player_pos) > GUARD_RANGE:
+			_free_guards(post)
+			post.released = true
+		kept.append(post)
 	_posts = kept
 
 
@@ -150,6 +162,22 @@ func _free_guards(post: Dictionary) -> void:
 	for g in post.guards:
 		if is_instance_valid(g) and g.guard_post == post.id and not g.is_dead:
 			g.queue_free()
+
+
+## Guards alive across all posts that have not been released.
+func _live_guards() -> int:
+	var n := 0
+	for post in _posts:
+		if post.released:
+			continue
+		for g in post.guards:
+			if is_instance_valid(g) and g.guard_post == post.id and not g.is_dead:
+				n += 1
+	return n
+
+
+func _distance_xz(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
 
 
 func _post_for(anchor: Node3D) -> Dictionary:

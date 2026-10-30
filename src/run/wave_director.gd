@@ -93,6 +93,16 @@ func alive_count() -> int:
 	return alive_enemies().size()
 
 
+## Live wave yōkai: what the planner's cap counts. Guards (AnchorGuards) sit outside it and
+## have their own budget of one group, so the total is at most the cap plus that group.
+func wave_count() -> int:
+	var n := 0
+	for e in alive_enemies():
+		if e.guard_post == 0:
+			n += 1
+	return n
+
+
 func has_active_oni() -> bool:
 	return is_instance_valid(_active_oni) and not _active_oni.is_dead
 
@@ -107,7 +117,7 @@ func step_director(delta: float, player_pos: Vector3, view_forward: Vector3 = Ve
 	if not active:
 		return
 	_view_forward = view_forward
-	var result := _planner.step(delta, alive_count(), has_active_oni())
+	var result := _planner.step(delta, wave_count(), has_active_oni())
 	run_seconds = _planner.t
 	if result.wave_started > 0:
 		wave = _planner.wave
