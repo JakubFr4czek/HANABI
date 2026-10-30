@@ -35,6 +35,10 @@ uniform float element_flash : hint_range(0.0, 1.0) = 0.0;
 // 1 during the last seconds: the glow pulses at 3 Hz from element_left.
 uniform float element_warn : hint_range(0.0, 1.0) = 0.0;
 uniform float element_left = 0.0;
+// D13 blade trace (BladeBody.mark_trace): 1 right after a landed cut, fading to 0 in ~3 s.
+// An ink or school-coloured mark along the cutting edge, never a red wash.
+uniform float trace_level : hint_range(0.0, 1.0) = 0.0;
+uniform vec3 trace_color : source_color = vec3(0.56, 0.68, 0.94);
 
 // Intro spirit gate: steel still on the far side of the gate plane is not
 // drawn, and a thin glowing seam marks where the blade crosses it.
@@ -147,6 +151,15 @@ void fragment() {
 		}
 		imbue = (glow * mix(0.55, 1.0, bt) * live + ec * front * element_flash * 2.2) * blade;
 	}
+
+	float trace_band = 0.0;
+	if (trace_level > 0.001) {
+		float side_e = (v_local.x - 0.115 * pow(max(v_local.y - 0.22, 0.0), 2.0)) / 0.0155;
+		float on_edge = (1.0 - smoothstep(-0.95, -0.15, side_e)) * blade;
+		float streak = 0.55 + 0.45 * sin(v_local.y * 70.0 + TIME * 1.5) * sin(v_local.y * 23.0 - TIME * 0.6);
+		trace_band = trace_level * on_edge * streak;
+	}
+	imbue += trace_color * trace_band * 1.6;
 
 	ALBEDO = albedo;
 	ROUGHNESS = rough;

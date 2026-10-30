@@ -210,6 +210,34 @@ func _update_rim(mat: ShaderMaterial, shown: String, level: float, sweep: float,
 	_rim_mat.set_shader_parameter("rim_left", element_time_remaining)
 
 
+## D13: a landed cut leaves a mark on the edge for [constant TRACE_SECONDS]: a trace in
+## the school's colour (ink blue when the blade is plain steel), easing out.
+const TRACE_SECONDS := 3.0
+var trace_left := 0.0
+
+
+func mark_trace() -> void:
+	trace_left = TRACE_SECONDS
+	_update_trace()
+
+
+func _process(delta: float) -> void:
+	if trace_left <= 0.0:
+		return
+	trace_left = maxf(trace_left - delta, 0.0)
+	_update_trace()
+
+
+func _update_trace() -> void:
+	var mat := _get_blade_material()
+	if mat == null:
+		return
+	var level := smoothstep(0.0, 1.0, trace_left / TRACE_SECONDS)
+	var c := glow_color(element) if element != Elements.NONE else Elements.accent_color(Elements.INK)
+	_set_shader(mat, "trace_color", Vector3(c.r, c.g, c.b))
+	_set_shader(mat, "trace_level", level)
+
+
 ## Only touches the material when a value actually changed.
 func _set_shader(mat: ShaderMaterial, key: String, value: Variant) -> void:
 	if _shader_cache.get(key) == value:

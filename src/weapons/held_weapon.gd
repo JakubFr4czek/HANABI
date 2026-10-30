@@ -969,6 +969,7 @@ func _handle_hit(c: Dictionary) -> void:
 	if receiver.has_method("receive_hit"):
 		hit = receiver.receive_hit(part, hit)
 	var dmg: float = hit.get("damage", base_damage)
+	mark_trace()
 	# A limb taken off, or a body cut in two, offers almost nothing: the blade
 	# follows through clean instead of biting in.
 	_apply_cut_resistance(c, mom, strike.kind, 0.25 if hit.has("severed") or hit.get("kirisute", false) else 1.0)
@@ -976,6 +977,7 @@ func _handle_hit(c: Dictionary) -> void:
 	# D17: the counter ring of the blade's school against this yōkai (1.0 = plain steel).
 	var matchup := float(hit.get("matchup", 1.0))
 	var school := String(hit.get("element", Elements.NONE))
+	var is_kirisute: bool = bool(hit.get("kirisute", false))
 	match strike.kind:
 		"edge", "thrust":
 			# Clean cut: crisp slice, bright thin sparks along the cut, a sharp bite in the palm.
@@ -986,7 +988,10 @@ func _handle_hit(c: Dictionary) -> void:
 				# through the hilt, harder for a committed swing.
 				steps.append([0.0, 0.035])
 				steps.append([clampf(0.6 + float(mom.power) * 0.4, 0.0, 1.0), 0.09])
-			_pulse_pattern(_school_haptics(steps, matchup))
+			if is_kirisute:
+				# D13: a Kirisute cut parts the body: one long, clean pull through the hilt.
+				steps = KIRISUTE_HAPTICS.duplicate(true)
+			_pulse_pattern(_school_haptics(steps, matchup, school))
 			Sfx.play_at("cut", c.point, loud)
 			if dmg >= 30.0:
 				Sfx.play_at("impact_heavy", c.point, loud - 6.0)
@@ -999,7 +1004,7 @@ func _handle_hit(c: Dictionary) -> void:
 			if dmg >= hit_stop_damage:
 				steps.append([0.0, 0.035])
 				steps.append([clampf(0.6 + float(mom.power) * 0.4, 0.0, 1.0), 0.1])
-			_pulse_pattern(_school_haptics(steps, matchup))
+			_pulse_pattern(_school_haptics(steps, matchup, school))
 			Sfx.play_at("impact_heavy" if dmg >= 30.0 else "impact_light", c.point, loud)
 		_:
 			# Flat, spine or hilt: a dull slap with no bite and a few dim, slow sparks.
@@ -1165,11 +1170,29 @@ func _pulse(amplitude: float, duration: float) -> void:
 
 ## D17: a countering school adds a second, harder beat to the hilt; the same school
 ## shortens and softens the pattern (a dull deflection, not a hit).
-func _school_haptics(steps: Array, matchup: float) -> Array:
+## D13: each school leaves its own signature in the palm after the blow (a flutter,
+## a crackle, a low rumble, a double tap). Scaled by the blow's force; the player's
+## haptic strength (Settings > ACCESS) is applied later by pulse().
+const SCHOOL_HAPTIC_TAIL := {
+	Elements.SAKURA: [[0.5, 0.03], [0.25, 0.03], [0.12, 0.03]],
+	Elements.STORM: [[0.9, 0.012], [0.0, 0.02], [0.7, 0.012]],
+	Elements.INK: [[0.55, 0.11]],
+	Elements.SHADOW: [[0.35, 0.02], [0.0, 0.04], [0.6, 0.02]],
+}
+const KIRISUTE_HAPTICS := [[1.0, 0.03], [0.0, 0.03], [0.8, 0.05], [0.35, 0.12]]
+
+
+func _school_haptics(steps: Array, matchup: float, school: String = Elements.NONE) -> Array:
 	if matchup > 1.0:
 		return steps + [[0.0, 0.03], [0.7, 0.06]]
 	if matchup < 1.0:
 		return [[float(steps[0][0]) * 0.45, 0.025]]
+	if SCHOOL_HAPTIC_TAIL.has(school):
+		var k := clampf(float(steps[0][0]) * 1.1, 0.3, 1.0)
+		var out: Array = steps.duplicate()
+		for tail in SCHOOL_HAPTIC_TAIL[school]:
+			out.append([float(tail[0]) * k, float(tail[1])])
+		return out
 	return steps
 
 
