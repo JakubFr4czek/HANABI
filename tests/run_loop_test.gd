@@ -185,6 +185,19 @@ func _run_all() -> void:
 	await _wait(0.15)
 	_check("Lethal hit ends the run (GAME_OVER) without auto-reviving",
 		run.state == RunGame.RunState.GAME_OVER and not player.health.is_alive())
+	# D13: the death is a slow fall of the world, never a frozen one (time_scale 0 would stop the end screen).
+	var never_zero := true
+	var reached_fall := false
+	for i in 200:
+		never_zero = never_zero and Engine.time_scale > 0.0 and TimeController.time_scale > 0.0
+		await get_tree().physics_frame
+		if absf(TimeController.time_scale - TimeController.DEATH_FALL_SCALE) < 0.001:
+			reached_fall = true
+			break
+	_check("Death: world sinks to the slow-fall scale and time_scale never reaches 0 (D13)",
+		never_zero and reached_fall and TimeController.is_active("death_fall"))
+	_check("Death: Sfx ducks Music/Ambience instead of silencing the end screen (D13)",
+		Sfx._pause_tween != null and Sfx._pause_tween.is_valid())
 	_check("High score (%d) is saved locally and MemorialStele + Restart Ema appear" % run.high_score,
 		run.high_score > 0
 		and run.load_high_score() == run.high_score

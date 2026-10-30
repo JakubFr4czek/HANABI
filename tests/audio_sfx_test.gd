@@ -35,6 +35,19 @@ func _ready() -> void:
 	Sfx.play_at("bonsho_gate", Vector3(0, 2, 0), -20.0)
 	_check("Sfx play_at uses pooled players without new nodes", Sfx.get_child_count() <= 30)
 
+	# D13: katana grab whisper, blade-tip whoosh threshold and voice limit, forest bed budget.
+	_check("Grab category loads the steel whisper", Sfx._streams.has("grab"))
+	_check("Whoosh stays silent below its speed threshold", HeldWeapon.whoosh_level(6.9, 7.0) == 0.0)
+	_check("Whoosh rises with tip speed and caps at full level",
+		HeldWeapon.whoosh_level(9.0, 7.0) > 0.3 and HeldWeapon.whoosh_level(9.0, 7.0) < HeldWeapon.whoosh_level(20.0, 7.0)
+		and HeldWeapon.whoosh_level(40.0, 7.0) == 1.0)
+	await _check_swing_voice_limit()
+	await _check_forest_bed_budget()
+	# Music (lead + layer) 2, rain 1, forest bed, Sfx pool: the design budget, checked again as real voices below.
+	var design_voices: int = Sfx.POOL_SIZE + RunForestAmbience.VOICES + 1 + 2
+	_check("Design voice budget: pool + forest bed + rain + music (%d <= %d)" % [design_voices, Sfx.VOICE_BUDGET],
+		design_voices <= Sfx.VOICE_BUDGET)
+
 	await _check_music_and_voice_cap()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -59,6 +72,35 @@ func _check_wav_dc_clean(path: String) -> bool:
 	return mean_pct < 1.0 and absi(first_sample) <= 50
 
 
+## A fast run of blade whooshes must never stack more than the per-category limit.
+func _check_swing_voice_limit() -> void:
+	for p in Sfx._pool:
+		p.stop()
+	for i in 6:
+		Sfx.play_at("swing", Vector3(i * 0.2, 0, 0), -6.0)
+	var swings := Sfx._category_voices("swing")
+	_check("Whoosh voices are capped at %d (playing %d of 6 requests)" % [Sfx.CATEGORY_VOICE_LIMIT["swing"], swings],
+		swings == Sfx.CATEGORY_VOICE_LIMIT["swing"])
+	for p in Sfx._pool:
+		p.stop()
+
+
+## The forest bed (wind + two cricket loops) uses exactly its declared voices, and
+## goes fully silent under a splash or menu so it frees them.
+func _check_forest_bed_budget() -> void:
+	var bed := RunForestAmbience.new()
+	add_child(bed)
+	await get_tree().process_frame
+	bed.snap_to(true)
+	await get_tree().process_frame
+	_check("Forest bed plays wind + cricket emitter = %d voices (%d playing)" % [RunForestAmbience.VOICES, bed.voices_playing()],
+		bed.voices_playing() == RunForestAmbience.VOICES)
+	bed.snap_to(false)
+	await get_tree().process_frame
+	_check("Forest bed is silent under a splash or menu (%d playing)" % bed.voices_playing(), bed.voices_playing() == 0)
+	bed.queue_free()
+
+
 func _count_playing_players_in_tree() -> int:
 	var count := 0
 	for p in get_tree().root.find_children("*", "AudioStreamPlayer", true, false):
@@ -80,6 +122,7 @@ func _check_music_and_voice_cap() -> void:
 	add_child(storm_ambience)
 	var forest_ambience := RunForestAmbience.new()
 	add_child(forest_ambience)
+	forest_ambience.snap_to(true)
 
 	await get_tree().process_frame
 	await get_tree().process_frame

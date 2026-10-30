@@ -71,6 +71,7 @@ var combat_fog: Node
 var run_intro: RunIntro
 var distant_fireworks: DistantFireworks = null
 var run_splash: RunSplash
+var forest_ambience: RunForestAmbience
 var restart_ema: VotiveTablet = null
 var _boot_splash_played := false
 
@@ -259,10 +260,11 @@ func _configure_run_forest() -> void:
 		hokora_manager.name = "HokoraManager"
 		add_child(hokora_manager)
 	hokora_manager.setup(forest_world, player, forest_world.torii_manager)
+	# D13: wind, crickets and a far temple bell; silent until the run starts (splash, end screen).
 	if get_node_or_null("RunForestAmbience") == null:
-		var forest_amb := RunForestAmbience.new()
-		forest_amb.name = "RunForestAmbience"
-		add_child(forest_amb)
+		forest_ambience = RunForestAmbience.new()
+		forest_ambience.name = "RunForestAmbience"
+		add_child(forest_ambience)
 	if distant_fireworks == null:
 		distant_fireworks = DistantFireworks.new()
 		distant_fireworks.name = "DistantFireworks"
@@ -440,6 +442,9 @@ func start_run() -> void:
 	if run_splash and run_splash.is_active():
 		return
 	TimeController.clear()
+	Sfx.set_pause_ducking(false, 0.0)
+	if forest_ambience:
+		forest_ambience.set_active(true)
 	if VfxPool:
 		VfxPool.ensure_run_budget(40)
 	_clear_souls()
@@ -862,6 +867,10 @@ func _update_element_seal() -> void:
 
 # --- Death, End Screen & High Score --------------------------------------------
 
+## Seconds the world takes to sink into the death slow-fall (D13).
+const DEATH_FALL_SEC := 1.2
+
+
 func compute_score() -> int:
 	return kills * 100 + int(run_time * 10.0) + maxi(level - 1, 0) * 150
 
@@ -880,6 +889,12 @@ func _on_player_died() -> void:
 	if shrine_offering:
 		shrine_offering.cancel()
 	TimeController.clear()
+	# D13: no freeze on death. The world sinks into a slow fall while the sound
+	# is ducked and low-passed (Music and Ambience go quiet, UI clicks stay sharp).
+	TimeController.death_fall(DEATH_FALL_SEC)
+	Sfx.set_pause_ducking(true, DEATH_FALL_SEC)
+	if forest_ambience:
+		forest_ambience.set_active(false)
 	wave_director.stop_director()
 	for e in wave_director.alive_enemies():
 		e.die({"element": Elements.NONE})
@@ -968,9 +983,10 @@ func _build_end_screen(summary: Dictionary) -> void:
 	var mins := int(run_time) / 60
 	var secs := int(run_time) % 60
 	var rows: Array = [
-		["散華", 72, 0.00185, Color(1.12, 0.34, 0.26), 0.235],
-		["RUN ENDED", 30, 0.00112, Color(0.78, 0.8, 0.88), 0.165],
-		["%d pt" % int(summary.score), 46, 0.00150, Color(0.96, 0.97, 1.0), 0.108],
+		# D13: one kanji and one word, no "GAME OVER": the blossom scatters.
+		["散", 104, 0.00250, Color(1.12, 0.34, 0.26), 0.232],
+		["chiru", 26, 0.00100, Color(0.6, 0.62, 0.72), 0.160],
+		["%d pt" % int(summary.score), 40, 0.00140, Color(0.88, 0.9, 0.96), 0.106],
 	]
 	if summary.get("new_record", false):
 		rows.append(["★ NEW RECORD", 28, 0.00112, Color(1.1, 0.78, 0.42), 0.058])
@@ -980,9 +996,10 @@ func _build_end_screen(summary: Dictionary) -> void:
 	var stat_text := "%02d:%02d  ·  斬 %d  ·  LV %d  ·  波 %d" % [mins, secs, int(summary.kills), int(summary.level), int(summary.wave)]
 	if kcal_burned > 0:
 		stat_text += "  ·  %d kcal" % kcal_burned
-	rows.append([stat_text, 32, 0.00118, Color(0.9, 0.92, 0.98), 0.005])
-	rows.append(["BEST  %d" % int(summary.high_score), 30, 0.00112, Color(0.8, 0.84, 0.94), -0.055])
-	rows.append(["BUILD  %s" % String(summary.get("build", "Unbound")), 32, 0.00118, Color(0.9, 0.76, 1.0), -0.115])
+	# Discreet: the stats sit low in contrast under the word, not on a banner.
+	rows.append([stat_text, 26, 0.00100, Color(0.68, 0.71, 0.8), 0.005])
+	rows.append(["BEST  %d" % int(summary.high_score), 24, 0.00100, Color(0.56, 0.6, 0.7), -0.055])
+	rows.append(["BUILD  %s" % String(summary.get("build", "Unbound")), 26, 0.00100, Color(0.7, 0.62, 0.84), -0.115])
 	for row in rows:
 		var lbl := MemorialTypography.stele_label(String(row[0]), int(row[1]), float(row[2]), row[3] as Color, Vector3(0, float(row[4]), 0.024))
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
