@@ -12,6 +12,7 @@
 [sub_resource type="Resource" id="Resource_sclpf"]
 script = ExtResource("3_0trhh")
 label = "Cedar (sugi)"
+min_spacing = 5.0
 
 [sub_resource type="Resource" id="Resource_7iial"]
 script = ExtResource("3_0trhh")

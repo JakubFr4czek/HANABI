@@ -185,6 +185,13 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## about every 15 to 25 m, so the trail reads as a lit walk, not a row of posts.
 @export_range(5.0, 40.0, 0.5) var path_lantern_spacing := 15.0
 
+@export_group("Sky")
+## Open sky above each path: no crown may reach within this distance of the path centre line
+## (metres). A crown is placed with its footprint in mind, so the strip stays open overhead.
+@export_range(1.0, 4.0, 0.05) var sky_path_half := 2.0
+## Open sky over the spawn glade: no crown may cover this disc around the glade centre (metres).
+@export_range(0.0, 8.0, 0.1) var sky_glade_radius := 3.5
+
 @export_group("Distant fireworks")
 ## Shortest and longest wait between far bursts (or between series), seconds (D18).
 @export_range(5.0, 120.0, 0.5) var firework_interval_min := 20.0
@@ -389,6 +396,7 @@ func _cedar_entry() -> TreeEntry:
 	t.label = "Cedar (sugi)"
 	t.crown = TreeEntry.Crown.CEDAR
 	t.weight = 1.0
+	t.min_spacing = 5.0
 	return t
 
 
