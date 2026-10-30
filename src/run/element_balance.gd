@@ -162,9 +162,10 @@ const HOKORA_REFUSE_ENEMY_RADIUS := 3.5
 ## tools/balance_model.gd hokora_spacing): ~215 m, about 80 s of walking at an
 ## average pace, roughly 8× rarer than the 18–32 m torii spacing.
 ## Share of slots whose candidates include a spot that passes the placement rules
-## (the balance model's spacing; tests/hokora_test.gd walks 1.5 km and meets 7–9
-## shrines, which the 5–11 range there accepts).
-const HOKORA_VALID_SHARE := 0.95
+## (the balance model's spacing). Shrines stand on footpaths (uwaga 8), and every slot
+## that holds one finds a valid spur spot among its path samples. tests/hokora_test.gd
+## walks 1.5 km and meets 9 shrines, which the 5–11 range there accepts.
+const HOKORA_VALID_SHARE := 1.0
 ## The first shrine stands this far in front of the spawn, so the economy starts
 ## inside the first minute (≈12 s of walking) and the mechanic is in view at once.
 const HOKORA_OPENING_DISTANCE := 30.0
