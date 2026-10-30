@@ -1,12 +1,14 @@
 shader_type spatial;
 render_mode blend_mix, depth_draw_never, cull_disabled, unshaded, fog_disabled, shadows_disabled;
 
-// The wrist readout (D14), one quad in the bracer's own plane (metres, "up" is +y):
+// The wrist readout (D14, D22), one quad in the bracer's own plane (metres, "up" is +y):
 // - the HP ring: a thin arc from 12 o'clock whose length is the health share, round
 //   at both ends, coloured by the health (the script picks the colour);
-// - the kcal fire inside the ring: noise flame in red, orange and yellow, lit by its
-//   own colours only (no light). The white figure is a Label3D on top of it;
-// - a hairline arc outside the ring for the time left on the imbued element.
+// - inside the ring, nothing: the kcal figure is a Label3D over a clear centre;
+// - a hairline arc outside the ring for the time left on the imbued element;
+// - three elemental charge orbs over the ring's top-right, in the order they were taken
+//   (oldest first): an empty orb is a dim grey outline, a filled one takes its element's
+//   colour with a soft glow. The script sets each slot's rgb colour and fill (a: 0 or 1).
 // Everything else in the quad is alpha 0, so the plate has no panel behind it.
 
 uniform vec2 size = vec2(0.06, 0.06);
@@ -14,7 +16,6 @@ uniform float ring_radius = 0.0170;
 uniform float ring_width = 0.0042;
 uniform float element_radius = 0.0236;
 uniform float element_width = 0.0014;
-uniform float flame_radius = 0.0136;
 
 uniform vec3 hp_color : source_color = vec3(0.36, 0.84, 0.72);
 uniform float hp_fill : hint_range(0.0, 1.0) = 1.0;
@@ -25,32 +26,19 @@ uniform vec3 element_color : source_color = vec3(0.8, 0.8, 0.8);
 uniform float element_fill : hint_range(0.0, 1.0) = 0.0;
 uniform float element_on : hint_range(0.0, 1.0) = 0.0;
 
-uniform vec3 flame_edge : source_color = vec3(0.5, 0.05, 0.02);
-uniform vec3 flame_mid : source_color = vec3(0.78, 0.18, 0.04);
-uniform vec3 flame_core : source_color = vec3(1.0, 0.66, 0.2);
-// 1 at rest, brighter for a moment on a level-up.
-uniform float flame_gain : hint_range(0.0, 3.0) = 1.0;
+// The three charge orbs: centre radius, orb radius, and the clockwise angles (rad from 12 o'clock).
+uniform float charge_radius = 0.0277;
+uniform float charge_size = 0.0019;
+uniform vec3 charge_angles = vec3(0.17, 0.61, 1.05);
+// Slot colour (rgb, source colour) and fill (a: 1 = charged, 0 = empty), oldest charge first.
+uniform vec4 charge_0 : source_color = vec4(0.3, 0.3, 0.34, 0.0);
+uniform vec4 charge_1 : source_color = vec4(0.3, 0.3, 0.34, 0.0);
+uniform vec4 charge_2 : source_color = vec4(0.3, 0.3, 0.34, 0.0);
 
 // Parry and level-up glow on the ring (0..1).
 uniform float glow : hint_range(0.0, 1.0) = 0.0;
 // The gesture fade (0 hidden .. 1 shown).
 uniform float presence : hint_range(0.0, 1.0) = 0.0;
-
-float hash21(vec2 p) {
-	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-}
-
-float vnoise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	vec2 u = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), u.x),
-		mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-
-float fbm(vec2 p) {
-	return 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.03 + 7.1) + 0.15 * vnoise(p * 4.1 - 3.7);
-}
 
 // 1 inside a band of half-width halfw around the signed distance d (anti-aliased).
 float band(float d, float halfw, float aa) {
@@ -88,6 +76,21 @@ void over(inout vec3 col, inout float a, vec3 layer, float layer_a) {
 	a = out_a;
 }
 
+// One charge orb at angle `ang`: an empty outline, or a filled disc with a soft glow.
+void charge_orb(inout vec3 col, inout float a, vec2 q, float ang, vec4 slot, float aa) {
+	vec2 c = vec2(sin(ang), cos(ang)) * charge_radius;
+	float d = length(q - c);
+	if (slot.a > 0.5) {
+		float halo = exp(-pow((d - charge_size) / (charge_size * 1.6), 2.0)) * 0.35;
+		over(col, a, slot.rgb, halo);
+		// A little brighter toward the centre, so the orb reads as a bead, not a flat dot.
+		vec3 bead = slot.rgb * (0.78 + 0.35 * (1.0 - clamp(d / charge_size, 0.0, 1.0)));
+		over(col, a, bead, disc(q, c, charge_size, aa));
+	} else {
+		over(col, a, slot.rgb, band(d - charge_size * 0.8, charge_size * 0.12, aa) * 0.6);
+	}
+}
+
 void fragment() {
 	vec2 p = (UV - 0.5) * size;
 	vec2 q = vec2(p.x, -p.y);
@@ -96,19 +99,6 @@ void fragment() {
 
 	vec3 col = vec3(0.0);
 	float a = 0.0;
-
-	// The fire: a noise tongue that rises and flickers, inside the ring.
-	vec2 f = q / flame_radius;
-	float fy = (f.y + 0.85) / 1.75;
-	float n = fbm(vec2(f.x * 2.6, fy * 2.2 - TIME * 1.9));
-	float half_w = mix(0.62, 0.04, pow(clamp(fy, 0.0, 1.0), 0.75)) * (0.8 + 0.45 * n);
-	float lean = (n - 0.5) * 0.4 * clamp(fy, 0.0, 1.0);
-	float dx = abs(f.x - lean) - half_w;
-	float tongue = (1.0 - smoothstep(-0.06, 0.05, dx)) * smoothstep(-0.02, 0.06, fy) * (1.0 - smoothstep(0.9, 1.02, fy));
-	float inner = clamp(-dx / max(half_w, 0.05), 0.0, 1.0);
-	vec3 fire = mix(flame_edge, flame_mid, smoothstep(0.0, 0.55, inner));
-	fire = mix(fire, flame_core, smoothstep(0.55, 1.0, inner) * (1.0 - smoothstep(0.1, 0.35, fy)));
-	over(col, a, fire, clamp(tongue * 0.92 * flame_gain * (0.85 + 0.15 * n), 0.0, 1.0));
 
 	// The ring: a muted track, the health arc over it, pulsing when critical.
 	float pulse = 1.0 - hp_pulse * 0.1 * (1.0 - sin(TIME * 4.2));
@@ -120,6 +110,11 @@ void fragment() {
 	// The element's time left, on its own hairline outside the ring.
 	float el = arc(q, element_radius, element_width, element_fill, aa) * element_on;
 	over(col, a, element_color, el * 0.95);
+
+	// The three charges, oldest first.
+	charge_orb(col, a, q, charge_angles.x, charge_0, aa);
+	charge_orb(col, a, q, charge_angles.y, charge_1, aa);
+	charge_orb(col, a, q, charge_angles.z, charge_2, aa);
 
 	// A soft halo of the health colour, stronger after a parry or a level-up.
 	float halo = exp(-pow((r - ring_radius) / 0.0062, 2.0)) * (0.08 + 0.3 * glow);
