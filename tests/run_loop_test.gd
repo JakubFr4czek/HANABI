@@ -68,14 +68,18 @@ func _run_all() -> void:
 	_check("Wrist readout is drawn only while the wrist is raised", hidden_low and shown_raised and not run.diegetic_hud.wrist_face.visible)
 
 	# 2. Wave director & yōkai walking from water onto the stone platform.
-	_check("Wave curve scales count, HP and speed with wave/time",
-		run.wave_director.wave_enemy_count(4, 90.0) > run.wave_director.wave_enemy_count(1, 0.0)
+	var prof := run.wave_director.get_profile()
+	_check("Wave curve grows the live cap, HP and speed with run time",
+		prof.cap_at(90.0) > prof.cap_at(0.0)
 		and run.wave_director.scaled_hp(4, 90.0) > run.wave_director.scaled_hp(1, 0.0)
 		and run.wave_director.scaled_speed(4, 90.0) > run.wave_director.scaled_speed(1, 0.0))
 
+	# Wave 1 opens after the calm lead-in: step the director past initial_wave_delay (no real waiting).
 	await _wait(0.8)
-	_check("Wave 1 started and spawned yōkai in the outer fog ring",
-		run.wave_director.wave >= 1 and run.wave_director.alive_count() >= 2)
+	var lead_in := run.wave_director.get_profile().initial_wave_delay
+	run.wave_director.step_director(lead_in + 0.1, player.global_position)
+	_check("Wave 1 opens after the calm lead-in and spawns yōkai in the fog ring",
+		run.wave_director.wave == 1 and run.wave_director.alive_count() >= 1)
 
 	# Spawn a yōkai just outside the platform rim (r = 6.0 m in the water) and
 	# verify it walks across the boundary (r = 5.2 m) onto the platform (r < 4.7 m).
@@ -213,12 +217,113 @@ func _run_all() -> void:
 		and run.kills == 0
 		and run.high_score == saved_best)
 
+	_spawn_pacing_checks(run)
 	await _sandbox_keeps_no_record()
 	run.queue_free()
 
 
 ## D9: a sandbox run never becomes a record. The same death with the same score is a record
 ## outside the sandbox, and only there. Deaths are called directly: the checks are the end state.
+## D10: the yōkai waves. The pacing is checked on WavePlanner (the code the game and
+## the editor panel both run); the first minute and the spawn points are checked on the
+## live director in the real run scene, with the camera and the world geometry.
+func _spawn_pacing_checks(run: RunGame) -> void:
+	var director := run.wave_director
+	var head := get_tree().get_first_node_in_group("player_head") as Camera3D
+	var profile := director.get_profile()
+	var demo := load(WaveProfile.preset_path("demo_gentle")) as WaveProfile
+	var hard := load(WaveProfile.preset_path("hardcore")) as WaveProfile
+
+	var errors := 0
+	for p in [demo, profile, hard]:
+		for line in p.validate():
+			if line.begins_with("BŁĄD"):
+				errors += 1
+	_check("Wave presets (demo, default, hardcore) load and validate without errors (%d)" % errors,
+		demo != null and hard != null and errors == 0)
+
+	var calm := WavePlanner.simulate(profile, 480.0, 7)
+	var again := WavePlanner.simulate(profile, 480.0, 7)
+	var hard_run := WavePlanner.simulate(hard, 480.0, 7)
+	_check("First minute: at most 4 yōkai spawned (%d), at most 3 alive at once (%d)" % [calm.first_minute_spawned, calm.first_minute_max_alive],
+		calm.first_minute_spawned <= 4 and calm.first_minute_max_alive <= 3)
+	_check("8-minute run is the same for the same seed and never above the Quest cap (max alive %d, cap %d)" % [calm.max_alive, WaveProfile.QUEST_YOKAI_CAP],
+		calm.spawned == again.spawned and calm.kills == again.kills
+		and calm.max_alive <= WaveProfile.QUEST_YOKAI_CAP and hard_run.max_alive <= WaveProfile.QUEST_YOKAI_CAP)
+	_check("Hardcore spawns more yōkai over 8 minutes than the default (%d > %d)" % [hard_run.spawned, calm.spawned],
+		hard_run.spawned > calm.spawned)
+
+	var plan := WavePlanner.new(profile, 1)
+	_check("Director cycle: waves 1-2 build, 3 peaks, 4 relaxes",
+		plan.state_for_wave(1) == WavePlanner.State.BUILD and plan.state_for_wave(2) == WavePlanner.State.BUILD
+		and plan.state_for_wave(3) == WavePlanner.State.PEAK and plan.state_for_wave(4) == WavePlanner.State.RELAX)
+
+	# The Oni is cued after oni_first_seconds, and only at the start of a PEAK wave.
+	var oni_plan := WavePlanner.new(profile, 3)
+	var oni_state := -1
+	var oni_at := -1.0
+	for i in 6000:
+		if oni_plan.step(0.1, 0, false).oni:
+			oni_state = oni_plan.state
+			oni_at = oni_plan.t
+			break
+	_check("Oni is cued at a PEAK wave after oni_first_seconds (at %.0f s)" % oni_at,
+		oni_state == WavePlanner.State.PEAK and oni_at >= profile.oni_first_seconds)
+
+	# Live director, first 60 s of run time (fixed 0.1 s steps, no waiting).
+	director.stop_director()
+	director.clear_enemies()
+	director.start_director()
+	var spawns: Array[Vector3] = []
+	director.enemy_spawned.connect(func(y: Yokai) -> void: spawns.append(y.global_position))
+	var center := head.global_position - Vector3(0.0, 0.35, 0.0)
+	var forward := -head.global_transform.basis.z
+	forward.y = 0.0
+	forward = forward.normalized()
+	var alive_peak := 0
+	for i in 600:
+		director.step_director(0.1, center, forward)
+		alive_peak = maxi(alive_peak, director.alive_count())
+	_check("Live first minute: at most 4 yōkai spawned (%d), at most 3 alive (%d)" % [spawns.size(), alive_peak],
+		spawns.size() >= 1 and spawns.size() <= 4 and alive_peak <= 3)
+
+	# Every spawn point is outside the camera's view and clear of the world geometry.
+	var in_view := 0
+	var blocked := 0
+	var yaw_view := atan2(forward.x, forward.z)
+	var cone := deg_to_rad(profile.view_half_angle)
+	var outside_cone := 0
+	for pos in spawns:
+		if head.is_position_in_frustum(pos + Vector3(0.0, 0.9, 0.0)):
+			in_view += 1
+		if not director.is_clear_of_world(pos):
+			blocked += 1
+		if absf(angle_difference(yaw_view, atan2(pos.x - center.x, pos.z - center.z))) >= cone:
+			outside_cone += 1
+	_check("Spawns are never in the camera's view (%d of %d in view)" % [in_view, spawns.size()],
+		spawns.size() >= 1 and in_view == 0 and outside_cone == spawns.size())
+	_check("Spawns are never inside solid geometry (%d of %d blocked)" % [blocked, spawns.size()],
+		blocked == 0)
+	# Same code path as the spawner, 300 times: the view test must see the camera's frame
+	# (a point straight ahead is in view, so the check is not vacuous) and must find no
+	# spawn point in it.
+	var ahead := center + forward * 9.0
+	_check("View check is real: a point 9 m straight ahead is in the camera frame",
+		head.is_position_in_frustum(ahead + Vector3(0.0, 0.9, 0.0)))
+	var drawn := 0
+	var drawn_blocked := 0
+	for i in 300:
+		var pos := director.find_spawn_point(center, forward)
+		if head.is_position_in_frustum(pos + Vector3(0.0, 0.9, 0.0)):
+			drawn += 1
+		if not director.is_clear_of_world(pos):
+			drawn_blocked += 1
+	_check("300 spawn points from the spawner: none in the camera frame (%d), none in geometry (%d)" % [drawn, drawn_blocked],
+		drawn == 0 and drawn_blocked == 0)
+	director.stop_director()
+	director.clear_enemies()
+
+
 func _sandbox_keeps_no_record() -> void:
 	VrComfortSettings.sandbox_enabled = true
 	var sandbox_run := await _death_with_score(SANDBOX_SAVE_PATH)

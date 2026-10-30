@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WaveProfile" format=3]
+
+[ext_resource type="Script" path="res://src/run/wave_profile.gd" id="1_jnbot"]
+
+[sub_resource type="Curve" id="Curve_6iq2p"]
+_data = [Vector2(0, 0), 0.0, 0.0, 0, 0, Vector2(0.5, 0.25), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[resource]
+script = ExtResource("1_jnbot")
+calm_seconds = 120.0
+ramp_seconds = 600.0
+initial_wave_delay = 6.0
+rest_calm = 18.0
+wave_credits_full = 9.0
+budget_curve = SubResource("Curve_6iq2p")
+cap_step_seconds = 60.0
+cap_hard = 6
+elite_from_seconds = 240.0
+elite_chance_full = 0.1
+hp_per_second = 0.003
+oni_first_seconds = 300.0
+oni_interval = 150.0
