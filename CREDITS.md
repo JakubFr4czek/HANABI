@@ -39,6 +39,7 @@ These are also shown in game on the `CreditsLabel` under the controls board at t
 - "Old Torii" by Sarah Nguyen (Nguyen Phuong Hoa) (primagenevieve) (https://sketchfab.com/3d-models/old-torii-34f21f85784a4dcf9e0f9c6b9d772e37), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (rescaled, darkened, rain/wet shading over the original PBR textures).
 - "Bonsyou5599" by Jnn (https://commons.wikimedia.org/wiki/File:Bonsyou5599.ogg), licensed under CC BY 2.1 JP / FAL / CC BY-SA — modified (DC offset removed, attack trimmed, resampled to 44.1 kHz, pitch and decay tuned for run start, Oni arrival, and gate imbue).
 
+- "Scots Pine Trees Set" by Maksim Batyrev (https://sketchfab.com/3d-models/scots-pine-trees-set-422b961ff3d14e7baa7e9077572b2247), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (one tree of the set cut out, scaled to metres, textures packed into one atlas).
 - "Japanese Stone Lantern" by Sahir Virmani (https://sketchfab.com/3d-models/japanese-stone-lantern-e0417d1e05984727a50f9ab1451d162d), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (scaled to metres, textures packed into one atlas).
 - "Giant Redwood" by rhcreations (https://sketchfab.com/3d-models/giant-redwood-1a2052c58869479eb7b204d5cdc7c63a), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (decimated to about 6k triangles, textures packed into one atlas).
 

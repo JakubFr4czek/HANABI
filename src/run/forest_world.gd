@@ -24,6 +24,9 @@ const TREE_ALBEDO := preload("res://assets/models/environment/forest_trees/cherr
 const TREE_NORMAL := preload("res://assets/models/environment/forest_trees/cherry_forest_normal.jpg")
 const SAKURA_TREE_SHADER := preload("res://src/shaders/sakura_tree.gdshader")
 const TORII_MESH_SCALE := 0.42
+## Clearance of a layout-after tree from base trunks and from gates (metres).
+const EXTRA_BASE_CLEAR := 3.0
+const EXTRA_GATE_CLEAR := 5.0
 ## Trunks and gate pillars collide on their own layer: the player walks into
 ## them, yōkai ragdolls do not (their limbs snag and topple them); yōkai steer
 ## around them instead (trunk_push).
@@ -83,6 +86,7 @@ var _chunks: Dictionary = {}
 var _trunk_cells: Dictionary = {}
 ## Chunk coord -> {spots, ids, clearing, cells}. Spots are world xz, scale, yaw
 ## (Vector4); ids are the profile tree-entry index of each spot.
+var _extra_spot_cache: Dictionary = {}
 var _tree_spot_cache: Dictionary = {}
 ## Chunk coord -> {points: Array[Vector4] (x, z, entry, spacing), clearing: int}.
 var _potential_cache: Dictionary = {}
@@ -217,6 +221,7 @@ func reset(anchor: Vector3 = Vector3.INF, facing: Vector3 = Vector3.ZERO) -> voi
 	_poisson_jobs.clear()
 	_trunk_cells.clear()
 	_tree_spot_cache.clear()
+	_extra_spot_cache.clear()
 	_potential_cache.clear()
 	_path_field_cache.clear()
 	_lattice_heights.clear()
@@ -247,6 +252,7 @@ func _apply_profile() -> void:
 	_terrain_res = profile.terrain_resolution
 	var seed_mix := profile.world_seed
 	_tree_spot_cache.clear()
+	_extra_spot_cache.clear()
 	_potential_cache.clear()
 	_path_field_cache.clear()
 	_lattice_heights.clear()
@@ -562,6 +568,7 @@ func _make_chunk(coord: Vector2i, terrain_mesh: ArrayMesh = null) -> Node3D:
 	_collect_senbon_corridor(root, coord)
 	clearing_props += _populate_trees(root, coord)
 	clearing_props += _populate_props(root, "Torii", _torii_mesh, _torii_mat, _torii_spec(), coord, KIND_TORII)
+	clearing_props += _populate_extra_trees(root, coord)
 	clearing_props += _populate_props(root, "Lanterns", _lantern_mesh, _lantern_mat, _lantern_spec(), coord, KIND_LANTERN)
 	for u in profile.undergrowth.size():
 		var entry := profile.undergrowth[u]
@@ -576,12 +583,29 @@ func _make_chunk(coord: Vector2i, terrain_mesh: ArrayMesh = null) -> Node3D:
 ## kind (sakura) turns one of them into its focal tree. One MultiMesh per kind.
 func _populate_trees(root: Node3D, coord: Vector2i) -> int:
 	var packed := _tree_spots(coord)
-	var spots: Array = packed.spots
-	var ids: PackedInt32Array = packed.ids
-	var props: Array = root.get_meta("prop_world_positions", [])
-	var per_kind: Dictionary = {}
 	var ordinary_all: Array[Transform3D] = []
 	var focal_all: Array[Transform3D] = []
+	_place_tree_spots(root, packed.spots, packed.ids, ordinary_all, focal_all)
+	root.set_meta("tree_local_xfs", ordinary_all)
+	root.set_meta("sakura_tree_local_xfs", focal_all)
+	return int(packed.clearing)
+
+
+## Layout-after kinds (TreeEntry.base_layout off): placed once the gates are planned, so
+## they keep off the torii and never move the base trees.
+func _populate_extra_trees(root: Node3D, coord: Vector2i) -> int:
+	var extra := _extra_tree_spots(coord)
+	if extra.spots.is_empty():
+		return 0
+	_place_tree_spots(root, extra.spots, extra.ids, [] as Array[Transform3D], [] as Array[Transform3D])
+	return 0
+
+
+## Plants the spots of one chunk: transforms, colliders, props, and one MultiMesh per kind.
+func _place_tree_spots(root: Node3D, spots: Array, ids: PackedInt32Array,
+		ordinary_all: Array[Transform3D], focal_all: Array[Transform3D]) -> void:
+	var props: Array = root.get_meta("prop_world_positions", [])
+	var per_kind: Dictionary = {}
 	for i in spots.size():
 		var spot: Vector4 = spots[i]
 		var e: int = ids[i]
@@ -609,8 +633,6 @@ func _populate_trees(root: Node3D, coord: Vector2i) -> int:
 			ordinary_all.append(xf)
 		props.append(Vector3(wx, base, wz))
 	root.set_meta("prop_world_positions", props)
-	root.set_meta("tree_local_xfs", ordinary_all)
-	root.set_meta("sakura_tree_local_xfs", focal_all)
 	for e in profile.trees.size():
 		if not per_kind.has(e):
 			continue
@@ -623,7 +645,6 @@ func _populate_trees(root: Node3D, coord: Vector2i) -> int:
 			_commit_multimesh(root, label, _tree_meshes[e], _tree_mats[e], xfs)
 		if entry.obstacle:
 			root.add_child(_build_tree_colliders(xfs, e, root))
-	return int(packed.clearing)
 
 
 ## Scatter for gates, lanterns and boulders: one MultiMesh per kind, placed
@@ -762,6 +783,74 @@ func _undergrowth_spec(entry: UndergrowthEntry) -> Dictionary:
 
 
 ## Trunk spots of the 3×3 ring: the keep-out set for scattered props.
+## Spots of the layout-after kinds in one chunk, cached. A candidate stays when it is off the
+## free ground's path, off the base trunks (EXTRA_BASE_CLEAR) and off the gates of the 3×3 ring
+## (EXTRA_GATE_CLEAR), and keeps its own spacing from the extra trunks already accepted.
+func _extra_tree_spots(coord: Vector2i) -> Dictionary:
+	if _extra_spot_cache.has(coord):
+		return _extra_spot_cache[coord]
+	var size := _chunk_size
+	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
+	var field := _path_field(coord)
+	var path_gap := _path_half_width() + profile.path_tree_clearance
+	var base: Array = _tree_trunk_points(coord)
+	var gates: Array[Vector3] = []
+	for ox in range(-1, 2):
+		for oz in range(-1, 2):
+			var n: Node3D = _chunks.get(coord + Vector2i(ox, oz), null)
+			if n:
+				for g in n.get_meta("torii_world_positions", []):
+					gates.append(g)
+	var accepted: Array[Vector4] = []
+	var spots: Array[Vector4] = []
+	var ids := PackedInt32Array()
+	for e in _extra_entries():
+		var entry := profile.trees[e]
+		for p in _take_poisson(coord, e):
+			if _in_clearing(p.x, p.y):
+				continue
+			if not field.is_empty() and _field_at(field, p - centre) < path_gap:
+				continue
+			var density := _scatter_noise.get_noise_2d(p.x * profile.density_frequency, p.y * profile.density_frequency) * 0.5 + 0.5
+			if _point_random(p.x, p.y, 1) > lerpf(profile.tree_keep_min, profile.tree_keep_max, density):
+				continue
+			if _near_points(base, p, EXTRA_BASE_CLEAR) or _near_points3(gates, p, EXTRA_GATE_CLEAR):
+				continue
+			if _near_vec4(accepted, p, entry.min_spacing):
+				continue
+			var scale := lerpf(entry.scale_min, entry.scale_max, _point_random(p.x, p.y, 2))
+			var yaw := _point_random(p.x, p.y, 3) * TAU
+			var spot := Vector4(p.x, p.y, scale, yaw if entry.random_yaw else 0.0)
+			spots.append(spot)
+			ids.append(e)
+			accepted.append(Vector4(p.x, p.y, 0.0, entry.min_spacing))
+	var packed := {"spots": spots, "ids": ids}
+	_extra_spot_cache[coord] = packed
+	return packed
+
+
+static func _near_points(points: Array, p: Vector2, clear: float) -> bool:
+	for q in points:
+		var v: Vector3 = q
+		if Vector2(v.x - p.x, v.y - p.y).length() < clear:
+			return true
+	return false
+
+
+static func _near_points3(points: Array[Vector3], p: Vector2, clear: float) -> bool:
+	for q in points:
+		if Vector2(q.x - p.x, q.z - p.y).length() < clear:
+			return true
+	return false
+
+
+static func _near_vec4(points: Array[Vector4], p: Vector2, clear: float) -> bool:
+	for q in points:
+		if Vector2(q.x - p.x, q.y - p.y).length() < maxf(clear, q.w):
+			return true
+	return false
+
+
 func _tree_trunk_points(coord: Vector2i) -> Array:
 	var out: Array = []
 	for ox in range(-1, 2):
@@ -837,7 +926,7 @@ func _prefetch_potentials(coord: Vector2i) -> void:
 		return
 	var size := _chunk_size
 	var origin := Vector2(coord.x * size, coord.y * size) - Vector2(size, size) * 0.5
-	for e in _ordinary_entries():
+	for e in _ordinary_entries() + _extra_entries():
 		var key := Vector3i(coord.x, coord.y, e)
 		if _poisson_jobs.has(key):
 			continue
@@ -911,7 +1000,17 @@ func _ordinary_entries() -> Array[int]:
 	var out: Array[int] = []
 	for e in profile.trees.size():
 		var entry := profile.trees[e]
-		if not entry.is_focal() and entry.weight > 0.0:
+		if not entry.is_focal() and entry.weight > 0.0 and entry.base_layout:
+			out.append(e)
+	return out
+
+
+## Entry indices of the layout-after tree kinds (see TreeEntry.base_layout).
+func _extra_entries() -> Array[int]:
+	var out: Array[int] = []
+	for e in profile.trees.size():
+		var entry := profile.trees[e]
+		if not entry.is_focal() and entry.weight > 0.0 and not entry.base_layout:
 			out.append(e)
 	return out
 
