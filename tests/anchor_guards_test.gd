@@ -1,10 +1,11 @@
 extends Node
 ## Guards for every torii gate and every hokora shrine (playtest note 5, backlog P5).
-## - Every live gate and shrine stands with 2–3 guards, each on the ring 6–12 m from it
+## - One guard post at a time: the nearest gate or shrine within 40 m has 2–3 guards on the 6–12 m ring
 ## - A guard stands clear of the footpath network (3 m) and outside the player's view cone
 ## - The ring has room for 2–3 guards at each footpath site along a walk
 ## - recall_stragglers leaves a guard at its post, however far the player has walked
-## - A gate that streams away takes its guards with it
+## - An anchor that streams away takes its guards with it
+## - Over a 120 s walk the live yokai stay within the planner cap plus one guard group
 ## godot --headless --path . --fixed-fps 90 res://tests/anchor_guards_test.tscn -- --desktop
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
@@ -37,15 +38,59 @@ func _run_all() -> void:
 		return
 	_check("The wave director runs, so guards are planned", run.wave_director.active)
 
-	await _test_every_anchor_has_two_or_three_guards()
+	await _test_one_guard_post_at_a_time()
 	await _test_walk_sites_have_room()
 	await _test_guards_keep_their_post()
 	await _test_guards_leave_with_their_gate()
+	await _test_budget_over_a_120_second_walk()
 
 	run.queue_free()
 
 
-func _test_every_anchor_has_two_or_three_guards() -> void:
+## Live yōkai over a 120 s walk (one 3 m step a second, 360 m). The planner's cap bounds the
+## wave yōkai; guards add at most one group on top of it.
+func _test_budget_over_a_120_second_walk() -> void:
+	var wd := run.wave_director
+	var player := run.player as DesktopPlayer
+	var max_total := 0
+	var max_wave := 0
+	var max_guards := 0
+	var max_cap := 0
+	var wave_over_cap := 0
+	var total_over_budget := 0
+	for i in range(1, 121):
+		var x := 3.0 * float(i)
+		player.teleport(Vector3(x, run.forest_world.height_at(x, 0.0), 0.0), 0.0)
+		for _f in 90:
+			await get_tree().physics_frame
+			var total := wd.alive_enemies().size()
+			var guards := _guard_count()
+			var wave := total - guards
+			var cap := wd.concurrent_cap()
+			max_total = maxi(max_total, total)
+			max_wave = maxi(max_wave, wave)
+			max_guards = maxi(max_guards, guards)
+			max_cap = maxi(max_cap, cap)
+			if wave > cap:
+				wave_over_cap += 1
+			if total > cap + AnchorGuards.MAX_GUARDS:
+				total_over_budget += 1
+	print("BUDGET 120 s walk: max live yokai %d, max wave yokai %d (cap up to %d), max guards %d, anchors %d"
+		% [max_total, max_wave, max_cap, max_guards, run.forest_world.torii_manager.get_active_gates().size() + run.hokora_manager.alive_shrines().size()])
+	_check("Wave yokai never exceed the planner cap (%d frames over)" % wave_over_cap, wave_over_cap == 0)
+	_check("Live yokai never exceed the planner cap plus one guard group of %d (%d frames over)" % [AnchorGuards.MAX_GUARDS, total_over_budget],
+		total_over_budget == 0)
+
+
+func _guard_count() -> int:
+	var n := 0
+	for e in run.wave_director.alive_enemies():
+		if e.guard_post != 0:
+			n += 1
+	return n
+
+
+func _test_one_guard_post_at_a_time() -> void:
 	var ag := run.anchor_guards
 	var tm := run.forest_world.torii_manager
 	var anchors: Array[Node3D] = []
@@ -55,14 +100,19 @@ func _test_every_anchor_has_two_or_three_guards() -> void:
 		anchors.append(s)
 	_check("The run has gates and shrines to guard (%d anchors)" % anchors.size(), anchors.size() >= 2)
 
+	# One post at a time (the budget): exactly one anchor carries a group, with 2–3 guards,
+	# and it is within GUARD_RANGE of the player. The other anchors wait for it to go.
 	var paths := run.forest_world.paths
-	var bad_counts := 0
+	var player := run._player_center()
+	var posted: Array[Node3D] = []
+	var live := 0
 	var bad_ring := 0
 	var bad_path := 0
 	for anchor in anchors:
 		var n := ag.guards_of(anchor).size()
-		if n < 2 or n > 3:
-			bad_counts += 1
+		if n > 0:
+			posted.append(anchor)
+			live += n
 		var ap := Vector2(anchor.global_position.x, anchor.global_position.z)
 		for spot in ag.spots_of(anchor):
 			var sp := Vector2(spot.x, spot.z)
@@ -71,8 +121,13 @@ func _test_every_anchor_has_two_or_three_guards() -> void:
 				bad_ring += 1
 			if paths != null and paths.nearest_point(sp, ag.PATH_CLEARANCE) != Vector2.INF:
 				bad_path += 1
-	_check("Every live gate and shrine has 2–3 guards (%d anchors checked, %d outside 2–3)" % [anchors.size(), bad_counts],
-		bad_counts == 0)
+	_check("Exactly one guard post is live (%d posts, %d anchors in the run)" % [posted.size(), anchors.size()],
+		posted.size() == 1)
+	_check("The live post has 2–3 guards (%d live)" % live, live >= 2 and live <= 3)
+	if posted.size() == 1:
+		var d := Vector2(posted[0].global_position.x - player.x, posted[0].global_position.z - player.z).length()
+		_check("The post is within %d m of the player (%.1f m)" % [AnchorGuards.GUARD_RANGE, d],
+			d <= AnchorGuards.GUARD_RANGE)
 	_check("Guards stand on the 6–12 m ring round their anchor (%d off the ring)" % bad_ring, bad_ring == 0)
 	_check("Guards stand clear of the footpath network (%d within 3 m)" % bad_path, bad_path == 0)
 
@@ -138,22 +193,30 @@ func _test_guards_keep_their_post() -> void:
 
 func _test_guards_leave_with_their_gate() -> void:
 	var ag := run.anchor_guards
-	var tm := run.forest_world.torii_manager
-	var gate: ToriiGate = null
-	for g in tm.get_active_gates():
-		if not ag.guards_of(g).is_empty():
-			gate = g
+	var anchor: Node3D = null
+	for a in _anchors_now():
+		if not ag.guards_of(a).is_empty():
+			anchor = a
 			break
-	_check("A gate with guards is up before it streams away", gate != null)
-	if gate == null:
+	_check("A guarded gate or shrine is up before it streams away", anchor != null)
+	if anchor == null:
 		return
-	var id := gate.get_instance_id()
+	var id := anchor.get_instance_id()
 	var before := _guards_with_post(id)
-	tm.clear_gates()
+	anchor.queue_free()
 	await _frames(40)
 	var after := _guards_with_post(id)
-	_check("A gate that streams away takes its %d guards with it (%d left)" % [before, after],
+	_check("An anchor that streams away takes its %d guards with it (%d left)" % [before, after],
 		before >= 2 and after == 0)
+
+
+func _anchors_now() -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	for g in run.forest_world.torii_manager.get_active_gates():
+		out.append(g)
+	for s in run.hokora_manager.alive_shrines():
+		out.append(s)
+	return out
 
 
 func _guards_with_post(post_id: int) -> int:
