@@ -79,6 +79,9 @@ func _ready() -> void:
 ## Loads a preset as an editable copy: the file on disk changes only on "Zapisz".
 func load_preset(file: String) -> void:
 	preset_file = file
+	for i in _presets.item_count:
+		if _presets.get_item_metadata(i) == file:
+			_presets.select(i)
 	var res := load(WaveProfile.preset_path(file)) as WaveProfile
 	profile = res.duplicate(true) as WaveProfile if res != null else WaveProfile.new()
 	_sync_fields()
@@ -220,7 +223,7 @@ func _refresh_table() -> void:
 		_table.text = ""
 		return
 	var lines := PackedStringArray()
-	lines.append("[b]min · fala · żywi/cap · zespawnowano (roi/elity)[/b]")
+	lines.append("[b]min · fala · żywi/cap · zespawnowano (zwykłe/elity) · śr. żywych[/b]")
 	for row in last_result.minutes:
 		lines.append("%d · %d · %d/%d · %d (%d/%d)  śr. %.1f" % [row.minute, row.wave,
 			row.alive, row.cap, row.spawned, row.swarm, row.elite, row.avg_alive])

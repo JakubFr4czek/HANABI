@@ -86,30 +86,37 @@ Odrzucone: model liczenia wrogów per fala z wzorem na numer fali (zgaduje
 kształt krzywej w dwóch miejscach naraz); pełny system grup ze spawn cards
 (zbyt dużo na jeden etap).
 
-## 3. Docelowa krzywa (liczby w profilu „Domyślny”)
+## 3. Docelowa krzywa (wartości z profilu „Domyślny”, zmierzone)
 
 Czas t liczony w sekundach od startu runu. Wszystkie liczby są w `WaveProfile`
-(zasób `.tres`), nie w kodzie.
+(zasób `.tres`), nie w kodzie. Tabela pochodzi z `WavePlanner.simulate`
+(ten sam kod co gra), seed 7, stały DPS gracza (patrz §10).
 
-| faza | czas | cap żywych | kredyty na falę | zachowanie |
+| minuta | fala | żywych (śr.) / cap | zespawnowano (razem) | stara krzywa (razem) |
 |---|---|---|---|---|
-| **Cisza (nauka)** | 0–75 s | 2 → 3 | 2 | jeden–dwa naraz, długie przerwy (6 s) |
-| **Narastanie** | 75–240 s | 3 → 6 | 2 → 7 | fale BUILD (×1) i szczyt co 3. fala (PEAK ×1,5) |
-| **Pełny napór** | 240–480 s | 6 → 8 | 7 → 12 | jak wyżej, cap 8 (budżet Quest) |
-| **Po 8 min** | >480 s | 8 | 12 | stała krzywa, bez dalszego wzrostu |
+| 1 | 4 | 0,2 / 3 | 3 | 14 (przy 60 s) |
+| 2 | 8 | 0,4 / 4 | 7 | 31 (przy 2 min) |
+| 3 | 10 | 2,0 / 5 | 14 | 45 |
+| 4 | 12 | 3,4 / 7 | 26 | – |
+| 5 | 14 | 6,7 / 8 | 34 | – |
+| 8 | 15 | 8,0 / 8 | 52 | 88 |
+
+Fazy: **cisza** (0–75 s) – 1 kredyt na falę, przerwa 14 s, pierwszy yōkai po 5 s;
+**narastanie** – budżet z 1 do 18 kredytów, przerwy z 14 s do 2,5 s, cap rośnie
+co 45 s od 2 do 8; **pełny napór** od ~5 min – cap 8.
 
 Cykl dyrektora (deterministyczny, sawtooth): fala 1 BUILD, fala 2 BUILD, fala 3
 PEAK (kredyty ×1,5, przerwa ×0,5), fala 4 RELAX (kredyty ×0,5, przerwa ×1,8),
 i tak dalej. Krzywa kredytów jest zależna od czasu przez `budget_curve` (Curve
 z inspektora), więc panel może ją pokazać i edytować.
 
-Typy i koszty: swarm koszt 1, elita koszt 4 (od 150 s, szansa 0 → 0,25 do 480 s,
-tylko gdy wystarczy kredytów). Oni: pierwszy po 180 s, **na początku najbliższej
-fali PEAK**, potem co 100 s (nie więcej niż jeden naraz, jak dotąd).
+Typy i koszty: swarm koszt 1, elita koszt 4 (od 150 s, szansa 0 → 0,25 na końcu
+rampy, tylko gdy wystarczy kredytów). Oni: pierwszy po 180 s, **na początku
+najbliższej fali PEAK**, potem co 100 s (nie więcej niż jeden naraz).
 
-HP i prędkość bez zmian: `scaled_hp` i `scaled_speed` zostają tymi samymi
-współczynnikami (0,14 na falę, 0,004 na sekundę), przeniesionymi do profilu.
-Zmiana balansu HP to osobna decyzja. Przy 8 min HP ≈ 370–410 (jak dziś).
+HP i prędkość: `scaled_hp` i `scaled_speed` z tymi samymi współczynnikami co
+przed zmianą (0,14 na falę, 0,004 na sekundę). Przy 6 min HP ≈ 4,4× bazowego,
+dlatego symulacja z płaskim DPS gracza wchodzi na cap i zostaje tam (§11).
 
 ## 4. Jak to wpina się w resztę
 
@@ -211,3 +218,29 @@ na scenie `run.tscn`, a nie dane.
 - **Cykl L4D potwierdzony tylko jako model.** Cyklu build-up/peak/relax nie
   znaleziono w tekście slajdów Valve dostępnym przez wyszukiwarkę; przyjęto go
   jako ogólny wzorzec i zrealizowano jako deterministyczny sawtooth (co 3. fala).
+
+## 11. Ocena zrzutów (docs/d10, surowo)
+
+Zrzuty: `1_run_start_first_minute`, `1b_run_start_turned_to_wave`,
+`2_peak_wave`, `2b_peak_wave_turned_to_pack`, `3_spawn_ring_top_down`,
+`4_fale_dock`.
+
+Co jest dobre: w kadrze startu nie ma yōkai, bo spawn leży poza kątem widzenia
+(zgodnie z celem). Po obrocie do fali widać je z czerwonymi oczami i przy
+mgle czytelnie. Widok z góry pokazuje 40 punktów spawnu jako łuk z wolnym
+klinem ~120° w kierunku widzenia. Dock: wykres, tabela i presety zgodne z grą.
+
+Co jest słabe i zostaje otwarte:
+
+- **Yōkai wyglądają prymitywnie** (bryłowate postacie z prymitywów). To są
+  placeholdery z istniejącej sceny, nie efekt tej pracy, ale wpływają na
+  wrażenie „premium”, które oceniamy.
+- **Od ~5 min cap jest stale pełny** (8 z 8). To nie wina krzywej fal, tylko
+  wzrostu HP (4,4× przy 6 min) przy stałym DPS w symulacji. W grze moc ostrza
+  rośnie z poziomem, więc prawdziwy napór będzie niższy. Do sprawdzenia
+  na playteście, a decyzja o HP należy do balansu.
+- **Widok z góry** pokazuje punkty spawnu jako rzut, nie wysokość, bo korona
+  cedrów zasłania ring z poziomu gruntu.
+- **Brak relaksu widocznego w kadrze**: sawtooth jest w liczbach (fale 3 i 4),
+  ale przy pełnym capie nie przekłada się na mniej wrogów w czasie.
+
