@@ -69,6 +69,33 @@ func _ready() -> void:
 		body.set("player_calibrate_height", false)
 	_load_view_settings()
 	_apply_height()
+	_dress_hands()
+
+
+## D13: the hands wear dark indigo gloves (cloth with a faint lacquer sheen), the
+## colour of the run's palette. The hand model's shape and rig are untouched.
+const GLOVE_ALBEDO := Color(0.085, 0.09, 0.14)
+static var _glove_material: StandardMaterial3D = null
+
+
+static func glove_material() -> StandardMaterial3D:
+	if _glove_material == null:
+		_glove_material = StandardMaterial3D.new()
+		_glove_material.albedo_color = GLOVE_ALBEDO
+		_glove_material.roughness = 0.58
+		_glove_material.metallic_specular = 0.45
+		_glove_material.clearcoat_enabled = true
+		_glove_material.clearcoat = 0.25
+		_glove_material.clearcoat_roughness = 0.4
+	return _glove_material
+
+
+func _dress_hands() -> void:
+	for model in [$XROrigin3D/LeftHand/LeftHandModel, $XROrigin3D/RightHand/RightHandModel]:
+		if model == null:
+			continue
+		for mesh in model.find_children("*", "MeshInstance3D", true, false):
+			(mesh as MeshInstance3D).material_override = glove_material()
 
 
 ## The weapon hand(s) get the full parry pattern from the weapon; a free hand

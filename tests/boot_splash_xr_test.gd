@@ -27,6 +27,16 @@ func _run_all() -> void:
 	_check("XR launch shows the boot splash, intro waits", xr != null and splash.is_active()
 		and not run.run_intro.is_active())
 	_check("XR board stands 3.5 m ahead at eye height, world-locked", _boards_placed(splash, cam))
+	# D13: both hands wear the indigo glove material (the rig draws them every frame).
+	var gloved := 0
+	var bare := 0
+	for hand in [xr.get_node("XROrigin3D/LeftHand/LeftHandModel"), xr.get_node("XROrigin3D/RightHand/RightHandModel")]:
+		for mesh in hand.find_children("*", "MeshInstance3D", true, false):
+			if (mesh as MeshInstance3D).material_override == XRPlayer.glove_material():
+				gloved += 1
+			else:
+				bare += 1
+	_check("Both XR hands wear the indigo gloves (%d gloved, %d bare mesh parts)" % [gloved, bare], gloved > 0 and bare == 0)
 
 	await _frames(40)
 	_sim.set_button("left", "ax_button", true)

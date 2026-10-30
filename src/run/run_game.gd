@@ -984,22 +984,22 @@ func _build_end_screen(summary: Dictionary) -> void:
 	var secs := int(run_time) % 60
 	var rows: Array = [
 		# D13: one kanji and one word, no "GAME OVER": the blossom scatters.
-		["散", 104, 0.00250, Color(1.12, 0.34, 0.26), 0.232],
-		["chiru", 26, 0.00100, Color(0.6, 0.62, 0.72), 0.160],
-		["%d pt" % int(summary.score), 40, 0.00140, Color(0.88, 0.9, 0.96), 0.106],
+		["散", 104, 0.00250, Color(1.12, 0.34, 0.26), 0.215],
+		["chiru", 34, 0.00128, Color(0.66, 0.68, 0.78), 0.075],
+		["%d pt" % int(summary.score), 40, 0.00140, Color(0.88, 0.9, 0.96), 0.022],
 	]
 	if summary.get("new_record", false):
-		rows.append(["★ NEW RECORD", 28, 0.00112, Color(1.1, 0.78, 0.42), 0.058])
+		rows.append(["★ NEW RECORD", 28, 0.00112, Color(1.1, 0.78, 0.42), -0.012])
 	elif summary.get("sandbox", false):
-		rows.append(["SANDBOX  ·  NO RECORD", 28, 0.00112, Color(0.98, 0.7, 0.3), 0.058])
+		rows.append(["SANDBOX  ·  NO RECORD", 28, 0.00112, Color(0.98, 0.7, 0.3), -0.012])
 	var kcal_burned := int(summary.get("kcal", 0))
 	var stat_text := "%02d:%02d  ·  斬 %d  ·  LV %d  ·  波 %d" % [mins, secs, int(summary.kills), int(summary.level), int(summary.wave)]
 	if kcal_burned > 0:
 		stat_text += "  ·  %d kcal" % kcal_burned
 	# Discreet: the stats sit low in contrast under the word, not on a banner.
-	rows.append([stat_text, 26, 0.00100, Color(0.68, 0.71, 0.8), 0.005])
-	rows.append(["BEST  %d" % int(summary.high_score), 24, 0.00100, Color(0.56, 0.6, 0.7), -0.055])
-	rows.append(["BUILD  %s" % String(summary.get("build", "Unbound")), 26, 0.00100, Color(0.7, 0.62, 0.84), -0.115])
+	rows.append([stat_text, 26, 0.00100, Color(0.68, 0.71, 0.8), -0.040])
+	rows.append(["BEST  %d" % int(summary.high_score), 24, 0.00100, Color(0.56, 0.6, 0.7), -0.082])
+	rows.append(["BUILD  %s" % String(summary.get("build", "Unbound")), 26, 0.00100, Color(0.7, 0.62, 0.84), -0.124])
 	for row in rows:
 		var lbl := MemorialTypography.stele_label(String(row[0]), int(row[1]), float(row[2]), row[3] as Color, Vector3(0, float(row[4]), 0.024))
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

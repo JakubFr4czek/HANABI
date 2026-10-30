@@ -44,7 +44,13 @@ func _run_all() -> void:
 		_check("%s: death ends the run" % label, run.state == RunGame.RunState.GAME_OVER)
 		_check("%s: no live enemy or boss stays on the field (%d alive, oni %s)" % [label, run.wave_director.alive_count(), run.wave_director.has_active_oni()],
 			run.wave_director.alive_count() == 0 and not run.wave_director.has_active_oni())
-		_check("%s: time runs at full speed on the end screen (%.2f)" % [label, Engine.time_scale], is_equal_approx(Engine.time_scale, 1.0))
+		# D13: the old rule (full speed on the end screen) is replaced by a slow fall that never freezes time.
+		for f in 200:
+			await get_tree().physics_frame
+			if absf(TimeController.time_scale - TimeController.DEATH_FALL_SCALE) < 0.001:
+				break
+		_check("%s: the world sinks to the slow-fall scale, time never stops (%.2f)" % [label, TimeController.time_scale],
+			absf(TimeController.time_scale - TimeController.DEATH_FALL_SCALE) < 0.001 and Engine.time_scale > 0.0)
 		await _until(func(): return run.restart_ema != null and is_instance_valid(run.restart_ema) and run.restart_ema.is_armed(), 600)
 		var head := get_tree().get_first_node_in_group("player_head") as Node3D
 		var ground := run.forest_world.height_at(head.global_position.x, head.global_position.z)

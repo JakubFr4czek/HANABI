@@ -14,6 +14,8 @@ uniform sampler2D normal_texture : hint_normal, filter_linear_mipmap;
 uniform sampler2D arm_texture : hint_default_white, filter_linear_mipmap; // R = AO, G = roughness, B = metallic
 uniform vec3 steel_tint : source_color = vec3(0.86, 0.87, 0.9);
 uniform vec3 lightning_tint : source_color = vec3(0.55, 0.72, 1.0);
+// Silk cord of the grip (tsuka-ito): deep indigo, a lighter lattice where the cord crosses.
+uniform vec3 ito_color : source_color = vec3(0.24, 0.26, 0.40);
 uniform float blade_polish : hint_range(0.0, 1.0) = 0.55;
 uniform float fittings_wet : hint_range(0.0, 1.0) = 0.35;
 uniform float droplets : hint_range(0.0, 1.0) = 1.0;
@@ -79,6 +81,23 @@ void fragment() {
 	// Handle and fittings: darker and a little glossier from the rain.
 	albedo *= mix(1.0, 0.8, fittings_wet * (1.0 - blade));
 	rough = mix(rough, rough * 0.7, fittings_wet * (1.0 - blade));
+
+	// D13 tsuka-ito: the grip is wrapped in dark silk cord in a diamond lattice (the
+	// mesh's handle runs from the tsuba down to the pommel, y -0.30..-0.01, r < 0.026).
+	float handle_r = length(v_local.xz);
+	float ito_zone = smoothstep(-0.30, -0.27, v_local.y) * (1.0 - smoothstep(-0.03, -0.012, v_local.y))
+		* (1.0 - smoothstep(0.018, 0.026, handle_r));
+	if (ito_zone > 0.0) {
+		float wrap_arc = atan(v_local.z, v_local.x) * 0.0155;
+		float lay_a = fract((wrap_arc + v_local.y * 0.85) / 0.0072);
+		float lay_b = fract((wrap_arc - v_local.y * 0.85) / 0.0072);
+		// Cords sit at the cell edges (lay near 0 or 1) of both diagonal families.
+		float cord = max(smoothstep(0.0, 0.16, abs(lay_a - 0.5) * 2.0 - 0.7),
+			smoothstep(0.0, 0.16, abs(lay_b - 0.5) * 2.0 - 0.7));
+		vec3 ito = ito_color * (0.6 + 1.1 * cord);
+		albedo = mix(albedo, ito, ito_zone);
+		rough = mix(rough, 0.42 - 0.12 * cord, ito_zone);
+	}
 
 	// Steel: keep the texture's hamon and polish marks, push towards a mirror.
 	albedo = mix(albedo, albedo * steel_tint, blade);
@@ -155,11 +174,12 @@ void fragment() {
 	float trace_band = 0.0;
 	if (trace_level > 0.001) {
 		float side_e = (v_local.x - 0.115 * pow(max(v_local.y - 0.22, 0.0), 2.0)) / 0.0155;
-		float on_edge = (1.0 - smoothstep(-0.95, -0.15, side_e)) * blade;
-		float streak = 0.55 + 0.45 * sin(v_local.y * 70.0 + TIME * 1.5) * sin(v_local.y * 23.0 - TIME * 0.6);
+		// A thin stripe on the cutting edge only, so the steel body and the imbue keep their read.
+		float on_edge = (1.0 - smoothstep(-0.92, -0.55, side_e)) * blade;
+		float streak = 0.8 + 0.2 * sin(v_local.y * 11.0 - TIME * 0.9);
 		trace_band = trace_level * on_edge * streak;
 	}
-	imbue += trace_color * trace_band * 1.6;
+	imbue += trace_color * trace_band * 0.7;
 
 	ALBEDO = albedo;
 	ROUGHNESS = rough;
