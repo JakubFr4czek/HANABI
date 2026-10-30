@@ -723,9 +723,14 @@ func _on_enemy_died(yokai: Yokai, _hit: Dictionary) -> void:
 ## choice refuses (a yōkai close by, or no room for three cards) rings the bell
 ## quietly and the shrine stays lit.
 func _poll_shrine_touch() -> void:
+	# E is spent on this frame whatever it reaches for.
+	var reach := _desktop_reach
+	_desktop_reach = false
 	if hokora_manager == null or shrine_offering == null or shrine_offering.is_open():
 		return
-	var hands := _hand_positions()
+	if _poll_shrine_bell(reach):
+		return
+	var hands := _hand_positions(reach)
 	if hands.is_empty():
 		return
 	var shrine := hokora_manager.poll_touch(hands)
@@ -744,20 +749,56 @@ func reach_for_offering() -> void:
 	_desktop_reach = true
 
 
+## The suzu (P8): a hand or the blade tip on the bell, with the player in reach, stores
+## one elemental charge. Desktop: E rings the nearest ready bell when it is nearer than
+## the altar. Returns true when a bell was touched this frame, so that touch never also
+## opens a choice.
+func _poll_shrine_bell(reach: bool) -> bool:
+	if hokora_manager == null:
+		return false
+	var points: Array[Vector3] = []
+	if katana:
+		points.append(katana.get_tip_global())
+	if player is XRPlayer:
+		var xr := player as XRPlayer
+		for holder in [xr.left_holder, xr.right_holder]:
+			if holder:
+				points.append(holder.global_position)
+	elif reach:
+		var bell := hokora_manager.nearest_bell()
+		if bell != Vector3.INF:
+			points.append(bell)
+	var shrine := hokora_manager.poll_bell(points)
+	if shrine == null:
+		return false
+	_ring_bell(shrine)
+	return true
+
+
+## A bell touch stores its charge (D21). A full buffer refuses it: a quiet ring, no charge.
+func _ring_bell(shrine: HokoraShrine) -> void:
+	var element := shrine.bell_element()
+	if element_system and element_system.add_charge(element):
+		shrine.ring_bell()
+		GameEvents.log_event("hokora_bell_rung", {"slot": [shrine.slot.x, shrine.slot.y], "element": element})
+	else:
+		shrine.refuse_bell()
+		GameEvents.log_event("hokora_bell_refused", {"slot": [shrine.slot.x, shrine.slot.y]})
+
+
 ## Where the hands that may touch an offering are: the hands that hold no katana (VR),
-## or the altar of the nearest shrine when E is pressed on desktop.
-func _hand_positions() -> Array[Vector3]:
+## or the altar of the nearest shrine when E was pressed on desktop.
+func _hand_positions(reach: bool) -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	if player is XRPlayer:
 		var xr := player as XRPlayer
 		for holder in [xr.left_holder, xr.right_holder]:
 			if holder and holder.held == null:
 				out.append(holder.global_position)
-	elif _desktop_reach and hokora_manager:
+	elif reach and hokora_manager:
 		var altar := hokora_manager.nearest_altar()
 		if altar != Vector3.INF:
 			out.append(altar)
-	_desktop_reach = false
 	return out
 
 

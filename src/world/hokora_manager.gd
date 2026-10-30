@@ -125,6 +125,54 @@ func poll_touch(hands: Array[Vector3]) -> HokoraShrine:
 	return best
 
 
+## The shrine whose suzu a point in [param points] (a hand or the blade tip) touches
+## this frame, or null (P8). Every shrine counts, lit or used, nearest first.
+func poll_bell(points: Array[Vector3]) -> HokoraShrine:
+	var p := _player_pos()
+	var best: HokoraShrine = null
+	var best_d := INF
+	for s in _shrines.values():
+		var shrine := s as HokoraShrine
+		if not is_instance_valid(shrine):
+			continue
+		var d := shrine.bell_position().distance_to(p)
+		if d >= best_d:
+			continue
+		for point in points:
+			if shrine.is_bell_touched_by(point, p):
+				best = shrine
+				best_d = d
+				break
+	return best
+
+
+## The suzu of the nearest shrine whose bell is ready, or Vector3.INF. Desktop uses it
+## for the reach key (E). It is offered only when it is nearer to the player than the
+## altar, so standing at an offering table still reaches for the choice.
+func nearest_bell() -> Vector3:
+	var p := _player_pos()
+	var best := Vector3.INF
+	var best_d := INF
+	for s in _shrines.values():
+		var shrine := s as HokoraShrine
+		if not is_instance_valid(shrine) or shrine.bell_cooldown > 0.0:
+			continue
+		var bell := shrine.bell_position()
+		var d := _flat_distance(bell, p)
+		if d < best_d:
+			best = bell
+			best_d = d
+	# Ground distance, not 3D: the suzu hangs about a metre above the offering table.
+	var altar := nearest_altar()
+	if best != Vector3.INF and altar != Vector3.INF and _flat_distance(altar, p) <= best_d:
+		return Vector3.INF
+	return best
+
+
+static func _flat_distance(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
 ## The altar of the shrine nearest to the player, or Vector3.INF when none is lit
 ## within reach. Desktop uses it for the reach key (E), so a desktop player touches the
 ## same offering table a VR hand would.
