@@ -42,6 +42,10 @@ const TRUNK_CELL := 3.0
 const GATE_CLEAR_OF_LIVE_GATE := 3.5
 ## A shrine is joined to a path that passes this close, metres.
 const SHRINE_SPUR_REACH := 40.0
+## How far a shrine spur strip floats above the rendered ground (metres).
+const SPUR_LIFT := 0.03
+## Largest cell of a shrine spur strip (metres), finer than the terrain lattice.
+const SPUR_CELL := 0.5
 ## Senbon rows: axis threshold and the spacing from the corridor noise.
 const SENBON_AXIS_THRESHOLD := 0.72
 const CORRIDOR_SCALE := 1.7
@@ -1289,17 +1293,37 @@ func _ribbon_mesh(line: PackedVector2Array) -> ArrayMesh:
 		var b := line[k + 1]
 		var t := (b - a).normalized()
 		var n := Vector2(-t.y, t.x) * hw
-		var pa := [a + n, a - n]
-		var pb := [b + n, b - n]
-		var va := [Vector3(pa[0].x, height_at(pa[0].x, pa[0].y) + 0.03, pa[0].y),
-			Vector3(pa[1].x, height_at(pa[1].x, pa[1].y) + 0.03, pa[1].y)]
-		var vb := [Vector3(pb[0].x, height_at(pb[0].x, pb[0].y) + 0.03, pb[0].y),
-			Vector3(pb[1].x, height_at(pb[1].x, pb[1].y) + 0.03, pb[1].y)]
-		for v in [va[0], vb[0], vb[1], va[0], vb[1], va[1]]:
-			st.set_normal(Vector3.UP)
-			st.set_color(colour)
-			st.add_vertex(v)
+		# Cells of at most SPUR_CELL: the terrain mesh bends between its lattice points, so a long
+		# flat triangle would sink into a hill between two of them.
+		var along := maxi(ceili((b - a).length() / SPUR_CELL), 1)
+		var across := maxi(ceili(2.0 * hw / SPUR_CELL), 1)
+		for i in along:
+			for j in across:
+				var u0 := float(i) / along
+				var u1 := float(i + 1) / along
+				var v0 := -1.0 + 2.0 * float(j) / across
+				var v1 := -1.0 + 2.0 * float(j + 1) / across
+				var p00 := _spur_point(a, b, n, u0, v0)
+				var p10 := _spur_point(a, b, n, u1, v0)
+				var p11 := _spur_point(a, b, n, u1, v1)
+				var p01 := _spur_point(a, b, n, u0, v1)
+				for v in [p00, p11, p10, p00, p01, p11]:
+					st.set_normal(Vector3.UP)
+					st.set_color(colour)
+					st.add_vertex(v)
 	return st.commit()
+
+
+## A point of the strip: u runs along the segment a→b, v across it (-1 and +1 at the edges).
+## Lifted off the highest rendered ground around it (3×3 cells), not the analytic height the mesh
+## misses on slopes: a flat cell between two vertices then never sinks into a hill's bulge.
+func _spur_point(a: Vector2, b: Vector2, n: Vector2, u: float, v: float) -> Vector3:
+	var p := a.lerp(b, u) + n * v
+	var ground := -INF
+	for ox in [-SPUR_CELL, 0.0, SPUR_CELL]:
+		for oz in [-SPUR_CELL, 0.0, SPUR_CELL]:
+			ground = maxf(ground, _mesh_height(p.x + ox, p.y + oz))
+	return Vector3(p.x, ground + SPUR_LIFT, p.y)
 
 
 ## Distance from every terrain vertex of a chunk to the nearest path centre line,
