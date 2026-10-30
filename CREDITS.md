@@ -23,7 +23,8 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Distant matsuri fireworks (D18): the far boom reuses Kenney Impact `thunder_impact_heavy_*` from `cc0_storm/`, and the near pop reuses `firework_pop_soft_000` from `kenney_run/` (both CC0, no new files)
 - Run ambient music: Tozan "Oriental Somber" (OpenGameArt CC0), `assets/audio/music/cc0_run/orientalsomber.ogg`
 - Run music shakuhachi & taiko ensemble layer: balanced arrangement combining CC0 taiko drum rhythm (Scott Harding / **Singapore Wind Symphony Percussion Ensemble**) and shakuhachi flute meditation (**Araki Kodō III**, Public Domain) into a seamless 24s loop on the Music bus, `assets/audio/music/cc0_run/shakuhachi_taiko_layer.wav`
-- Run forest trees: "Cherry Blossom Tree" by **Grab3D** (CC0), crown simplified and the daylight blossoms recolored to night foliage, `assets/models/environment/forest_trees/`
+- Forest ground moss (D5): "Moss002" by **Lennart Demes** (ambientCG, CC0), `assets/textures/forest_ground/moss002/`
+- Run forest trees (`cherry_forest.gltf`, `cherry_forest_albedo.jpg`, `cherry_forest_normal.jpg`): "Cherry Blossom Tree" by **Grab3D** (CC0), crown simplified and the daylight blossoms recolored to night foliage, `assets/models/environment/forest_trees/`
 - Run forest torii (distant MultiMesh): procedural torii gate from **polyfork.dev** (commercial/CC0 kit, no attribution required; credited here by choice)
 - Interactive Torii gate & andon lantern: hexagonal paper andon with eaves and ribs, procedural mesh by project author (CC0)
 - Custom shaders (blade rim fresnel, katana steel edge light, wrist element plate, torii halo): project author (CC0)
@@ -37,6 +38,9 @@ These are also shown in game on the `CreditsLabel` under the controls board at t
 - "Japanese Torii gate Game Asset" by Bazylonator (https://sketchfab.com/3d-models/japanese-torii-gate-game-asset-e12d2fa1b2b94928b8b87cb7787e2462), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (rescaled, rain/wet shading over the original PBR textures).
 - "Old Torii" by Sarah Nguyen (Nguyen Phuong Hoa) (primagenevieve) (https://sketchfab.com/3d-models/old-torii-34f21f85784a4dcf9e0f9c6b9d772e37), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (rescaled, darkened, rain/wet shading over the original PBR textures).
 - "Bonsyou5599" by Jnn (https://commons.wikimedia.org/wiki/File:Bonsyou5599.ogg), licensed under CC BY 2.1 JP / FAL / CC BY-SA — modified (DC offset removed, attack trimmed, resampled to 44.1 kHz, pitch and decay tuned for run start, Oni arrival, and gate imbue).
+
+- "Japanese Stone Lantern" by Sahir Virmani (https://sketchfab.com/3d-models/japanese-stone-lantern-e0417d1e05984727a50f9ab1451d162d), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (scaled to metres, textures packed into one atlas).
+- "Giant Redwood" by rhcreations (https://sketchfab.com/3d-models/giant-redwood-1a2052c58869479eb7b204d5cdc7c63a), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (decimated to about 6k triangles, textures packed into one atlas).
 
 ## Thanks (optional credits for CC0 packs available to the project)
 Quaternius, Kay Lousberg, Poly Haven (Greg Zaal and team), Grab3D, Pixor, Tozan, Ruskerdax, Vacuous BGM, Casual Garage Coder, FencerDevLog, celyk (GPUTrail), Jnn, Scott Harding, Singapore Wind Symphony Percussion Ensemble, Araki Kodō III;
