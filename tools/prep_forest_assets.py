@@ -11,6 +11,7 @@ scan's colours (the Godot merge in ForestWorld keeps surface 0 only).
 --scale  metres per source unit (Sketchfab "cm" scans: 0.01)
 --tris   decimate the whole mesh to about this many triangles (0 = keep)
 --atlas  atlas edge in pixels (each part's texture is resized to fit its cell)
+--rotate-y  turn about Y in degrees (a gate modelled along Z: 90)
 --min-faces  floor of triangles per part when decimating (default 64)
 --key-blue  key blue-dominant backdrop pixels to black (cut away by the forest shader)
 --part   keep only these parts (the index printed by the dump; repeatable), e.g. to drop a
@@ -29,7 +30,7 @@ import trimesh
 from PIL import Image
 
 
-def parts_of(src: str, scale: float, keep: list[int] | None) -> list[trimesh.Trimesh]:
+def parts_of(src: str, scale: float, keep: list[int] | None, rotate_y: float = 0.0) -> list[trimesh.Trimesh]:
     scene = trimesh.load(src, force="scene")
     parts = []
     for i, m in enumerate(scene.dump()):
@@ -39,6 +40,8 @@ def parts_of(src: str, scale: float, keep: list[int] | None) -> list[trimesh.Tri
             continue
         m = m.copy()
         m.apply_scale(scale)
+        if rotate_y:
+            m.apply_transform(trimesh.transformations.rotation_matrix(math.radians(rotate_y), [0, 1, 0]))
         parts.append(m)
     return parts
 
@@ -122,12 +125,13 @@ def main() -> int:
     ap.add_argument("--scale", type=float, default=1.0)
     ap.add_argument("--tris", type=int, default=0)
     ap.add_argument("--atlas", type=int, default=2048)
+    ap.add_argument("--rotate-y", type=float, default=0.0, help="turn the model about Y (degrees) before baking")
     ap.add_argument("--min-faces", type=int, default=64, help="floor per part when decimating (keeps thin parts such as a lantern's column)")
     ap.add_argument("--key-blue", action="store_true", help="key blue-dominant backdrop pixels to black (card foliage)")
     ap.add_argument("--part", type=int, action="append", help="keep only these parts (index in the scene dump, repeatable)")
     args = ap.parse_args()
 
-    parts = parts_of(args.src, args.scale, args.part)
+    parts = parts_of(args.src, args.scale, args.part, args.rotate_y)
     total = sum(len(p.faces) for p in parts)
     print(f"source: {len(parts)} parts, {total} triangles")
 
