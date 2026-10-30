@@ -20,9 +20,6 @@ signal finished
 const WHITE_AT := 2.98
 const WHITE_FULL_AT := 3.22
 const FINISH_AT := 3.32
-## The finisher's element flash starts building here and peaks at FLASH_MAX alpha.
-const FLASH_AT := 2.7
-const FLASH_MAX := 0.55
 ## A skip fades to white this fast, then hands over.
 const SKIP_FADE := 0.4
 ## Local hit-stop: after a cut the clock runs at SLOW_SCALE for SLOW_SECONDS real seconds.
@@ -46,8 +43,10 @@ const DASH_OUT := 0.06
 ## Glade centre (x, z) in the forest: the run's spawn clearing at the origin.
 const GLADE := Vector2.ZERO
 ## Scales the cut layout (yōkai and stations) into the run's spawn clearing (radius ~5.2 m),
-## where no cedar stands: the cinematic keeps clear of trunks it cannot cut.
+## the only spot of the default profile found clear of trunks (see docs/OPENING_STRIKE.md, "Lokacja").
 const SPACING := 0.7
+## The cinematic's cut pieces glow this much hotter than a run's cut: it is the close look.
+const CUT_GLOW_BOOST := 1.6
 const START_STATION := Vector2(-0.4, 2.4)
 const START_LOOK := Vector2(-1.1, -3.2)
 ## The camera pushes in this far after the last cut, into the white.
@@ -97,8 +96,8 @@ var _katana: HeldWeapon
 var _yokai: Array[Yokai] = []
 var _trail: MeshInstance3D
 var _trail_mesh: ImmediateMesh
-var _flash: ColorRect
 var _white: ColorRect
+var _boosted := {}
 var _board: MeshInstance3D
 var _board_mat: StandardMaterial3D
 var _quad: QuadMesh
@@ -169,11 +168,6 @@ func white_level() -> float:
 var _final_white := 0.0
 
 
-## The element flash's coverage at the moment (0 until the finisher builds it).
-func flash_level() -> float:
-	return _flash.color.a if _flash else 0.0
-
-
 ## The SubViewport whose own world holds the stage, its cuts' pieces and effects; null
 ## when the stage is not built.
 func stage_root() -> Node:
@@ -211,6 +205,7 @@ func start() -> void:
 	set_process(true)
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	_splits = 0
+	_boosted.clear()
 	GameEvents.log_event("opening_strike_started", {})
 	_apply_pose(0.0)
 	# The splash's black veil (still fading as this starts) becomes the cinematic's fade-in.
@@ -407,11 +402,27 @@ func _strike(i: int) -> void:
 	var out := yokai.receive_hit(part, hit)
 	if bool(out.get("kirisute", false)):
 		_splits += 1
+		_boost_pieces()
+	# The finisher bursts in its school's colour at the contact (the game's own firework).
+	if i == CUTS.size() - 1:
+		ElementFirework.spawn(_viewport, f.point, cut.element, 1.4)
 	_slow_left = SLOW_SECONDS
 	Sfx.play_at("swing", _sound_point(), -4.0, 40.0, 1.0 + 0.04 * float(i))
 	Sfx.play_at("cut", _sound_point(), -3.0, 40.0)
 	GameEvents.log_event("opening_strike_cut", {"index": i, "element": cut.element,
 		"split": bool(out.get("kirisute", false))})
+
+
+## The new pieces of this stage start at CUT_GLOW_BOOST times a run's cut glow. Only
+## pieces not seen before are touched, so each split is boosted once.
+func _boost_pieces() -> void:
+	for c in _viewport.get_children():
+		if c is KirisuteChunk and not _boosted.has(c):
+			_boosted[c] = true
+			var chunk := c as KirisuteChunk
+			chunk.hot_energy *= CUT_GLOW_BOOST
+			if chunk.cap_material:
+				chunk.cap_material.emission_energy_multiplier = chunk.hot_energy
 
 
 func _apply_pose(t: float) -> void:
@@ -426,10 +437,6 @@ func _apply_pose(t: float) -> void:
 
 
 func _update_overlays(t: float) -> void:
-	var col := Elements.color(CUTS[CUTS.size() - 1].element)
-	# The flash gathers late and fast: a long soft wash reads as a tint, not a flash.
-	var build := pow(smoothstep(FLASH_AT, WHITE_AT, t), 2.0) * FLASH_MAX
-	_flash.color = Color(col.r, col.g, col.b, build)
 	var white := smoothstep(WHITE_AT, WHITE_FULL_AT, t)
 	if _skip_t >= 0.0:
 		white = maxf(white, clampf(_skip_t / SKIP_FADE, 0.0, 1.0))
@@ -550,11 +557,6 @@ func _spawn_yokai(i: int) -> void:
 
 
 func _build_overlays() -> void:
-	_flash = ColorRect.new()
-	_flash.color = Color(0, 0, 0, 0)
-	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_viewport.add_child(_flash)
 	_white = ColorRect.new()
 	_white.color = Color(1, 1, 1, 0)
 	_white.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -593,7 +595,6 @@ func _clear_stage() -> void:
 	_katana = null
 	_trail = null
 	_trail_mesh = null
-	_flash = null
 	_white = null
 	_yokai.clear()
 

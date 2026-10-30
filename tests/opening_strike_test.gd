@@ -67,7 +67,9 @@ func _run_all() -> void:
 	var contact_ok := true
 	var worst_draws := 0
 	var white_held := 0.0
-	var flash_before_white := 0.0
+	var finisher_burst := 0
+	var worst_lights := 0
+	var min_glow := INF
 	var max_pieces := 0
 	var time_scale_ok := true
 	var rig_moved := 0.0
@@ -111,8 +113,12 @@ func _run_all() -> void:
 			split_ok = split_ok and pieces >= mini(last_split + 2, ElementBalance.KIRISUTE_MAX_PIECES)
 			last_split = pieces
 			worst_draws = maxi(worst_draws, RunPerfProbe.estimate_scene_cost(stage)["draw_calls"])
-		if t >= 2.9 and t < 2.98:
-			flash_before_white = maxf(flash_before_white, cin.flash_level())
+			worst_lights = maxi(worst_lights, RunPerfProbe.count_dynamic_lights(stage))
+			for c in stage.get_children():
+				if c is KirisuteChunk:
+					min_glow = minf(min_glow, (c as KirisuteChunk).hot_energy)
+			if i == cuts.size() - 1:
+				finisher_burst = stage.get_child_count() - _piece_count(stage)
 		if t >= 3.22 and t < cin.FINISH_AT:
 			white_held = maxf(white_held, cin.white_level())
 
@@ -126,8 +132,15 @@ func _run_all() -> void:
 		max_pieces <= ElementBalance.KIRISUTE_MAX_PIECES and max_pieces > 0)
 	_check("the stage stays under the Quest draw budget at the cuts (%d of %d)" % [worst_draws, RunPerfBudget.MAX_DRAW_CALLS],
 		worst_draws <= RunPerfBudget.MAX_DRAW_CALLS and worst_draws > 0)
-	_check("the finisher's colour builds before the white (flash %.2f at 2.9 s)" % flash_before_white,
-		flash_before_white > 0.3)
+	_check("the finisher bursts at its contact in its school's colour (%d new effect nodes)" % finisher_burst,
+		finisher_burst > 0)
+	# The dimmest school (Ink, 0.8) boosted: the pieces start hotter than a run's cut of that school.
+	var dimmest := KirisuteCut.hot_energy(Elements.INK) * cin.CUT_GLOW_BOOST
+	_check("the cut pieces start %.0f%% hotter than a run's cut (dimmest %.2f, need ≥ %.2f)" % [
+		(cin.CUT_GLOW_BOOST - 1.0) * 100.0, min_glow, dimmest - 0.01],
+		min_glow >= dimmest - 0.01)
+	_check("the stage stays under the dynamic light budget (%d of %d)" % [worst_lights, RunPerfBudget.MAX_DYNAMIC_LIGHTS],
+		worst_lights <= RunPerfBudget.MAX_DYNAMIC_LIGHTS)
 	_check("the white is full before the cinematic ends (%.2f)" % white_held, white_held >= 0.99)
 	_check("the cinematic runs about three seconds (%d frames, %.2f s on its clock)" % [frames, prev_clock],
 		frames <= 360 and prev_clock >= 3.2 and prev_clock <= 3.4)
