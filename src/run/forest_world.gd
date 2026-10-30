@@ -869,12 +869,17 @@ func _tree_trunk_points(coord: Vector2i) -> Array:
 
 ## Keep-out trunks for lanterns and boulders: the base trunks plus the layout-after
 ## trunks (sequoia, pine) of the 3×3 ring. Kept apart from _tree_trunk_points, which
-## the layout-after spots themselves are built from.
+## the layout-after spots themselves are built from. A neighbour's layout-after spots
+## are read only when already cached: computing them early would fix them before the
+## gates of that neighbour's ring are planned (the budget test caught a redwood that way).
 func _prop_trunk_points(coord: Vector2i) -> Array:
 	var out := _tree_trunk_points(coord)
 	for ox in range(-1, 2):
 		for oz in range(-1, 2):
-			for s in _extra_tree_spots(coord + Vector2i(ox, oz)).get("spots", []):
+			var c := coord + Vector2i(ox, oz)
+			if c != coord and not _extra_spot_cache.has(c):
+				continue
+			for s in _extra_tree_spots(c).get("spots", []):
 				var spot: Vector4 = s
 				out.append(Vector3(spot.x, spot.y, 0.0))
 	return out
