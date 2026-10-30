@@ -357,8 +357,12 @@ func on_grabbed(by: Node3D, local_grip: Transform3D = Transform3D.IDENTITY) -> v
 		clamped_grip = Transform3D.IDENTITY
 	_local_grips[by] = clamped_grip
 	_grip_zones[by] = classify_grip_zone(clamped_grip.origin)
+	# D13: the first hand to take the blade up hears the steel whisper (a second hand does not).
+	var first_grab := holder == null
 	holder = holders[0]
 	wielder = holder
+	if first_grab:
+		Sfx.play_at("grab", global_position, -5.0, 2.0)
 	gravity_scale = 1.0
 	_stuck_timer = 0.0
 	_has_prev_target = false
@@ -1183,7 +1187,16 @@ func _update_swing_audio(delta: float) -> void:
 	_last_tip = tip
 	if not holder:
 		return
-	if measured_tip_speed > swing_sound_speed and _swing_cooldown <= 0.0:
+	var spd := whoosh_level(measured_tip_speed, swing_sound_speed)
+	if spd > 0.0 and _swing_cooldown <= 0.0:
 		_swing_cooldown = 0.35
-		var spd := clampf(measured_tip_speed / 14.0, 0.3, 1.0)
 		Sfx.play_at("swing", tip, linear_to_db(spd), 4.0, clampf(0.82 + spd * 0.38, 0.85, 1.35))
+
+
+## D13: loudness of the blade-tip whoosh for a tip moving at [param tip_speed] (real m/s).
+## 0 below [param threshold] (a slow wave makes no sound), then rising with speed and
+## capped at 1.0. Pitch and volume both follow this value.
+static func whoosh_level(tip_speed: float, threshold: float) -> float:
+	if tip_speed <= threshold:
+		return 0.0
+	return clampf(tip_speed / 14.0, 0.3, 1.0)

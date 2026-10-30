@@ -20,6 +20,8 @@ const CATEGORIES := {
 	"ofuda_slice": ["res://assets/audio/sfx/kenney_run", "ofuda_slice"],
 	"level_up": ["res://assets/audio/sfx/kenney_run", "level_up"],
 	"yokai_slice": ["res://assets/audio/sfx/kenney_run", "yokai_slice"],
+	# D13: steel whispering out of the grip when the katana is taken up.
+	"grab": ["res://assets/audio/sfx/hanabi_proc", "grab_steel"],
 	# Element imbue cues (E3): one quiet cue per school and the blade going plain.
 	"imbue_sakura": ["res://assets/audio/sfx/hanabi_proc", "imbue_sakura"],
 	"imbue_storm": ["res://assets/audio/sfx/hanabi_proc", "imbue_storm"],
@@ -33,9 +35,16 @@ const CATEGORIES := {
 	"bonsho_oni": ["res://assets/audio/sfx/bonsho", "bonsho_oni"],
 	"bonsho_gate": ["res://assets/audio/sfx/bonsho", "bonsho_gate"],
 }
-const POOL_SIZE := 24
+## 23 (D13, was 24): the forest bed's cricket loop takes one voice back, so the mix
+## (pool + music 2 + rain 1 + wind 1 + crickets 1) stays inside [constant VOICE_BUDGET].
+const POOL_SIZE := 23
 const MAX_ACTIVE_WORLD_VOICES := 20
 const SOFT_CAP_CATEGORIES := ["enemy_tell", "blade_ring", "slap", "bonsho_gate"]
+## D13: most simultaneous voices per category. The whoosh is one blade's tip, so two
+## at most; a third would only stack into noise.
+const CATEGORY_VOICE_LIMIT := {"swing": 2}
+## Quest audio budget (docs/QUEST_TEST.md, §18): the whole mix stays at or under this.
+const VOICE_BUDGET := 28
 const WORLD_BUS := &"World"
 const AMBIENCE_BUS := &"Ambience"
 const MUSIC_BUS := &"Music"
@@ -59,6 +68,7 @@ const PAUSE_FADE_SEC := 0.25
 var _pause_amount := 0.0
 var _pause_tween: Tween
 var _music_lowpass_idx := -1
+var _player_category := {}  # AudioStreamPlayer3D -> category it last played
 
 
 func _ready() -> void:
@@ -110,13 +120,25 @@ func play_at(category: String, position: Vector3, volume_db: float = 0.0, unit_s
 		return
 	if SOFT_CAP_CATEGORIES.has(category) and _active_world_voices() >= MAX_ACTIVE_WORLD_VOICES:
 		return
+	if CATEGORY_VOICE_LIMIT.has(category) and _category_voices(category) >= CATEGORY_VOICE_LIMIT[category]:
+		return
 	var player := _acquire_player()
+	_player_category[player] = category
 	player.stream = _streams[category]
 	player.volume_db = clampf(volume_db, -36.0, MAX_WORLD_DB)
 	player.pitch_scale = clampf(pitch_scale, 0.65, 1.45)
 	player.unit_size = unit_size
 	player.global_position = position
 	player.play()
+
+
+## Playing voices that were started under [param category] (D13 per-category limit).
+func _category_voices(category: String) -> int:
+	var n := 0
+	for p in _pool:
+		if p.playing and _player_category.get(p, "") == category:
+			n += 1
+	return n
 
 
 func _active_world_voices() -> int:
