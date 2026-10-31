@@ -1,6 +1,6 @@
 # D18: odległe fajerwerki matsuri — notatka dla Jakuba
 
-Plan i decyzje: [`docs/FIREWORKS_PLAN.md`](../FIREWORKS_PLAN.md). Tekst intro: [`docs/INTRO_TEXT.md`](../INTRO_TEXT.md).
+Plan i decyzje: [`docs/FIREWORKS_PLAN.md`](../FIREWORKS_PLAN.md). Tekst intro: [`assets/text/INTRO_TEXT.md`](../../assets/text/INTRO_TEXT.md).
 
 ## Do odsłuchu
 
