@@ -13,6 +13,10 @@ const MAX_DRAW_CALLS := 345
 const MAX_PRIMITIVES := 420_000
 const MAX_PROCESS_MS := 6.0
 const MAX_YOKAI_PHYSICS_BODIES := 72
+## N3: one yōkai's visible triangles and draw surfaces (the mask is ~2.2k of the triangles).
+## Eight of them at the hard cap must stay inside the primitive budget with the forest.
+const MAX_YOKAI_TRIANGLES := 4000
+const MAX_YOKAI_DRAWS := 24
 const MAX_PARTICLES := 4000
 const MAX_DYNAMIC_LIGHTS := 12
 const MAX_AUDIO_VOICES := 28

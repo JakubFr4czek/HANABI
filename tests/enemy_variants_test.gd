@@ -89,6 +89,32 @@ func _run_all() -> void:
 	_check("spawner gives a swarm yōkai of each school its element (body and profile)", school_bodies_ok)
 	run.wave_director.clear_enemies()
 
+	# N3: the yōkai wear the demon mask and have no boxes on the head or the torso; one
+	# yōkai stays inside the triangle and draw-call budget (RunPerfBudget).
+	var forms_swarm := run.wave_director.spawn_enemy_at(Vector3(-3.0, 0.0, -4.0), player.global_position, Elements.STORM)
+	var forms_elite := run.wave_director.spawn_elite_at(Vector3(3.0, 0.0, -4.0), player.global_position, Elements.INK)
+	await _frames(2)
+	for y: Yokai in [forms_swarm, forms_elite]:
+		var who := "elite" if y.is_elite() else "swarm"
+		var head := y.parts["head"] as RagdollPart
+		var masks := 0
+		for c in head.get_children():
+			if c is MeshInstance3D and (c as MeshInstance3D).mesh == YokaiForms.mask_mesh():
+				masks += 1
+		_check("%s yōkai wears the demon mask on its head (%d masks)" % [who, masks], masks == 1)
+		var boxes := 0
+		for part_name in ["head", "chest", "pelvis"]:
+			for c in (y.parts[part_name] as RagdollPart).get_children():
+				if c is MeshInstance3D and (c as MeshInstance3D).mesh is BoxMesh:
+					boxes += 1
+		_check("%s yōkai has no boxes on head, chest or pelvis (%d)" % [who, boxes], boxes == 0)
+		var cost := RunPerfProbe.yokai_cost(y)
+		_check("%s yōkai stays within %d triangles (%d)" % [who, RunPerfBudget.MAX_YOKAI_TRIANGLES, cost.tris],
+			cost.tris <= RunPerfBudget.MAX_YOKAI_TRIANGLES)
+		_check("%s yōkai stays within %d draw surfaces (%d)" % [who, RunPerfBudget.MAX_YOKAI_DRAWS, cost.draws],
+			cost.draws <= RunPerfBudget.MAX_YOKAI_DRAWS)
+	run.wave_director.clear_enemies()
+
 	# The Oni's timing is the planner's cue (tests/run_loop_test.gd); here the director
 	# just has to summon a working duelist when asked.
 	run.wave_director.active = true

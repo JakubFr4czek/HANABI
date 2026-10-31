@@ -126,10 +126,12 @@ static func split(body: Node3D, parts: Dictionary, parent: Node, point: Vector3,
 
 
 ## The body shape of a [RagdollPart]: its first MeshInstance3D child with a
-## primitive mesh (`_decorate_part` adds it before any decoration).
+## primitive or array mesh (`_decorate_part` adds it before any decoration; the N3
+## tapered forms are ArrayMeshes, see YokaiForms).
 static func _primary_mesh(part: Node3D) -> MeshInstance3D:
 	for child in part.get_children():
-		if child is MeshInstance3D and (child as MeshInstance3D).mesh is PrimitiveMesh:
+		var m := (child as MeshInstance3D).mesh if child is MeshInstance3D else null
+		if m is PrimitiveMesh or m is ArrayMesh:
 			return child as MeshInstance3D
 	return null
 
