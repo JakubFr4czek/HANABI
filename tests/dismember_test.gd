@@ -365,6 +365,10 @@ func _test_slicer() -> void:
 	var cases := [
 		["box", box, Vector3(0.05, 0.0, 0.0), Vector3.RIGHT],
 		["capsule", capsule, Vector3(0.01, 0.1, 0.0), Vector3(0.6, 0.8, 0.1)],
+		# N3: the tapered yōkai forms (ArrayMesh) are cut like the primitives.
+		["chest form", YokaiForms.body_mesh("chest", {}), Vector3(0.0, 0.02, 0.0), Vector3(0.3, 1.0, 0.2)],
+		["pelvis form", YokaiForms.body_mesh("pelvis", {}), Vector3(0.0, 0.0, 0.0), Vector3(1.0, 0.0, 0.0)],
+		["shoulder plate", YokaiForms.ellipsoid(0.055, 0.09, 0.10), Vector3(0.0, 0.01, 0.0), Vector3(0.0, 1.0, 0.0)],
 	]
 	for c: Array in cases:
 		var label: String = c[0]

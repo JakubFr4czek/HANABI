@@ -52,6 +52,23 @@ static func _mesh_primitives(mesh: Mesh) -> int:
 	return total
 
 
+## Triangles and draw surfaces of one yōkai's visible meshes (N3 budget, see RunPerfBudget).
+static func yokai_cost(y: Node3D) -> Dictionary:
+	var tris := 0
+	var draws := 0
+	for mi in y.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null or not m.is_visible_in_tree():
+			continue
+		for s in m.mesh.get_surface_count():
+			draws += 1
+			var arrays := MeshSlicer.surface_arrays(m.mesh, s)
+			var index = arrays[Mesh.ARRAY_INDEX]
+			var count: int = (index as PackedInt32Array).size() if index != null else (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+			tris += count / 3
+	return {"tris": tris, "draws": draws}
+
+
 static func count_yokai_physics_bodies(root: Node) -> int:
 	var count := 0
 	for n in root.find_children("*", "Yokai", true, false):

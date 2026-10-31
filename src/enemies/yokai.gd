@@ -60,7 +60,6 @@ var _nav_dir := Vector3.ZERO
 var _skin := ShaderMaterial.new()
 var _mask_mat := ShaderMaterial.new()
 var _sash := ShaderMaterial.new()
-var _horn_mat := StandardMaterial3D.new()
 var _eyes := StandardMaterial3D.new()
 ## Fog-piercing glow points over the eye slits (EyeGlow).
 var _eye_glows: Array[MeshInstance3D] = []
@@ -81,6 +80,8 @@ var _petal_burst_done := false
 ## Petals a whole yōkai comes apart into.
 const DEATH_PETALS := 90
 const MASK_FILL := 0.55
+## Size of the eye glow points in the mask sockets (EyeGlow base size, m).
+const MASK_EYE_GLOW_SIZE := 0.075
 var _slow_time := 0.0
 var _slow_scale := 1.0
 var _confusion_time := 0.0
@@ -142,8 +143,6 @@ func place_at(pos: Vector3, yaw: float) -> void:
 func apply_distance_lod(dist: float) -> void:
 	_lod_far = dist > 12.5
 	_eyes.emission_energy_multiplier = 0.22 if _lod_far else 0.85
-	if _horn_mat:
-		_horn_mat.albedo_color = Color(0.14, 0.11, 0.13) if not _lod_far else Color(0.1, 0.08, 0.09)
 
 
 func _ready() -> void:
@@ -174,11 +173,16 @@ func _ready() -> void:
 	_skin.set_shader_parameter("fill", 1.65)
 	_skin.set_shader_parameter("flash_color", Color(1.0, 0.36, 0.22))
 
-	# Weathered pale bone Noh/oni mask.
+	# The demon mask (N3): its own albedo, ORM and normal map through the wet shader. The
+	# albedo is a dark lacquer; the base colour lifts it to an aged, desaturated tone.
 	_mask_mat.shader = WET_SURFACE_SHADER
-	# Aged bone, not a glowing white plate: the face reads in the fog without
-	# shining like a signal.
-	_mask_mat.set_shader_parameter("base_color", Color(0.46, 0.4, 0.34))
+	_mask_mat.set_shader_parameter("albedo_texture", YokaiForms.mask_albedo())
+	_mask_mat.set_shader_parameter("orm_texture", YokaiForms.mask_orm())
+	_mask_mat.set_shader_parameter("orm_mode", 1)
+	_mask_mat.set_shader_parameter("normal_texture", YokaiForms.mask_normal())
+	_mask_mat.set_shader_parameter("normal_depth", 1.0)
+	# Aged, not glowing: the face reads in the fog without shining like a signal.
+	_mask_mat.set_shader_parameter("base_color", YokaiForms.MASK_TINT)
 	_mask_mat.set_shader_parameter("roughness_dry", 0.72)
 	_mask_mat.set_shader_parameter("roughness_wet", 0.38)
 	_mask_mat.set_shader_parameter("wetness", 0.42)
@@ -196,9 +200,6 @@ func _ready() -> void:
 	_sash.set_shader_parameter("wetness", 0.48)
 	_sash.set_shader_parameter("waterline_y", -10.0)
 	_sash.set_shader_parameter("fill", 1.60)
-
-	_horn_mat.albedo_color = Color(0.14, 0.11, 0.13)
-	_horn_mat.roughness = 0.55
 
 	_eyes.albedo_color = Color(0.95, 0.18, 0.10)
 	_eyes.emission_enabled = true
@@ -318,7 +319,6 @@ func _reset_spawn_look() -> void:
 	_mask_mat.set_shader_parameter("flash", 0.0)
 	_sash.set_shader_parameter("base_color", Color(0.46, 0.055, 0.075))
 	_sash.set_shader_parameter("fill", 1.60)
-	_horn_mat.albedo_color = Color(0.14, 0.11, 0.13)
 	_eyes.albedo_color = Color(0.95, 0.18, 0.10)
 	_eyes.emission = Color(1.6, 0.22, 0.08)
 	_eyes.emission_energy_multiplier = 0.85
@@ -556,139 +556,72 @@ func _define_poses() -> Dictionary:
 
 func _decorate_part(part_name: String, part: RagdollPart, def: Dictionary) -> void:
 	var mi := MeshInstance3D.new()
-	match def.shape:
-		"box":
-			var m := BoxMesh.new()
-			m.size = def.size
-			mi.mesh = m
-		"capsule":
-			var m := CapsuleMesh.new()
-			m.radius = def.radius
-			m.height = def.height
-			m.radial_segments = 10
-			m.rings = 2
-			mi.mesh = m
-		"sphere":
-			var m := SphereMesh.new()
-			m.radius = def.radius
-			m.height = def.radius * 2.0
-			m.radial_segments = 12
-			m.rings = 6
-			mi.mesh = m
+	mi.mesh = YokaiForms.body_mesh(part_name, def)
 	mi.material_override = _skin
 	part.add_child(mi)
 
 	match part_name:
 		"head":
-			# Pale bone Noh/Oni mask plate on the front (+Z).
+			# The demon mask (N3, CC BY 4.0, baked into the head's frame). Kept on a Kirisute
+			# piece: the mask and the eyes read as the yōkai's head.
 			var mask_mi := MeshInstance3D.new()
-			var mask_mesh := BoxMesh.new()
-			mask_mesh.size = Vector3(0.18, 0.22, 0.048)
-			mask_mi.mesh = mask_mesh
-			mask_mi.position = Vector3(0, -0.005, 0.095)
+			mask_mi.mesh = YokaiForms.mask_mesh()
 			mask_mi.material_override = _mask_mat
-			# Kept on a Kirisute piece (the mask and horns read as the yōkai's head); the
-			# eyes, war paint and claws go with their glow, as a dying body loses them.
 			mask_mi.set_meta("keep_on_piece", true)
 			part.add_child(mask_mi)
-
-			# Crimson war-paint brow mark.
-			var brow := MeshInstance3D.new()
-			var brow_m := BoxMesh.new()
-			brow_m.size = Vector3(0.14, 0.024, 0.012)
-			brow.mesh = brow_m
-			brow.position = Vector3(0, 0.06, 0.118)
-			brow.material_override = _sash
-			part.add_child(brow)
-
-			# Two curved obsidian horns on the forehead + glowing eye slits + cheek slashes.
+			# Glowing eyes in the mask's sockets; the school's light in them (see _apply_element_eyes).
 			for sx in [-1.0, 1.0]:
-				var horn := MeshInstance3D.new()
-				var cyl := CylinderMesh.new()
-				cyl.bottom_radius = 0.024
-				cyl.top_radius = 0.004
-				cyl.height = 0.18
-				cyl.radial_segments = 8
-				horn.mesh = cyl
-				horn.position = Vector3(0.056 * sx, 0.125, 0.082)
-				horn.rotation = Vector3(deg_to_rad(-30.0), 0.0, deg_to_rad(-18.0 * sx))
-				horn.material_override = _horn_mat
-				horn.set_meta("keep_on_piece", true)
-				part.add_child(horn)
-
-				# Piercing crimson eye slits.
 				var eye := MeshInstance3D.new()
-				var eb := BoxMesh.new()
-				eb.size = Vector3(0.046, 0.016, 0.014)
-				eye.mesh = eb
-				eye.position = Vector3(0.044 * sx, 0.016, 0.120)
-				eye.rotation.z = deg_to_rad(-11.0 * sx)
+				eye.mesh = YokaiForms.eye_mesh()
+				eye.position = Vector3(YokaiForms.EYE_X * sx, YokaiForms.EYE_Y, YokaiForms.EYE_Z)
 				eye.material_override = _eyes
 				part.add_child(eye)
-				if sx > 0.0:
-					_eye_glows.append(EyeGlow.attach(part, Vector3(0.0, eye.position.y, eye.position.z), Color(1.0, 0.24, 0.1), 0.088))
-
-				# Crimson cheek war-paint stripe.
-				var cheek := MeshInstance3D.new()
-				var ch_m := BoxMesh.new()
-				ch_m.size = Vector3(0.036, 0.012, 0.012)
-				cheek.mesh = ch_m
-				cheek.position = Vector3(0.052 * sx, -0.042, 0.118)
-				cheek.rotation.z = deg_to_rad(18.0 * sx)
-				cheek.material_override = _sash
-				part.add_child(cheek)
+			# A little larger than the old eye slits: the dark mask around the eyes takes colour from them.
+			_eye_glows.append(EyeGlow.attach(part, Vector3(0.0, YokaiForms.EYE_Y, YokaiForms.EYE_Z),
+				Color(1.0, 0.24, 0.1), YokaiForms.EYE_X * 2.0, MASK_EYE_GLOW_SIZE))
 
 		"chest":
-			# Lacquered crimson chest/shoulder wrap + sode shoulder plates + glowing curse sigil.
+			# Lacquered crimson wrap over the chest, sode shoulder plates and the glowing curse sigil.
 			var wrap := MeshInstance3D.new()
-			var wm := BoxMesh.new()
-			wm.size = Vector3(0.36, 0.14, 0.22)
-			wrap.mesh = wm
-			wrap.position = Vector3(0, 0.10, 0)
+			wrap.mesh = YokaiForms.sash_band("wrap")
 			wrap.material_override = _sash
 			part.add_child(wrap)
 
 			for sx in [-1.0, 1.0]:
 				var sode := MeshInstance3D.new()
-				var sm := BoxMesh.new()
-				sm.size = Vector3(0.09, 0.16, 0.22)
-				sode.mesh = sm
+				sode.mesh = YokaiForms.ellipsoid(0.055, 0.09, 0.10)
 				sode.position = Vector3(0.20 * sx, 0.12, 0.0)
 				sode.rotation.z = deg_to_rad(-18.0 * sx)
 				sode.material_override = _sash
 				part.add_child(sode)
 
 			var sigil := MeshInstance3D.new()
-			var sig_m := BoxMesh.new()
-			sig_m.size = Vector3(0.036, 0.24, 0.012)
-			sigil.mesh = sig_m
-			sigil.position = Vector3(0, 0.01, 0.106)
+			sigil.mesh = YokaiForms.ellipsoid(0.016, 0.12, 0.006, 8)
+			sigil.position = Vector3(0, 0.01, 0.102)
 			sigil.material_override = _sigil_mat
 			part.add_child(sigil)
 
 		"pelvis":
 			var obi := MeshInstance3D.new()
-			var ob := BoxMesh.new()
-			ob.size = Vector3(0.31, 0.08, 0.20)
-			obi.mesh = ob
-			obi.position = Vector3(0, 0.04, 0)
+			obi.mesh = YokaiForms.sash_band("obi")
 			obi.material_override = _sash
 			part.add_child(obi)
+			# Torn hakama on the hips: one ragged skirt over the thighs.
+			var skirt := MeshInstance3D.new()
+			skirt.mesh = YokaiForms.hakama()
+			skirt.material_override = _skin
+			part.add_child(skirt)
 
 		"arm_l", "arm_r":
 			# Three long bone/ember claws extending from the hand (-Y end of the arm capsule).
 			for c_idx in [-1, 0, 1]:
 				var claw := MeshInstance3D.new()
-				var cm := BoxMesh.new()
-				cm.size = Vector3(0.012, 0.145, 0.020)
-				claw.mesh = cm
+				claw.mesh = YokaiForms.claw()
 				claw.position = Vector3(c_idx * 0.024, -0.32, 0.028)
 				claw.rotation.x = deg_to_rad(18.0)
 				claw.material_override = _claw_mat
 				part.add_child(claw)
 
-
-# --- Damage & Death ------------------------------------------------------------
 
 func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	if is_dead:
