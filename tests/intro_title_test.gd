@@ -1,5 +1,5 @@
 extends Node
-## D18 title plate after the boot splash (docs/INTRO_TEXT.md): the text is read from
+## D18 title plate after the boot splash (assets/text/INTRO_TEXT.md): the text is read from
 ## the file, the plate fades in and out within about 9 s, a skip ends it quickly,
 ## and its start cues the distant firework. Time is stepped by hand.
 ##   godot --headless --path . --fixed-fps 90 res://tests/intro_title_test.tscn -- --desktop
@@ -19,7 +19,7 @@ func _ready() -> void:
 
 func _text_and_fade() -> void:
 	var lines := RunSplash.title_lines()
-	_check("the title is read from docs/INTRO_TEXT.md (%d lines)" % lines.size(), lines.size() >= 2 and lines.size() <= 3)
+	_check("the title is read from assets/text/INTRO_TEXT.md (%d lines)" % lines.size(), lines.size() >= 2 and lines.size() <= 3)
 	_check("a missing text file gives no lines", RunSplash.title_lines("res://docs/NO_SUCH_FILE.md").is_empty())
 	_check("the plate starts black and is fully lit at 2 s", RunSplash.title_brightness(0.0) == 0.0 and RunSplash.title_brightness(2.0) == 1.0)
 	_check("the plate fades out to black at the end (9 s)", absf(RunSplash.title_brightness(RunSplash.TITLE_SEC)) < 1e-6)

@@ -6,7 +6,7 @@ Jakub, 29.10: gra dzieje się podczas letniego festiwalu; w trakcie festiwalu y�
 
 | # | Decyzja | Dlaczego |
 |---|---|---|
-| 1 | **Fabuła:** letnie matsuri, yōkai budzą się w trakcie festiwalu (GDD §1, §2). Nazwa festiwalu: propozycja w `docs/INTRO_TEXT.md`. | Jakub, 29.10. Uzasadnienie HANABI w GDD §1. |
+| 1 | **Fabuła:** letnie matsuri, yōkai budzą się w trakcie festiwalu (GDD §1, §2). Nazwa festiwalu: propozycja w `assets/text/INTRO_TEXT.md`. | Jakub, 29.10. Uzasadnienie HANABI w GDD §1. |
 | 2 | **Fajerwerki nie zmieniają rozgrywki.** Brak punktów, pickupów, celów, wpływu na wrogów. | Atmosfera i napięcie, nie nagroda. |
 | 3 | **Dystans daleki:** 150–400 m od gracza, w poziomie. **Wysokość:** 18–60 m (nad linią drzew, za mgłą). | Mgła pełna przy 11 m, więc daleki wybuch jest tylko poświatą w mgle. |
 | 4 | **Kierunek:** losowy azymut. Nowy kierunek musi różnić się o **≥ 70°** od dwóch poprzednich (nigdy w to samo miejsce dwa razy z rzędu). | Brak punktu odpalania do ustalenia. |
@@ -22,7 +22,7 @@ Jakub, 29.10: gra dzieje się podczas letniego festiwalu; w trakcie festiwalu y�
 | 14 | **Redukcja błysków (Ustawienia > UŁATWIENIA):** `flash_scale()` mnoży jasność poświaty. Przy 0% poświata znika, dźwięk zostaje (jak grzmot pioruna). | Zgodne z D3. |
 | 15 | **Budżet Quest 3:** +≤4 draw calls (3 quady w puli, 1 cząstki), 0 świateł dynamicznych, ≤2 głosy audio (pula 2 graczy). Zero alokacji nodów na wybuch. | GDD §9, QUEST_TEST. |
 | 16 | **Parametry (D8):** grupa „Distant fireworks" w `WorldGenProfile`: przedziały interwału, szansa serii, dystanse, szanse eskalacji, głośności. Edycja w docku World Gen. | Jedno źródło prawdy. |
-| 17 | **Intro (§9):** po splashu Nanjo plansza tekstowa (`docs/INTRO_TEXT.md`), zanim ruszy intro seiza. Gra nie ma osobnego menu głównego; plansza stoi na miejscu, w którym menu byłoby. Fade in 2 s, trzymanie 5 s, fade out 2 s (9 s). Pomijalna triggerem/A/X/Space/Enter/Esc (tak jak reszta splashu). Na początku planszy słychać jeden daleki wybuch. | Jakub: "wiąże intro z D18". |
+| 17 | **Intro (§9):** po splashu Nanjo plansza tekstowa (`assets/text/INTRO_TEXT.md`), zanim ruszy intro seiza. Gra nie ma osobnego menu głównego; plansza stoi na miejscu, w którym menu byłoby. Fade in 2 s, trzymanie 5 s, fade out 2 s (9 s). Pomijalna triggerem/A/X/Space/Enter/Esc (tak jak reszta splashu). Na początku planszy słychać jeden daleki wybuch. | Jakub: "wiąże intro z D18". |
 | 18 | **Start i stop:** harmonogram rusza po `run_started`, zatrzymuje się po śmierci. Pauza = zatrzymanie (PROCESS_MODE_PAUSABLE). | Nie ma wybuchów podczas menu i end screenu. |
 
 ## Testy (krytyczne, krokowanie czasu, bez czekania)

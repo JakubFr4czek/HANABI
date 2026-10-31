@@ -2,6 +2,29 @@
 
 Krótka lista do przejścia na goglach przed hackathonem. Profilowanie: uruchom run z `--perf-hud` albo w trakcie gry naciśnij **F3** (desktop / link z klawiaturą). Overlay pokazuje też **lights** (OmniLight3D) i **audio~** (grające strumienie).
 
+## Jak zainstalować na Queście 3 (5 minut)
+
+1. **Pobierz APK:** GitHub → zakładka *Actions* → workflow **quest-apk** → ostatni zielony run → artefakt **hanabi-quest-apk** (`hanabi.apk`, rozmiar w podsumowaniu joba). Run odpala się sam na pushu do `build/quest-apk` i na tagach `v*`, albo ręcznie: *Run workflow*. Artefakt leży 7 dni.
+2. **Gogle:** w aplikacji Meta Horizon na telefonie włącz **Developer Mode** dla gogli, podłącz kablem USB-C do komputera i potwierdź „Allow USB debugging” w gogle.
+3. **Instalacja** (z `platform-tools`):
+   ```
+   adb devices                       # gogle muszą być na liście jako "device"
+   adb install -r hanabi.apk
+   ```
+   albo: Meta Quest Developer Hub → Device Manager → Install APK.
+   Jeśli `INSTALL_FAILED_UPDATE_INCOMPATIBLE`: `adb uninstall com.jakubfr4czek.hanabi`, potem ponów `install`. (Klucz podpisu jest trzymany w cache GitHuba; po ~7 dniach bez buildu cache wygasa i podpis się zmienia.)
+4. **Start:** w bibliotece aplikacji *Unknown Sources* → HANABI. Pierwsze uruchomienie: splash Nanjo → plansza tytułowa → intro seiza.
+5. **Pierwsze 2 minuty — sprawdź:**
+   - **FPS:** płynność w lesie i przy 8+ yōkai (cel ≥72). Liczby: overlay z `--perf-hud` / Performance HUD w Meta Quest Developer Hub, jeśli dostępny w Twojej wersji.
+   - **Chwyt katany** w obu dłoniach, cięcie, brak wypadania z ręki.
+   - **Menu:** lewy Menu (tap) otwiera drzewko umiejętności przed twarzą; drugi tap zamyka.
+   - **Pauza** i wznowienie; świat stoi, głowa i katana nadal się ruszają.
+   - **Splash i plansza tytułowa** (tekst z `assets/text/INTRO_TEXT.md`) czytelne, bez kiczu.
+   - **Mgła i kontrast** w lesie: horyzont zamknięty mgłą, drzewa nie migają.
+   - **Oni:** maska ~2 m czytelna, sylwetka ~6 m we mgle.
+
+Build i zawartość paczki: `export_presets.cfg` (preset „Meta Quest”, Compatibility/OpenXR, Quest 3, minSDK 32). Do APK nie trafiają `tests/`, `docs/`, `ci/`, `tools/`, `scripts/`, `secrets/` — sprawdza to `tests/quest_perf_test.gd`.
+
 ## Przed startem
 
 - [ ] Build z `main`, urządzenie w Developer Mode, kabel lub Air Link stabilny.
@@ -164,7 +187,7 @@ Zgłoszenie Jakuba (28 X): po odpaleniu menu czasem „przesuwało mnie w bok”
 
 Plan: `docs/FIREWORKS_PLAN.md`. Notatka i odsłuch: `docs/d18/NOTES.md`.
 
-- [ ] Po splashu Nanjo: plansza po angielsku (2–3 linijki z `docs/INTRO_TEXT.md`), płynny fade in/out (~9 s), w tle słychać jeden **daleki, wytłumiony huk** (bez trzasku, bez wysokich tonów). Pominięcie triggerem kończy planszę od razu i nie pomija intro.
+- [ ] Po splashu Nanjo: plansza po angielsku (2–3 linijki z `assets/text/INTRO_TEXT.md`), płynny fade in/out (~9 s), w tle słychać jeden **daleki, wytłumiony huk** (bez trzasku, bez wysokich tonów). Pominięcie triggerem kończy planszę od razu i nie pomija intro.
 - [ ] Po zejściu seiza: pierwszy wybuch w przeciągu 20–60 s; kierunek za każdym razem inny (nie w to samo miejsce dwa razy z rzędu).
 - [ ] Daleki wybuch: poświata za mgłą nad drzewami, przytłumiona, bez ostrej krawędzi; dźwięk spóźniony o ~0.5–1 s względem błysku.
 - [ ] Bliski wybuch (rzadko, co 2–4 min): za drzewami, jaśniejszy i głośniejszy, nigdy blisko gracza.

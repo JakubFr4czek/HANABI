@@ -12,6 +12,7 @@ func _ready() -> void:
 
 
 func _run_all() -> void:
+	_check_quest_export_preset()
 	# Locks and purchases are checked here: a sandbox switch in the player's own file must not be read (D9).
 	VrComfortSettings.sandbox_enabled = false
 	var run: RunGame = RUN_SCENE.instantiate()
@@ -185,6 +186,38 @@ func _split_hit(y: Yokai) -> void:
 		"point": part.global_position, "direction": Vector3.RIGHT, "power": 1.0, "impulse": 18.0,
 		"knockback": Vector3.RIGHT * 18.0, "kirisute_offer": true, "blade_axis": Vector3.UP}
 	y.receive_hit(part, hit)
+
+
+# The Quest APK is built from export_presets.cfg by .github/workflows/quest-apk.yml. These keys are
+# what the headset needs (OpenXR, Quest 3 flag, Android 12L+ minimum) and what must stay out of the
+# pack: tests, docs, CI and tooling. The title plate's text is the one doc file that must ship.
+func _check_quest_export_preset() -> void:
+	var cfg := ConfigFile.new()
+	var err := cfg.load("res://export_presets.cfg")
+	_check("export_presets.cfg loads", err == OK)
+	if err != OK:
+		return
+	var preset := ""
+	for section in cfg.get_sections():
+		if section.begins_with("preset.") and not section.contains(".options") and cfg.get_value(section, "name", "") == "Meta Quest":
+			preset = section
+	_check("export preset \"Meta Quest\" exists", preset != "")
+	if preset == "":
+		return
+	var opts := preset + ".options"
+	_check("Quest preset targets Android", cfg.get_value(preset, "platform", "") == "Android")
+	_check("Quest preset uses OpenXR (xr_mode = 1)", int(cfg.get_value(opts, "xr_features/xr_mode", 0)) == 1)
+	_check("Quest 3 support flag is on", bool(cfg.get_value(opts, "meta_xr_features/quest_3_support", false)))
+	_check("Quest APK minimum SDK is 32 or higher (%s)" % str(cfg.get_value(opts, "gradle_build/min_sdk", "")),
+		int(cfg.get_value(opts, "gradle_build/min_sdk", "0")) >= 32)
+	var excluded := PackedStringArray(String(cfg.get_value(preset, "exclude_filter", "")).split(",", false))
+	_check("Quest pack excludes tests/ and docs/ (exclude_filter)",
+		excluded.has("tests/*") and excluded.has("docs/*"))
+	_check("Quest pack excludes CI and tooling folders (ci/, tools/, scripts/, secrets/)",
+		excluded.has("ci/*") and excluded.has("tools/*") and excluded.has("scripts/*") and excluded.has("secrets/*"))
+	var included := PackedStringArray(String(cfg.get_value(preset, "include_filter", "")).split(",", false))
+	_check("Quest pack includes the title plate text (include_filter)",
+		included.has("assets/text/INTRO_TEXT.md") and FileAccess.file_exists("res://assets/text/INTRO_TEXT.md"))
 
 
 func _check(label: String, ok: bool) -> void:
