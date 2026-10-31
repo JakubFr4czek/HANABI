@@ -13,13 +13,13 @@ extends TrainingDummy
 signal boss_defeated(oni: RunOniBoss, hit: Dictionary)
 
 const ONI_SCALE := 1.50
+## Scale of the boss mask node (N3): the shared demon mask, at the size of the old boss mask.
+const ONI_MASK_SCALE := 2.35
 ## Half-thickness of the visible kanabō head: mesh AABB x 0.144 m × 1.45 scale
 ## (0.209 m) → radius 0.105 m. Added to the player capsule radius; the blade
 ## segment below already spans the whole visible head, so no extra reach fudge.
 const KANABO_HIT_RADIUS := 0.105
 
-const ONI_MASK_GLB := preload("res://assets/models/enemies/oni_mask_run.glb")
-const ONI_MASK_NRM := preload("res://assets/models/enemies/oni_mask_run_normal.png")
 const ONI_BODY_GLB := preload("res://assets/models/enemies/oni_body_run.glb")
 const ONI_KANABO_GLB := preload("res://assets/models/enemies/oni_kanabo_run.glb")
 
@@ -27,7 +27,6 @@ var is_dead := false
 ## Open Kirisute wounds (D4 §8): most this many glow at once (Quest budget).
 const MAX_WOUNDS := 2
 var _wounds: Array[MeshInstance3D] = []
-static var _cached_mask_mesh: Mesh
 var _last_hit := {}
 var _flesh := ShaderMaterial.new()
 var _armor := ShaderMaterial.new()
@@ -114,14 +113,18 @@ func _ready() -> void:
 	_robe.set_shader_parameter("procedural_ao", 0.55)
 
 	_mask.shader = WET_SURFACE_SHADER
-	_mask.set_shader_parameter("base_color", Color(0.52, 0.46, 0.38))
+	# The mask is the demon mask shared with the yōkai (N3, CC BY 4.0): its own albedo, ORM and normal.
+	_mask.set_shader_parameter("albedo_texture", YokaiForms.mask_albedo())
+	_mask.set_shader_parameter("orm_texture", YokaiForms.mask_orm())
+	_mask.set_shader_parameter("orm_mode", 1)
+	_mask.set_shader_parameter("base_color", YokaiForms.MASK_TINT)
 	_mask.set_shader_parameter("roughness_dry", 0.58)
 	_mask.set_shader_parameter("roughness_wet", 0.22)
 	_mask.set_shader_parameter("wetness", 0.48)
 	_mask.set_shader_parameter("fill", 2.35)
 	_mask.set_shader_parameter("fog_rim", 1.25)
 	_mask.set_shader_parameter("flash_color", Color(0.9, 0.3, 0.16))
-	_mask.set_shader_parameter("normal_texture", ONI_MASK_NRM)
+	_mask.set_shader_parameter("normal_texture", YokaiForms.mask_normal())
 	_mask.set_shader_parameter("normal_depth", 1.35)
 	_mask.set_shader_parameter("procedural_ao", 0.42)
 	_mask.set_shader_parameter("emission_tint", Color(0.35, 0.32, 0.28))
@@ -326,16 +329,7 @@ static func _oni_kanabo_mesh() -> Mesh:
 
 
 static func _oni_mask_mesh() -> Mesh:
-	if _cached_mask_mesh != null:
-		return _cached_mask_mesh
-	var inst := ONI_MASK_GLB.instantiate()
-	for node in inst.find_children("*", "MeshInstance3D", true, false):
-		var mi := node as MeshInstance3D
-		if mi.mesh:
-			_cached_mask_mesh = mi.mesh
-			break
-	inst.free()
-	return _cached_mask_mesh
+	return YokaiForms.mask_mesh()
 
 
 func _attach_oni_mask(head: RagdollPart) -> void:
@@ -347,12 +341,14 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 	var mesh := _oni_mask_mesh()
 	mask_mi.mesh = mesh if mesh else _fallback_mask_mesh()
 	mask_mi.position = Vector3(0.0, 0.03, 0.16)
-	mask_mi.scale = Vector3(1.36, 1.36, 1.35)
+	# The yōkai mask is ~0.18 m wide; the boss's mask is ~2.35x that (about 0.41 m, as before).
+	mask_mi.scale = Vector3.ONE * ONI_MASK_SCALE
 	mask_mi.material_override = _mask
 	var eye_l := MeshInstance3D.new()
 	var eye_m := SphereMesh.new()
-	eye_m.radius = 0.045
-	eye_m.height = 0.09
+	# Sized to the scaled mask: about 0.05 m eyes on the boss, as before.
+	eye_m.radius = 0.05 / ONI_MASK_SCALE
+	eye_m.height = 2.0 * eye_m.radius
 	eye_l.mesh = eye_m
 	var eye_mat := StandardMaterial3D.new()
 	eye_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -366,7 +362,8 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 	for sx in [-1.0, 1.0]:
 		var e := eye_l.duplicate() as MeshInstance3D
 		e.name = "OniEye_" + ("l" if sx < 0 else "r")
-		e.position = Vector3(0.075 * sx, 0.03, 0.18)
+		# In the mask's sockets (YokaiForms.EYE_*), in the mask's own frame.
+		e.position = Vector3(YokaiForms.EYE_X * sx, YokaiForms.EYE_Y, YokaiForms.EYE_Z)
 		mask_mi.add_child(e)
 	head.add_child(mask_mi)
 
