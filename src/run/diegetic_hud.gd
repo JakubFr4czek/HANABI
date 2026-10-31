@@ -11,8 +11,8 @@ extends Node3D
 ## - under the ring: the element and its seconds, the two ability glyphs (bright
 ##   when ready) and the run line (rank, kills, points, XP, buffs).
 ## It is drawn only while the wrist is raised to the face (the check-the-watch
-## gesture: close, face turned to the eyes, in view), with hysteresis and a short
-## fade. Hidden, its subtree is hidden, so it costs no draw calls. On desktop the
+## gesture: close, forearm level, face turned to the eyes, in view), with hysteresis and
+## a short fade. A hand held upright with its back to the eyes does not show it. Hidden, its subtree is hidden, so it costs no draw calls. On desktop the
 ## same readout is held on H. Nothing is drawn on the katana, and the text sits on the
 ## forearm side of the ring, where the hand mesh falls away (wrist_hud_test).
 
@@ -52,11 +52,15 @@ const ABILITY_FONT := 18
 const STATUS_FONT := 19
 
 ## Show and hide limits: the wrist to the eyes (m), the angle between the readout's
-## face and the eyes (deg), and the fade time (s). Hiding needs the wider limits.
+## face and the eyes (deg), the forearm's lift above level (deg), and the fade time (s).
+## Hiding needs the wider limits.
 const SHOW_DIST := 0.35
 const HIDE_DIST := 0.42
 const SHOW_ANGLE_DEG := 45.0
 const HIDE_ANGLE_DEG := 55.0
+## The forearm lies level when the watch is checked; an upright hand does not show it (P9).
+const SHOW_FOREARM_DEG := 35.0
+const HIDE_FOREARM_DEG := 50.0
 const FADE_SECONDS := 0.15
 ## Desktop: where the readout hangs in front of the camera while H is held.
 const DESKTOP_OFFSET := Vector3(-0.16, -0.14, -0.30)
@@ -332,8 +336,9 @@ func _trigger_wrist_haptic() -> void:
 			ctrl.trigger_haptic_pulse("haptic", 0.0, amp, 0.04, 0.0)
 
 
-## The check-the-watch gesture (XR): the wrist close to the eyes, its face turned to
-## them and in view, with hysteresis so it does not flicker at the edge. Desktop: H held.
+## The check-the-watch gesture (XR): the wrist close to the eyes, its forearm level, its
+## face turned to them and in view, with hysteresis so it does not flicker at the edge.
+## Desktop: H held.
 func _gesture_held() -> bool:
 	if _bound_player is DesktopPlayer:
 		return (_bound_player as DesktopPlayer).wrist_check
@@ -347,8 +352,12 @@ func _gesture_held() -> bool:
 		return false
 	var near_limit := HIDE_DIST if _raised else SHOW_DIST
 	var face_limit := HIDE_ANGLE_DEG if _raised else SHOW_ANGLE_DEG
+	var forearm_limit := HIDE_FOREARM_DEG if _raised else SHOW_FOREARM_DEG
 	var face_deg := rad_to_deg(wrist_unit.global_basis.y.angle_to(to_eye / d))
-	return d < near_limit and face_deg < face_limit and cam.is_position_in_frustum(anchor)
+	# The forearm runs along the wrist's +Z (toward the elbow). Its lift is the angle it makes
+	# with level, whichever way it points, so a hand held up or down reads the same.
+	var forearm_deg := rad_to_deg(asin(clampf(absf(wrist_unit.global_basis.z.y), 0.0, 1.0)))
+	return d < near_limit and face_deg < face_limit and forearm_deg < forearm_limit and cam.is_position_in_frustum(anchor)
 
 
 func _camera() -> Camera3D:
