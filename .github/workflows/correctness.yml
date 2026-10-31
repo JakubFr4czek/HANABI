@@ -63,15 +63,17 @@ jobs:
           line=$(grep -E '^testy: [0-9]+/[0-9]+' ci_out/tests.txt | tail -1)
           pass=$(echo "$line" | sed -E 's/testy: ([0-9]+)\/([0-9]+).*/\1/')
           total=$(echo "$line" | sed -E 's/testy: ([0-9]+)\/([0-9]+).*/\2/')
-          echo "pass=$pass" >> "$GITHUB_OUTPUT"; echo "total=$total" >> "$GITHUB_OUTPUT"
-          [ -n "$pass" ] && [ "$pass" = "$total" ]
+          skipped=$(echo "$line" | sed -nE 's/.*\(([0-9]+) skipped.*/\1/p'); skipped=${skipped:-0}
+          echo "pass=$pass" >> "$GITHUB_OUTPUT"; echo "total=$total" >> "$GITHUB_OUTPUT"; echo "skipped=$skipped" >> "$GITHUB_OUTPUT"
+          # windowed-only tests are reported as SKIP by run_tests.sh: ok only if no FAIL and pass+skipped == total
+          ! grep -q '^FAIL:' ci_out/tests.txt && [ -n "$pass" ] && [ $((pass + skipped)) -eq "$total" ]
       - name: Summary
         if: always()
         run: |
           {
             echo "## Testy headless (tools/run_tests.sh)"
             echo
-            echo "**${{ steps.suite.outputs.pass }}/${{ steps.suite.outputs.total }}** przechodzi"
+            echo "**${{ steps.suite.outputs.pass }}/${{ steps.suite.outputs.total }}** przechodzi (pominięte windowed-only: ${{ steps.suite.outputs.skipped }})"
             echo
             if grep -q '^FAIL:' ci_out/tests.txt 2>/dev/null; then
               echo "### Nieprzechodzące"
