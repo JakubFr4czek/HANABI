@@ -194,14 +194,17 @@ func _rest_left() -> void:
 	sim.set_hand("left", Transform3D(b, sim.head_xf.origin + b * Vector3(-0.22, -0.6, -0.3)))
 
 
-## Left forearm up in front of the face, back of the wrist toward the eyes. The readout
-## (the ring on the back of the wrist) lands about 0.27 m from the eyes: inside the gesture's
-## 0.35 m, as a check-the-watch turn puts it (wrist_hud_test pins the limits).
+## Left forearm level in front of the face, back of the wrist toward the eyes: the check-the-watch
+## pose (P9; an upright hand does not show the readout). The readout (the ring on the back of the
+## wrist) lands about 0.27 m from the eyes: inside the gesture's 0.35 m (wrist_hud_test pins the limits).
 func _raise_wrist() -> void:
 	var b := _body_basis()
 	var ring_at := sim.head_xf.origin + b * Vector3(-0.06, -0.20, -0.26)
 	var to_eye := (sim.head_xf.origin - ring_at).normalized()
-	var z := -(b * Vector3.UP).slide(to_eye).normalized()
+	# The forearm runs level from the wrist back toward the elbow, which is by the body.
+	var z := Vector3.UP.cross(to_eye).normalized()
+	if z.dot(b * Vector3.BACK) < 0.0:
+		z = -z
 	var x := to_eye.cross(z).normalized()
 	var target_basis := Basis(x, to_eye, z)
 	var mount := Basis.from_euler(Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(-14.0)))
