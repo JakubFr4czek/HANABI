@@ -17,6 +17,9 @@ var events: Array[Dictionary] = []
 
 
 func _ready() -> void:
+	# Fixed global seed: the gameplay streams (spawner, brains, ragdoll poses, soul orbs) draw
+	# from it, so the run is reproducible instead of depending on the launch's random seed.
+	seed(20260604)
 	GameEvents.event_logged.connect(func(e: Dictionary): events.append(e))
 	get_tree().create_timer(75.0).timeout.connect(func():
 		print("\nWATCHDOG TIMEOUT in oni_boss_ai_test!")

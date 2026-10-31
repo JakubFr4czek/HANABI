@@ -151,6 +151,7 @@ var _petal_mat: ShaderMaterial
 
 func _ready() -> void:
 	add_to_group("element_system")
+	_rng.seed = randi()
 
 
 func setup(p_run_game: RunGame, p_weapon: HeldWeapon) -> void:

@@ -10,9 +10,16 @@ extends Node
 ## Exit code 0 when everything passed.
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
+## The restart cut: the walk holds this flat distance (m) from the plaque, and a swing starts
+## only within RESTART_REACH_BAND of it.
+const RESTART_REACH := 1.3
+const RESTART_REACH_BAND := 0.15
+## Aim points on the plaque, in its own frame (metres from the centre), tried in turn.
+const RESTART_AIM_SPOTS := [Vector3(0.0, 0.0, 0.0), Vector3(0.07, 0.07, 0.0), Vector3(-0.07, -0.05, 0.0), Vector3(0.05, -0.09, 0.0), Vector3(-0.06, 0.08, 0.0)]
 
 var failures := 0
 var run: RunGame
+var cut_attempts := 0
 var xr: XRPlayer
 var sim: XrSim
 var origin: XROrigin3D
@@ -25,6 +32,9 @@ var _swing_target := Vector3.ZERO
 
 
 func _ready() -> void:
+	# Fixed global seed: the gameplay streams (spawner, brains, ragdoll poses, soul orbs) draw
+	# from it, so the run is reproducible instead of depending on the launch's random seed.
+	seed(20260602)
 	await _run_all()
 	RuntimeGuard.print_summary()
 	_check("the runtime guard stayed clean (%d violations)" % RuntimeGuard.violation_count(), RuntimeGuard.violation_count() == 0)
@@ -129,9 +139,14 @@ func _die_and_restart(tag: String) -> void:
 			break
 		if is_instance_valid(run.restart_ema):
 			_look_at_world(run.restart_ema.global_position)
-			_step_toward(run.restart_ema.global_position, 1.3)
-			if _swing_t < 0.0 and run.restart_ema.is_ready_to_cut() and _flat_dist(run.restart_ema.global_position) <= 1.4:
-				_start_swing_through(run.restart_ema.global_position)
+			_step_toward(run.restart_ema.global_position, RESTART_REACH)
+			var ema_dist := _flat_dist(run.restart_ema.global_position)
+			if _swing_t < 0.0 and run.restart_ema.is_ready_to_cut() and absf(ema_dist - RESTART_REACH) <= RESTART_REACH_BAND:
+				# Each swing aims at the next spot on the plaque: a sweep that misses one spot
+				# (the blade does not always follow the hand) is retried across the face.
+				var aim_at := run.restart_ema.global_transform * (RESTART_AIM_SPOTS[cut_attempts % RESTART_AIM_SPOTS.size()] as Vector3)
+				cut_attempts += 1
+				_start_swing_through(aim_at)
 			if OS.get_cmdline_user_args().has("--verbose-cards") and i % 15 == 0:
 				var ro := run.restart_ema
 				var inv := ro._card_root.global_transform.affine_inverse()
@@ -174,9 +189,16 @@ func _flat_dist(p: Vector3) -> float:
 	return Vector2(p.x - cam.global_position.x, p.z - cam.global_position.z).length()
 
 
-## Walk with the left stick until [param p] is within [param reach].
+## Walk with the left stick to [param reach] from [param p], forward or back: where a fight
+## ends can leave the player nearer or farther than the restart swing is set up for.
 func _step_toward(p: Vector3, reach: float) -> void:
-	sim.set_stick("left", Vector2(0.0, 0.6) if _flat_dist(p) > reach else Vector2.ZERO)
+	var d := _flat_dist(p)
+	var stick := Vector2.ZERO
+	if d > reach + RESTART_REACH_BAND * 0.5:
+		stick = Vector2(0.0, 0.6)
+	elif d < reach - RESTART_REACH_BAND * 0.5:
+		stick = Vector2(0.0, -0.6)
+	sim.set_stick("left", stick)
 
 
 func _body_basis() -> Basis:

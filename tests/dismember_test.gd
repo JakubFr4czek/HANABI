@@ -15,6 +15,9 @@ var director: WaveDirector
 
 
 func _ready() -> void:
+	# Fixed global seed: the gameplay streams (spawner, brains, ragdoll poses, soul orbs) draw
+	# from it, so the run is reproducible instead of depending on the launch's random seed.
+	seed(20260603)
 	await _run_all()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -291,6 +294,8 @@ func _chunk_count() -> int:
 func _spawn(at: Vector3, hp: float) -> Yokai:
 	at.y = float(director.ground_height.call(at.x, at.z))
 	var y := director.spawn_enemy_at(at, Vector3.ZERO)
+	# Fixed pose variation and sway: the body's random posture moves the tear and the landing.
+	y.set_motion_seed(7)
 	y.configure_kind(Yokai.Kind.SWARM, Elements.NONE, hp)
 	y.brain.set_physics_process(false) if y.brain else null
 	_spare_katana(y)
