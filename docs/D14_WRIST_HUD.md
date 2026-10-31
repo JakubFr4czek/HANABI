@@ -19,6 +19,7 @@ Dokumentacja realizacji zadania D14 zgodnie z wytycznymi GDD i ustaleniami Jakub
 - HUD jest renderowany **wyłącznie** po wykonaniu gestu spojrzenia na nadgarstek:
   - Odległość od oczu (kamery): `< 0.35 m` (histereza wygaszania przy `> 0.42 m`).
   - Kąt wewnętrznej/wierzchniej strony nadgarstka do wektora wzroku: `< 45°` (histereza wygaszania przy `> 55°`).
+  - Przedramię leży poziomo: uniesienie przedramienia nad poziom `< 35°` (histereza wygaszania przy `> 50°`). Ręka trzymana pionowo, z grzbietem do oczu, nie pokazuje odczytu (P9).
   - Obecność w polu widzenia kamery (`cam.is_position_in_frustum`).
   - Płynny fade in/out trwający `0.15 s`.
 - Gdy ręka jest opuszczona lub odwrócona, całe poddrzewo jest wyłączane (`wrist_face.visible = false`), co daje **0 dodatkowych draw calls**.

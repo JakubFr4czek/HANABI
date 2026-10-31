@@ -3,8 +3,9 @@ extends Node
 ## - Clearance: the ring and its text rows never sit in the hand mesh or the katana, at
 ##   the eye tilt limits and in several katana poses (the readout is a plate in the bracer
 ##   frame; any mesh vertex above it inside its footprint is clipping).
-## - Gesture: shown only when the wrist is close to the eyes, its face turned to them and
-##   in view; hysteresis at both edges; a 0.15 s fade; nothing drawn while hidden.
+## - Gesture: shown only when the wrist is close to the eyes, its forearm level, its face
+##   turned to them and in view; hysteresis at both edges; a 0.15 s fade; nothing drawn while
+##   hidden. An upright hand (forearm vertical, back to the eyes) keeps it hidden (P9).
 ## - Ring: fill = HP share; colour teal -> amber -> red; pulse only when critical.
 ## - No flame (D22): the ring's shader has no fire; the clear centre holds the kcal figure.
 ## - Figure (D22): the white kcal number, with its unit under it, is centred in the clear ring,
@@ -133,6 +134,19 @@ func _clearance_and_gesture() -> void:
 	await _frames(20)
 	_check("face turned away (120 deg): readout hidden", not hud.wrist_face.visible)
 
+	# P9: the watch is checked with the forearm level. The same face turned to the eyes, with
+	# the forearm standing up (a hand held upright, its back to the eyes), stays hidden.
+	_place_readout(hud, cam, 0.25, 15.0, 80.0)
+	await _frames(20)
+	_check("upright hand (forearm 80 deg), face to the eyes: readout hidden", not hud.wrist_face.visible and _drawn_under(hud) == 0)
+
+	_place_readout(hud, cam, 0.25, 15.0, 25.0)
+	await _frames(20)
+	_check("forearm lifted 25 deg, face to the eyes: readout shown", hud.wrist_face.visible)
+	_place_readout(hud, cam, 0.25, 15.0)
+	await _frames(20)
+	_check("forearm level, face to the eyes: readout shown again", hud.wrist_face.visible)
+
 	# Hysteresis: visible at 0.30 m stays visible to 0.38 m; hidden at 0.38 m stays hidden.
 	_place_readout(hud, cam, 0.30, 15.0)
 	await _frames(20)
@@ -172,9 +186,11 @@ func _clearance_and_gesture() -> void:
 
 
 ## Places the readout's centre [param dist] metres from the eyes (down and to the left of
-## the view), its face turned [param face_deg] off the eyes. The eyes are read live: the XR
-## body sinks while the test runs.
-func _place_readout(hud: DiegeticHud, cam: Node3D, dist: float, face_deg: float) -> void:
+## the view), its face turned [param face_deg] off the eyes. The forearm (the wrist's +Z,
+## toward the elbow) lies level, the watch check, unless [param forearm_deg] lifts it: 90 is
+## straight up or down, with the elbow below. The eyes are read live: the XR body sinks while
+## the test runs.
+func _place_readout(hud: DiegeticHud, cam: Node3D, dist: float, face_deg: float, forearm_deg := 0.0) -> void:
 	var eye := cam.global_position
 	var toward := (-cam.global_basis.z + cam.global_basis.x * 0.25 - Vector3.UP * 0.3).normalized()
 	var centre := eye + toward * dist
@@ -183,11 +199,14 @@ func _place_readout(hud: DiegeticHud, cam: Node3D, dist: float, face_deg: float)
 	if axis.length_squared() < 1e-6:
 		axis = Vector3.RIGHT
 	var face := to_eye.rotated(axis.normalized(), deg_to_rad(face_deg))
-	var x := Vector3.RIGHT.cross(face)
-	if x.length_squared() < 1e-6:
-		x = Vector3.FORWARD.cross(face)
-	x = x.normalized()
-	var z := x.cross(face).normalized()
+	# Level: across the face, perpendicular to it. Lifted: the in-plane direction that points down,
+	# blended in by the lift angle (the elbow below the hand).
+	var level := Vector3.UP.cross(face).normalized()
+	var down := -(Vector3.UP - face * Vector3.UP.dot(face)).normalized()
+	var lift := deg_to_rad(forearm_deg)
+	var z := (level * cos(lift) + down * sin(lift)).normalized()
+	var x := face.cross(z).normalized()
+	z = x.cross(face).normalized()
 	hud.wrist_unit.global_transform = Transform3D(Basis(x, face, z), centre)
 
 
