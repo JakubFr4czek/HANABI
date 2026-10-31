@@ -2,3 +2,6 @@ self-hosted-runner:
   labels:
     - hanabi
     - box
+    - raspberka
+    - arm64
+    - pi
