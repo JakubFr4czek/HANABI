@@ -174,7 +174,7 @@ var _total_mass := 0.0
 
 
 func _ready() -> void:
-	_pose_rng.randomize()
+	_pose_rng.seed = randi()
 	_facing_yaw = global_rotation.y
 	_target_yaw = _facing_yaw
 	anchor_position = global_position

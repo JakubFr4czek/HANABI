@@ -45,7 +45,7 @@ const BEHIND_SECTOR_HALF := deg_to_rad(60.0)
 
 
 func _ready() -> void:
-	_rng.randomize()
+	_rng.seed = randi()
 
 
 ## Pooled bodies sit off the tree, so nothing frees them with the scene:
@@ -71,7 +71,7 @@ func start_director() -> void:
 	run_seconds = 0.0
 	_planner.profile = get_profile()
 	_planner.reset()
-	_planner.rng.randomize()
+	_planner.rng.seed = randi()
 	active = true
 	started_this_run = true
 

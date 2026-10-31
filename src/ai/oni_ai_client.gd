@@ -77,7 +77,7 @@ var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
-	_rng.randomize()
+	_rng.seed = randi()
 	_http = HTTPRequest.new()
 	_http.name = "AiHttp"
 	_http.timeout = TIMEOUT_SECONDS

@@ -37,7 +37,7 @@ var _rng := RandomNumberGenerator.new()
 
 func setup(p_body: Node3D, p_profile: EnemyProfile) -> void:
 	super.setup(p_body, p_profile)
-	_rng.randomize()
+	_rng.seed = randi()
 	_strafe_sign = -1.0 if _rng.randf() < 0.5 else 1.0
 	_cooldown = _rng.randf_range(0.15, 0.55)
 
