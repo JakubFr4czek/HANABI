@@ -63,6 +63,18 @@ func _run_all() -> void:
 
 	_check("Draw calls under Quest budget (%d <= %d)" % [peak.draw_calls, RunPerfBudget.MAX_DRAW_CALLS],
 		peak.draw_calls <= RunPerfBudget.MAX_DRAW_CALLS)
+	# N3: every yōkai at the hard cap (8 bodies) stays inside its own triangle and draw budget.
+	var worst_tris := 0
+	var worst_draws := 0
+	for y in run.find_children("*", "Yokai", true, false):
+		var cost := RunPerfProbe.yokai_cost(y as Yokai)
+		worst_tris = maxi(worst_tris, cost.tris)
+		worst_draws = maxi(worst_draws, cost.draws)
+	print("PERF yokai worst tris=%d draws=%d" % [worst_tris, worst_draws])
+	_check("Each yōkai stays within %d triangles (worst %d)" % [RunPerfBudget.MAX_YOKAI_TRIANGLES, worst_tris],
+		worst_tris <= RunPerfBudget.MAX_YOKAI_TRIANGLES)
+	_check("Each yōkai stays within %d draw surfaces (worst %d)" % [RunPerfBudget.MAX_YOKAI_DRAWS, worst_draws],
+		worst_draws <= RunPerfBudget.MAX_YOKAI_DRAWS)
 	_check("Triangle budget via primitives (%d <= %d)" % [peak.primitives, RunPerfBudget.MAX_PRIMITIVES],
 		peak.primitives <= RunPerfBudget.MAX_PRIMITIVES)
 	_check("Frame process time under budget (%.2f ms <= %.1f ms)"
