@@ -1,0 +1,195 @@
+# Build APK na Quest 3 z preset "Meta Quest" (export_presets.cfg) na runnerze GitHub (ubuntu-latest).
+# Artefakt `hanabi-quest-apk` (7 dni) do `adb install -r` / Meta Quest Developer Hub; instrukcja: docs/QUEST_TEST.md.
+# Uruchamia się ręcznie (workflow_dispatch), na pushu do gałęzi build/quest-apk i na tagach v*.
+# Nie blokuje merge'a i nie jest self-hosted: Android SDK jest preinstalowany na ubuntu-latest.
+# Podpis: debug keystore generowany raz i trzymany w cache, żeby kolejne buildy miały ten sam podpis
+# (inaczej `adb install -r` odrzuca APK). To klucz debugowy, nie release — brak sekretów w repo.
+name: quest-apk
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/quest-apk
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hanabi-quest-apk-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  GODOT_VERSION: "4.7.2"
+  GODOT_BASE_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable
+  GODOT_TEMPLATES_DIR: ${{ github.workspace }}/.quest-templates
+
+jobs:
+  apk:
+    name: Export Meta Quest APK (debug, arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Godot editor 4.7.2
+        uses: actions/cache@v4
+        with:
+          path: ~/godot-bin
+          key: godot-editor-4.7.2-linux
+
+      - name: Godot editor 4.7.2
+        run: |
+          set -euo pipefail
+          dir="$HOME/godot-bin"
+          bin="$dir/Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          if [ ! -x "$bin" ]; then
+            mkdir -p "$dir"
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/godot.zip" "$GODOT_BASE_URL/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+            unzip -o -q "$RUNNER_TEMP/godot.zip" -d "$dir"
+            chmod +x "$bin"
+          fi
+          "$bin" --version
+          echo "GODOT=$bin" >> "$GITHUB_ENV"
+
+      - name: Cache Android export templates 4.7.2
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates/4.7.2.stable
+          key: godot-android-templates-4.7.2
+
+      - name: Export templates 4.7.2 (Android only)
+        run: |
+          set -euo pipefail
+          dest="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          if [ ! -f "$dest/android_debug.apk" ] || [ ! -f "$dest/android_source.zip" ]; then
+            tpz="$RUNNER_TEMP/export_templates.tpz"
+            curl -fsSL --retry 3 -o "$tpz" "$GODOT_BASE_URL/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+            mkdir -p "$dest"
+            # Only the Android templates (plus version.txt) are unpacked; the rest of the .tpz is not needed.
+            unzip -o -q "$tpz" 'templates/android_*' 'templates/version.txt' -d "$RUNNER_TEMP/tpl"
+            cp -a "$RUNNER_TEMP/tpl/templates/." "$dest/"
+            rm -f "$tpz"
+          fi
+          echo "${GODOT_VERSION}.stable" > "$dest/version.txt"
+          ls -la "$dest"
+
+      - name: Android SDK (preinstalled on the runner; add missing platform/build-tools)
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$sdk" ] || [ ! -d "$sdk" ]; then echo "::error::Android SDK not found on runner"; exit 1; fi
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          sdkmanager="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          for api in 35 36; do
+            [ -d "$sdk/platforms/android-$api" ] && continue
+            if [ -x "$sdkmanager" ]; then yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true; "$sdkmanager" "platforms;android-$api"; fi
+          done
+          for bt in 35.0.0 36.0.0; do
+            [ -d "$sdk/build-tools/$bt" ] && continue
+            if [ -x "$sdkmanager" ]; then yes | "$sdkmanager" --licenses >/dev/null 2>&1 || true; "$sdkmanager" "build-tools;$bt"; fi
+          done
+          ls "$sdk/platforms" "$sdk/build-tools"
+
+      - name: Cache debug keystore (same signature across builds, so adb install -r works)
+        uses: actions/cache@v4
+        with:
+          path: ~/.hanabi-quest-keystore
+          key: hanabi-quest-debug-keystore-v1
+
+      - name: Godot editor settings (Android SDK, JDK, debug keystore)
+        run: |
+          set -euo pipefail
+          keystore_dir="$HOME/.hanabi-quest-keystore"
+          mkdir -p "$keystore_dir"
+          ks="$keystore_dir/debug.keystore"
+          if [ ! -f "$ks" ]; then
+            keytool -genkeypair -v -keystore "$ks" -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          cfg="$HOME/.config/godot/editor_settings-4.7.tres"
+          mkdir -p "$(dirname "$cfg")"
+          java_home="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")}"
+          {
+            echo '[gd_resource type="EditorSettings" format=3]'
+            echo
+            echo '[resource]'
+            echo "export/android/java_sdk_path = \"$java_home\""
+            echo "export/android/android_sdk_path = \"$ANDROID_HOME\""
+            echo "export/android/debug_keystore = \"$ks\""
+            echo 'export/android/debug_keystore_user = "androiddebugkey"'
+            echo 'export/android/debug_keystore_pass = "android"'
+          } > "$cfg"
+          cat "$cfg"
+
+      - name: Import project (headless)
+        run: |
+          set -euo pipefail
+          timeout 900 "$GODOT" --headless --path . --import > import.log 2>&1 || code=$?
+          if [ "${code:-0}" -eq 124 ]; then echo "::error::Godot import timed out"; exit 1; fi
+          grep -E "SCRIPT ERROR|ERROR:" import.log | head -20 || true
+
+      - name: Export APK (Meta Quest preset)
+        id: export
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          mkdir -p build/quest
+          install_flag=()
+          if [ ! -d android/build ]; then install_flag=(--install-android-build-template); fi
+          timeout 1700 "$GODOT" --headless --path . "${install_flag[@]}" \
+            --export-debug "Meta Quest" build/quest/hanabi.apk 2>&1 | tee export.log
+          test -s build/quest/hanabi.apk
+
+      - name: Inspect APK (aapt2 badging)
+        if: always() && steps.export.outcome == 'success'
+        run: |
+          set -uo pipefail
+          aapt2=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/aapt2
+          "$aapt2" dump badging build/quest/hanabi.apk > badging.txt 2>&1 || true
+          grep -E "^package|sdkVersion|targetSdkVersion|uses-feature|uses-permission|launchable-activity" badging.txt | head -40
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Quest APK"
+            if [ -s build/quest/hanabi.apk ]; then
+              bytes=$(stat -c %s build/quest/hanabi.apk)
+              echo "- File: \`hanabi.apk\`, size **$(( bytes / 1048576 )) MB** ($bytes bytes)"
+              echo "- SHA-256: \`$(sha256sum build/quest/hanabi.apk | cut -d' ' -f1)\`"
+              echo "- Commit: \`${GITHUB_SHA:0:12}\` on \`${GITHUB_REF_NAME}\`"
+            else
+              echo "- **No APK produced**: see the export log (artifact \`hanabi-quest-export-log\`)."
+            fi
+            echo
+            echo "Export: \`${{ steps.export.outcome }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APK
+        if: steps.export.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hanabi-quest-apk
+          path: build/quest/hanabi.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload export log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hanabi-quest-export-log
+          path: |
+            export.log
+            import.log
+          if-no-files-found: ignore
+          retention-days: 7
