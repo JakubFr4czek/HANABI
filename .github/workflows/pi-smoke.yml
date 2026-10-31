@@ -1,0 +1,29 @@
+# Smoke check for the Raspberry Pi runner (raspberka, linux-arm64).
+# Only proves the runner picks up jobs and Godot 4.7.2 arm64 runs headless; nothing else targets this runner yet.
+name: pi-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ci/raspberka]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hanabi-pi-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Pi runner smoke
+    runs-on: [self-hosted, raspberka]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner info
+        run: uname -a; nproc; free -m; df -h .
+      - name: Godot version
+        run: ~/ci-tools/godot/Godot_v4.7.2-stable_linux.arm64 --version
+      - name: Godot headless project load
+        run: timeout 600 ~/ci-tools/godot/Godot_v4.7.2-stable_linux.arm64 --headless --path . --quit
