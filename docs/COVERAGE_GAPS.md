@@ -32,14 +32,16 @@ i limit 200 oczekujących komunikatów.
 
 ## `src/player/xr_player.gd` (martwe gałęzie, 82% po D16)
 
+Zapis wysokości oczu po puszczeniu B (`_save_view_settings`) jest pokryty przez
+`xr_input_test`: ustawienia idą do pliku testowego (`VrComfortSettings.settings_path`),
+a nie do `user://hanabi_vr.cfg`, więc realna konfiguracja nie jest ruszana.
+Liczba 82% pochodzi z pomiaru sprzed tego testu.
+
 Pozostałe nieosiągnięte linie to:
 
 - Gałęzie `else` dla `VrComfortSettings == null` (ścieżka zapisu/odczytu do `ConfigFile`
   i `VIEW_SETTINGS_PATH`). Autoload `VrComfortSettings` zawsze istnieje, więc to martwy kod.
   Usunięcie go to zmiana logiki gry, a tego nie robimy w ramach pokrycia.
-- Zapis ustawień po puszczeniu B po zmianie wysokości lub po recenter (`_save_view_settings`).
-  Taki zapis trafia do realnej konfiguracji użytkownika. Test trzyma B do końca przebiegu
-  i nigdy go nie puszcza, żeby nie dotknąć pliku.
 - `teleport_feet` bez metody `teleport` i `feet_position` bez `PlayerBody`: nie występują
   w scenie gracza.
 
