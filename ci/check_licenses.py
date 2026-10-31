@@ -3,6 +3,9 @@
 
 Every file under assets/ must be covered by a path in LICENSES.md (or CREDITS.md),
 and the licence on that row must be CC0 / CC BY / public domain / project-own.
+Accepted licence cells: CC0, CC BY (not SA/NC/ND), public domain, SIL OFL 1.1 (fonts) and the explicit
+marker "Project-own art" (own or AI-generated project art, see the rule in ci/README.md). Nothing else is waved through
+by name: a file with no row still fails, and a row with another licence still needs a human look.
 Paths are read from `backtick` tokens. A token may be a file, a glob (`sword.*.ogg`)
 or a folder (`assets/fonts/`); a token without a folder (`oni_mask_run_normal.png`)
 is relative to the folder of the previous token on the same line, as the files use it.
@@ -23,7 +26,7 @@ import sys
 IGNORED_SUFFIXES = (".import", ".uid", ".md", ".gdignore", ".unwrap_cache")
 IGNORED_NAMES = re.compile(r"^(LICEN[CS]E|COPYING|OFL)[^/]*$", re.I)
 OK_LICENCE = re.compile(r"\bCC0\b|CC[ -]?BY(?![ -]?(SA|NC|ND))|public domain|project[- ]own|project author|"
-                        r"HANABI\b|own asset|procedural|synthesi[sz]ed|no recordings", re.I)
+                        r"HANABI\b|own asset|procedural|synthesi[sz]ed|no recordings|SIL OFL 1\.1|Project-own art", re.I)
 WARN_LICENCE = re.compile(r"\bOFL\b|SIL|MIT|Apache|CC[ -]?BY[ -]?SA|commercial", re.I)
 TOKEN = re.compile(r"`([^`]+)`")
 
