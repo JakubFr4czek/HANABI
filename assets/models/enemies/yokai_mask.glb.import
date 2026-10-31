@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://boeneknkwkkva"
-path="res://.godot/imported/oni_mask_run.glb-b06666f6fee3f8b64048e012bf72e330.scn"
+uid="uid://x8mf7xad1iwv"
+path="res://.godot/imported/yokai_mask.glb-c0cc465d1cd388bc0376743afd738574.scn"
 
 [deps]
 
-source_file="res://assets/models/enemies/oni_mask_run.glb"
-dest_files=["res://.godot/imported/oni_mask_run.glb-b06666f6fee3f8b64048e012bf72e330.scn"]
+source_file="res://assets/models/enemies/yokai_mask.glb"
+dest_files=["res://.godot/imported/yokai_mask.glb-c0cc465d1cd388bc0376743afd738574.scn"]
 
 [params]
 
