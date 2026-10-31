@@ -1,11 +1,7 @@
-Oni boss mask: assets/models/enemies/oni_mask_run.glb
-Normal map: assets/models/enemies/oni_mask_run_normal.png
-
-License: CC0 1.0 — project-authored sculpt (§17 search found no suitable
-account-free CC0 GLB on Poly Haven / Kenney / OpenGameArt).
-
-Generator: tools/gen_oni_mask_glb.py (~1.1k verts, horns/brows/fangs + baked normal).
-
-Regenerate: python3 tools/gen_oni_mask_glb.py
+Oni boss mask: superseded (N3). The Oni and the yōkai now wear the same demon mask,
+assets/models/enemies/yokai_mask.glb (+ yokai_mask_albedo/orm/normal.png).
+Licence: CC BY 4.0, "Japanese demon mask" by Eques_inferno (https://sketchfab.com/3d-models/japanese-demon-mask-da21beea26034da9b889ec075bec6207),
+modified (decimated, retextured). Baked by tools/bake_yokai_mask.py. The old procedural mask
+(tools/gen_oni_mask_glb.py) is no longer used and its files were removed.
 
 Oni body + kanabō: oni_body_run.glb, oni_kanabo_run.glb (CC0 1.0, tools/gen_oni_body_glb.py).

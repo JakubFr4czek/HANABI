@@ -30,7 +30,8 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Run forest torii (distant MultiMesh): procedural torii gate from **polyfork.dev** (commercial/CC0 kit, no attribution required; credited here by choice)
 - Interactive Torii gate & andon lantern: hexagonal paper andon with eaves and ribs, procedural mesh by project author (CC0)
 - Custom shaders (blade rim fresnel, katana steel edge light, wrist element plate, torii halo): project author (CC0)
-- Oni boss: mask `oni_mask_run.glb` + normal map; body `oni_body_run.glb` + kanabō `oni_kanabo_run.glb` (project CC0, `tools/gen_oni_mask_glb.py`, `tools/gen_oni_body_glb.py`; §17/§21 no account-free external boss mesh)
+- Oni boss: body `oni_body_run.glb` + kanabō `oni_kanabo_run.glb` (project CC0, `tools/gen_oni_body_glb.py`; §17/§21 no account-free external boss mesh); mask: the demon mask below.
+- Demon mask (yōkai faces and the Oni boss mask): "Japanese demon mask" by Eques_inferno (https://sketchfab.com/3d-models/japanese-demon-mask-da21beea26034da9b889ec075bec6207), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (decimated to 1.7k triangles, retextured: albedo, ORM and normal map at 1K, `tools/bake_yokai_mask.py`).
 - Memorial stele engraving font: **Yuji Boku** (Kinuta, SIL OFL), `assets/fonts/YujiBoku-Regular.ttf`
 - Skill-tree menu Latin lettering: **Cinzel** (The Cinzel Project Authors, SIL OFL 1.1), `assets/fonts/Cinzel-Variable.ttf`
 - Boot splash films: "HANABI" firework film (`assets/splash/hanabi.ogv`, its frame is the boot still `assets/splash/hanabi_boot.png`) and "NANJO" studio film (`assets/splash/nanjo.ogv`): **Nanjo (original)**, the studio's own work; re-encoded to 1280x720 Theora for the game (`assets/splash/`)
