@@ -517,7 +517,7 @@ func _update_air_steps(delta: float) -> void:
 
 
 func _build_visuals() -> void:
-	_rng.randomize()
+	_rng.seed = randi()
 	_shadow = MeshInstance3D.new()
 	_shadow.name = "SeizaShadow"
 	var plane := PlaneMesh.new()

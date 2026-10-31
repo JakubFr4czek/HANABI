@@ -33,6 +33,7 @@ func _run() -> void:
 
 	# Spawns are recorded with the view yaw they were made under (a dict: lambdas copy ints).
 	var sim := {"yaw": 0.0}
+	var last_view := Vector3.ZERO
 	var spawned: Array[Dictionary] = []
 	director.enemy_spawned.connect(func(y: Yokai) -> void:
 		spawned.append({"pos": y.global_position, "yaw": sim.yaw}))
@@ -40,7 +41,8 @@ func _run() -> void:
 	for step in int(SIM_SECONDS / STEP):
 		# The view turns a full circle every ~14 s, so every sector passes over the spawner.
 		sim.yaw = step * STEP * 0.45
-		director.step_director(STEP, center, Vector3(sin(sim.yaw), 0.0, cos(sim.yaw)))
+		last_view = Vector3(sin(sim.yaw), 0.0, cos(sim.yaw))
+		director.step_director(STEP, center, last_view)
 		if step % 30 == 29:
 			# Kill-and-clear every 3 s so the planner keeps spawning for the whole 10 min.
 			director.clear_enemies()
@@ -68,7 +70,8 @@ func _run() -> void:
 	director.clear_enemies()
 
 	# Straggler recall: a yōkai left 60 m behind the player is pulled into the ring, not behind.
-	var view := Vector3(0.0, 0.0, 1.0)
+	# The recall works from the view the director was last stepped with, so measure from that view.
+	var view := last_view
 	var far := center + Vector3(0.0, 0.0, -60.0)
 	far.y = run.forest_world.height_at(far.x, far.z)
 	var left := director.spawn_enemy_at(far, center)

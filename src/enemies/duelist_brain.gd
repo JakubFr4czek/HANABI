@@ -146,7 +146,7 @@ func setup(p_body: Node3D, p_profile: EnemyProfile) -> void:
 			difficulty = p_profile.difficulty.duplicate()
 		else:
 			difficulty = DuelistDifficulty.preset(String(t.get("difficulty", "normal")))
-	_rng.randomize()
+	_rng.seed = randi()
 
 
 ## Back to a calm guard (room reset).

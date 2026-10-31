@@ -57,7 +57,7 @@ static func burst_from(source: Node3D, parent: Node, count: int, push: Vector3 =
 	s.global_transform = Transform3D.IDENTITY
 	tint = tint.clamp()
 	var rng := RandomNumberGenerator.new()
-	rng.randomize()
+	rng.seed = randi()
 	for i in count:
 		# Pick a mesh by volume, then a point inside its box.
 		var pick := rng.randf() * total

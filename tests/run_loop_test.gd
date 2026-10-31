@@ -19,6 +19,9 @@ var failures := 0
 
 
 func _ready() -> void:
+	# Fixed global seed: the gameplay streams (spawner, brains, ragdoll poses, soul orbs) draw
+	# from it, so the run is reproducible instead of depending on the launch's random seed.
+	seed(20260601)
 	await _run_all()
 	if FileAccess.file_exists(TEST_SAVE_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_SAVE_PATH))
@@ -325,14 +328,19 @@ func _spawn_pacing_checks(run: RunGame) -> void:
 		head.is_position_in_frustum(ahead + Vector3(0.0, 0.9, 0.0)))
 	var drawn := 0
 	var drawn_blocked := 0
+	var placed := 0
 	for i in 300:
 		var pos := director.find_spawn_point(center, forward)
+		# Vector3.INF is the spawner's "no legal spot this tick" (the spawn is skipped): not a point to test.
+		if pos == Vector3.INF:
+			continue
+		placed += 1
 		if head.is_position_in_frustum(pos + Vector3(0.0, 0.9, 0.0)):
 			drawn += 1
 		if not director.is_clear_of_world(pos):
 			drawn_blocked += 1
-	_check("300 spawn points from the spawner: none in the camera frame (%d), none in geometry (%d)" % [drawn, drawn_blocked],
-		drawn == 0 and drawn_blocked == 0)
+	_check("300 spawn points from the spawner (%d placed): none in the camera frame (%d), none in geometry (%d)" % [placed, drawn, drawn_blocked],
+		placed > 0 and drawn == 0 and drawn_blocked == 0)
 	director.stop_director()
 	director.clear_enemies()
 

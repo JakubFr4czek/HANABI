@@ -39,7 +39,7 @@ var _rng := RandomNumberGenerator.new()
 func _ready() -> void:
 	# Keeps playing while a menu pauses the game (ducked by Sfx.set_pause_ducking).
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_rng.randomize()
+	_rng.seed = randi()
 	_wind = AudioStreamPlayer.new()
 	_wind.name = "ForestWind"
 	_wind.stream = _looped(WIND)
