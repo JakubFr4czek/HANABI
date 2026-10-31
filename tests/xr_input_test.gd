@@ -4,15 +4,19 @@ extends Node
 ## (toggle attacks, recenter, eye height saved on release), grip blocking the view
 ## buttons, the off-hand charge trigger, thumbstick click cycling the blade's element,
 ## the parry echo on the free hand, and the glove dressing.
-##   godot --headless --path . --fixed-fps 90 res://tests/xr_input_test.tscn -- --desktop
-## Exit code 0 when everything passed.
+##   godot --headless --path . res://tests/xr_input_test.tscn -- --desktop
+## Exit code 0 when everything passed. Timing does not depend on the engine's frame rate:
+## the test steps XRPlayer itself with FRAME_DELTA, so --fixed-fps is not needed.
 
 const PLAYER_SCENE := preload("res://scenes/player/xr_player.tscn")
 const KATANA_SCENE := preload("res://scenes/weapons/katana.tscn")
 const KANABO_SCENE := preload("res://scenes/weapons/kanabo.tscn")
 const SETTINGS_TEST_FILE := "xr_input_test.cfg"
 const SETTINGS_TEST_PATH := "user://" + SETTINGS_TEST_FILE
-## Frame counts at the fixed 90 Hz tick: a tap stays well inside TAP_MAX_SEC (0.35 s),
+## One physics-rate frame. XRPlayer times its button holds from the _process delta, so the
+## test feeds it this exact step each frame instead of the engine's wall-clock delta.
+const FRAME_DELTA := 1.0 / 90.0
+## Frame counts at FRAME_DELTA: a tap stays well inside TAP_MAX_SEC (0.35 s),
 ## a hold clears RECENTER_HOLD_SEC (0.6 s), and the Menu hold needs 1.0 s.
 const TAP_FRAMES := 8
 const HOLD_FRAMES := 80
@@ -53,6 +57,8 @@ func _run() -> void:
 		xr.remove_child(start_xr)
 		start_xr.free()
 	add_child(xr)
+	# _frames() steps XRPlayer with FRAME_DELTA; the engine must not step it too.
+	xr.set_process(false)
 	katana = KATANA_SCENE.instantiate() as HeldWeapon
 	kanabo = KANABO_SCENE.instantiate() as HeldWeapon
 	add_child(katana)
@@ -409,3 +415,4 @@ func _check(label: String, ok: bool) -> void:
 func _frames(n: int) -> void:
 	for _i in n:
 		await get_tree().process_frame
+		xr._process(FRAME_DELTA)
