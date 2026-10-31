@@ -28,6 +28,20 @@ więc minuty GitHub Actions nie są zużywane. Każdy workflow ma własną grup�
 - `ci/box_tools_check.sh` failuje krok z listą brakujących narzędzi zamiast instalować je w jobie.
 - `.github/actionlint.yaml` deklaruje etykiety runnera dla actionlint.
 
+## Licencje assetów (`ci/check_licenses.py`)
+
+Każdy plik w `assets/` musi mieć wiersz w `LICENSES.md` lub `CREDITS.md` (ścieżka w backtickach, folder lub glob).
+Akceptowana licencja w komórce wiersza:
+
+- CC0 / CC BY (bez SA/NC/ND) / public domain,
+- **SIL OFL 1.1** – tylko dla fontów, z autorem i plikiem licencji w wierszu,
+- **`Project-own art`** – własna grafika projektu, także AI-generated; znacznik musi być w wierszu wprost
+  (obecnie: `project art` w ikonach i splashu to `Project-own art, AI-generated for HANABI by Nanjo`).
+  Ogólne słowa typu „projekt” nie wystarczą.
+
+Plik bez wiersza daje błąd (exit 1); inna licencja też. Skrypt nie ma listy wyjątków po nazwie pliku.
+Przy dodawaniu assetu: wiersz w `LICENSES.md`, atrybucja w `CREDITS.md`, a dla CC BY – także w grze.
+
 ## Lokalnie
 
 ```sh

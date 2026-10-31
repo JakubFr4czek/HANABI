@@ -20,7 +20,7 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 - Bonshō temple bell (run start toll, Oni boss arrival, Torii gate imbue): authentic field recording at Chōmei-ji (長命寺), Shiga Prefecture, Japan by **Jnn** (Wikimedia Commons, CC BY 2.1 JP / FAL / CC BY-SA / GFDL), modified (DC offset removed, attack trimmed, resampled to 44.1 kHz, volume normalized to -1 dBFS, tuned per cue), `assets/audio/sfx/bonsho/`
 - Forest wind bed, Torii gate fūrin (wind chime) & element imbue cues: procedural WAV in `assets/audio/sfx/hanabi_proc/` (project author, CC0)
 - Katana grab whisper (`grab_steel_0.wav`) and forest crickets loop (`crickets_loop.wav`): procedural WAV from `tools/gen_d13_audio.py` (project author, CC0)
-- App icon and boot splash: HANABI logo art (`assets/icons/`, `assets/splash/hanabi_boot.png`), built from the project's own splash art and firework graphic (AI-generated, see the asset pack README)
+- App icon and boot splash: HANABI logo art (`assets/icons/`, `assets/splash/hanabi_boot.png`), built from the project's own splash art and firework graphic — Project-own art, AI-generated for HANABI by Nanjo (see the asset pack README)
 - Storm rain + thunder: Kresiek The Furry, WuxiaScrub, OpenGameArt CC0 in `assets/audio/sfx/cc0_storm/` (see `LICENSE.txt`)
 - Distant matsuri fireworks (D18): the far boom reuses Kenney Impact `thunder_impact_heavy_*` from `cc0_storm/`, and the near pop reuses `firework_pop_soft_000` from `kenney_run/` (both CC0, no new files)
 - Run ambient music: Tozan "Oriental Somber" (OpenGameArt CC0), `assets/audio/music/cc0_run/orientalsomber.ogg`
