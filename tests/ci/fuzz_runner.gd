@@ -256,9 +256,9 @@ func _act_skill() -> void:
 func _act_wrist() -> void:
 	var b := Basis(Vector3.UP, yaw)
 	var ring_at: Vector3 = sim.head_xf.origin + b * Vector3(-0.06, -0.20, -0.26)
-	var to_eye := (sim.head_xf.origin - ring_at).normalized()
+	var to_eye: Vector3 = (sim.head_xf.origin - ring_at).normalized()
 	var z := -(b * Vector3.UP).slide(to_eye).normalized()
-	var x := to_eye.cross(z).normalized()
+	var x: Vector3 = to_eye.cross(z).normalized()
 	var target_basis := Basis(x, to_eye, z)
 	var mount := Basis.from_euler(Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(-14.0)))
 	var wrist := target_basis * mount.inverse()
