@@ -12,7 +12,7 @@ extends Node3D
 ## play, so the splash is silent until the intro. Time advances by the frame
 ## delta only; nothing here touches Engine.time_scale.
 ##
-## After the NANJO film comes the title plate (D18, docs/INTRO_TEXT.md): two or three
+## After the NANJO film comes the title plate (D18, assets/text/INTRO_TEXT.md): two or three
 ## English lines on black, fading in and out over TITLE_SEC. A far firework is heard
 ## at its start (DistantFireworks, through title_started). The Fireworks bus is not
 ## muted here, so the boom comes through the films' silence.
@@ -45,7 +45,7 @@ const TITLE_FADE_OUT := 2.0
 const TITLE_SEC := TITLE_FADE_IN + TITLE_HOLD + TITLE_FADE_OUT
 const TITLE_TEXT_SIZE := 38
 const TITLE_COLOR := Color(0.86, 0.84, 0.8)
-const INTRO_TEXT_PATH := "res://docs/INTRO_TEXT.md"
+const INTRO_TEXT_PATH := "res://assets/text/INTRO_TEXT.md"
 const INTRO_TEXT_BEGIN := "<!-- INTRO -->"
 const INTRO_TEXT_END := "<!-- /INTRO -->"
 const TITLE_MAX_LINES := 3
@@ -104,7 +104,7 @@ func current_board() -> String:
 	return ["hanabi", "gap", "nanjo", "title"][_phase]
 
 
-## The title plate's lines, read from docs/INTRO_TEXT.md between its markers:
+## The title plate's lines, read from assets/text/INTRO_TEXT.md between its markers:
 ## one line per non-empty line, at most TITLE_MAX_LINES. Empty when the file is missing.
 static func title_lines(path: String = INTRO_TEXT_PATH) -> PackedStringArray:
 	var out := PackedStringArray()
