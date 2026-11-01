@@ -88,27 +88,33 @@ func _run_all() -> void:
 	_stand(player, forest, stand, dir)
 	player.camera.look_at(along.pos + Vector3(0.0, -0.9, 0.0) + dir * 1.5, Vector3.UP)
 	await _frames(30)
-	# Rain falls differently in every frame: the same view is measured on N_EDGE_FRAMES frames and the
-	# median of the per-frame maxima is taken, so one streak cannot make or break the verdict.
-	var maxima: Array[float] = []
-	var means: Array[float] = []
-	var img: Image = null
-	var rows := 0
+	# The trail's own boundary, read from a flat mask of the ground (debug_mask, see forest_ground.gdshader):
+	# the moon shadow on the gravel is not the trail's edge, so the mask keeps it out of the measure.
+	# The same view on HEAD and after; the median of N_EDGE_FRAMES frames is taken.
+	await _set_ground_mask(forest, run, true)
+	var mask_maxima: Array[float] = []
+	var mask_means: Array[float] = []
+	var mask_rows := 0
+	var mask_img: Image = null
 	for k in N_EDGE_FRAMES:
 		await _frames(1)
-		var frame := await _capture("n5_trail_edge_near" if k == 0 else "")
+		var frame := await _capture("n5_trail_edge_mask" if k == 0 else "")
 		if k == 0:
-			img = frame
-		var e := _edge_steps(frame)
-		rows = e.rows
-		maxima.append(e.max_step)
-		means.append(e.mean_step)
-	maxima.sort()
-	means.sort()
-	var edge := {"rows": rows, "max_step": maxima[maxima.size() / 2], "mean_step": means[means.size() / 2]}
-	print("MEASURE trail edge (median of %d frames): rows %d, max second difference %.2f px (frames %s), mean %.2f px" % [N_EDGE_FRAMES, edge.rows, edge.max_step, str(maxima), edge.mean_step])
-	_check("The trail edge is a curve, not steps (max second difference %.2f px, need <= %.1f)" % [edge.max_step, MAX_EDGE_STEP_PX],
-		edge.rows >= 12 and edge.max_step <= MAX_EDGE_STEP_PX)
+			mask_img = frame
+		var e := _mask_edge_steps(frame)
+		mask_rows = e.rows
+		mask_maxima.append(e.max_step)
+		mask_means.append(e.mean_step)
+	await _set_ground_mask(forest, run, false)
+	mask_maxima.sort()
+	mask_means.sort()
+	var mask_edge := {"rows": mask_rows, "max_step": mask_maxima[mask_maxima.size() / 2], "mean_step": mask_means[mask_means.size() / 2]}
+	print("MEASURE trail edge on the trail mask (median of %d frames): rows %d, max second difference %.2f px (frames %s), mean %.2f px" % [N_EDGE_FRAMES, mask_edge.rows, mask_edge.max_step, str(mask_maxima), mask_edge.mean_step])
+	_check("The trail edge is a curve, not steps (max second difference %.2f px, need <= %.1f)" % [mask_edge.max_step, MAX_EDGE_STEP_PX],
+		mask_edge.rows >= 12 and mask_edge.max_step <= MAX_EDGE_STEP_PX)
+	# The coloured frame's gravel-edge measure (kept for the history, see docs/N5_FOREST.md).
+	var colour_frame := await _capture("n5_trail_edge_near")
+	print("MEASURE trail edge on the coloured frame (gravel/duff, info only): max second difference %.2f px" % _edge_steps(colour_frame).max_step)
 
 	# View B: a fern 1.6–3 m off the trail, 4–10 m from the glade, framed from the trail. The ferns are
 	# hidden and shown again on the same view; the pixels that change are the ferns in the picture.
@@ -410,6 +416,69 @@ func _nearest_fern(forest: ForestWorld, at: Vector3, dir: Vector3) -> Vector3:
 		if not hidden:
 			return w
 	return Vector3.INF
+
+
+## Turns the flat trail mask on or off on every chunk's ground, and hides or shows the tree, torii and
+## undergrowth MultiMeshes and the shrines, so the mask frame has the trail and nothing else in it.
+func _set_ground_mask(forest: ForestWorld, run: RunGame, on: bool) -> void:
+	for key in forest._chunks:
+		var root := forest._chunks[key] as Node3D
+		var terrain := root.get_node_or_null("Terrain") as MeshInstance3D
+		if terrain != null and terrain.material_override is ShaderMaterial:
+			(terrain.material_override as ShaderMaterial).set_shader_parameter("debug_mask", on)
+		for child in root.get_children():
+			if child is MultiMeshInstance3D:
+				child.visible = not on
+	for child in forest.get_children():
+		if child is MultiMeshInstance3D:
+			child.visible = not on
+	# Shrines (hokora) stand on the trail and cast a black silhouette across it: hidden in the mask too.
+	if run.hokora_manager != null:
+		for mi in run.hokora_manager.find_children("*", "MeshInstance3D", true, false):
+			(mi as MeshInstance3D).visible = not on
+	await _frames(3)
+
+
+## Mean of 7 samples of [param raw] centred on [param x] (clamped at the picture's ends).
+static func _box(raw: PackedFloat32Array, x: int) -> float:
+	var acc := 0.0
+	var n := 0
+	for k in range(maxi(0, x - 3), mini(raw.size(), x + 4)):
+		acc += raw[k]
+		n += 1
+	return acc / float(n)
+
+
+## Edge of the trail in the flat mask, per picture row (rows 40–92 % of the height): the x where the mask
+## crosses one half, with a sub-pixel position. Returns the second differences along consecutive rows.
+func _mask_edge_steps(img: Image) -> Dictionary:
+	var w := img.get_width()
+	var h := img.get_height()
+	var xs: Dictionary = {}
+	for y in range(int(h * 0.40), int(h * 0.92)):
+		# Box-blurred 7 px across: the rain streaks (thin white lines) drop below the half level.
+		var raw := PackedFloat32Array()
+		raw.resize(w)
+		for x in w:
+			raw[x] = _lum(img.get_pixel(x, y))
+		var prev := 0.0
+		var cur := 0.0
+		for x in range(1, w):
+			prev = _box(raw, x - 1)
+			cur = _box(raw, x)
+			if (prev - 0.5) * (cur - 0.5) <= 0.0 and cur != prev:
+				xs[y] = float(x) - 1.0 + (0.5 - prev) / (cur - prev)
+				break
+	var max_step := 0.0
+	var sum := 0.0
+	var n := 0
+	for y in range(int(h * 0.40) + 1, int(h * 0.92) - 1):
+		if xs.has(y - 1) and xs.has(y) and xs.has(y + 1):
+			var step := absf(float(xs[y + 1]) - 2.0 * float(xs[y]) + float(xs[y - 1]))
+			max_step = maxf(max_step, step)
+			sum += step
+			n += 1
+	return {"rows": xs.size(), "max_step": max_step, "mean_step": sum / float(maxi(n, 1))}
 
 
 ## Pixels of the ground band (lower 55 %) that differ between two frames of the same view.
