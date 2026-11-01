@@ -2,7 +2,7 @@
 # Runs one test scene under `timeout 600` (headless, except the windowed render tests); writes /tmp/hanabi_tests/<name>.{log,result}.
 cd "$(dirname "$0")/.." || exit 1
 GODOT=${GODOT:-.tools/Godot.app/Contents/MacOS/Godot}
-OUT=/tmp/hanabi_tests
+OUT=${HANABI_TEST_OUT:-/tmp/hanabi_tests}
 mkdir -p $OUT
 name=$1
 ARGS="--desktop"
