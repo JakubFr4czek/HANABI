@@ -228,6 +228,17 @@ func _atmosphere_checks(run: RunGame, forest: ForestWorld, at: Vector2, along: V
 		# Informational only (not a pass/fail check yet): the sampled "mist" points often land on the
 		# dark ground behind the trunk, so this number does not yet measure trunk-against-mist (docs/n4/README.md).
 		print("MEASURE trunk 8-20m diff=%.3f (informational, threshold %.3f not enforced)" % [trunk, TRUNK_DIFF_MIN])
+	# Layers (N4 fix1): the floor at 8, 20 and 40 m from the glade camera gets lighter with distance
+	# (mist between the trunks), not one flat wall. Measured here, asserted once the numbers are known.
+	var lay := [-6.0, -3.2, 3.2, 6.0]
+	var l8: float = AtmosphereMetrics.ground_mean(glade, cam, forest, [8.0], lay)
+	var l20: float = AtmosphereMetrics.ground_mean(glade, cam, forest, [20.0], lay)
+	var l40: float = AtmosphereMetrics.ground_mean(glade, cam, forest, [40.0], lay)
+	print("MEASURE layers floor 8m=%.3f 20m=%.3f 40m=%.3f" % [l8, l20, l40])
+	_check("N4 layers: the floor lightens from 8 m to 20 m (%.3f < %.3f)" % [l8, l20],
+		l8 >= 0.0 and l20 >= 0.0 and l8 < l20)
+	# 40 m is informational: the hills (4.6 m amplitude) often hide that patch behind a dark slope.
+	print("MEASURE layers 40m=%.3f (informational, not asserted: terrain occlusion)" % l40)
 	var sh: Dictionary = AtmosphereMetrics.shaft(glade)
 	print("MEASURE glade shaft excess=%.3f width=%.3f" % [sh.excess, sh.width])
 	_check("N4 no moonbeam column across the sky (width %.3f, need <= %.2f)" % [sh.width, SHAFT_WIDTH_MAX],
