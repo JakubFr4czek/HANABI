@@ -81,3 +81,41 @@ Trójkąty szacowane ręcznie dla „przed”: nie mierzone w poprzednim commici
 - Desaturacja skóry roju (sky fill w `wet_surface.gdshader`), wspólna dla wszystkich wrogów; zmiana globalna.
 - Pazury i hakama z kilkoma wariantami kształtu, żeby rój nie wyglądał jak jeden model powielony.
 - Wygładzenie maski (ok. 2,2k tris dawałoby lepszy profil rogów; budżet jest tu ciasny).
+
+## Poprawki fix1 (po review supervisora)
+
+Zmiany:
+- Proporcje: klatka szersza (barki ±0,198 m, talia ±0,176 m), tułów pochylony do przodu
+  o ok. 0,05 m na górze (`CHEST_LEAN`, przesunięcie w samej siatce, nie węzeł: slicer czyta
+  wierzchołki). Ramiona i przedramiona pełniejsze (do 1,38× promienia fizycznej kapsuły),
+  nadgarstek cieńszy. Uda do 1,45×, łydki 1,12×, kostka 0,75×. Ring-y bez zmiany liczby,
+  więc trójkąty prawie stoją w miejscu.
+- Maska: cieplejszy, jaśniejszy tint (`MASK_TINT` 2,4/1,9/1,6), wilgotność 0,42 → 0,2 (mniej
+  przyciemnienia), warstwa `MASK_FILL` 0,85, rim Fresnela z istniejącego parametru `fog_rim`
+  (0,7), delikatna ciepła emisja `MASK_LIFT` (0,09/0,06/0,05) – nie świeci, bez świateł.
+  `normal_depth` 1,0 → 0,5: przy ~30 px dawał iskrzenie (aliasing).
+- Test: nowa asercja kontrastu głowy/maski względem tła przy 3 m (`MASK_CONTRAST` 0,08;
+  wynik 0,21). Uwaga: ten pomiar obejmuje też jasne oczy, więc zawyża czytelność rysów.
+
+Wyniki (ten sam kadr):
+- 8 m, cztery szkoły: najbliższa para 0,20 (próg 0,12).
+- 3 m, sylwetka vs mgła: 0,28 (próg 0,05).
+- 3 m, głowa/maska vs mgła: 0,21 (próg 0,08).
+- Trójkąty na yōkai: 3 266 (limit 4 000); surface: 23 (limit 24).
+
+Surowa ocena po poprawkach:
+- Sylwetka: lepsza. Szersze barki i pochylenie czytają się z 8 m jako postać, nie jako
+  patyk. Nadal jeden model powielony na cały rój: wszystkie yōkai identyczne, ręce w T
+  wynikają z istniejących póz (nie ruszałem fizyki ani póz).
+- Maska z 3 m: rogi są widoczne jako dwa haczyki po bokach, czoło jest cieplejsze, ale twarz
+  nadal ciemna i mało szczegółowa. To NIE jest jeszcze czytelna maska demona; to czytelna
+  głowa z oczami. Rysy (zęby, usta) przy 3 m są nieczytelne przy 960×540.
+- Oni: maska jest tą samą maską (ciemna twarz, jasne oczy, rogi słabo widoczne), ale
+  korpus Oni (blokowy, czerwony) nadal dominuje kadr. Nie poprawiałem korpusu, bo to osobna praca.
+- Kirisute: kadr po cięciu nadal nie pokazuje wyraźnie przekroju.
+
+Testy (flaky, poza N3):
+- `xr_play_test` (run 2, check „cutting the restart ema starts a new run”, potem kolejne
+  checki run 2) pada losowo także na commicie sprzed N3 (`a033e7f`: 1 na 4 przebiegi).
+  To pre-istniejąca niestabilność czasowa testu XR, nie regresja tej pracy. Nie naprawiona
+  w tym commicie; wymaga osobnej analizy (czasy klatek i trafienia ostrza w symulacji XR).

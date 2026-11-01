@@ -13,20 +13,23 @@ const MASK_ALBEDO := "res://assets/models/enemies/yokai_mask_albedo.png"
 const MASK_NORMAL := "res://assets/models/enemies/yokai_mask_normal.png"
 const MASK_ORM := "res://assets/models/enemies/yokai_mask_orm.png"
 ## Tint over the mask albedo (a dark lacquered demon mask, lifted so the horns read), yōkai and Oni.
-const MASK_TINT := Color(1.9, 1.55, 1.35)
+const MASK_TINT := Color(2.4, 1.9, 1.6)
 ## Eye glows sit in the mask's eye sockets, in the head's frame (metres).
 const EYE_X := 0.0248
 const EYE_Y := -0.02
 const EYE_Z := 0.112
 
 ## (y, rx, rz) rings, bottom to top. The chest is wider than deep and narrows at the hips.
+## Broad shoulders over a narrower waist; the torso leans forward (CHEST_LEAN, see tube).
 const CHEST_RINGS := [
-	Vector3(-0.21, 0.135, 0.078), Vector3(-0.09, 0.160, 0.092), Vector3(0.04, 0.172, 0.100),
-	Vector3(0.17, 0.158, 0.092), Vector3(0.21, 0.120, 0.078),
+	Vector3(-0.21, 0.150, 0.096), Vector3(-0.09, 0.176, 0.112), Vector3(0.04, 0.184, 0.122),
+	Vector3(0.17, 0.198, 0.118), Vector3(0.22, 0.166, 0.100),
 ]
+const CHEST_LEAN := 0.22
 ## Limb profiles: (fraction of the capsule's height, fraction of its radius), top to bottom.
-const ARM_PROFILE := [Vector2(-0.5, 0.45), Vector2(-0.36, 0.70), Vector2(-0.1, 0.70), Vector2(0.12, 0.88), Vector2(0.32, 1.0), Vector2(0.5, 0.78)]
-const LEG_PROFILE := [Vector2(-0.5, 0.62), Vector2(-0.3, 0.76), Vector2(-0.02, 0.92), Vector2(0.2, 1.0), Vector2(0.36, 1.12), Vector2(0.5, 0.72)]
+## Bulky, not sticks: full upper arm and forearm belly, thin wrist; thick thigh and calf, thin ankle.
+const ARM_PROFILE := [Vector2(-0.5, 0.70), Vector2(-0.4, 0.95), Vector2(-0.2, 1.20), Vector2(0.05, 1.02), Vector2(0.30, 1.30), Vector2(0.5, 1.38)]
+const LEG_PROFILE := [Vector2(-0.5, 0.75), Vector2(-0.35, 1.00), Vector2(-0.2, 1.22), Vector2(0.0, 1.12), Vector2(0.3, 1.45), Vector2(0.5, 1.30)]
 ## The visible head: inside the mask, never through its face (the collision sphere is 0.115).
 const HEAD_VISUAL_RADIUS := 0.088
 const PELVIS_RINGS := [Vector3(-0.085, 0.122, 0.080), Vector3(0.0, 0.140, 0.092), Vector3(0.085, 0.132, 0.086)]
@@ -43,7 +46,7 @@ static var _cache := {}
 static func body_mesh(part_name: String, def: Dictionary) -> Mesh:
 	match part_name:
 		"chest":
-			return _cached("chest", func() -> Mesh: return tube(CHEST_RINGS, 12, true))
+			return _cached("chest", func() -> Mesh: return tube(CHEST_RINGS, 12, true, 0.0, CHEST_LEAN))
 		"pelvis":
 			return _cached("pelvis", func() -> Mesh: return tube(PELVIS_RINGS, 12, true))
 	match String(def.shape):
@@ -159,7 +162,7 @@ static func claw() -> Mesh:
 ## A closed or open tube through (y, rx, rz) rings, bottom to top, with [param segs] sides.
 ## [param jag] > 0 ragged-cuts the last ring (a torn hem). Winding is outward (clockwise
 ## front faces, Godot's convention), normals point out of the surface.
-static func tube(rings: Array, segs: int, caps: bool, jag: float = 0.0) -> ArrayMesh:
+static func tube(rings: Array, segs: int, caps: bool, jag: float = 0.0, lean: float = 0.0) -> ArrayMesh:
 	var verts := PackedVector3Array()
 	var norms := PackedVector3Array()
 	var uvs := PackedVector2Array()
@@ -176,7 +179,8 @@ static func tube(rings: Array, segs: int, caps: bool, jag: float = 0.0) -> Array
 				var h := _hash01(s)
 				k = 1.0 + (h - 0.5) * 2.0 * jag / maxf(ring.y, 1e-3)
 				dy = -jag * 1.4 * h * h
-			verts.append(Vector3(cos(a) * ring.y * k, ring.x + dy, sin(a) * ring.z * k))
+			# lean: the ring shifts forward (+Z) in proportion to its height, a bent pose in the mesh itself.
+			verts.append(Vector3(cos(a) * ring.y * k, ring.x + dy, sin(a) * ring.z * k + lean * ring.x))
 			norms.append(Vector3(cos(a) / maxf(ring.y, 1e-4), 0.0, sin(a) / maxf(ring.z, 1e-4)).normalized())
 			uvs.append(Vector2(float(s) / float(segs), float(r) / float(maxi(n - 1, 1))))
 	for r in n - 1:
@@ -192,7 +196,7 @@ static func tube(rings: Array, segs: int, caps: bool, jag: float = 0.0) -> Array
 			var ring: Vector3 = rings[e]
 			var up := -1.0 if e == 0 else 1.0
 			var center := verts.size()
-			verts.append(Vector3(0.0, ring.x, 0.0))
+			verts.append(Vector3(0.0, ring.x, lean * ring.x))
 			norms.append(Vector3(0.0, up, 0.0))
 			uvs.append(Vector2(0.5, 0.5))
 			var base: int = e * segs
