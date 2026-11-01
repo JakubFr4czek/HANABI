@@ -26,7 +26,12 @@ const SAKURA_TREE_SHADER := preload("res://src/shaders/sakura_tree.gdshader")
 const TORII_MESH_SCALE := 0.42
 ## Metres of path distance the vertex colour's G channel spans (see _path_colour).
 const PATH_ENCODE_RANGE := 4.0
+## Most centre-line segments a chunk hands to the ground shader (forest_ground.gdshader path_segs).
+const PATH_SEGMENTS_MAX := 48
+const PATH_SIMPLIFY_TOL := 0.12
 ## Width of the distance fade at a kind's draw edge, metres (see _draw_fade).
+## Share of the distance haze the back layer takes (see _back_material).
+const BACK_HAZE_SHARE := 0.35
 const DRAW_FADE_BAND := 7.0
 ## Foliage clumps are drawn this many times their listed radius, so neighbours merge into one canopy.
 const CROWN_OVERSIZE := 1.18
@@ -106,6 +111,12 @@ var _trunk_cells: Dictionary = {}
 ## Chunk coord -> {spots, ids, clearing, cells}. Spots are world xz, scale, yaw
 ## (Vector4); ids are the profile tree-entry index of each spot.
 var _extra_spot_cache: Dictionary = {}
+## Back-layer transforms per chunk: entry index -> Array[Transform3D] (N5, see _back_spots).
+var _back_spot_cache: Dictionary = {}
+var _back_mats: Array[Material] = []
+## Silhouette of the back layer (N5): ~40 triangles, shared by every back kind's instances.
+var _back_meshes: Array[Mesh] = []
+var _back_tree_nodes: Dictionary = {}
 var _tree_spot_cache: Dictionary = {}
 ## Chunk coord -> {points: Array[Vector4] (x, z, entry, spacing), clearing: int}.
 var _potential_cache: Dictionary = {}
@@ -251,6 +262,7 @@ func reset(anchor: Vector3 = Vector3.INF, facing: Vector3 = Vector3.ZERO) -> voi
 	_trunk_cells.clear()
 	_tree_spot_cache.clear()
 	_extra_spot_cache.clear()
+	_back_spot_cache.clear()
 	_potential_cache.clear()
 	_path_field_cache.clear()
 	_lattice_heights.clear()
@@ -282,6 +294,7 @@ func _apply_profile() -> void:
 	var seed_mix := profile.world_seed
 	_tree_spot_cache.clear()
 	_extra_spot_cache.clear()
+	_back_spot_cache.clear()
 	_potential_cache.clear()
 	_path_field_cache.clear()
 	_lattice_heights.clear()
@@ -538,6 +551,10 @@ func _rebuild_active_chunks(build_now := true) -> void:
 		var c: Vector2i = key
 		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 1:
 			_extra_spot_cache.erase(key)
+	for key in _back_spot_cache.keys():
+		var c: Vector2i = key
+		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 1:
+			_back_spot_cache.erase(key)
 	for key in _path_field_cache.keys():
 		var c: Vector2i = key
 		if maxi(absi(c.x - center_chunk.x), absi(c.y - center_chunk.y)) > radius + 2:
@@ -594,7 +611,7 @@ func _make_chunk(coord: Vector2i, terrain_mesh: ArrayMesh = null) -> Node3D:
 	var terrain := MeshInstance3D.new()
 	terrain.name = "Terrain"
 	terrain.mesh = terrain_mesh if terrain_mesh != null else _build_terrain_mesh(coord)
-	terrain.material_override = _ground_mat
+	terrain.material_override = _chunk_ground_material(coord)
 	terrain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	terrain.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	_set_view_range(terrain)
@@ -606,6 +623,7 @@ func _make_chunk(coord: Vector2i, terrain_mesh: ArrayMesh = null) -> Node3D:
 	clearing_props += _populate_trees(root, coord)
 	clearing_props += _populate_props(root, "Torii", _torii_mesh, _torii_mat, _torii_spec(), coord, KIND_TORII)
 	clearing_props += _populate_extra_trees(root, coord)
+	_populate_back_trees(root, coord)
 	clearing_props += _populate_props(root, "Lanterns", _lantern_mesh, _lantern_mat, _lantern_spec(), coord, KIND_LANTERN)
 	for u in profile.undergrowth.size():
 		var entry := profile.undergrowth[u]
@@ -1086,7 +1104,7 @@ func _ordinary_entries() -> Array[int]:
 	var out: Array[int] = []
 	for e in profile.trees.size():
 		var entry := profile.trees[e]
-		if not entry.is_focal() and entry.weight > 0.0 and entry.base_layout:
+		if not entry.is_focal() and entry.weight > 0.0 and entry.base_layout and not entry.back_layer:
 			out.append(e)
 	return out
 
@@ -1096,7 +1114,7 @@ func _extra_entries() -> Array[int]:
 	var out: Array[int] = []
 	for e in profile.trees.size():
 		var entry := profile.trees[e]
-		if not entry.is_focal() and entry.weight > 0.0 and not entry.base_layout:
+		if not entry.is_focal() and entry.weight > 0.0 and not entry.base_layout and not entry.back_layer:
 			out.append(e)
 	return out
 
@@ -1135,6 +1153,66 @@ static func _near_base(base: Array, p: Vector2, reach: float) -> bool:
 		if Vector2(v.x - p.x, v.y - p.y).length() < maxf(EXTRA_BASE_CLEAR, CROWN_OVERLAP_SHARE * (v.z + reach)):
 			return true
 	return false
+
+
+## Entry indices of the back-layer kinds (N5).
+func _back_entries() -> Array[int]:
+	var out: Array[int] = []
+	for e in profile.trees.size():
+		if profile.trees[e].back_layer and profile.trees[e].weight > 0.0:
+			out.append(e)
+	return out
+
+
+## Back layer (N5): far silhouettes of the forest wall, placed per chunk after everything else.
+## They keep off the paths (the sky rule), off the base and layout-after trunks, and off the gates,
+## so they never stand in a trunk or over a trail. They have no collider and no layout role.
+func _populate_back_trees(root: Node3D, coord: Vector2i) -> void:
+	var spots := _back_spots(coord)
+	for e in spots:
+		root.set_meta("xfs_Back%d" % int(e), spots[e])
+
+
+func _back_spots(coord: Vector2i) -> Dictionary:
+	if _back_spot_cache.has(coord):
+		return _back_spot_cache[coord]
+	var size := _chunk_size
+	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
+	var field := _path_field(coord)
+	var path_gap := _path_half_width() + profile.path_tree_clearance
+	var gates: Array[Vector3] = []
+	for ox in range(-1, 2):
+		for oz in range(-1, 2):
+			var n: Node3D = _chunks.get(coord + Vector2i(ox, oz), null)
+			if n:
+				for g in n.get_meta("torii_world_positions", []):
+					gates.append(g)
+	var accepted: Array[Vector4] = []
+	var out := {}
+	for e in _back_entries():
+		var entry := profile.trees[e]
+		var list: Array[Transform3D] = []
+		for p in _take_poisson(coord, e):
+			if _in_clearing(p.x, p.y):
+				continue
+			if not field.is_empty() and _field_at(field, p - centre) < path_gap:
+				continue
+			var scale := lerpf(entry.scale_min, entry.scale_max, _point_random(p.x, p.y, 2))
+			var yaw := _point_random(p.x, p.y, 3) * TAU if entry.random_yaw else 0.0
+			# Beyond back_near the trunk stands behind the near forest, so it may overlap a near crown;
+			# it keeps off the gates and its own spacing only (the near rules would leave no room for a wall).
+			if _near_points3(gates, p, EXTRA_GATE_CLEAR):
+				continue
+			if _near_extra(accepted, p, e, entry.min_spacing, 0.0):
+				continue
+			if not _crown_clear(p, e, scale, yaw):
+				continue
+			accepted.append(Vector4(p.x, p.y, float(e), 0.0))
+			var base_y := _mesh_min_height(p.x, p.y, 2.1 * scale) - 0.05 * scale
+			list.append(Transform3D(_trunk_basis(p, entry, yaw, scale), Vector3(p.x - centre.x, base_y, p.y - centre.y)))
+		out[e] = list
+	_back_spot_cache[coord] = out
+	return out
 
 
 ## Stateless random in [0, 1) for a world point: the same point always draws
@@ -1855,6 +1933,7 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 	# Far crowns of the whole ring, in world space, per ordinary entry.
 	var far_all: Dictionary = {}
 	var scene_all: Dictionary = {}
+	var back_all: Dictionary = {}
 	drawn_full_origins.clear()
 	drawn_far_origins.clear()
 	drawn_scene_origins.clear()
@@ -1902,6 +1981,17 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 			mm.instance_count = near.size()
 			for i in near.size():
 				mm.set_instance_transform(i, near[i])
+		# Back layer (N5): far crowns between back_near and the draw radius, no near copy, no collider.
+		for e in _back_entries():
+			for xf in chunk.get_meta("xfs_Back%d" % e, []):
+				var placed := xf as Transform3D
+				var bx := base.x + placed.origin.x - origin.x
+				var bz := base.z + placed.origin.z - origin.z
+				var bd2 := bx * bx + bz * bz
+				if bd2 <= draw2 and bd2 >= profile.back_near * profile.back_near:
+					if not back_all.has(e):
+						back_all[e] = [] as Array[Transform3D]
+					(back_all[e] as Array[Transform3D]).append(Transform3D(_grown(placed, growth).basis, placed.origin + base))
 		# Scene crowns (D5 redwood): full detail to tree_draw_radius, one MultiMesh for the whole ring.
 		for e in profile.trees.size():
 			if profile.trees[e].is_focal() or profile.trees[e].crown != TreeEntry.Crown.SCENE:
@@ -1916,8 +2006,14 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 					(scene_all[e] as Array[Transform3D]).append(Transform3D(_grown(placed, growth).basis, placed.origin + base))
 					drawn_scene_origins.append(base + placed.origin)
 					drawn_scene_growth.append(growth)
+	for e in _back_entries():
+		var back_list: Array = back_all.get(e, [])
+		var back_node := _back_tree_node(e)
+		back_node.multimesh.instance_count = back_list.size()
+		for i in back_list.size():
+			back_node.multimesh.set_instance_transform(i, back_list[i])
 	for e in profile.trees.size():
-		if profile.trees[e].is_focal() or profile.trees[e].crown == TreeEntry.Crown.SCENE:
+		if profile.trees[e].is_focal() or profile.trees[e].crown == TreeEntry.Crown.SCENE or profile.trees[e].back_layer:
 			continue
 		var far_list: Array = far_all.get(e, [])
 		var node := _far_tree_node(e)
@@ -1953,6 +2049,67 @@ func _scene_tree_node(e: int) -> MultiMeshInstance3D:
 	add_child(inst)
 	_scene_tree_nodes[e] = inst
 	return inst
+
+
+## The back-layer MultiMesh of one kind (N5): one node for the whole ring, far crowns only.
+func _back_tree_node(e: int) -> MultiMeshInstance3D:
+	if _back_tree_nodes.has(e):
+		return _back_tree_nodes[e]
+	var inst := MultiMeshInstance3D.new()
+	inst.name = "BackTrees%d" % e
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = _back_meshes[e]
+	mm.instance_count = 0
+	inst.multimesh = mm
+	inst.material_override = _back_mats[e]
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	_set_view_range(inst)
+	inst.custom_aabb = AABB(Vector3(-400.0, -2.0, -400.0), Vector3(800.0, 24.0, 800.0))
+	add_child(inst)
+	_back_tree_nodes[e] = inst
+	return inst
+
+
+## A far silhouette (N5 back layer): a tapered trunk and three crown tiers, about 40 triangles. Every
+## vertex carries the leaf UV (UV.y 2), so the cut-out keeps it whole and it takes the dark foliage
+## colour: a dark tree-line against the mist, as in the concept.
+static func _build_back_silhouette() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var sides := 8
+	var leaf := Vector2(0.5, 2.0)
+	# Trunk: an open column, 8 sides, from the ground to the first tier.
+	for i in sides:
+		var a0 := TAU * float(i) / float(sides)
+		var a1 := TAU * float(i + 1) / float(sides)
+		var r := 0.32
+		var p0 := Vector3(cos(a0) * r, 0.0, sin(a0) * r)
+		var p1 := Vector3(cos(a1) * r, 0.0, sin(a1) * r)
+		var q0 := p0 + Vector3(0.0, 3.4, 0.0)
+		var q1 := p1 + Vector3(0.0, 3.4, 0.0)
+		st.set_uv(leaf); st.add_vertex(p0)
+		st.set_uv(leaf); st.add_vertex(q0)
+		st.set_uv(leaf); st.add_vertex(q1)
+		st.set_uv(leaf); st.add_vertex(p0)
+		st.set_uv(leaf); st.add_vertex(q1)
+		st.set_uv(leaf); st.add_vertex(p1)
+	# Three crown tiers: cones of 8 sides, apex up.
+	for tier in 3:
+		var base_y := 2.6 + 2.1 * float(tier)
+		var radius := 2.9 - 0.75 * float(tier)
+		var apex := Vector3(0.0, base_y + 3.4, 0.0)
+		for i in sides:
+			var a0 := TAU * float(i) / float(sides)
+			var a1 := TAU * float(i + 1) / float(sides)
+			var b0 := Vector3(cos(a0) * radius, base_y, sin(a0) * radius)
+			var b1 := Vector3(cos(a1) * radius, base_y, sin(a1) * radius)
+			st.set_uv(leaf); st.add_vertex(b0)
+			st.set_uv(leaf); st.add_vertex(b1)
+			st.set_uv(leaf); st.add_vertex(apex)
+	st.generate_normals()
+	return st.commit()
 
 
 ## The far-crown MultiMesh of one ordinary entry, created on first use under the forest.
@@ -2106,6 +2263,48 @@ class TerrainBuild extends RefCounted:
 		_st.index()
 		_st.generate_normals()
 		return _st.commit()
+
+
+## The ground material of one chunk (N5): a copy of the shared one, with this chunk's path centre
+## lines, so the trail edge is drawn per pixel from the true curve (see forest_ground.gdshader).
+func _chunk_ground_material(coord: Vector2i) -> ShaderMaterial:
+	var mat := _ground_mat.duplicate() as ShaderMaterial
+	var segs := PackedVector4Array()
+	if paths != null:
+		var size := _chunk_size
+		var rect := Rect2(Vector2(coord) * size - Vector2(size, size) * 0.5, Vector2(size, size)).grow(4.0)
+		var pts := paths.segments_in_rect(rect)
+		var chain: Array[Vector2] = []
+		for k in range(0, pts.size() - 1, 2):
+			var a := pts[k]
+			if chain.is_empty() or chain[chain.size() - 1].distance_to(a) > 0.001:
+				_simplify_chain(chain, segs)
+				chain = [a]
+			chain.append(pts[k + 1])
+		_simplify_chain(chain, segs)
+	mat.set_shader_parameter("path_seg_count", segs.size())
+	mat.set_shader_parameter("path_segs", segs)
+	return mat
+
+
+## Greedy simplification of one polyline into long segments: a run of points stays one segment while
+## every point it skips lies within PATH_SIMPLIFY_TOL of it (12 cm, far below a pixel on Quest). The
+## ground shader loops over these segments per pixel, so their count is kept small.
+static func _simplify_chain(chain: Array[Vector2], out: PackedVector4Array) -> void:
+	var i := 0
+	while i < chain.size() - 1:
+		var j := i + 1
+		while j + 1 < chain.size() and _chain_straight(chain, i, j + 1):
+			j += 1
+		out.append(Vector4(chain[i].x, chain[i].y, chain[j].x, chain[j].y))
+		i = j
+
+
+static func _chain_straight(chain: Array[Vector2], i: int, j: int) -> bool:
+	for m in range(i + 1, j):
+		if ForestPaths.segment_distance(chain[m], chain[i], chain[j]) > PATH_SIMPLIFY_TOL:
+			return false
+	return true
 
 
 func _build_terrain_collider(mesh: ArrayMesh) -> StaticBody3D:
@@ -2294,6 +2493,11 @@ func _build_meshes() -> void:
 	_crown_reach = 0.0
 	_tree_far_meshes.clear()
 	_tree_far_mats.clear()
+	_back_mats.clear()
+	_back_meshes.clear()
+	for node in _back_tree_nodes.values():
+		(node as Node).free()
+	_back_tree_nodes.clear()
 	for node in _far_tree_nodes.values():
 		(node as Node).free()
 	_far_tree_nodes.clear()
@@ -2316,6 +2520,8 @@ func _build_meshes() -> void:
 		var far_key := "tree_far|%s|%d" % [_scene_key(entry.scene), entry.crown]
 		_tree_far_meshes.append(_built_once(far_key, _build_far_tree_mesh.bind(entry)) as Mesh)
 		_tree_far_mats.append(_tree_material(1.0, own_albedo))
+		_back_mats.append(_back_material(own_albedo) if entry.back_layer else null)
+		_back_meshes.append(_built_once("back_silhouette", _build_back_silhouette) as Mesh if entry.back_layer else null)
 		_tree_shapes.append(built.hulls)
 		_tree_chest.append(float(built.chest))
 	if not _tree_chest.is_empty():
@@ -2421,6 +2627,17 @@ func _rock_material() -> ShaderMaterial:
 		_rock_material_cache.set_shader_parameter("specular_scale", 0.0)
 		_rock_material_cache.set_shader_parameter("fog_fill", 0.18)
 	return _rock_material_cache
+
+
+## Back layer material (N5): the far crown, dissolving in from back_near to back_near + back_fade.
+## Its distance haze is a share of the forest's (BACK_HAZE_SHARE): the wall reads as dark trunks against
+## the mist, as in the concept, instead of melting into it; the near forest keeps the full haze.
+func _back_material(own_albedo: Texture2D) -> ShaderMaterial:
+	var mat := _tree_material(1.0, own_albedo)
+	mat.set_shader_parameter("lod_band", Vector2(profile.back_near, profile.back_near + profile.back_fade))
+	mat.set_shader_parameter("distance_haze_max", profile.distance_haze_max * BACK_HAZE_SHARE)
+	mat.set_shader_parameter("albedo_texture", TREE_ALBEDO)
+	return mat
 
 
 ## Neon sakura material from the entry's colours (GDD §9: over-the-top neon pink).

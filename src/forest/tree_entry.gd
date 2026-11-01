@@ -43,6 +43,11 @@ enum Crown {
 @export_range(0.0, 1.0, 0.01) var hill_lean := 0.72
 ## Smallest trunk-to-trunk distance for this kind (Poisson-disk radius, metres).
 @export_range(0.8, 10.0, 0.05) var min_spacing := 2.7
+## Back layer (N5): drawn only as far crowns, from back_near to draw radius (see WorldGenProfile),
+## with no trunk collider and no layout of its own. It builds the forest wall seen from the glade
+## (docs/N5_FOREST.md). Its chunk meta is xfs_Back<e>, so the crown and sky tests of the near forest
+## do not count it.
+@export var back_layer := false
 ## Solid trunk: the player and the blade stop on it (yōkai steer around it).
 @export var obstacle := true
 ## Neon sakura look (only for crown SAKURA): accent glow, petals, rim light, emission and sparsity.
