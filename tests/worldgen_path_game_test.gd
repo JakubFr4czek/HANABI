@@ -62,9 +62,23 @@ func _run_all() -> void:
 					worst = minf(worst, d)
 	_check("No trunk or boulder stands within the path clearance (nearest %.2f m, need %.2f m)" % [worst, reach],
 		worst >= reach)
+	# The ground shader loops over each chunk's centre-line segments per pixel: they must all fit.
+	var over := 0
+	var with_path := 0
+	for key in forest._chunks:
+		var mat := (forest._chunks[key] as Node3D).get_child(0) as MeshInstance3D
+		var n: int = (mat.material_override as ShaderMaterial).get_shader_parameter("path_seg_count")
+		if n > 0:
+			with_path += 1
+		if n > ForestWorld.PATH_SEGMENTS_MAX:
+			over += 1
+	_check("Every chunk hands all its trail segments to the ground shader (%d chunks with trail, %d over %d)" % [with_path, over, ForestWorld.PATH_SEGMENTS_MAX],
+		with_path > 0 and over == 0)
 	var edge := forest._path_half_width() + 0.6
+	_check("Ferns exist along the trail (%s)" % ("none found" if fern_worst == INF else "nearest %.2f m" % fern_worst),
+		fern_worst < INF)
 	_check("Ferns stand on the trail's edge, never on the gravel (nearest %.2f m, need %.2f m)" % [fern_worst, edge],
-		fern_worst >= edge or fern_worst == INF)
+		fern_worst >= edge)
 	run.queue_free()
 	await get_tree().process_frame
 
