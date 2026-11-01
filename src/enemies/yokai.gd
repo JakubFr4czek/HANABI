@@ -79,7 +79,12 @@ var _dissolve_duration := 0.95
 var _petal_burst_done := false
 ## Petals a whole yōkai comes apart into.
 const DEATH_PETALS := 90
-const MASK_FILL := 0.55
+## Sky fill on the mask: higher than the skin, so the face and horns keep their form in the dark.
+const MASK_FILL := 0.85
+## Fresnel rim on the mask edges (the shader's fog_rim, no light): the horns and brow read as edges.
+const MASK_RIM := 0.7
+## Warm emission lift of the mask lacquer (a few percent of its own colour; no light source).
+const MASK_LIFT := Color(0.09, 0.06, 0.05)
 ## Size of the eye glow points in the mask sockets (EyeGlow base size, m).
 const MASK_EYE_GLOW_SIZE := 0.075
 var _slow_time := 0.0
@@ -180,12 +185,15 @@ func _ready() -> void:
 	_mask_mat.set_shader_parameter("orm_texture", YokaiForms.mask_orm())
 	_mask_mat.set_shader_parameter("orm_mode", 1)
 	_mask_mat.set_shader_parameter("normal_texture", YokaiForms.mask_normal())
-	_mask_mat.set_shader_parameter("normal_depth", 1.0)
+	_mask_mat.set_shader_parameter("normal_depth", 0.5)
 	# Aged, not glowing: the face reads in the fog without shining like a signal.
 	_mask_mat.set_shader_parameter("base_color", YokaiForms.MASK_TINT)
+	_mask_mat.set_shader_parameter("fog_rim", MASK_RIM)
 	_mask_mat.set_shader_parameter("roughness_dry", 0.72)
 	_mask_mat.set_shader_parameter("roughness_wet", 0.38)
-	_mask_mat.set_shader_parameter("wetness", 0.42)
+	_mask_mat.set_shader_parameter("wetness", 0.2)
+	# A faint warm lift in the lacquer itself: the face keeps its shape in the dark (not a light).
+	_mask_mat.set_shader_parameter("emission_tint", MASK_LIFT)
 	_mask_mat.set_shader_parameter("waterline_y", -10.0)
 	_mask_mat.set_shader_parameter("fill", MASK_FILL)
 	# Hit flash on the mask is the same ember as the skin, not the shader's
