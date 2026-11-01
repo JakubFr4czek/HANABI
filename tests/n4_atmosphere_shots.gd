@@ -33,6 +33,12 @@ func _ready() -> void:
 		await get_tree().process_frame
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
+	# Frozen weather, as in the suite: no lightning flash may light a frame.
+	var lightning := run.get_node_or_null("Arena/StormLightning")
+	if lightning:
+		lightning.process_mode = Node.PROCESS_MODE_DISABLED
+		lightning.set("_strike_age", -1.0)
+		lightning.call("_set_flash", 0.0)
 	player = run.player as DesktopPlayer
 	forest = run.forest_world
 
@@ -48,12 +54,14 @@ func _ready() -> void:
 		# A gate beside the trail, 30 m ahead, seen from the spawn.
 		var side: Vector2 = Vector2(-along.y, along.x)
 		var gate_xz: Vector2 = far + side * 3.0
-		var gate: Node3D = forest.torii_manager.spawn_gate_at(gate_xz.x, gate_xz.y, "")
+		forest.torii_manager.clear_gates()
+		var gate: Node3D = forest.torii_manager.spawn_gate_at(gate_xz.x, gate_xz.y, Elements.STORM)
 		await _frames(30)
 		var gp: Vector3 = gate.global_position
 		var to: Vector3 = gp - Vector3(at.x, 0.0, at.y)
 		var torii := await _look(Vector3(at.x, forest.height_at(at.x, at.y), at.y), atan2(-to.x, -to.z), -2.0, "torii30")
 		_report("torii30", torii, gp)
+		print("MEASURE torii30_cyan_share=%.3f" % AtmosphereMetrics.cyan_share(torii, player.camera, gp))
 		gate.queue_free()
 		await _frames(10)
 

@@ -161,3 +161,75 @@ static func trunk_bases(forest: ForestWorld) -> PackedVector3Array:
 					var t: Transform3D = xf
 					out.append(chunk.position + t.origin)
 	return out
+
+
+## Share of cyan pixels (hue 170..215 deg, saturation >= 0.35, value >= 0.25) in a window
+## around the screen position of [param world] (window half-size [param half] px).
+static func cyan_share(img: Image, cam: Camera3D, world: Vector3, half: int = 60) -> float:
+	if cam.is_position_behind(world):
+		return -1.0
+	var s := cam.unproject_position(world)
+	var cx := int(s.x)
+	var cy := int(s.y)
+	var hits := 0
+	var n := 0
+	for y in range(maxi(cy - half, 0), mini(cy + half, img.get_height())):
+		for x in range(maxi(cx - half, 0), mini(cx + half, img.get_width())):
+			var c := img.get_pixel(x, y)
+			n += 1
+			var h := hue_deg(c)
+			if h >= 170.0 and h <= 215.0 and c.s >= 0.35 and c.v >= 0.25:
+				hits += 1
+	return float(hits) / maxf(1.0, float(n))
+
+
+## Mean display luminance of the ground beside the trail: patches at [param distances] metres
+## ahead of the camera (on the ground), at lateral [param offsets] metres. Off-frame patches are skipped.
+static func ground_mean(img: Image, cam: Camera3D, forest: ForestWorld, distances: Array, offsets: Array) -> float:
+	var fwd: Vector3 = -cam.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var right: Vector3 = cam.global_transform.basis.x
+	var base: Vector3 = cam.global_position
+	var sum := 0.0
+	var n := 0
+	for d in distances:
+		var c: Vector3 = base + fwd * float(d)
+		for o in offsets:
+			var p: Vector3 = c + right * float(o)
+			var world: Vector3 = Vector3(p.x, forest.height_at(p.x, p.z) + 0.05, p.z)
+			var l: float = patch_lum(img, cam, world, 3)
+			if l >= 0.0:
+				sum += l
+				n += 1
+	return sum / maxf(1.0, float(n))
+
+
+## Trunks against the mist: the planted trunks 8..20 m away that sit nearest the middle of the
+## frame (up to TRUNK_CANDIDATES). Returns the largest |fog beside a trunk - trunk| in display
+## luminance, or -1 when no candidate is on screen.
+const TRUNK_CANDIDATES := 8
+
+static func trunk_contrast(img: Image, cam: Camera3D, forest: ForestWorld) -> float:
+	var mid := Vector2(img.get_width() * 0.5, img.get_height() * 0.5)
+	var cands: Array = []
+	for b in trunk_bases(forest):
+		var top: Vector3 = b + Vector3.UP * 1.5
+		var dist: float = cam.global_position.distance_to(top)
+		if dist < 8.0 or dist > 20.0 or cam.is_position_behind(top):
+			continue
+		var s: Vector2 = cam.unproject_position(top)
+		if s.x < 40.0 or s.x > img.get_width() - 40.0 or s.y < 40.0 or s.y > img.get_height() - 40.0:
+			continue
+		cands.append([s.distance_to(mid), top])
+	cands.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
+	var best := -1.0
+	for k in mini(TRUNK_CANDIDATES, cands.size()):
+		var top: Vector3 = cands[k][1]
+		var trunk: float = patch_lum(img, cam, top, 2)
+		# Mist behind the trunk: 1.2 m aside and 5 m higher (the ground behind it is dark, not mist).
+		var beside: float = patch_lum(img, cam, top + cam.global_transform.basis.x * 1.2 + Vector3.UP * 3.5, 2)
+		if trunk < 0.0 or beside < 0.0:
+			continue
+		best = maxf(best, absf(beside - trunk))
+	return best
