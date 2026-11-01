@@ -1,61 +1,67 @@
-# N5 — las jak w koncepcie (stan, pomiary, decyzje)
+# N5 — las jak w koncepcie (stan, pomiary, decyzje, co słabe)
 
-Źródło: `docs/concept/forest_concept.jpg`. Zrzuty z gry (okno, xvfb, ta sama kamera PRZED/PO): `docs/n5/before/` (HEAD `48dfe1c`), `docs/n5/after/` (ta gałąź). Test wizualny: `tests/n5_forest_visual_test.tscn` (okienkowy, w headless SKIP).
+Źródło: `docs/concept/forest_concept.jpg`. Zrzuty z gry w oknie (xvfb), **PRZED** = HEAD `48dfe1c`, **PO** = ta gałąź, te same kamery i ta sama procedura testu: `docs/n5/before/`, `docs/n5/after/` (pary `n5_glade_dir0..3`, `n5_glade_dirN_no_trees` = ta sama kamera bez drzew, `n5_torii_35m`, `n5_sakura_24m`, `n5_border_frame_a/b`, `n5_trail_edge_near`, `n5_trail_edge_no_ferns`, `n5_trail_wide`).
+
+Test: `tests/n5_forest_visual_test.tscn` (okienkowy, w headless SKIP).
 
 ## Co zrobione
 
-| Punkt | Zmiana | Gdzie |
+| Obszar | Zmiana | Gdzie |
 |---|---|---|
-| Gęstość | Drugi rodzaj sugi `base_layout = false` (rozstaw 3 m, korona 0,6–0,9) sadzony po torii, więc układ torii się nie rusza. Rozstaw między pniami wynika z zasięgu koron, nie z samego odstępu. | `worldgen_profile.gd` (`_dense_cedar_entry`), `forest_world.gd` (`_extra_tree_spots`, `_near_extra`, `_near_base`, `_crown_reach_at`) |
-| Gęstość — reguła | Pnie dodatkowe trzymają od pni bazowych i między sobą `0,75 × (r₁ + r₂)` (ta sama miara co `canopy_visual_quality_test`). Zasięg korony liczony jak w teście (przesunięcie dysku + promień). | `forest_world.gd` |
-| Ścieżki | Krawędź liczona w shaderze z odległości do osi (kanał G wierzchołka, w metrach), szum szerokości 0,22 m. Kanał R (waga) zostaje dla testów. | `forest_world.gd` (`_path_colour`), `forest_ground.gdshader` |
-| Paprocie | Asset `fern_zvanstone` (CC BY 4.0), bake RGBA (`tools/prep_forest_assets.py --alpha`), 299 tris, materiał `forest_diffuse` z cięciem po alfie, wpis podszytu `along_path` (tylko na krawędzi ścieżki, bez kolizji). | `assets/models/environment/undergrowth/`, `worldgen_profile.gd` (`_fern_entry`), `undergrowth_entry.gd`, `forest_world.gd` (`_card_material`) |
-| Fade | Każdy rodzaj drzewa, sakura i paproć gasną ditherem na ostatnich 7 m (paprocie 18–26 m) przed krawędzią rysowania, zamiast ucinać się w jednym kroku. | `forest_diffuse.gdshader`, `sakura_tree.gdshader` (`draw_fade`), `forest_world.gd` (`_draw_fade`) |
-| Sakura | Neon nie miał mgły ani fade'u — znikał twardo na 40 m. Teraz fade jak wyżej. | `sakura_tree.gdshader` |
+| Ściana lasu | Nowy rodzaj `back_layer` (TreeEntry): daleka sylwetka rysowana **tylko** od 14 m do promienia rysowania (płynne wejście 14–18 m, zanik przy 33–40 m), bez kolizji, bez układu bazowego, bez wpływu na torii. Jeden MultiMesh na rodzaj (+1 draw call). | `tree_entry.gd`, `worldgen_profile.gd` (`_back_entry`, `back_near`, `back_fade`), `forest_world.gd` (`_back_spots`, `_populate_back_trees`, `_back_silhouette`, `_back_tree_node`) |
+| Sylwetka | Tania (~40 trójkątów): pień + 3 stożki, wszystkie wierzchołki na ścieżce „liść” (bez cięcia alfą), ciemna barwa listowia. Zamiast daleki pień ~400 tris. | `forest_world.gd` (`_build_back_silhouette`) |
+| Mgła warstwy | Maksymalna mgła odległościowa warstwy = 0,35 profilu (`BACK_HAZE_SHARE`); bliski las bez zmian. | `forest_world.gd` (`_back_material`) |
+| Krawędź ścieżki | (1) Odległość liczona **per piksel** z dokładnych odcinków ścieżki (uniform per chunk, ≤48 odcinków, uproszczenie 12 cm). (2) Sieć ścieżek: Chaikin 2 → 4 iteracje (wygładzenie zakrętów siatki 2,5 m). | `forest_ground.gdshader` (`path_distance`), `forest_world.gd` (`_chunk_ground_material`, `_simplify_chain`), `forest_paths.gd` |
+| Paprocie | (z poprzedniej iteracji) krawędź ścieżki, cut-out po alfie, bez kolizji, fade 18–26 m. | `undergrowth_entry.gd`, `worldgen_profile.gd` (`_fern_entry`) |
+| Fade | Drzewa, sakury, paprocie i warstwa tylna gasną ditherem na ostatnich 7 m przed krawędzią rysowania. | `forest_diffuse.gdshader`, `sakura_tree.gdshader`, `forest_world.gd` (`_draw_fade`) |
 
-## Pomiary
+Zachowane: torii, polana (`prop_clearing_radius`), spawn, D19 (niebo nad ścieżkami i polaną; test „Path samples stay under open sky” i „Crown points stay 2.0 m from every path centre line” przechodzą), układ bazowy torii.
 
-Gęstość (pnie na 100 m² w pierścieniu 8–30 m):
+## Pomiary (ten sam test, ta sama procedura)
 
-| | HEAD | teraz |
-|---|---|---|
-| wokół polany | 0,84 | **1,33** |
-| wokół punktów ścieżki | 0,85 | **1,24** |
+**Ściana lasu z polany** — udział pikseli w paśmie horyzontu (28–50% wysokości), które zmienia się po ukryciu węzłów drzew (ta sama kamera, z drzewami i bez; zamazanie 5×5, żeby deszcz nie tworzył fałszywych pikseli):
 
-Nakładanie koron (`canopy_visual_quality_test`, limit 40%): **17,2%**. Otwarte niebo nad ścieżkami 97% (D19 bez zmian). Zasięg koron od pni ścieżki: min. **2,37 m** (limit 2,0 m).
+| | HEAD (PRZED) | PO | próg testu |
+|---|---|---|---|
+| średnia z 4 kierunków | **15,8%** | **68,6%** (60,9 / 72,2 / 72,5 / 68,9) | ≥ 1,5 × PRZED = 23,2% — **PASS** |
 
-Linia wzroku do torii z 35 m, blokada przez pnie: **48%** (test: ≥ 40%).
+**Krawędź ścieżki** — druga różnica położenia krawędzi między wierszami obrazu (krawędź śledzona gradientem, po rozmyciu 7 px):
 
-Budżet (`quest_perf_test`): draw calls **291** (limit 345, z menu 292 — zapas 53), prymitywy lasu **248 485** (limit 315 000). Przed zmianami: 302 768 w D5 notatkach, 135 759 w pierwszym pomiarze tej sesji — porównanie uczciwe tylko z pomiarem na HEAD, którego nie powtórzyłem w tej samej konfiguracji.
+| | HEAD | PO | próg testu |
+|---|---|---|---|
+| maks. [px] | 4,49 | **3,81** | ≤ 2,5 — **FAIL** |
+| średnia [px] | 1,12 | 1,14 | — |
 
-Krawędź ścieżki (pomiar: druga różnica pozycji krawędzi między wierszami obrazu, po rozmyciu 7 px, żeby deszcz nie tworzył fałszywych krawędzi):
+**Paprocie** — 1 415 pikseli zmienionych po pokazaniu węzłów paproci (PRZED: brak paproci, wartość 1 415 to szum deszczu/mech; PO: ~2 000); próg 150 — PASS (ta asercja nie rozróżnia paproci od szumu, patrz słabe).
 
-| | maks. [px] | średnia [px] |
-|---|---|---|
-| PRZED (HEAD) | 5,78 | 1,24 |
-| PO (ta gałąź, szum 0,22 m) | 4,48 | 1,01 |
+**Gęstość pni (headless)**: wokół polany w 8–30 m: 1,33/100 m² (HEAD 0,84); tylna warstwa: 433 pnie w pierścieniu 3×3 (ok. 3/100 m²).
 
-**Próg 2,5 px NIE jest spełniony.** Test `n5_forest_visual_test` raportuje FAIL. Próbowałem szumu 0,10 m: maks. 3,74, średnia 1,27 — gorzej w średniej, więc wróciłem do 0,22 m. Poprawa jest realna, ale krawędź nadal nie jest tak gładka, jak wymaga zadanie.
+**Budżet** (`quest_perf_test`): draw calls **288** (limit 345; z menu 56 zapasu do 345), prymitywy lasu **188 719** (limit 315 000), ostatni pomiar przed zmianą sylwetki w tym samym widoku: 258 595 — zmierzone, w limicie.
 
-Paprocie w kadrze: zmiana **2 707 pikseli** w pasie gruntu, gdy paprocie są widoczne (test: ≥ 150).
+**Linia wzroku do torii z 35 m** (raycast przez pnie, headless): 48% (próg 40%). Na zrzucie `n5_torii_35m` brama z 35 m jest na osi, ale widoczna jako mała sylwetka (~20 px), bo kadr nie może być bliżej (zadanie: z 35 m).
 
-## Testy dodane / rozszerzone
+## Co słabe (surowo, bez upiększania)
 
-- `forest_world_test`: gęstość w pierścieniu polany i ścieżek (≥ 1,0/100 m²), linia wzroku do torii (≥ 40%), fade każdego rodzaju przy krawędzi (bez skoku).
-- `worldgen_path_game_test`: głazy i pnie 2,5 m od ścieżki (bez zmian progu); paprocie stoją na krawędzi, nie na żwirze (≥ 1,6 m od osi). Dla paproci zmieniłem źródło danych na metadane chunka (`xfs_Undergrowth*`), bo w headless odczyt bufora MultiMesh zwraca tożsamość.
-- `n5_forest_visual_test` (okienkowy): krawędź ścieżki (druga różnica), paprocie w kadrze, zrzuty PRZED/PO.
-
-## Co słabe (surowo)
-
-- **Las nadal rzadki w zestawieniu z koncepcją.** 1,3 pnia/100 m² to +60%, nie „gęsty las”. Wąskim gardłem jest reguła koron względem pni bazowych (sugi z zasięgiem ~4–5 m i rozstawem 6 m). Dalsze zagęszczenie wymaga zmiany bazowego układu (rozstaw/korony sugi), a to przesuwa torii — poza zakresem tej zmiany. Zrzuty PO z polany pokazują to wprost.
-- **Krawędź ścieżki nadal ma ząbki** wg miary (4,48 px > 2,5 px). Źródło nie jest zidentyfikowane; podejrzane: aliasing 7 cm strefy przejścia na małej rozdzielczości i szum szerokości.
-- **Paprocie wyglądają jak karty**, nie jak roślina zbita przy pniach — nie robiłem przy pniach (tylko krawędź ścieżki), ani mchu na pniach (mossy_log nie zbadane).
-- **Sakura z daleka:** fade jest, ale nie oceniłem na zrzucie w oczach (sakura_24m), a test wizualny nie sprawdza pop-inu sakury pikselowo.
-- **Torii 35 m** na zrzucie PO nie zawsze kadruje bramę (kamera ustawiona na pozycję, nie na bramę).
-- Ścieżki nie łączą się między chunkami inaczej niż dotąd (nie ruszane).
+- **Krawędź ścieżki nie spełnia progu 2,5 px** (3,81 px). Źródło: nie jedno. (a) Ząbki z siatki terenu usunięte (shader liczy odległość per piksel). (b) Pozostają **ostre narożniki samej osi ścieżki** — widoczne np. na powiększeniu `n5_trail_edge_near` (prawy kadr, ok. x=1400, y=300 na powiększeniu 4×). Trasa ma jeszcze kąty po wygładzeniu Chaikinem 4 (prawdopodobnie zakręt węzła sieci ścieżek). Nie zdążyłem tego zbadać do końca. (c) Miara jest zaszumiona: ±1 px między przebiegami tym samym kodem. Nie obniżałem progu.
+- **Ściana to jedna sylwetka powtórzona**: ten sam stożek ×3 piętra, w równym rozstawie; z konceptem różni się brakiem zróżnicowania koron i brakiem ciemnego pnia pierwszego planu. Wygląda jak tło, nie jak las z konceptu z głębią.
+- **Gęstość bliska (8–14 m) jest nadal rzadka**: warstwa tylna zaczyna się od 14 m, a bliski las zostaje na poziomie 1,33/100 m² (reguła koron względem pni bazowych). Pod polaną widać więc pustą strefę 4–14 m.
+- **Brama z 35 m jest mała** (~20 px) i obok stoją bramy z polany z bliska (3–5 m), których nie da się usunąć bez zmiany spawnu.
+- **Paprocie wyglądają jak karty**: cięcie po alfie działa, ale z odległości brak ich zbitej masy przy pniach (rozmieszczenie tylko przy krawędzi ścieżki). Nie przeszedłem do mchu na pniach (`mossy_log`) — punkt 3 zadania nie jest zrobiony w całości.
+- **Sakura z 24 m** jest czytelna i nie znika nagle. Pop-in sakury na granicy chunka nie jest zmierzony pikselowo: obie klatki `border_frame_a/b` są z różnych pozycji kamery (1,4 m), więc różnica pikseli między nimi nic nie mówi. Oceniam je wizualnie: bez widocznego ucinania pni.
+- **Koszt shadera**: krawędź liczy pętlę po do 30 odcinkach na piksel gruntu. Nie zmierzyłem tego na Quest (tylko headless budżet prymitywów i DC). To ryzyko dla ≥72 fps.
+- **Rozstaw warstwy tylnej** jest w jednym, globalnym gęstości; nie ma wariantu na wysokości/wilgotność, więc wygląda jednorodnie.
+- `xr_play_test`: znany flake (restart po śmierci, „cutting the restart ema”); na HEAD też pada w tej asercji. Nie naprawiony.
 
 ## Decyzje
 
-- Dodatkowe rodzaje sugi/sosny/sekwoi są po torii (`base_layout = false`), więc układ torii zostaje ten sam — zgodnie z D5.
-- Reguła koron (`0,75 × (r₁ + r₂)`) jest traktowana jako twarde ograniczenie gęstości, a nie cel do obejścia. Pnie scen (sekwoje) zmniejszyły się z 75 do 44 w ringu przez tę regułę — akceptuję jako koszt; to hero-drzewa.
-- Paprocie: tylko krawędź ścieżki (`along_path`), bez kolizji, fade 18–26 m.
+- Reguła koron (`0,75 × (r₁+r₂)`) nadal ogranicza bliski las; zamiast ją łamać, dodałem **warstwę tylną**, która jest poza nią (poza 14 m, bez kolizji, bez układu). To zasada, której test sprawdza: kolizje, torii i polana bez zmian.
+- Miara „ściany” jest różnicą kadru z ukrytymi drzewami, nie progiem jasności: mgła N4 spłaszczała daleki las do koloru nieba (wcześniejszy próg jasnościowy dawał 16% PO wobec 16% PRZED — zmierzone i odrzucone).
+- Wygładzanie trasy Chaikinem 4 zmienia geometrię ścieżki o ~cm: testy ścieżki/latarni/torii przechodzą (subset 10/12 + 1 okienkowy).
+
+## Testy (ta gałąź)
+
+- `forest_world_test`: gęstość w pierścieniu polany/ścieżek (≥ 1,0/100 m²), linia wzroku do torii (≥ 40%), fade każdego rodzaju.
+- `worldgen_path_game_test`: głazy/pnie ≥ 2,5 m od ścieżki; **paprocie istnieją przy ścieżce (>0)** i nie są na żwirze (≥ 1,6 m); każdy chunk przekazuje ≤ 48 odcinków ścieżki do shadera.
+- `n5_forest_visual_test` (okienkowy): ściana lasu (próg 1,5× PRZED), krawędź ścieżki (2,5 px — **FAIL**), paprocie w kadrze; zrzuty z `--shots`.
+
+Pełny zestaw (headless, 2 joby, `HANABI_TEST_OUT=/tmp/hanabi_tests_n5`): **69/76 pass**, 6 pominiętych (okienkowe), 1 FAIL = `xr_play_test` (znany flake).
