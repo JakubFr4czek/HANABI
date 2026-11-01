@@ -17,6 +17,8 @@ const N5_PRE_FOREST_SHARE := 15.5
 const N5_MIN_FOREST_GAIN := 1.5
 ## Largest second difference of the trail-edge x between rows, pixels: a smooth edge stays under it.
 const MAX_EDGE_STEP_PX := 2.5
+## Frames measured for the trail edge (median of their maxima).
+const N_EDGE_FRAMES := 5
 ## Changed pixels in the ground band when the ferns are shown: at least this many.
 const MIN_FERN_PIXELS := 150
 ## Luminance change (blurred, 0..1) that counts as a tree pixel.
@@ -79,30 +81,57 @@ func _run_all() -> void:
 		mean >= N5_PRE_FOREST_SHARE * N5_MIN_FOREST_GAIN)
 
 	# b) and c): the trail edge and the ferns, from a point on the trail 9 m out.
+	# View A (fixed, the same on HEAD and after N5): the trail 9 m out from the glade. The edge metric runs here.
 	var along := _trail_point(forest, 9.0)
 	var dir: Vector3 = along.dir
 	var stand: Vector3 = along.pos - dir * 3.5
 	_stand(player, forest, stand, dir)
 	player.camera.look_at(along.pos + Vector3(0.0, -0.9, 0.0) + dir * 1.5, Vector3.UP)
 	await _frames(30)
-	var img := await _capture("n5_trail_edge_near")
-	var edge := _edge_steps(img)
-	print("MEASURE trail edge: rows %d, max second difference %.2f px, mean %.2f px" % [edge.rows, edge.max_step, edge.mean_step])
+	# Rain falls differently in every frame: the same view is measured on N_EDGE_FRAMES frames and the
+	# median of the per-frame maxima is taken, so one streak cannot make or break the verdict.
+	var maxima: Array[float] = []
+	var means: Array[float] = []
+	var img: Image = null
+	var rows := 0
+	for k in N_EDGE_FRAMES:
+		await _frames(1)
+		var frame := await _capture("n5_trail_edge_near" if k == 0 else "")
+		if k == 0:
+			img = frame
+		var e := _edge_steps(frame)
+		rows = e.rows
+		maxima.append(e.max_step)
+		means.append(e.mean_step)
+	maxima.sort()
+	means.sort()
+	var edge := {"rows": rows, "max_step": maxima[maxima.size() / 2], "mean_step": means[means.size() / 2]}
+	print("MEASURE trail edge (median of %d frames): rows %d, max second difference %.2f px (frames %s), mean %.2f px" % [N_EDGE_FRAMES, edge.rows, edge.max_step, str(maxima), edge.mean_step])
 	_check("The trail edge is a curve, not steps (max second difference %.2f px, need <= %.1f)" % [edge.max_step, MAX_EDGE_STEP_PX],
 		edge.rows >= 12 and edge.max_step <= MAX_EDGE_STEP_PX)
 
-	var ferns_on := _fern_nodes(forest)
-	for node in ferns_on:
-		node.visible = false
-	await _frames(3)
-	var without := await _capture("n5_trail_edge_no_ferns")
-	for node in ferns_on:
-		node.visible = true
-	await _frames(3)
-	var fern_px := _changed_pixels(img, without)
-	print("MEASURE fern pixels changed by showing the ferns (ground band): %d over %d fern nodes" % [fern_px, ferns_on.size()])
+	# View B: a fern 1.6–3 m off the trail, 4–10 m from the glade, framed from the trail. The ferns are
+	# hidden and shown again on the same view; the pixels that change are the ferns in the picture.
+	var fern_view := _fern_trail_point(forest)
+	var fern_px := 0
+	var fern_nodes := _fern_nodes(forest)
+	if not fern_view.is_empty():
+		var fdir: Vector3 = fern_view.dir
+		_stand(player, forest, fern_view.pos - fdir * 2.6, fdir)
+		player.camera.look_at(fern_view.pos + Vector3(0.0, -0.9, 0.0) + fdir * 1.5, Vector3.UP)
+		await _frames(30)
+		var with_ferns := await _capture("n5_fern_trail")
+		for node in fern_nodes:
+			node.visible = false
+		await _frames(3)
+		var without_ferns := await _capture("n5_fern_trail_no_ferns")
+		for node in fern_nodes:
+			node.visible = true
+		await _frames(3)
+		fern_px = _changed_pixels(with_ferns, without_ferns)
+	print("MEASURE fern pixels changed by showing the ferns on the fern view: %d over %d fern nodes" % [fern_px, fern_nodes.size()])
 	_check("Ferns are in the picture beside the trail (%d pixels change when they are shown, need %d)" % [fern_px, MIN_FERN_PIXELS],
-		ferns_on.size() > 0 and fern_px >= MIN_FERN_PIXELS)
+		not fern_view.is_empty() and fern_px >= MIN_FERN_PIXELS)
 
 	if out_dir != "":
 		await _review_shots(forest, player, along)
@@ -320,11 +349,67 @@ func _fern_nodes(forest: ForestWorld) -> Array[MultiMeshInstance3D]:
 	for key in forest._chunks:
 		var chunk := forest._chunks[key] as Node3D
 		for u in forest.profile.undergrowth.size():
-			if forest.profile.undergrowth[u].cutout:
+			if forest.profile.undergrowth[u].get("cutout") == true:
 				var node := chunk.get_node_or_null("Undergrowth%d" % u) as MultiMeshInstance3D
 				if node != null:
 					out.append(node)
 	return out
+
+
+## A trail point beside a fern: the fern stands 1.6–3 m off the centre line and 6–14 m from the glade.
+## Returns {pos, dir} of the trail there, or an empty dictionary when no such fern exists in the ring.
+func _fern_trail_point(forest: ForestWorld) -> Dictionary:
+	for key in forest._chunks:
+		var root := forest._chunks[key] as Node3D
+		for u in forest.profile.undergrowth.size():
+			if not forest.profile.undergrowth[u].get("cutout") == true:
+				continue
+			for xf in root.get_meta("xfs_Undergrowth%d" % u, []):
+				var t: Transform3D = xf
+				var w := root.position + t.origin
+				var from_glade := Vector2(w.x, w.z).length()
+				if from_glade < 4.0 or from_glade > 10.0:
+					continue
+				var best := {}
+				var best_d := INF
+				for sm in forest.paths.samples_in_rect(Rect2(Vector2(w.x, w.z) - Vector2(4.0, 4.0), Vector2(8.0, 8.0)), 0.5):
+					var d := Vector2(sm.x - w.x, sm.y - w.z).length()
+					if d < best_d:
+						best_d = d
+						best = {"pos": Vector3(sm.x, forest.height_at(sm.x, sm.y), sm.y), "dir": Vector3(sm.z, 0.0, sm.w).normalized()}
+				if not best.is_empty() and best_d >= 1.6 and best_d <= 3.0:
+					return best
+	return {}
+
+
+## The nearest fern (cut-out kind) to [param at] on the ground, or INF when none is within 8 m.
+func _nearest_fern(forest: ForestWorld, at: Vector3, dir: Vector3) -> Vector3:
+	var gates: Array[Vector3] = []
+	var ferns: Array[Vector3] = []
+	for key in forest._chunks:
+		var root := forest._chunks[key] as Node3D
+		for g in root.get_meta("torii_world_positions", []):
+			gates.append(g)
+		for u in forest.profile.undergrowth.size():
+			if not forest.profile.undergrowth[u].get("cutout") == true:
+				continue
+			for xf in root.get_meta("xfs_Undergrowth%d" % u, []):
+				var t: Transform3D = xf
+				var w := root.position + t.origin
+				if Vector2(w.x - at.x, w.z - at.z).length() < 8.0:
+					ferns.append(w)
+	# Nearest first; a fern whose sightline from the camera (2.4 m back along the trail) meets a gate is skipped.
+	ferns.sort_custom(func(a: Vector3, b: Vector3) -> bool:
+		return Vector2(a.x - at.x, a.z - at.z).length() < Vector2(b.x - at.x, b.z - at.z).length())
+	for w in ferns:
+		var cam := w - dir * 2.4
+		var hidden := false
+		for g in gates:
+			if Vector2(g.x - cam.x, g.z - cam.z).length() < w.distance_to(cam) and _seg_dist_xz(cam, w, g) < 2.0:
+				hidden = true
+		if not hidden:
+			return w
+	return Vector3.INF
 
 
 ## Pixels of the ground band (lower 55 %) that differ between two frames of the same view.
