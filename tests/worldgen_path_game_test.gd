@@ -42,6 +42,7 @@ func _run_all() -> void:
 
 	var reach := forest._path_half_width() + forest.profile.path_tree_clearance - 0.5
 	var worst := INF
+	var fern_worst := INF
 	for key in forest._chunks:
 		var chunk := forest._chunks[key] as Node3D
 		var field := forest._path_field(key)
@@ -49,11 +50,21 @@ func _run_all() -> void:
 		for s in forest._tree_spots(key).get("spots", []):
 			var spot: Vector4 = s
 			worst = minf(worst, forest._field_at(field, Vector2(spot.x, spot.y) - centre))
-		for p in chunk.get_meta("undergrowth_world_positions", []):
-			var stone: Vector3 = p
-			worst = minf(worst, forest._field_at(field, Vector2(stone.x, stone.z) - centre))
+		# Boulders (and any other floor kind) keep the clearance; along-path kinds (N5 ferns) stand on the
+		# trail's edge by design, so they get their own rule below: off the gravel and its edge.
+		for u in forest.profile.undergrowth.size():
+			for xf in chunk.get_meta("xfs_Undergrowth%d" % u, []):
+				var at: Vector3 = (xf as Transform3D).origin
+				var d := forest._field_at(field, Vector2(at.x, at.z))
+				if forest.profile.undergrowth[u].along_path:
+					fern_worst = minf(fern_worst, d)
+				else:
+					worst = minf(worst, d)
 	_check("No trunk or boulder stands within the path clearance (nearest %.2f m, need %.2f m)" % [worst, reach],
 		worst >= reach)
+	var edge := forest._path_half_width() + 0.6
+	_check("Ferns stand on the trail's edge, never on the gravel (nearest %.2f m, need %.2f m)" % [fern_worst, edge],
+		fern_worst >= edge or fern_worst == INF)
 	run.queue_free()
 	await get_tree().process_frame
 
