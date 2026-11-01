@@ -2290,6 +2290,12 @@ func _tree_material(far: float, own_albedo: Texture2D = null) -> ShaderMaterial:
 	if own_albedo != null:
 		band = Vector2(1.0e5, 1.0e5 + 1.0)
 	mat.set_shader_parameter("lod_band", band)
+	mat.set_shader_parameter("height_haze_low", profile.crown_haze_low)
+	mat.set_shader_parameter("height_haze_high", profile.crown_haze_high)
+	mat.set_shader_parameter("height_haze", profile.crown_haze_amount)
+	mat.set_shader_parameter("distance_haze_start", profile.distance_haze_start)
+	mat.set_shader_parameter("distance_haze_end", profile.distance_haze_end)
+	mat.set_shader_parameter("distance_haze_max", profile.distance_haze_max)
 	return mat
 
 

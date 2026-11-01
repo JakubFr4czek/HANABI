@@ -132,9 +132,10 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## fog, ambient and moon colours all follow the mix (see fog_color()).
 @export var dusk_pink := Color(0.46, 0.22, 0.42)
 ## Night colour of the palette (fog, ambient and moon at dusk_mix 0).
-@export var night_blue := Color(0.12, 0.26, 0.34)
+## Indigo (N4): the mist is deep and cool; the cyan gate glow stays clearly off its hue.
+@export var night_blue := Color(0.13, 0.12, 0.32)
 ## 0 = night blue, 1 = dusk rose. Fog, ambient and moon follow it.
-@export_range(0.0, 1.0, 0.01) var dusk_mix := 0.3
+@export_range(0.0, 1.0, 0.01) var dusk_mix := 0.12
 ## Light the fog gives the forest floor and trunks.
 @export_range(0.0, 2.0, 0.01) var ambient_energy := 0.55
 ## Strength of the moonbeams through the canopy (the spawn beam included). Kept low:
@@ -151,7 +152,7 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Cyan glow of the forest gates: the emission tint of the gate material.
 @export var torii_glow_color := Color(0.3, 0.9, 1.0)
 ## Strength of the gate glow in torii_glow_color (0 = no glow).
-@export_range(0.0, 2.0, 0.01) var torii_glow_strength := 0.12
+@export_range(0.0, 2.0, 0.01) var torii_glow_strength := 0.5
 
 @export_group("Ground")
 ## How damp the ground looks (0 dry, 1 wet).
@@ -164,7 +165,7 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(0.0, 1.0, 0.01) var ground_roughness_wet := 0.72
 ## Fog-coloured fill light on the forest floor (0 = the old black floor). Lifts the
 ## ground beside the trail to a readable dark moss, not a black void (N4 measure: 0.06 at 0.08).
-@export_range(0.0, 0.8, 0.01) var ground_fill := 0.3
+@export_range(0.0, 1.5, 0.01) var ground_fill := 0.6
 
 @export_group("Paths")
 ## Footpaths joining the glade, the gates and the shrines (see ForestPaths).
@@ -237,7 +238,19 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## Beyond it a far crown of about 400 triangles takes over, cross-faded over lod_fade.
 @export_range(2.0, 40.0, 0.5) var lod_near_radius := 8.0
 ## Width of the dithered cross-fade between the full and the far crown, metres.
-@export_range(0.5, 12.0, 0.1) var lod_fade := 2.0
+@export_range(0.5, 12.0, 0.1) var lod_fade := 0.5
+## Height haze on the crowns (N4): above crown_haze_low the crown takes the fog colour
+## by crown_haze_amount, fully at crown_haze_high. The tall crown tops dissolve into the
+## mist instead of standing out as dark blocks (the "clouds" of the CI findings).
+@export_range(0.0, 40.0, 0.5) var crown_haze_low := 8.0
+@export_range(0.0, 60.0, 0.5) var crown_haze_high := 22.0
+@export_range(0.0, 1.0, 0.01) var crown_haze_amount := 0.45
+## Distance haze on the crowns and trunks (N4): from distance_haze_start to distance_haze_end
+## (metres) they take up to distance_haze_max of the mist colour. Starting later keeps the
+## trunks 12-20 m away dark against the mist (atmospheric perspective) instead of washing out.
+@export_range(0.0, 60.0, 0.5) var distance_haze_start := 20.0
+@export_range(4.0, 80.0, 0.5) var distance_haze_end := 40.0
+@export_range(0.0, 1.0, 0.01) var distance_haze_max := 0.5
 ## Ground fade from the camera: start and full fade, metres.
 @export_range(5.0, 200.0, 0.5) var ground_fade_start := 60.0
 ## Distance where the ground fades out fully, metres.
