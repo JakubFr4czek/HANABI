@@ -48,6 +48,9 @@ enum Crown {
 ## (docs/N5_FOREST.md). Its chunk meta is xfs_Back<e>, so the crown and sky tests of the near forest
 ## do not count it.
 @export var back_layer := false
+## Back layer only: metres from the camera where the kind starts to fade in (-1 = the profile's back_near).
+## A middle kind uses a nearer start, so the 8–14 m ring holds trunks too (N5).
+@export var draw_from := -1.0
 ## Solid trunk: the player and the blade stop on it (yōkai steer around it).
 @export var obstacle := true
 ## Neon sakura look (only for crown SAKURA): accent glow, petals, rim light, emission and sparsity.

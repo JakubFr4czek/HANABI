@@ -295,7 +295,7 @@ func moon_color() -> Color:
 
 
 func _init() -> void:
-	trees = [_cedar_entry(), _sakura_entry(), _redwood_entry(), _pine_entry(), _dense_cedar_entry(), _back_entry()]
+	trees = [_cedar_entry(), _sakura_entry(), _redwood_entry(), _pine_entry(), _dense_cedar_entry(), _back_entry(), _mid_entry()]
 	undergrowth = [_boulder_entry(), _fern_entry()]
 	torii_scene = load(TORII_SCENE_PATH)
 	lantern_scene = load(LANTERN_SCENE_PATH)
@@ -477,6 +477,24 @@ func _dense_cedar_entry() -> TreeEntry:
 
 
 ## Back layer (N5): far silhouettes of the forest wall, spaced 2.5 m, after the gates. See TreeEntry.back_layer.
+## Middle kind (N5): the 6–14 m ring. Drawn from 6 m (its own fade band), with trunk colliders, so a
+## player walking off the trail meets it. Stays off the trail, the glade, the gates and the spawn.
+func _mid_entry() -> TreeEntry:
+	var t := TreeEntry.new()
+	t.label = "Middle kind, 6-14 m ring (N5)"
+	t.crown = TreeEntry.Crown.CEDAR
+	t.weight = 1.0
+	t.base_layout = false
+	t.back_layer = true
+	t.obstacle = false
+	t.draw_from = 6.0
+	t.min_spacing = 2.0
+	t.hill_lean = 0.3
+	t.scale_min = 0.7
+	t.scale_max = 1.0
+	return t
+
+
 func _back_entry() -> TreeEntry:
 	var t := TreeEntry.new()
 	t.label = "Back layer, far silhouettes (N5)"
@@ -487,7 +505,7 @@ func _back_entry() -> TreeEntry:
 	t.obstacle = false
 	t.min_spacing = 2.5
 	t.hill_lean = 0.3
-	t.scale_min = 0.9
+	t.scale_min = 0.8
 	t.scale_max = 1.3
 	return t
 
