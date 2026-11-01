@@ -23,6 +23,8 @@ func _run_all() -> void:
 	var player := run.player as DesktopPlayer
 	_check("RunGame spawns the endless forest around the shrine", forest != null)
 	_check("Forest keeps a bounded 3×3 chunk ring", forest.chunk_count == 9)
+	# N5 density is read at the spawn, before the walks below move the ring.
+	await _n5_density_sight_and_fade(forest)
 
 	var before := forest.center_chunk
 	player.teleport(Vector3(34.0, 0.0, 6.0), 0.0)
@@ -604,3 +606,81 @@ func _nearest_trunk_distance(trunks: Array[Vector2], at: Vector3) -> float:
 	for t in trunks:
 		best = minf(best, Vector2(at.x - t.x, at.z - t.y).length())
 	return best
+
+
+## N5: the forest is dense enough to read as a forest (trunks per area in the 8–30 m ring
+## around the glade and around path points), a gate 35 m away is hidden by trunks in a good share
+## of the sightlines, and every kind fades out at its draw edge (no pop at the radius).
+const N5_RING_LO := 8.0
+const N5_RING_HI := 30.0
+const N5_MIN_RING_DENSITY := 1.0
+const N5_MIN_BLOCKED_SHARE := 0.4
+const N5_SIGHT_DISTANCE := 35.0
+
+func _n5_density_sight_and_fade(forest: ForestWorld) -> void:
+	var trunks: Array[Vector2] = []
+	for key in forest._chunks:
+		var root := forest._chunks[key] as Node3D
+		for e in forest.profile.trees.size():
+			var label := ("Focal%d" if forest.profile.trees[e].is_focal() else "Trees%d") % e
+			for xf in root.get_meta("xfs_" + label, []):
+				var t: Transform3D = xf
+				trunks.append(Vector2(root.position.x + t.origin.x, root.position.z + t.origin.z))
+	var ring_area := PI * (N5_RING_HI * N5_RING_HI - N5_RING_LO * N5_RING_LO)
+	var glade := 0
+	for p in trunks:
+		if p.length() >= N5_RING_LO and p.length() <= N5_RING_HI:
+			glade += 1
+	var glade_density := glade * 100.0 / ring_area
+	var path_hits := 0
+	var path_samples := forest.paths.samples_in_rect(Rect2(Vector2(-60.0, -60.0), Vector2(120.0, 120.0)), 10.0)
+	for s in path_samples:
+		var c := Vector2(s.x, s.y)
+		for p in trunks:
+			var d := p.distance_to(c)
+			if d >= N5_RING_LO and d <= N5_RING_HI:
+				path_hits += 1
+	var path_density := float(path_hits) / maxf(1.0, float(path_samples.size())) * 100.0 / ring_area
+	_check("The 8–30 m ring around the glade holds trunks (%.2f per 100 m², %d trunks)" % [glade_density, glade],
+		glade_density >= N5_MIN_RING_DENSITY)
+	_check("The ring around path points holds trunks too (%.2f per 100 m² over %d points)" % [path_density, path_samples.size()],
+		path_density >= N5_MIN_RING_DENSITY)
+
+	# Sightlines: from 35 m out, a ray to a gate's upper frame, blocked by a trunk (the trunk layer only).
+	var space := get_viewport().world_3d.direct_space_state
+	var rays := 0
+	var blocked := 0
+	for key in forest._chunks:
+		var root := forest._chunks[key] as Node3D
+		for g in root.get_meta("torii_world_positions", []):
+			var gate: Vector3 = g
+			var target := gate + Vector3(0.0, 2.5, 0.0)
+			for k in 12:
+				var a := TAU * float(k) / 12.0
+				var eye_xz := Vector2(gate.x, gate.z) + Vector2(cos(a), sin(a)) * N5_SIGHT_DISTANCE
+				var eye := Vector3(eye_xz.x, forest.height_at(eye_xz.x, eye_xz.y) + 1.6, eye_xz.y)
+				if forest._in_clearing(eye.x, eye.z):
+					continue
+				var query := PhysicsRayQueryParameters3D.create(eye, target, ForestWorld.TRUNK_LAYER)
+				rays += 1
+				if not space.intersect_ray(query).is_empty():
+					blocked += 1
+	var share := float(blocked) / maxf(1.0, float(rays))
+	_check("Gates 35 m away are hidden behind trunks in %.0f%% of %d sightlines (need %.0f%%)" % [share * 100.0, rays, N5_MIN_BLOCKED_SHARE * 100.0],
+		rays >= 12 and share >= N5_MIN_BLOCKED_SHARE)
+
+	# Fade: every kind dissolves over the last band before its draw edge, and ends at it.
+	var fade_ok := true
+	var fades := 0
+	for e in forest.profile.trees.size():
+		var radius := forest.profile.focal_draw_radius if forest.profile.trees[e].is_focal() else forest.profile.tree_draw_radius
+		var fade: Vector2 = forest._tree_mats[e].get_shader_parameter("draw_fade")
+		fade_ok = fade_ok and absf(fade.y - radius) < 0.01 and fade.y - fade.x >= 4.0
+		fades += 1
+	for u in forest.profile.undergrowth.size():
+		if forest.profile.undergrowth[u].cutout:
+			var card: Vector2 = forest._under_mats[u].get_shader_parameter("draw_fade")
+			fade_ok = fade_ok and card.x < card.y and card.y <= forest.profile.tree_draw_radius
+			fades += 1
+	_check("Every tree and fern kind fades out at its draw edge, no pop (%d kinds checked)" % fades, fade_ok and fades > 0)
+
