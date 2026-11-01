@@ -29,6 +29,8 @@ const PATH_ENCODE_RANGE := 4.0
 ## Most centre-line segments a chunk hands to the ground shader (forest_ground.gdshader path_segs).
 const PATH_SEGMENTS_MAX := 48
 const PATH_SIMPLIFY_TOL := 0.12
+## Metres around a shrine that stay free of the middle and back kinds (N5): the offering cards need room.
+const SHRINE_RESERVE := 6.0
 ## Width of the distance fade at a kind's draw edge, metres (see _draw_fade).
 ## Share of the distance haze the back layer takes (see _back_material).
 const BACK_HAZE_SHARE := 0.35
@@ -116,6 +118,8 @@ var _back_spot_cache: Dictionary = {}
 var _back_mats: Array[Material] = []
 ## Silhouette of the back layer (N5): ~40 triangles, shared by every back kind's instances.
 var _back_meshes: Dictionary = {}
+## Ground positions (x, z) of shrines: the middle and back kinds keep SHRINE_RESERVE metres from them.
+var _shrine_reserves: Array[Vector2] = []
 var _back_tree_nodes: Dictionary = {}
 var _tree_spot_cache: Dictionary = {}
 ## Chunk coord -> {points: Array[Vector4] (x, z, entry, spacing), clearing: int}.
@@ -1199,7 +1203,97 @@ func _populate_back_trees(root: Node3D, coord: Vector2i) -> void:
 		for v in BACK_VARIANTS:
 			all.append_array(spots.get(back_key(e, v), []))
 		if not all.is_empty():
-			root.add_child(_build_tree_colliders(all, e, root))
+			root.add_child(_build_back_colliders(all, e, root))
+
+
+## Trunk colliders of one back-layer kind (N5). Their registrations are remembered on the chunk, so a
+## shrine founded later can take them out again (see reserve_shrine).
+func _build_back_colliders(all: Array[Transform3D], e: int, root: Node3D) -> StaticBody3D:
+	var before := (root.get_meta("trunk_entries", []) as Array).size()
+	var body := _build_tree_colliders(all, e, root)
+	var registered: Array = root.get_meta("trunk_entries", [])
+	root.set_meta("back_trunk_entries", registered.slice(before))
+	return body
+
+
+## True when a ground point lies within SHRINE_RESERVE metres of a shrine.
+func _reserved(p: Vector2) -> bool:
+	for c in _shrine_reserves:
+		if p.distance_to(c) < SHRINE_RESERVE:
+			return true
+	return false
+
+
+## A shrine stands at [param at] (world): the middle and back kinds keep SHRINE_RESERVE metres from it.
+## Chunks already built lose their silhouettes and colliders there; chunks built later skip them.
+func reserve_shrine(at: Vector3) -> void:
+	var c := Vector2(at.x, at.z)
+	_shrine_reserves.append(c)
+	for key in _chunks.keys():
+		_strip_back_near(key, c)
+	for key in _back_spot_cache.keys():
+		var spots: Dictionary = _back_spot_cache[key]
+		for k in spots:
+			var kept: Array[Transform3D] = []
+			for xf in spots[k]:
+				var t: Transform3D = xf
+				if _chunk_point(key, t.origin).distance_to(c) >= SHRINE_RESERVE:
+					kept.append(t)
+			spots[k] = kept
+
+
+## World ground point of a chunk-local origin.
+func _chunk_point(coord: Vector2i, local: Vector3) -> Vector2:
+	return Vector2(float(coord.x) * _chunk_size + local.x, float(coord.y) * _chunk_size + local.z)
+
+
+## Removes the back-layer silhouettes of one built chunk within SHRINE_RESERVE of [param c], and rebuilds the
+## chunk's colliders of those kinds from what is left.
+func _strip_back_near(coord: Vector2i, c: Vector2) -> void:
+	var root := _chunks.get(coord) as Node3D
+	if root == null:
+		return
+	var changed := {}
+	for key in _back_keys():
+		var list: Array = root.get_meta("xfs_Back%d" % key, [])
+		var kept: Array[Transform3D] = []
+		for xf in list:
+			var t: Transform3D = xf
+			if _chunk_point(coord, t.origin).distance_to(c) >= SHRINE_RESERVE:
+				kept.append(t)
+		if kept.size() != list.size():
+			changed[key] = true
+			root.set_meta("xfs_Back%d" % key, kept)
+	if changed.is_empty():
+		return
+	for e in _back_entries():
+		var kind_changed := false
+		for v in BACK_VARIANTS:
+			if changed.has(back_key(e, v)):
+				kind_changed = true
+		if not kind_changed:
+			continue
+		# Forget the old registrations, drop the old body, build the kept silhouettes again.
+		var reg: Array = root.get_meta("trunk_entries", [])
+		for pair in root.get_meta("back_trunk_entries", []):
+			var cell: Vector2i = pair[0]
+			(_trunk_cells.get(cell, []) as Array).erase(pair[1])
+			reg.erase(pair)
+		root.set_meta("trunk_entries", reg)
+		root.set_meta("back_trunk_entries", [])
+		for child in root.get_children():
+			if child is StaticBody3D and String(child.name) == "TrunkColliders%d" % e:
+				root.remove_child(child)
+				child.queue_free()
+		var all: Array[Transform3D] = []
+		for v in BACK_VARIANTS:
+			var k := back_key(e, v)
+			var kept_list: Array = root.get_meta("xfs_Back%d" % k, [])
+			all.append_array(kept_list)
+			if _back_spot_cache.has(coord):
+				(_back_spot_cache[coord] as Dictionary)[k] = kept_list
+		if profile.trees[e].obstacle and not all.is_empty():
+			root.add_child(_build_back_colliders(all, e, root))
 
 ## Key of one back-layer silhouette variant in the chunk spots and meta: kind index × 10 + variant.
 static func back_key(e: int, variant: int) -> int:
@@ -1228,7 +1322,7 @@ func _back_spots(coord: Vector2i) -> Dictionary:
 		for v in BACK_VARIANTS:
 			lists.append([] as Array[Transform3D])
 		for p in _take_poisson(coord, e):
-			if _in_clearing(p.x, p.y):
+			if _in_clearing(p.x, p.y) or _reserved(p):
 				continue
 			if not field.is_empty() and _field_at(field, p - centre) < path_gap:
 				continue
@@ -1451,6 +1545,7 @@ func _path_half_width() -> float:
 ## Trodden spur from the nearest path to a shrine. Top level, in world space, so
 ## the shrine's own turn does not bend it; it is freed with the shrine.
 func connect_shrine(shrine: Node3D) -> void:
+	reserve_shrine(shrine.position)
 	if paths == null:
 		return
 	var at := shrine.position
@@ -2326,47 +2421,12 @@ func _chunk_ground_material(coord: Vector2i) -> ShaderMaterial:
 	if paths != null:
 		var size := _chunk_size
 		var rect := Rect2(Vector2(coord) * size - Vector2(size, size) * 0.5, Vector2(size, size)).grow(4.0)
-		var pts := paths.segments_in_rect(rect)
-		var chain: Array[Vector2] = []
-		for k in range(0, pts.size() - 1, 2):
-			var a := pts[k]
-			if chain.is_empty() or chain[chain.size() - 1].distance_to(a) > 0.001:
-				_simplify_chain(chain, segs)
-				chain = [a]
-			chain.append(pts[k + 1])
-		_simplify_chain(chain, segs)
+		segs = paths.smooth_segments_in_rect(rect, PATH_SIMPLIFY_TOL)
+		if segs.size() > PATH_SEGMENTS_MAX:
+			segs.resize(PATH_SEGMENTS_MAX)
 	mat.set_shader_parameter("path_seg_count", segs.size())
 	mat.set_shader_parameter("path_segs", segs)
 	return mat
-
-
-## Greedy simplification of one polyline into long segments: a run of points stays one segment while
-## every point it skips lies within PATH_SIMPLIFY_TOL of it (12 cm, far below a pixel on Quest). The
-## ground shader loops over these segments per pixel, so their count is kept small.
-static func _simplify_chain(chain: Array[Vector2], out: PackedVector4Array) -> void:
-	# Rounded before the simplification: where two footpath edges meet at a node, their routes
-	# meet at an angle; Chaikin on the joined chain turns that corner into a curve (N5).
-	if chain.size() >= 3:
-		var raw := PackedVector2Array(chain)
-		var curved := ForestPaths._chaikin(raw, 2)
-		var smooth: Array[Vector2] = []
-		for q in curved:
-			smooth.append(q)
-		chain = smooth
-	var i := 0
-	while i < chain.size() - 1:
-		var j := i + 1
-		while j + 1 < chain.size() and _chain_straight(chain, i, j + 1):
-			j += 1
-		out.append(Vector4(chain[i].x, chain[i].y, chain[j].x, chain[j].y))
-		i = j
-
-
-static func _chain_straight(chain: Array[Vector2], i: int, j: int) -> bool:
-	for m in range(i + 1, j):
-		if ForestPaths.segment_distance(chain[m], chain[i], chain[j]) > PATH_SIMPLIFY_TOL:
-			return false
-	return true
 
 
 func _build_terrain_collider(mesh: ArrayMesh) -> StaticBody3D:
