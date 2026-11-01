@@ -14,7 +14,7 @@ signal boss_defeated(oni: RunOniBoss, hit: Dictionary)
 
 const ONI_SCALE := 1.50
 ## Scale of the boss mask node (N3): the shared demon mask, at the size of the old boss mask.
-const ONI_MASK_SCALE := 2.35
+const ONI_MASK_SCALE := 1.88
 ## Half-thickness of the visible kanabō head: mesh AABB x 0.144 m × 1.45 scale
 ## (0.209 m) → radius 0.105 m. Added to the player capsule radius; the blade
 ## segment below already spans the whole visible head, so no extra reach fudge.
@@ -341,7 +341,7 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 	var mesh := _oni_mask_mesh()
 	mask_mi.mesh = mesh if mesh else _fallback_mask_mesh()
 	mask_mi.position = Vector3(0.0, 0.03, 0.16)
-	# The yōkai mask is ~0.18 m wide; the boss's mask is ~2.35x that (about 0.41 m, as before).
+	# The yōkai mask is 0.22 m wide; at 1.88 the boss mask is about 0.41 m wide, as before (N3 fix2).
 	mask_mi.scale = Vector3.ONE * ONI_MASK_SCALE
 	mask_mi.material_override = _mask
 	var eye_l := MeshInstance3D.new()
