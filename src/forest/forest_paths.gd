@@ -85,6 +85,102 @@ func edges_in_rect(rect: Rect2) -> Array[Vector4i]:
 	return out
 
 
+## Smooth centre-line segments for the ground shader (N5): the edges around [param rect] are joined at
+## their nodes where exactly two edges meet, the joined polyline is rounded with Chaikin (so a node is a
+## curve, not a corner), then simplified within [param tol] metres. Returns (a, b) pairs as Vector4
+## (a.xy, b.xy), only the segments whose box touches [param rect].
+func smooth_segments_in_rect(rect: Rect2, tol: float) -> PackedVector4Array:
+	var out := PackedVector4Array()
+	if _p == null or not _p.paths_enabled:
+		return out
+	var keys := edges_in_rect(rect.grow(48.0))
+	var lines: Array = []
+	var ends: Array = []
+	var node_edges: Dictionary = {}
+	for idx in keys.size():
+		var k := keys[idx]
+		var na := Vector2i(k.x, k.y)
+		var nb := Vector2i(k.z, k.w)
+		lines.append(polyline(k))
+		ends.append([na, nb])
+		for n in [na, nb]:
+			if not node_edges.has(n):
+				node_edges[n] = []
+			(node_edges[n] as Array).append(idx)
+	var used := {}
+	for idx in lines.size():
+		if used.has(idx):
+			continue
+		used[idx] = true
+		var chain := PackedVector2Array(lines[idx])
+		# Walk forward from the end, then backward from the start, through nodes of degree 2 only.
+		var node: Vector2i = ends[idx][1]
+		var cur := idx
+		while (node_edges[node] as Array).size() == 2:
+			var other := _other_edge(node_edges[node], cur)
+			if other < 0 or used.has(other):
+				break
+			used[other] = true
+			var nxt := PackedVector2Array(lines[other])
+			if ends[other][0] != node:
+				nxt.reverse()
+			chain.append_array(nxt.slice(1))
+			node = ends[other][1] if ends[other][0] == node else ends[other][0]
+			cur = other
+		node = ends[idx][0]
+		cur = idx
+		var prefix := PackedVector2Array()
+		while (node_edges[node] as Array).size() == 2:
+			var other := _other_edge(node_edges[node], cur)
+			if other < 0 or used.has(other):
+				break
+			used[other] = true
+			var prv := PackedVector2Array(lines[other])
+			if ends[other][1] != node:
+				prv.reverse()
+			var add := prv.slice(0, prv.size() - 1)
+			add.append_array(prefix)
+			prefix = add
+			node = ends[other][0] if ends[other][1] == node else ends[other][1]
+			cur = other
+		prefix.append_array(chain)
+		_emit_chain(prefix, rect, tol, out)
+	return out
+
+
+## The other edge of a degree-2 node (the one that is not [param cur]); -1 when there is none.
+static func _other_edge(edges: Array, cur: int) -> int:
+	for e in edges:
+		if int(e) != cur:
+			return int(e)
+	return -1
+
+
+## Chaikin-rounds one joined polyline, then simplifies it into long segments kept when they touch [param rect].
+static func _emit_chain(chain: PackedVector2Array, rect: Rect2, tol: float, out: PackedVector4Array) -> void:
+	if chain.size() < 2:
+		return
+	var curved := _chaikin(chain, 2)
+	var i := 0
+	while i < curved.size() - 1:
+		var j := i + 1
+		while j + 1 < curved.size() and _straight(curved, i, j + 1, tol):
+			j += 1
+		var a := curved[i]
+		var b := curved[j]
+		var box := Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)), Vector2(absf(a.x - b.x), absf(a.y - b.y)))
+		if rect.intersects(box):
+			out.append(Vector4(a.x, a.y, b.x, b.y))
+		i = j
+
+
+static func _straight(pts: PackedVector2Array, i: int, j: int, tol: float) -> bool:
+	for m in range(i + 1, j):
+		if segment_distance(pts[m], pts[i], pts[j]) > tol:
+			return false
+	return true
+
+
 ## The routed centre line of an edge: world xz points, one metre apart.
 func polyline(key: Vector4i) -> PackedVector2Array:
 	if _routes.has(key):

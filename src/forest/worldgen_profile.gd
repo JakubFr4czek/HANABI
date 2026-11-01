@@ -152,8 +152,9 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export var volumetric_fog := false
 ## Cyan glow of the forest gates: the emission tint of the gate material.
 @export var torii_glow_color := Color(0.3, 0.9, 1.0)
-## Strength of the gate glow in torii_glow_color (0 = no glow).
-@export_range(0.0, 2.0, 0.01) var torii_glow_strength := 0.5
+## Strength of the gate glow in torii_glow_color (0 = no glow). An accent, not a paint: at 0.5 the whole
+## gate read as flat cyan at night (the emission covered the red body, GDD: "red torii, neon accents").
+@export_range(0.0, 2.0, 0.01) var torii_glow_strength := 0.12
 
 @export_group("Ground")
 ## How damp the ground looks (0 dry, 1 wet).
@@ -486,7 +487,7 @@ func _mid_entry() -> TreeEntry:
 	t.weight = 1.0
 	t.base_layout = false
 	t.back_layer = true
-	t.obstacle = false
+	t.obstacle = true
 	t.draw_from = 6.0
 	t.min_spacing = 2.0
 	t.hill_lean = 0.3
