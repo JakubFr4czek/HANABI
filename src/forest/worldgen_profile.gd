@@ -14,6 +14,7 @@ const DEFAULT_PATH := "res://data/worldgen/default_profile.tres"
 const REDWOOD_SCENE_PATH := "res://assets/models/environment/forest_trees/giant_redwood.glb"
 const PINE_SCENE_PATH := "res://assets/models/environment/forest_trees/scots_pine.glb"
 const LANTERN_SCENE_PATH := "res://assets/models/environment/lanterns/stone_lantern_sahir.glb"
+const FERN_SCENE_PATH := "res://assets/models/environment/undergrowth/fern_zvanstone_baked.glb"
 const SETTING_PATH := "hanabi/worldgen/profile"
 const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/torii_gate_polyfork.glb"
 
@@ -290,8 +291,8 @@ func moon_color() -> Color:
 
 
 func _init() -> void:
-	trees = [_cedar_entry(), _sakura_entry(), _redwood_entry(), _pine_entry()]
-	undergrowth = [_boulder_entry()]
+	trees = [_cedar_entry(), _sakura_entry(), _redwood_entry(), _pine_entry(), _dense_cedar_entry()]
+	undergrowth = [_boulder_entry(), _fern_entry()]
 	torii_scene = load(TORII_SCENE_PATH)
 	lantern_scene = load(LANTERN_SCENE_PATH)
 
@@ -456,6 +457,21 @@ func _pine_entry() -> TreeEntry:
 	return t
 
 
+## Second cedar kind (N5): the same crown, planted after the gates (base_layout off), so the
+## torii layout does not move. Its trunks fill the ring out to the far crowns (cheap, 400 tris).
+func _dense_cedar_entry() -> TreeEntry:
+	var t := TreeEntry.new()
+	t.label = "Cedar, dense far ring (N5)"
+	t.crown = TreeEntry.Crown.CEDAR
+	t.weight = 1.0
+	t.base_layout = false
+	t.min_spacing = 3.0
+	t.hill_lean = 0.3
+	t.scale_min = 0.6
+	t.scale_max = 0.9
+	return t
+
+
 func _sakura_entry() -> TreeEntry:
 	var t := TreeEntry.new()
 	t.label = "Sakura (neon focal)"
@@ -463,6 +479,26 @@ func _sakura_entry() -> TreeEntry:
 	t.weight = 0.0
 	t.focal_chance = 0.18
 	return t
+
+
+## Fern (N5, CC BY 4.0, zvanstone): a leaf card with alpha, along the footpath edges. It is
+## walked through (no collider) and fades at 18–26 m, where a fern is lost in the fog anyway.
+func _fern_entry() -> UndergrowthEntry:
+	var u := UndergrowthEntry.new()
+	u.label = "Fern (CC BY 4.0)"
+	u.source = UndergrowthEntry.Source.SCENE
+	u.scene = load(FERN_SCENE_PATH)
+	u.cutout = true
+	u.along_path = true
+	u.obstacle = false
+	u.max_per_chunk = 14
+	u.min_spacing = 1.6
+	u.scale_min = 0.8
+	u.scale_max = 1.25
+	u.bury = 0.0
+	u.clearance = 0.3
+	u.cluster_threshold = 0.0
+	return u
 
 
 func _boulder_entry() -> UndergrowthEntry:
