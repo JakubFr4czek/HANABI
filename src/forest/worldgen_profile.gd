@@ -137,6 +137,9 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(0.0, 1.0, 0.01) var dusk_mix := 0.3
 ## Light the fog gives the forest floor and trunks.
 @export_range(0.0, 2.0, 0.01) var ambient_energy := 0.55
+## Strength of the moonbeams through the canopy (the spawn beam included). Kept low:
+## a bright column reads as a plastic tube in the fog (N4 measure).
+@export_range(0.0, 0.6, 0.01) var shaft_intensity := 0.12
 ## Brightness of the moon light.
 @export_range(0.0, 3.0, 0.01) var moon_energy := 0.5
 ## Tonemap exposure: overall brightness of the scene.
@@ -159,6 +162,9 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(0.0, 3.0, 0.01) var ground_normal_strength := 1.2
 ## Roughness of the wet ground.
 @export_range(0.0, 1.0, 0.01) var ground_roughness_wet := 0.72
+## Fog-coloured fill light on the forest floor (0 = the old black floor). Lifts the
+## ground beside the trail to a readable dark moss, not a black void (N4 measure: 0.06 at 0.08).
+@export_range(0.0, 0.8, 0.01) var ground_fill := 0.3
 
 @export_group("Paths")
 ## Footpaths joining the glade, the gates and the shrines (see ForestPaths).
