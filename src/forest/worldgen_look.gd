@@ -38,3 +38,5 @@ static func apply_moon(moon: DirectionalLight3D, world: WorldGenProfile) -> void
 	moon.light_color = world.moon_color()
 	moon.light_energy = world.moon_energy
 	moon.light_specular = 0.0
+	# Soft mist, not a hard edge: the moon's cast shadow on the floor is off (N4 fix1).
+	moon.shadow_enabled = false

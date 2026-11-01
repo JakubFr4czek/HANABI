@@ -165,7 +165,7 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(0.0, 1.0, 0.01) var ground_roughness_wet := 0.72
 ## Fog-coloured fill light on the forest floor (0 = the old black floor). Lifts the
 ## ground beside the trail to a readable dark moss, not a black void (N4 measure: 0.06 at 0.08).
-@export_range(0.0, 1.5, 0.01) var ground_fill := 0.6
+@export_range(0.0, 1.5, 0.01) var ground_fill := 0.75
 
 @export_group("Paths")
 ## Footpaths joining the glade, the gates and the shrines (see ForestPaths).
@@ -244,13 +244,18 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 ## mist instead of standing out as dark blocks (the "clouds" of the CI findings).
 @export_range(0.0, 40.0, 0.5) var crown_haze_low := 8.0
 @export_range(0.0, 60.0, 0.5) var crown_haze_high := 22.0
-@export_range(0.0, 1.0, 0.01) var crown_haze_amount := 0.45
+@export_range(0.0, 1.0, 0.01) var crown_haze_amount := 0.6
 ## Distance haze on the crowns and trunks (N4): from distance_haze_start to distance_haze_end
 ## (metres) they take up to distance_haze_max of the mist colour. Starting later keeps the
 ## trunks 12-20 m away dark against the mist (atmospheric perspective) instead of washing out.
-@export_range(0.0, 60.0, 0.5) var distance_haze_start := 20.0
+@export_range(0.0, 60.0, 0.5) var distance_haze_start := 8.0
 @export_range(4.0, 80.0, 0.5) var distance_haze_end := 40.0
-@export_range(0.0, 1.0, 0.01) var distance_haze_max := 0.5
+@export_range(0.0, 1.0, 0.01) var distance_haze_max := 0.8
+## Mist lying low between the trunks (N4): strength at the ground, and the height (m) it thins over.
+@export_range(0.0, 1.0, 0.01) var low_mist_amount := 0.5
+@export_range(0.5, 10.0, 0.1) var low_mist_height := 3.0
+## Colour the far mist turns to (teal) beyond ~15 m: depth gradient from indigo near to teal far.
+@export var haze_far_color := Color(0.16, 0.30, 0.36)
 ## Ground fade from the camera: start and full fade, metres.
 @export_range(5.0, 200.0, 0.5) var ground_fade_start := 60.0
 ## Distance where the ground fades out fully, metres.

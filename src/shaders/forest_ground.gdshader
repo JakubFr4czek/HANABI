@@ -1,5 +1,7 @@
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_disabled;
+
+#include "res://src/shaders/atmosphere.gdshaderinc"
 // Run forest floor: cedar-needle soil, patches of grass on the flats and stones
 // on slopes / in scattered beds (Poly Haven CC0, 1K). World-space planar mapping
 // (the terrain has no UVs); diffuse + normal only to stay cheap on Quest.
@@ -30,6 +32,13 @@ uniform float roughness_dry : hint_range(0.0, 1.0) = 0.9;
 uniform float roughness_wet : hint_range(0.0, 1.0) = 0.5;
 uniform float wetness : hint_range(0.0, 1.0) = 0.6;
 uniform float fog_fade_start = 60.0;
+// Atmosphere of the floor (N4): the same layers as the crowns, set from WorldGenProfile.
+uniform float distance_haze_start = 8.0;
+uniform float distance_haze_end = 40.0;
+uniform float distance_haze_max = 0.8;
+uniform float low_mist_amount = 0.35;
+uniform float low_mist_height = 3.0;
+uniform vec3 haze_far_color : source_color = vec3(0.16, 0.30, 0.36);
 uniform float fog_fade_end = 70.0;
 // Unlit moon/fog bounce so the forest floor is not a black void at night.
 uniform float ambient_fill = 0.0;
@@ -128,10 +137,14 @@ void fragment() {
 	alb *= mix(vec3(1.0), night_tint * 1.65, 0.28);
 	float radial = length(v_world_pos.xz - CAMERA_POSITION_WORLD.xz);
 	float fog_mix = smoothstep(fog_fade_start, fog_fade_end, radial);
+	float haze = mist_amount(radial, v_world_pos.y, distance_haze_start, distance_haze_end, distance_haze_max,
+		low_mist_amount, low_mist_height);
+	vec3 haze_col = mix(storm_fog_color.rgb, haze_far_color, smoothstep(15.0, 40.0, radial));
+	// Mist is added as emission (below), not mixed into the albedo: the albedo is lit by the dark
+	// night ambient, so a mixed-in mist would be lit dark too.
 	if (fog_mix > 0.985) {
 		discard;
 	}
-	ALBEDO = alb;
 	NORMAL_MAP = nrm;
 	NORMAL_MAP_DEPTH = normal_strength;
 	// Rain pools in the soil, less on stone tops.
@@ -139,5 +152,6 @@ void fragment() {
 	ROUGHNESS = mix(roughness_dry, roughness_wet, wet);
 	METALLIC = 0.0;
 	// Shadowed soil takes the fog's color, not a lit copy of the daylight scan.
-	EMISSION = mix(alb, storm_fog_color.rgb, 0.4) * ambient_fill * (1.0 - fog_mix);
+	EMISSION = mix(alb, storm_fog_color.rgb, 0.4) * ambient_fill * (1.0 - fog_mix) + haze_col * haze;
+	ALBEDO = alb * (1.0 - haze);
 }
