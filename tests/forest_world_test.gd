@@ -661,6 +661,55 @@ func _n5_density_sight_and_fade(forest: ForestWorld) -> void:
 	var mid_density := mid_ring * 100.0 / mid_ring_area
 	_check("The 8–14 m ring around the glade is dense (%.2f trunks per 100 m², %d; pre-N5 0.48, need >= 4.0)" % [mid_density, mid_ring],
 		mid_density >= 4.0)
+	# The middle kind has trunk colliders (the player meets it) and keeps SHRINE_RESERVE from every shrine,
+	# in the chunks built before the shrine and after it (N5).
+	var mid_e := -1
+	for e in forest._back_entries():
+		if forest.profile.trees[e].obstacle:
+			mid_e = e
+	# A shrine founded on top of a middle-kind trunk (already built chunks): the trunks there must go.
+	var shrine_at := Vector3.INF
+	for key in forest._chunks:
+		var root0 := forest._chunks[key] as Node3D
+		for k3 in forest._back_keys():
+			for xf in root0.get_meta("xfs_Back%d" % k3, []):
+				if shrine_at == Vector3.INF:
+					var t4: Transform3D = xf
+					shrine_at = root0.position + t4.origin
+	if shrine_at != Vector3.INF:
+		forest.reserve_shrine(shrine_at)
+	var mid_bodies := 0
+	var in_reserve := 0
+	for key in forest._chunks:
+		var root := forest._chunks[key] as Node3D
+		for child in root.get_children():
+			if child is StaticBody3D and String(child.name) == "TrunkColliders%d" % mid_e and child.get_child_count() > 0:
+				mid_bodies += 1
+		for k2 in forest._back_keys():
+			for xf in root.get_meta("xfs_Back%d" % k2, []):
+				var t3: Transform3D = xf
+				var p3 := Vector2(root.position.x + t3.origin.x, root.position.z + t3.origin.z)
+				if forest._reserved(p3):
+					in_reserve += 1
+	# Every forest mesh carries its own shader material (no empty or default material), and the gate body is
+	# red as in the GDD ("red torii"); its cyan is the neon accent only (torii_glow_strength).
+	var bare := 0
+	var meshes := 0
+	var nodes: Array[Node] = []
+	nodes.append_array(forest.get_children())
+	for key in forest._chunks:
+		nodes.append_array((forest._chunks[key] as Node3D).get_children())
+	for child in nodes:
+		if child is MultiMeshInstance3D:
+			meshes += 1
+			var m := (child as MultiMeshInstance3D).material_override as ShaderMaterial
+			if m == null or m.shader == null:
+				bare += 1
+	var body := forest._torii_mat.get_shader_parameter("base_color") as Color
+	_check("Every forest mesh has its own shader material (%d meshes, %d bare) and the gate body is red (%.2f, %.2f, %.2f)" % [meshes, bare, body.r, body.g, body.b],
+		meshes > 0 and bare == 0 and body.r > body.g and body.r > body.b)
+	_check("The middle kind has trunk colliders in the ring (%d chunks) and keeps off shrines (%d inside the reserve)" % [mid_bodies, in_reserve],
+		mid_e >= 0 and mid_bodies > 0 and in_reserve == 0)
 	_check("The 8–30 m ring around the glade holds trunks (%.2f per 100 m², %d trunks)" % [glade_density, glade],
 		glade_density >= N5_MIN_RING_DENSITY)
 	_check("The ring around path points holds trunks too (%.2f per 100 m² over %d points)" % [path_density, path_samples.size()],
