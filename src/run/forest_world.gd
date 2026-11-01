@@ -24,14 +24,23 @@ const TREE_ALBEDO := preload("res://assets/models/environment/forest_trees/cherr
 const TREE_NORMAL := preload("res://assets/models/environment/forest_trees/cherry_forest_normal.jpg")
 const SAKURA_TREE_SHADER := preload("res://src/shaders/sakura_tree.gdshader")
 const TORII_MESH_SCALE := 0.42
+## Metres of path distance the vertex colour's G channel spans (see _path_colour).
+const PATH_ENCODE_RANGE := 4.0
+## Width of the distance fade at a kind's draw edge, metres (see _draw_fade).
+const DRAW_FADE_BAND := 7.0
 ## Foliage clumps are drawn this many times their listed radius, so neighbours merge into one canopy.
 const CROWN_OVERSIZE := 1.18
+## Metres of crown the open-sky rule keeps beyond the drawn reach (path-field lattice error and clump tips).
+const CROWN_SKY_MARGIN := 0.3
 ## Slack added to every crown disc (metres): covers the far crown, which has fewer segments.
 const CROWN_DISC_MARGIN := 0.1
 ## Lowest height a scanned crown counts for the sky rule: below it is trunk and root flare.
 const SCENE_CROWN_FLOOR := 2.5
 ## Clearance of a layout-after tree from base trunks and from gates (metres).
 const EXTRA_BASE_CLEAR := 4.5
+## Share of the two crown reaches two trunks may overlap by before they are too close (N5): the
+## canopy test's severe-overlap line (d < 0.75 × (r1 + r2)).
+const CROWN_OVERLAP_SHARE := 0.75
 const EXTRA_GATE_CLEAR := 5.0
 ## Trunks and gate pillars collide on their own layer: the player walks into
 ## them, yōkai ragdolls do not (their limbs snag and topple them); yōkai steer
@@ -712,6 +721,10 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 			continue
 		if bool(spec.avoid_path) and not field.is_empty() and _field_at(field, Vector2(lx, lz)) < path_keep:
 			continue
+		# Along-path kinds (N5 ferns) stand on the edge only: a site inside another trail's
+		# edge zone (where two footpaths meet) is skipped, so no fern sits on gravel.
+		if bool(spec.get("path_only", false)) and not field.is_empty() and _field_at(field, Vector2(lx, lz)) < _path_half_width() + 0.6:
+			continue
 		var density := _scatter_noise.get_noise_2d(wx * profile.density_frequency, wz * profile.density_frequency) * 0.5 + 0.5
 		if kind == KIND_TORII:
 			# Only chosen chunks hold gates; inside one, most candidates
@@ -769,6 +782,9 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 		root.set_meta("senbon_pending", [])
 	if not transforms.is_empty():
 		_commit_multimesh(root, label, mesh, mat, transforms)
+		# The kind's placed transforms, kept on the chunk like the trees' (headless reads of a
+		# MultiMesh buffer come back as identity, so the tests read these).
+		root.set_meta("xfs_" + label, transforms)
 		if kind == KIND_TORII:
 			root.add_child(_build_torii_colliders(transforms, root))
 		elif kind == KIND_LANTERN:
@@ -801,12 +817,17 @@ func _lantern_spec() -> Dictionary:
 
 
 func _undergrowth_spec(entry: UndergrowthEntry) -> Dictionary:
+	# Along the footpaths: the sites are the trail edges only (path_only), so the kind never
+	# lands on the gravel and never on the open floor. Otherwise the floor scatter as before.
+	var along := entry.along_path
 	return {
 		"max": entry.max_per_chunk, "spacing": entry.min_spacing, "cluster": entry.cluster_threshold,
 		"scale_min": entry.scale_min, "scale_max": entry.scale_max, "grow": 0.5,
 		"tree_clear": entry.clearance, "prop_clear": entry.clearance,
 		"bury": entry.bury, "obstacle": entry.obstacle,
-		"path_share": 0.0, "path_offset": 0.0, "avoid_path": true,
+		"path_share": 1.0 if along else 0.0,
+		"path_offset": _path_half_width() + entry.path_edge_offset if along else 0.0,
+		"avoid_path": not along, "path_only": along,
 	}
 
 
@@ -842,18 +863,20 @@ func _extra_tree_spots(coord: Vector2i) -> Dictionary:
 			var density := _scatter_noise.get_noise_2d(p.x * profile.density_frequency, p.y * profile.density_frequency) * 0.5 + 0.5
 			if _point_random(p.x, p.y, 1) > lerpf(profile.tree_keep_min, profile.tree_keep_max, density):
 				continue
-			if _near_points(base, p, EXTRA_BASE_CLEAR) or _near_points3(gates, p, EXTRA_GATE_CLEAR):
-				continue
-			if _near_vec4(accepted, p, entry.min_spacing):
-				continue
 			var scale := lerpf(entry.scale_min, entry.scale_max, _point_random(p.x, p.y, 2))
-			var yaw := _point_random(p.x, p.y, 3) * TAU
-			if not _crown_clear(p, e, scale, yaw if entry.random_yaw else 0.0):
+			var yaw := _point_random(p.x, p.y, 3) * TAU if entry.random_yaw else 0.0
+			var reach := _crown_reach_at(p, e, scale, yaw)
+			# Crowns may touch the base crowns only as far as the canopy rule allows (see _near_extra).
+			if _near_base(base, p, reach) or _near_points3(gates, p, EXTRA_GATE_CLEAR):
 				continue
-			var spot := Vector4(p.x, p.y, scale, yaw if entry.random_yaw else 0.0)
+			if _near_extra(accepted, p, e, entry.min_spacing, reach):
+				continue
+			if not _crown_clear(p, e, scale, yaw):
+				continue
+			var spot := Vector4(p.x, p.y, scale, yaw)
 			spots.append(spot)
 			ids.append(e)
-			accepted.append(Vector4(p.x, p.y, 0.0, entry.min_spacing))
+			accepted.append(Vector4(p.x, p.y, float(e), reach))
 	var packed := {"spots": spots, "ids": ids}
 	_extra_spot_cache[coord] = packed
 	return packed
@@ -881,14 +904,19 @@ static func _near_vec4(points: Array[Vector4], p: Vector2, clear: float) -> bool
 	return false
 
 
+## Base trunks of the 3×3 ring as (x, z, crown reach): the reach (see _crown_reach_at) is what the
+## canopy rule of the layout-after kinds needs; the prop checks read only x and z.
 func _tree_trunk_points(coord: Vector2i) -> Array:
 	var out: Array = []
 	for ox in range(-1, 2):
 		for oz in range(-1, 2):
 			var packed: Dictionary = _tree_spots(coord + Vector2i(ox, oz))
-			for s in packed.get("spots", []):
-				var spot: Vector4 = s
-				out.append(Vector3(spot.x, spot.y, 0.0))
+			var spots: Array = packed.get("spots", [])
+			var ids: PackedInt32Array = packed.get("ids", PackedInt32Array())
+			for i in spots.size():
+				var spot: Vector4 = spots[i]
+				var reach := _crown_reach_at(Vector2(spot.x, spot.y), ids[i], spot.z, spot.w)
+				out.append(Vector3(spot.x, spot.y, reach))
 	return out
 
 
@@ -1071,6 +1099,42 @@ func _extra_entries() -> Array[int]:
 		if not entry.is_focal() and entry.weight > 0.0 and not entry.base_layout:
 			out.append(e)
 	return out
+
+
+## Layout-after spacing (N5): two trunks may stand only as far apart as their crowns allow, i.e.
+## CROWN_OVERLAP_SHARE × (r1 + r2) (the canopy rule of canopy_visual_quality_test). A kind also keeps
+## its own min_spacing from its own trunks. Trunk spacing alone let the crowns of different kinds
+## interpenetrate (45 % severe pairs against the 40 % limit).
+static func _near_extra(accepted: Array[Vector4], p: Vector2, e: int, own_spacing: float, reach: float) -> bool:
+	for q in accepted:
+		var need := CROWN_OVERLAP_SHARE * (reach + q.w)
+		if int(q.z) == e:
+			need = maxf(need, own_spacing)
+		if Vector2(q.x, q.y).distance_to(p) < need:
+			return true
+	return false
+
+
+## Horizontal crown reach of a planted tree, as canopy_visual_quality_test measures it: the farthest
+## crown disc's horizontal offset from the trunk plus its radius, with the tree's own lean and yaw.
+func _crown_reach_at(p: Vector2, e: int, scale: float, yaw: float) -> float:
+	var basis := _trunk_basis(p, profile.trees[e], yaw, scale)
+	var reach := 0.0
+	for disc in _crown_discs[e]:
+		var d: Vector4 = disc
+		var off := basis * Vector3(d.x, d.y, d.z)
+		reach = maxf(reach, Vector2(off.x, off.z).length() + d.w * scale)
+	return reach
+
+
+## True when a layout-after trunk at [param p] with crown reach [param reach] is too close to a base
+## trunk (x, z, reach): the canopy rule (see _near_extra) and never closer than EXTRA_BASE_CLEAR.
+static func _near_base(base: Array, p: Vector2, reach: float) -> bool:
+	for q in base:
+		var v: Vector3 = q
+		if Vector2(v.x - p.x, v.y - p.y).length() < maxf(EXTRA_BASE_CLEAR, CROWN_OVERLAP_SHARE * (v.z + reach)):
+			return true
+	return false
 
 
 ## Stateless random in [0, 1) for a world point: the same point always draws
@@ -1420,7 +1484,9 @@ func _crown_clear(p: Vector2, e: int, scale: float, yaw: float) -> bool:
 		var d: Vector4 = disc
 		var off := basis * Vector3(d.x, d.y, d.z)
 		var w := p + Vector2(off.x, off.z)
-		var r := d.w * scale
+		# The disc is the crown's core: the drawn clumps reach CROWN_OVERSIZE past it, so the rule
+		# measures that reach (the crown points test holds 2 m off the centre line).
+		var r := d.w * scale * CROWN_OVERSIZE + CROWN_SKY_MARGIN
 		if w.length() - r < profile.sky_glade_radius:
 			return false
 		if _path_distance_at(w) - r < limit:
@@ -2117,8 +2183,10 @@ static func _path_colour(field: PackedFloat32Array, idx: int, half_width: float)
 	if field.is_empty():
 		return Color.BLACK
 	var d := field[idx]
-	# A tight ramp: the trail edge reads as an edge, not as a blur.
-	return Color(1.0 - smoothstep(half_width * 0.75, half_width * 1.2, d), 0.0, 0.0, 1.0)
+	# R: the trail weight (1 on the trail), kept for the tests and the old look.
+	# G: the distance to the path centre line, in PATH_ENCODE_RANGE metres. The shader
+	# draws the edge from G, so the edge is a smooth curve, not the 1 m lattice's steps.
+	return Color(1.0 - smoothstep(half_width * 0.75, half_width * 1.2, d), clampf(d / PATH_ENCODE_RANGE, 0.0, 1.0), 0.0, 1.0)
 
 
 func _build_materials() -> void:
@@ -2145,6 +2213,9 @@ func _build_materials() -> void:
 	_ground_mat.set_shader_parameter("moss_normal", MOSS_NORMAL)
 	_ground_mat.set_shader_parameter("path_tint", profile.path_tint)
 	_ground_mat.set_shader_parameter("path_gain", profile.path_gain)
+	# The edge is drawn from the distance in the vertex colour G (see _path_colour).
+	_ground_mat.set_shader_parameter("path_half", _path_half_width())
+	_ground_mat.set_shader_parameter("path_encode", PATH_ENCODE_RANGE)
 	_ground_mat.set_shader_parameter("fog_fade_end", profile.ground_fade_end)
 	_ground_mat.set_shader_parameter("distance_haze_start", profile.distance_haze_start)
 	_ground_mat.set_shader_parameter("distance_haze_end", profile.distance_haze_end)
@@ -2262,7 +2333,7 @@ func _build_meshes() -> void:
 		var key := "under|%s|%d" % [_scene_key(entry.scene), entry.source]
 		var built := _built_once(key, _build_undergrowth_parts.bind(entry)) as Dictionary
 		_under_meshes.append(built.mesh)
-		_under_mats.append(_rock_material())
+		_under_mats.append(_card_material(entry) if entry.cutout else _rock_material())
 		_under_shapes.append(built.shape)
 
 
@@ -2296,6 +2367,19 @@ func _tree_material(far: float, own_albedo: Texture2D = null) -> ShaderMaterial:
 	if own_albedo != null:
 		band = Vector2(1.0e5, 1.0e5 + 1.0)
 	mat.set_shader_parameter("lod_band", band)
+	mat.set_shader_parameter("draw_fade", _draw_fade(profile.tree_draw_radius))
+	_set_atmosphere(mat)
+	return mat
+
+
+## Distance fade of a kind at its draw edge (N5): the crown dissolves over the last DRAW_FADE_BAND
+## metres in front of [param radius], so it leaves the ring by dithering, never by popping.
+func _draw_fade(radius: float) -> Vector2:
+	return Vector2(radius - DRAW_FADE_BAND, radius)
+
+
+## Height and distance haze from the profile (N4), shared by every forest material.
+func _set_atmosphere(mat: ShaderMaterial) -> void:
 	mat.set_shader_parameter("height_haze_low", profile.crown_haze_low)
 	mat.set_shader_parameter("height_haze_high", profile.crown_haze_high)
 	mat.set_shader_parameter("height_haze", profile.crown_haze_amount)
@@ -2305,6 +2389,22 @@ func _tree_material(far: float, own_albedo: Texture2D = null) -> ShaderMaterial:
 	mat.set_shader_parameter("low_mist_amount", profile.low_mist_amount)
 	mat.set_shader_parameter("low_mist_height", profile.low_mist_height)
 	mat.set_shader_parameter("haze_far_color", profile.haze_far_color)
+
+
+## Leaf cards with their own alpha (N5 ferns): the cut-out foliage shader on the baked RGBA atlas.
+## No LOD band (one card, drawn as it is), and the same distance fade as the trees.
+func _card_material(entry: UndergrowthEntry) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = TREE_DIFFUSE
+	mat.set_shader_parameter("albedo_texture", _scene_albedo(entry.scene))
+	mat.set_shader_parameter("normal_texture", TREE_NORMAL)
+	mat.set_shader_parameter("alpha_from_texture", true)
+	mat.set_shader_parameter("cut_level", 0.5)
+	mat.set_shader_parameter("normal_depth", 0.0)
+	mat.set_shader_parameter("lod_far", 0.0)
+	mat.set_shader_parameter("lod_band", Vector2(1.0e5, 1.0e5 + 1.0))
+	mat.set_shader_parameter("draw_fade", Vector2(entry.fade_start, entry.fade_end))
+	_set_atmosphere(mat)
 	return mat
 
 
@@ -2337,6 +2437,7 @@ func _sakura_material(entry: TreeEntry) -> ShaderMaterial:
 	mat.set_shader_parameter("stamen_color", Color(1.0, 0.88, 0.95))
 	mat.set_shader_parameter("emission_strength", entry.emission)
 	mat.set_shader_parameter("neon_sparsity", entry.neon_sparsity)
+	mat.set_shader_parameter("draw_fade", _draw_fade(profile.focal_draw_radius))
 	return mat
 
 

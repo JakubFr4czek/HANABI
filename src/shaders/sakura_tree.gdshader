@@ -28,6 +28,9 @@ uniform vec3 stamen_color : source_color = vec3(1.0, 0.88, 0.95);
 
 uniform float emission_strength : hint_range(0.5, 3.0) = 1.35;
 uniform float neon_sparsity : hint_range(0.0, 1.0) = 0.70;
+// Distance fade at the focal draw edge (N5): the neon has no haze, so it dissolves by dither
+// from draw_fade.x to draw_fade.y metres instead of popping out at the draw radius.
+uniform vec2 draw_fade = vec2(100000.0, 100001.0);
 
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
@@ -46,8 +49,13 @@ void vertex() {
 	}
 }
 
+float interleaved_gradient(vec2 p) {
+	return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+}
+
 void fragment() {
 	vec3 wn = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	float draw_alpha = 1.0 - smoothstep(draw_fade.x, draw_fade.y, distance(v_world_pos, CAMERA_POSITION_WORLD));
 	float open_sky = clamp(wn.y * 0.45 + 0.5, 0.0, 1.0);
 
 	// 1. Root flare (UV.x > 1.5)
@@ -111,7 +119,8 @@ void fragment() {
 	METALLIC = 0.0;
 	NORMAL_MAP = texture(normal_texture, UV).rgb;
 	NORMAL_MAP_DEPTH = normal_depth * (1.0 - root) * (1.0 - leaf);
-	ALPHA = mix(cover, 1.0, max(root, leaf));
-	ALPHA_SCISSOR_THRESHOLD = 0.05;
+	ALPHA = mix(cover, 1.0, max(root, leaf)) * draw_alpha;
+	// Inside the fade band the scissor is the dither; elsewhere the usual cut-out.
+	ALPHA_SCISSOR_THRESHOLD = draw_alpha < 1.0 ? interleaved_gradient(FRAGCOORD.xy) : 0.05;
 	EMISSION = final_emission;
 }

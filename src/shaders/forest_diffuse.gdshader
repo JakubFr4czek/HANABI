@@ -41,6 +41,9 @@ uniform float cut_level = 0.05;
 // Leaf cards with their own alpha (ferns, RGBA atlases) cut out on the alpha channel.
 // Off by default: the cherry atlas has no alpha and is cut out on its brightness.
 uniform bool alpha_from_texture = false;
+// Distance fade at the draw edge (N5): the kind dissolves from draw_fade.x to draw_fade.y metres
+// from the camera, by the same dither as the LOD band, so a crown leaving the ring never pops.
+uniform vec2 draw_fade = vec2(100000.0, 100001.0);
 
 varying vec3 world_pos;
 
@@ -55,7 +58,8 @@ float interleaved_gradient(vec2 p) {
 void fragment() {
 	float dist = distance(world_pos, CAMERA_POSITION_WORLD);
 	float in_band = smoothstep(lod_band.x, lod_band.y, dist);
-	float lod_alpha = mix(1.0 - in_band, in_band, lod_far);
+	float draw_alpha = 1.0 - smoothstep(draw_fade.x, draw_fade.y, dist);
+	float lod_alpha = mix(1.0 - in_band, in_band, lod_far) * draw_alpha;
 	float dither = interleaved_gradient(FRAGCOORD.xy);
 	// UV.x above 1 is the root flare: bark at the trunk, soil at the tip.
 	float root = step(1.5, UV.x);
