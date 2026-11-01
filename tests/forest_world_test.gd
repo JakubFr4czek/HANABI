@@ -641,6 +641,26 @@ func _n5_density_sight_and_fade(forest: ForestWorld) -> void:
 			if d >= N5_RING_LO and d <= N5_RING_HI:
 				path_hits += 1
 	var path_density := float(path_hits) / maxf(1.0, float(path_samples.size())) * 100.0 / ring_area
+	# Middle ring (N5): 8–14 m around the glade holds trunks and silhouettes, not only the base layout.
+	# Measured on pre-N5 HEAD: 0.48 per 100 m²; required: at least 4.0 per 100 m².
+	var mid_ring_area := PI * (14.0 * 14.0 - 8.0 * 8.0)
+	var mid_ring := 0
+	for key in forest._chunks:
+		var root := forest._chunks[key] as Node3D
+		var labels: Array[String] = []
+		for e in forest.profile.trees.size():
+			labels.append(("Focal%d" if forest.profile.trees[e].is_focal() else "Trees%d") % e)
+		for k in forest._back_keys():
+			labels.append("Back%d" % k)
+		for label in labels:
+			for xf in root.get_meta("xfs_" + label, []):
+				var t: Transform3D = xf
+				var d := Vector2(root.position.x + t.origin.x, root.position.z + t.origin.z).length()
+				if d >= 8.0 and d <= 14.0:
+					mid_ring += 1
+	var mid_density := mid_ring * 100.0 / mid_ring_area
+	_check("The 8–14 m ring around the glade is dense (%.2f trunks per 100 m², %d; pre-N5 0.48, need >= 4.0)" % [mid_density, mid_ring],
+		mid_density >= 4.0)
 	_check("The 8–30 m ring around the glade holds trunks (%.2f per 100 m², %d trunks)" % [glade_density, glade],
 		glade_density >= N5_MIN_RING_DENSITY)
 	_check("The ring around path points holds trunks too (%.2f per 100 m² over %d points)" % [path_density, path_samples.size()],
