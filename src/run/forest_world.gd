@@ -2126,7 +2126,7 @@ func _build_materials() -> void:
 	_ground_mat.shader = GROUND_SHADER
 	_ground_mat.set_shader_parameter("fill", 0.0)
 	_ground_mat.set_shader_parameter("cavity_ao", profile.ground_cavity_ao)
-	_ground_mat.set_shader_parameter("ambient_fill", 0.08)
+	_ground_mat.set_shader_parameter("ambient_fill", profile.ground_fill)
 	_ground_mat.set_shader_parameter("normal_strength", profile.ground_normal_strength)
 	# Damp, not mirror-wet: wet normals over 1K scans sparkle white in VR.
 	_ground_mat.set_shader_parameter("wetness", profile.ground_wetness)
@@ -2210,7 +2210,7 @@ func _build_meshes() -> void:
 	_shaft_mat.shader = SHAFT_SHADER
 	# Same grey as the fog, dim. A blue-white beam reads as a plastic tube.
 	_shaft_mat.set_shader_parameter("shaft_color", Color(0.62, 0.64, 0.66))
-	_shaft_mat.set_shader_parameter("intensity", 0.2)
+	_shaft_mat.set_shader_parameter("intensity", profile.shaft_intensity)
 	_tree_meshes.clear()
 	_tree_mats.clear()
 	_crown_discs.clear()
