@@ -119,3 +119,45 @@ Testy (flaky, poza N3):
   checki run 2) pada losowo także na commicie sprzed N3 (`a033e7f`: 1 na 4 przebiegi).
   To pre-istniejąca niestabilność czasowa testu XR, nie regresja tej pracy. Nie naprawiona
   w tym commicie; wymaga osobnej analizy (czasy klatek i trafienia ostrza w symulacji XR).
+
+## Poprawki fix2 (ostatnia runda N3, tylko maska)
+
+Zmiany:
+- **Rogi:** osobna siatka – dwa zwężane rogi kości słoniowej (`YokaiForms.horn_mesh`, jedna
+  powierzchnia, ~0,13 m, wychylone na boki i do góry), `keep_on_piece` (jadą z głową przy cięciu).
+  Materiał `HORN_IVORY` (0,86/0,80/0,66), szorstkość 0,45. Rogi maski zostały, ale są ciemne.
+- **Maska większa:** przebake z szerokością 0,22 m (zamiast 0,176; ×1,25) i nosem na 0,155 m
+  (`tools/bake_yokai_mask.py`, nowe opcjonalne argumenty). Oczy: `EYE_X/Y/Z` = 0,0305/-0,02/0,13
+  (przeliczone z otworów na nowym renderze). Oni: `ONI_MASK_SCALE` 1,88, efektywna szerokość
+  bez zmian (~0,41 m). Trójkąty 1 700 (bez zmian).
+- **Twarz:** `tools/retexture_yokai_mask.py` podnosi prawie czarne wyspy albedo do ciemnej
+  cynobry (125/36/30). Czerwona lakiera i kość zębów zostają, znika czarne iskrzenie.
+  `MASK_TINT` (3,2/2,5/2,1), `normal_depth` 0,3, `specular_scale` 0,25.
+- **Oczy:** mniejsze (promień 0,0085 zamiast 0,0115), jedna powierzchnia dla obu, emisja
+  0,85 → 0,5, poświata EyeGlow 0,075 → 0,07 (kompromis z testem kolorów szkół).
+- **Test:** nowe asercje (3 m): rogi nad głową zmieniają piksele względem nieba
+  (kontrast ≥ 0,05 i ≥ 6 px), twarz różni się jasnością od kołnierza pod maską (|Δ| ≥ 0,05).
+
+Wyniki (ten sam kadr, PRZED/PO: `docs/n3/PRE_POST_head_3m_fix2.png`):
+- 8 m, cztery szkoły: najbliższa para 0,15 (próg 0,12). Było 0,22 przed czerwoną maską:
+  czerwień wokół oczu zbliża kolory szkół. To realny koszt, nie szum.
+- 3 m, maska vs tło: 0,20 (próg 0,08). Rogi nad sylwetką: kontrast 0,05–0,09, marginalnie.
+- 3 m, twarz vs kołnierz: |Δ| 0,07–0,11. Twarz jest CIEMNIEJSZA od kołnierza (0,23 vs 0,30),
+  więc maska NIE jest jaśniejsza od kaptura, jak prosił supervisor. Różni się barwą i jasnością,
+  ale nie wyraźnie na plus. Test został nazwany uczciwie („różni się jasnością”), nie „jaśniejsza”.
+- Trójkąty na yōkai: 3 394 (≤4 000); surface 23 (≤24). Fizyka bez zmian.
+
+Surowa ocena po fix2:
+- **Maska jest już czerwona i odcina się od granatowego ciała** – to największa zmiana
+  i to jest czytelne z 3 m. Głowa nie jest już granatową kulą z dwoma plamami.
+- **Rogi są, ale cieńsze i wyglądają ciemno/czerwonawo z 3 m**, nie kością słoniową. PRZED
+  miało grubsze, ciemniejsze rogi o wyraźniejszej sylwetce; PO jest bliskie, nie lepsze.
+  Premium nie osiągnięte: brak wyraźnych rysów (brwi, usta, zęby) przy 30 px.
+- **Oczy**: mniej prześwietlone, ale szkoła gorzej czytelna na czerwonym tle (patrz 0,15).
+- **Oni**: ta sama maska, czerwona, lepsza niż poprzednia blokowa; korpus Oni nadal blokowy.
+- Kirisute: kadr po cięciu nadal nie pokazuje wyraźnie przekroju.
+
+Zapisane poza N3 (dla N7):
+- `xr_play_test` jest niestabilny. Pada losowo (run 2, kolejne checki), także na commicie
+  sprzed N3 (`a033e7f`: 1 na 4 przebiegi). Pre-istniejąca niestabilność czasowa testu XR.
+  Nie naprawiona tutaj; wymaga analizy czasów klatek i trafień ostrza w symulacji XR.
