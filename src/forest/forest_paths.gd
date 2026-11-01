@@ -219,7 +219,7 @@ func _route(a: Vector2, b: Vector2) -> PackedVector2Array:
 		var c: Vector2i = cells[k]
 		pts.append(lo + Vector2(c.x, c.y) * ROUTE_CELL)
 	pts.append(b)
-	pts = _chaikin(pts, 2)
+	pts = _chaikin(pts, 4)
 	return _resample(pts, RESAMPLE)
 
 

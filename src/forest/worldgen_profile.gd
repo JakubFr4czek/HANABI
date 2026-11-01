@@ -229,6 +229,10 @@ const TORII_SCENE_PATH := "res://assets/models/environment/forest_quaternius/tor
 @export_range(-40.0, 0.0, 0.5) var firework_near_db := -11.0
 
 @export_group("Distance and LOD")
+## Back layer (N5): far silhouettes fade in between back_near and back_near + back_fade metres.
+## Nothing of the back layer is drawn inside back_near, so the player never meets a fading trunk.
+@export_range(6.0, 40.0, 0.5) var back_near := 14.0
+@export_range(1.0, 12.0, 0.5) var back_fade := 4.0
 ## Ordinary trees are drawn out to this distance from the camera. Keep it at or
 ## beyond the point where the fog is (nearly) full, or trees pop in at the edge
 ## (validate() warns).
@@ -291,7 +295,7 @@ func moon_color() -> Color:
 
 
 func _init() -> void:
-	trees = [_cedar_entry(), _sakura_entry(), _redwood_entry(), _pine_entry(), _dense_cedar_entry()]
+	trees = [_cedar_entry(), _sakura_entry(), _redwood_entry(), _pine_entry(), _dense_cedar_entry(), _back_entry()]
 	undergrowth = [_boulder_entry(), _fern_entry()]
 	torii_scene = load(TORII_SCENE_PATH)
 	lantern_scene = load(LANTERN_SCENE_PATH)
@@ -469,6 +473,22 @@ func _dense_cedar_entry() -> TreeEntry:
 	t.hill_lean = 0.3
 	t.scale_min = 0.6
 	t.scale_max = 0.9
+	return t
+
+
+## Back layer (N5): far silhouettes of the forest wall, spaced 2.5 m, after the gates. See TreeEntry.back_layer.
+func _back_entry() -> TreeEntry:
+	var t := TreeEntry.new()
+	t.label = "Back layer, far silhouettes (N5)"
+	t.crown = TreeEntry.Crown.CEDAR
+	t.weight = 1.0
+	t.base_layout = false
+	t.back_layer = true
+	t.obstacle = false
+	t.min_spacing = 2.5
+	t.hill_lean = 0.3
+	t.scale_min = 0.9
+	t.scale_max = 1.3
 	return t
 
 
