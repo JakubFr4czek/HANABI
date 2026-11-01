@@ -17,6 +17,15 @@ uniform vec3 foliage_color : source_color = vec3(0.30, 0.36, 0.32);
 // in over the same band. The dither is an ordered pattern on the screen, so the
 // fade has no popping edge and does not shimmer while the camera stands still.
 uniform float lod_far = 0.0;
+// Height haze (N4): crowns fade into the fog colour above height_haze_low, fully at height_haze_high.
+uniform float height_haze_low = 8.0;
+uniform float height_haze_high = 22.0;
+uniform float height_haze = 0.0;
+// Distance haze (N4, from the profile): trunks start to take the mist at distance_haze_start,
+// fully at distance_haze_end, at most distance_haze_max. Later start = darker trunks against the mist.
+uniform float distance_haze_start = 14.0;
+uniform float distance_haze_end = 40.0;
+uniform float distance_haze_max = 0.5;
 uniform vec2 lod_band = vec2(9.0, 11.0);
 // The far crown's trunk is a plain bark colour: the atlas sample at its UV is pale.
 uniform vec3 far_bark_color : source_color = vec3(0.16, 0.12, 0.10);
@@ -70,12 +79,13 @@ void fragment() {
 	alb = mix(alb, alb_leaf, leaf);
 
 	// Distance haze: the crowns lose their dark body into the milk before the fog takes them.
-	float haze = smoothstep(14.0, 40.0, distance(world_pos, CAMERA_POSITION_WORLD)) * 0.5;
+	float haze = smoothstep(distance_haze_start, distance_haze_end, distance(world_pos, CAMERA_POSITION_WORLD)) * distance_haze_max;
 	vec3 body = mix(alb, alb_root, root);
 	if (lod_far > 0.5 && leaf < 0.5) {
 		body = far_bark_color * night_tint * mix(0.84, 1.06, grain);
 	}
-	ALBEDO = mix(body, storm_fog_color.rgb, haze);
+	float high_haze = smoothstep(height_haze_low, height_haze_high, world_pos.y) * height_haze;
+	ALBEDO = mix(body, storm_fog_color.rgb, max(haze, high_haze));
 	ROUGHNESS = 1.0;
 	METALLIC = 0.0;
 	// Bark grooves and leaf clumps catch the moon on the diffuse lobe only.

@@ -62,6 +62,6 @@ fog_curve = 2.1
 tree_draw_radius = 40.0
 focal_draw_radius = 40.0
 lod_near_radius = 8.0
-lod_fade = 2.0
+lod_fade = 0.5
 shrine_slot_size = 112.0
 lantern_scene = ExtResource("7_lantn")
