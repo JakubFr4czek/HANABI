@@ -2,6 +2,7 @@
 # Run with Blender headless (Blender 4.x, the glTF importer/exporter built in):
 #   blender -b --factory-startup -P tools/bake_yokai_mask.py -- SRC.glb OUT.glb OUT_DIR TRIS
 #   e.g. TRIS=1700 -> ~1.7k triangles; the textures go to OUT_DIR as yokai_mask_{albedo,orm,normal}.png
+#   optional: WIDTH (m) and FRONT (m), defaults 0.176 and 0.135 (the N3 first bake)
 # Note: the trailing `--` separates Blender's own arguments from ours.
 # Source: face +X, up +Z, units arbitrary. Output (Godot frame): face +Z, up +Y, metres,
 # centred on the head origin with the nose at z=FRONT and the flange inside the skull.
@@ -9,8 +10,12 @@ import bpy, sys, math
 from mathutils import Matrix, Vector
 argv = sys.argv; a = argv[argv.index("--") + 1:]
 src, dst_glb, dst_dir, target_tris = a[0], a[1], a[2], int(a[3])
-WIDTH = 0.176   # m across the cheeks (source Y span)
-FRONT = 0.135   # m: the nose tip sits this far in front of the head origin (Godot +Z)
+WIDTH = 0.176   # m across the cheeks (source Y span); default, see the optional 5th argument
+FRONT = 0.135   # m: the nose tip sits this far in front of the head origin (Godot +Z); optional 6th argument
+if len(a) > 4:
+    WIDTH = float(a[4])
+if len(a) > 5:
+    FRONT = float(a[5])
 CENTER_Y = -0.012
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=src)
