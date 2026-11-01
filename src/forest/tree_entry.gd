@@ -52,7 +52,7 @@ enum Crown {
 ## Rim light on the sakura crown (sakura only).
 @export var rim_color := Color(0.96, 0.65, 0.98)
 ## Neon emission strength of the sakura crown.
-@export_range(0.0, 4.0, 0.01) var emission := 1.35
+@export_range(0.0, 4.0, 0.01) var emission := 0.9
 ## How sparse the neon blossoms are: higher means fewer lit petals.
 @export_range(0.0, 1.0, 0.01) var neon_sparsity := 0.70
 

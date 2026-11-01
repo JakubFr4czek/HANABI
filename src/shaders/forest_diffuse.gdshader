@@ -3,6 +3,8 @@ shader_type spatial;
 // wraps the form and then disappears into the fog instead of sheening like plastic.
 render_mode blend_mix, depth_draw_opaque, cull_disabled, diffuse_burley, specular_disabled;
 
+#include "res://src/shaders/atmosphere.gdshaderinc"
+
 global uniform vec4 storm_fog_color;
 
 uniform sampler2D albedo_texture : source_color, filter_linear_mipmap, repeat_enable;
@@ -26,6 +28,9 @@ uniform float height_haze = 0.0;
 uniform float distance_haze_start = 14.0;
 uniform float distance_haze_end = 40.0;
 uniform float distance_haze_max = 0.5;
+uniform float low_mist_amount = 0.35;
+uniform float low_mist_height = 3.0;
+uniform vec3 haze_far_color : source_color = vec3(0.16, 0.30, 0.36);
 uniform vec2 lod_band = vec2(9.0, 11.0);
 // The far crown's trunk is a plain bark colour: the atlas sample at its UV is pale.
 uniform vec3 far_bark_color : source_color = vec3(0.16, 0.12, 0.10);
@@ -79,13 +84,18 @@ void fragment() {
 	alb = mix(alb, alb_leaf, leaf);
 
 	// Distance haze: the crowns lose their dark body into the milk before the fog takes them.
-	float haze = smoothstep(distance_haze_start, distance_haze_end, distance(world_pos, CAMERA_POSITION_WORLD)) * distance_haze_max;
+	float dist_cam = distance(world_pos, CAMERA_POSITION_WORLD);
+	float haze = mist_amount(dist_cam, world_pos.y, distance_haze_start, distance_haze_end, distance_haze_max,
+		low_mist_amount, low_mist_height);
+	vec3 haze_col = mix(storm_fog_color.rgb, haze_far_color, smoothstep(15.0, 40.0, dist_cam));
 	vec3 body = mix(alb, alb_root, root);
 	if (lod_far > 0.5 && leaf < 0.5) {
 		body = far_bark_color * night_tint * mix(0.84, 1.06, grain);
 	}
 	float high_haze = smoothstep(height_haze_low, height_haze_high, world_pos.y) * height_haze;
-	ALBEDO = mix(body, storm_fog_color.rgb, max(haze, high_haze));
+	// The mist is emission, so the dark night light cannot darken it (see atmosphere.gdshaderinc).
+	float mist = max(haze, high_haze);
+	ALBEDO = body * (1.0 - mist);
 	ROUGHNESS = 1.0;
 	METALLIC = 0.0;
 	// Bark grooves and leaf clumps catch the moon on the diffuse lobe only.
@@ -97,5 +107,5 @@ void fragment() {
 	bool fading = lod_alpha > 0.0 && lod_alpha < 1.0;
 	ALPHA_SCISSOR_THRESHOLD = fading ? dither : cut_level;
 	// Shadowed bark takes a little of the fog, so a trunk fades into the air.
-	EMISSION = storm_fog_color.rgb * 0.05 * (0.65 + 0.35 * open_sky);
+	EMISSION = storm_fog_color.rgb * 0.05 * (0.65 + 0.35 * open_sky) + haze_col * mist;
 }
