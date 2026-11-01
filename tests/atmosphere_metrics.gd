@@ -202,7 +202,10 @@ static func ground_mean(img: Image, cam: Camera3D, forest: ForestWorld, distance
 			if l >= 0.0:
 				sum += l
 				n += 1
-	return sum / maxf(1.0, float(n))
+	print("MEASURE ground patches on screen: %d (distances %s)" % [n, str(distances)])
+	if n == 0:
+		return -1.0
+	return sum / float(n)
 
 
 ## Trunks against the mist: the planted trunks 8..20 m away that sit nearest the middle of the
