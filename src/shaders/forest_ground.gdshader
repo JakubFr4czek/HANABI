@@ -63,6 +63,8 @@ uniform int path_seg_count = 0;
 uniform vec4 path_segs[48];
 // Width jitter of the edge, metres: a ragged, hand-trodden border, not a drawn line.
 uniform float path_edge_noise = 0.22;
+// Tests only: the flat trail mask (see the end of fragment()). Off in the game.
+uniform bool debug_mask = false;
 
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
@@ -182,4 +184,10 @@ void fragment() {
 	// Shadowed soil takes the fog's color, not a lit copy of the daylight scan.
 	EMISSION = mix(alb, storm_fog_color.rgb, 0.4) * ambient_fill * (1.0 - fog_mix) + haze_col * haze;
 	ALBEDO = alb * (1.0 - haze);
+	// Measurement mask (tests only): the trail as flat, unlit white on black, so the edge test reads the
+	// trail's own boundary and not the moon shadow on the gravel. Off in the game.
+	if (debug_mask) {
+		ALBEDO = vec3(0.0);
+		EMISSION = vec3(trail);
+	}
 }
