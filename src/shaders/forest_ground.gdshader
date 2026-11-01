@@ -57,6 +57,10 @@ uniform float path_gain = 1.5;
 // The vertex R weight is a 1 m lattice ramp: its edge stepped like the grid, so it is not used for the edge.
 uniform float path_half = 1.0;
 uniform float path_encode = 4.0;
+// Exact path distance per pixel (N5): the centre-line segments of this chunk (world xz, a.xy to b.xy in
+// .xy/.zw), set per chunk by ForestWorld. The edge of the trail is a true curve, not the 1 m lattice's facets.
+uniform int path_seg_count = 0;
+uniform vec4 path_segs[48];
 // Width jitter of the edge, metres: a ragged, hand-trodden border, not a drawn line.
 uniform float path_edge_noise = 0.22;
 
@@ -86,6 +90,18 @@ float vnoise(vec2 p) {
 	return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// Distance from a world xz point to the nearest centre-line segment of this chunk.
+float path_distance(vec2 p) {
+	float d = 1000.0;
+	for (int i = 0; i < path_seg_count; i++) {
+		vec2 a = path_segs[i].xy;
+		vec2 ab = path_segs[i].zw - a;
+		float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 0.000001), 0.0, 1.0);
+		d = min(d, length(p - a - ab * t));
+	}
+	return d;
+}
+
 void fragment() {
 	vec2 p = v_world_pos.xz;
 	float slope = 1.0 - clamp(v_world_normal.y, 0.0, 1.0);
@@ -96,7 +112,7 @@ void fragment() {
 	// and noisy, so it never reads as a drawn line.
 	// Sharp edge: a little noise only, so the border is ragged but still a border.
 	// Distance to the centre line (metres), read from G: a smooth field, so the edge is a curve.
-	float path_d = COLOR.g * path_encode;
+	float path_d = path_distance(p);
 	// Smooth trail weight (1 on the trail, 0 off it), then the noisy edge: the noise is in metres.
 	float path_w = 1.0 - smoothstep(path_half * 0.75, path_half * 1.2, path_d);
 	float path_w_edge = 1.0 - smoothstep(path_half * 0.75, path_half * 1.2,
