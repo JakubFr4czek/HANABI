@@ -16,6 +16,18 @@ const GROUND_OFFSETS := [-3.2, -2.8, -2.4, 2.4, 2.8, 3.2]
 const MIN_CONTRAST := 0.25
 const DEBUG_DIR := "/tmp/hanabi_path_visible"
 
+## N4 atmosphere thresholds (measured PRE/POST, docs/n4/README.md). Frames are the
+## spawn glade (pitch -8), a torii 30 m away and the ground beside the trail from close.
+const RMS_MIN := 1.2  # frame contrast; PRE 1.15, now ~1.47
+const TRUNK_DIFF_MIN := 0.03  # trunk 8-20 m vs the mist (informational until the sampling is fixed)
+const GROUND_GLADE_MIN := 0.08  # ground beside the trail, not black (PRE 0.065)
+const GROUND_GLADE_MAX := 0.25  # ... and not washed out
+const GROUND_NEAR_MIN := 0.012  # close ground stays readable (PRE 0.001-0.007)
+const TORII_CYAN_MIN := 0.015  # share of cyan pixels around a STORM gate (now ~0.026)
+const TORII_HUE_GAP_MIN := 8.0  # gate glow hue vs the mist, degrees (now ~12)
+const SHAFT_WIDTH_MAX := 0.10  # widest bright moonbeam column, share of the frame width
+const SHAFT_PEAK_MAX := 0.30  # moonbeam brightness above the sky median (display luminance)
+
 var failures := 0
 
 
@@ -54,6 +66,7 @@ func _run_all() -> void:
 			var far_dir := _trail_direction(forest, far)
 			var from_far := await _frame_contrast(run, far, far_dir, "20m")
 			print("RESULT spawn=%+.0f%%  20m=%+.0f%%" % [from_spawn * 100.0, from_far * 100.0])
+	await _atmosphere_checks(run, forest, at, along)
 	run.queue_free()
 	await get_tree().process_frame
 
@@ -181,6 +194,97 @@ func _trail_point(forest: ForestWorld, from: Vector2, dir: Vector2, metres: floa
 			best_err = err
 			best = p
 	return best
+
+
+## N4: the rendered atmosphere. Glade frame (contrast, trunk against the mist, ground, moonbeam),
+## the ground from close, and a STORM gate 30 m down the trail (cyan share and hue).
+func _atmosphere_checks(run: RunGame, forest: ForestWorld, at: Vector2, along: Vector2) -> void:
+	var player := run.player as DesktopPlayer
+	var cam: Camera3D = player.camera
+	var yaw: float = atan2(-along.x, -along.y)
+	var glade_ground: Vector3 = Vector3(at.x, forest.height_at(at.x, at.y), at.y)
+	# Frozen weather: no lightning strike may light the frame (its timer runs on real time).
+	var lightning := run.get_node_or_null("Arena/StormLightning")
+	if lightning:
+		lightning.process_mode = Node.PROCESS_MODE_DISABLED
+		lightning.set("_strike_age", -1.0)
+		lightning.call("_set_flash", 0.0)
+	var glade: Image = await _grab(player, glade_ground, yaw, -8.0)
+	_save(glade, "n4_glade")
+
+	var rms: float = AtmosphereMetrics.rms_contrast(glade)
+	_check("N4 glade frame has contrast: RMS %.2f, need >= %.2f" % [rms, RMS_MIN], rms >= RMS_MIN)
+	var ground: float = AtmosphereMetrics.ground_mean(glade, cam, forest, [4.0, 6.0, 8.0, 10.0, 12.0], [-3.2, -2.4, 2.4, 3.2])
+	print("MEASURE glade ground=%.3f" % ground)
+	_check("N4 ground beside the trail is neither black nor washed out (%.3f, need %.2f..%.2f)" % [ground, GROUND_GLADE_MIN, GROUND_GLADE_MAX],
+		ground >= GROUND_GLADE_MIN and ground <= GROUND_GLADE_MAX)
+	# Trunks against the mist: the frame 20 m down the trail, looking along it (the trees stand beside the path).
+	var walk_xz: Vector2 = _trail_point(forest, at, along, 20.0)
+	if walk_xz != Vector2.INF:
+		var walk_dir: Vector2 = _trail_direction(forest, walk_xz)
+		var walk: Image = await _grab(player, Vector3(walk_xz.x, forest.height_at(walk_xz.x, walk_xz.y), walk_xz.y), atan2(-walk_dir.x, -walk_dir.y), -8.0)
+		_save(walk, "n4_walk20")
+		var trunk: float = AtmosphereMetrics.trunk_contrast(walk, player.camera, forest)
+		# Informational only (not a pass/fail check yet): the sampled "mist" points often land on the
+		# dark ground behind the trunk, so this number does not yet measure trunk-against-mist (docs/n4/README.md).
+		print("MEASURE trunk 8-20m diff=%.3f (informational, threshold %.3f not enforced)" % [trunk, TRUNK_DIFF_MIN])
+	var sh: Dictionary = AtmosphereMetrics.shaft(glade)
+	print("MEASURE glade shaft excess=%.3f width=%.3f" % [sh.excess, sh.width])
+	_check("N4 no moonbeam column across the sky (width %.3f, need <= %.2f)" % [sh.width, SHAFT_WIDTH_MAX],
+		float(sh.width) <= SHAFT_WIDTH_MAX)
+	_check("N4 moonbeam peak stays soft (excess %.3f, need <= %.2f)" % [sh.excess, SHAFT_PEAK_MAX],
+		float(sh.excess) <= SHAFT_PEAK_MAX)
+
+	var far_xz: Vector2 = _trail_point(forest, at, along, 20.0)
+	if far_xz != Vector2.INF:
+		var far_dir: Vector2 = _trail_direction(forest, far_xz)
+		var near_yaw: float = atan2(-far_dir.y, -far_dir.x)
+		var near: Image = await _grab(player, Vector3(far_xz.x, forest.height_at(far_xz.x, far_xz.y), far_xz.y), near_yaw, -30.0)
+		var near_ground: float = AtmosphereMetrics.ground_mean(near, player.camera, forest, [3.0, 4.0, 5.0, 6.0], [-2.4, 2.4])
+		print("MEASURE near ground=%.3f" % near_ground)
+		_check("N4 ground from close is readable (%.3f, need >= %.3f)" % [near_ground, GROUND_NEAR_MIN], near_ground >= GROUND_NEAR_MIN)
+
+	# A STORM (cyan) gate 30 m down the trail; no other gate in the frame.
+	var far30: Vector2 = _trail_point(forest, at, along, 30.0)
+	if far30 == Vector2.INF:
+		_check("N4 trail runs 30 m from the spawn for the torii shot", false)
+		return
+	forest.torii_manager.clear_gates()
+	var side: Vector2 = Vector2(-along.y, along.x)
+	var gate_xz: Vector2 = far30 + side * 3.0
+	var gate: Node3D = forest.torii_manager.spawn_gate_at(gate_xz.x, gate_xz.y, Elements.STORM)
+	await get_tree().process_frame
+	var gate_pos: Vector3 = gate.global_position
+	var to_gate: Vector3 = gate_pos - Vector3(at.x, 0.0, at.y)
+	var torii: Image = await _grab(player, glade_ground, atan2(-to_gate.x, -to_gate.z), -2.0)
+	_save(torii, "n4_torii30")
+	var cyan: float = AtmosphereMetrics.cyan_share(torii, player.camera, gate_pos)
+	_check("N4 the torii glows cyan (share %.3f, need >= %.3f)" % [cyan, TORII_CYAN_MIN], cyan >= TORII_CYAN_MIN)
+	var g: Color = AtmosphereMetrics.patch_color(torii, player.camera, gate_pos + Vector3.UP * 3.0, 3)
+	var f: Color = AtmosphereMetrics.patch_color(torii, player.camera, gate_pos + Vector3.UP * 3.0 + player.camera.global_transform.basis.x * 3.0, 3)
+	var gap: float = AtmosphereMetrics.hue_gap(g, f) if g.r >= 0.0 and f.r >= 0.0 else -1.0
+	print("MEASURE torii hue gap=%.1f" % gap)
+	_check("N4 the gate glow has its own hue against the mist (gap %.1f deg, need >= %.1f)" % [gap, TORII_HUE_GAP_MIN],
+		gap >= TORII_HUE_GAP_MIN)
+	forest.torii_manager.clear_gates()
+
+
+## Looks from [param ground] (world, on the ground) with the given yaw and pitch and returns the frame.
+func _grab(player: DesktopPlayer, ground: Vector3, yaw: float, pitch_deg: float) -> Image:
+	player.teleport(ground + Vector3.UP * 0.2, yaw)
+	player.camera.rotation.x = deg_to_rad(pitch_deg)
+	for _k in 60:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var img: Image = get_viewport().get_texture().get_image()
+	if img.is_compressed():
+		img.decompress()
+	return img
+
+
+## Keeps the frames the checks read, for a look after a failure (DEBUG_DIR).
+func _save(img: Image, name: String) -> void:
+	img.save_png(DEBUG_DIR.path_join("%s.png" % name))
 
 
 func _check(label: String, ok: bool) -> void:
