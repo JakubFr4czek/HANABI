@@ -16,6 +16,9 @@ const PATCH_HALF := 2
 const COLOUR_GAP := 0.12
 ## Mean luminance change of the silhouette against the fog (0..1 scale).
 const SILHOUETTE_CONTRAST := 0.05
+## Mean luminance change of the head (mask, horns, eyes) against the fog at 3 m: the face must
+## read as a face, not a dark patch. Measured on the POST build with a margin.
+const MASK_CONTRAST := 0.08
 ## Right eye in the head frame (the mask's socket, YokaiForms.EYE_*). Kept as numbers so the
 ## same scene also runs on the pre-N3 tree for the PRE shots.
 const EYE_LOCAL := Vector3(0.0248, -0.02, 0.112)
@@ -89,6 +92,10 @@ func _run_all() -> void:
 	print("silhouette contrast at 3 m: %.3f (≥ %.2f)" % [contrast, SILHOUETTE_CONTRAST])
 	_check("the yōkai's silhouette reads against the fog at 3 m (contrast %.3f ≥ %.2f)" % [contrast, SILHOUETTE_CONTRAST],
 		contrast >= SILHOUETTE_CONTRAST)
+	var mask_contrast := _silhouette_contrast(shown, fog, _head_box(player, near))
+	print("mask (head) contrast at 3 m: %.3f (≥ %.2f)" % [mask_contrast, MASK_CONTRAST])
+	_check("the demon mask reads against the fog at 3 m (contrast %.3f ≥ %.2f)" % [mask_contrast, MASK_CONTRAST],
+		mask_contrast >= MASK_CONTRAST)
 	# A close look at the face (1.5 m): the mask, eyes and sigil, for the shot log.
 	near.global_position = Vector3(0.0, _ground(director, 0.0, 0.7), 0.7)
 	near.place_at(near.global_position, 0.0)
@@ -138,6 +145,15 @@ func _eye_screen_point(player: DesktopPlayer, y: Yokai) -> Vector2:
 
 
 ## The screen box of one yōkai (head to feet, with a margin), from its body parts.
+## The screen box of one yōkai's head (the mask and horns), about 1.3 head radii around its centre.
+func _head_box(player: DesktopPlayer, y: Yokai) -> Rect2i:
+	var head := y.parts["head"] as RagdollPart
+	var centre := player.camera.unproject_position(head.global_position)
+	var edge := player.camera.unproject_position(head.global_position + player.camera.global_basis.x * 0.09)
+	var r := absf(edge.x - centre.x) * 1.3
+	return Rect2i(Vector2i(centre - Vector2(r, r)), Vector2i(Vector2(2.0 * r, 2.0 * r)))
+
+
 func _body_box(player: DesktopPlayer, y: Yokai) -> Rect2i:
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
