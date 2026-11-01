@@ -2146,6 +2146,12 @@ func _build_materials() -> void:
 	_ground_mat.set_shader_parameter("path_tint", profile.path_tint)
 	_ground_mat.set_shader_parameter("path_gain", profile.path_gain)
 	_ground_mat.set_shader_parameter("fog_fade_end", profile.ground_fade_end)
+	_ground_mat.set_shader_parameter("distance_haze_start", profile.distance_haze_start)
+	_ground_mat.set_shader_parameter("distance_haze_end", profile.distance_haze_end)
+	_ground_mat.set_shader_parameter("distance_haze_max", profile.distance_haze_max)
+	_ground_mat.set_shader_parameter("low_mist_amount", profile.low_mist_amount)
+	_ground_mat.set_shader_parameter("low_mist_height", profile.low_mist_height)
+	_ground_mat.set_shader_parameter("haze_far_color", profile.haze_far_color)
 
 	_torii_mat = ShaderMaterial.new()
 	_torii_mat.shader = WET_SHADER
@@ -2296,6 +2302,9 @@ func _tree_material(far: float, own_albedo: Texture2D = null) -> ShaderMaterial:
 	mat.set_shader_parameter("distance_haze_start", profile.distance_haze_start)
 	mat.set_shader_parameter("distance_haze_end", profile.distance_haze_end)
 	mat.set_shader_parameter("distance_haze_max", profile.distance_haze_max)
+	mat.set_shader_parameter("low_mist_amount", profile.low_mist_amount)
+	mat.set_shader_parameter("low_mist_height", profile.low_mist_height)
+	mat.set_shader_parameter("haze_far_color", profile.haze_far_color)
 	return mat
 
 
