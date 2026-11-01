@@ -16,6 +16,8 @@ scan's colours (the Godot merge in ForestWorld keeps surface 0 only).
 --key-blue  key blue-dominant backdrop pixels to black (cut away by the forest shader)
 --part   keep only these parts (the index printed by the dump; repeatable), e.g. to drop a
          stalk card whose alpha the RGB atlas would lose
+--alpha  keep the baseColor alpha (RGBA atlas): ferns and other alpha-cut cards (D5 undergrowth).
+         Needs a material with an alpha channel; the forest's cut-out reads it (alpha_from_texture).
 
 Needs trimesh, Pillow, numpy, fast-simplification and rtree (pip install --user; binary wheels).
 """
@@ -46,15 +48,19 @@ def parts_of(src: str, scale: float, keep: list[int] | None, rotate_y: float = 0
     return parts
 
 
-def base_texture(m: trimesh.Trimesh) -> Image.Image:
-    """The part's baseColor image; a flat cell of its colour factor when it has none."""
+def base_texture(m: trimesh.Trimesh, alpha: bool = False) -> Image.Image:
+    """The part's baseColor image; a flat cell of its colour factor when it has none.
+
+    With alpha the image keeps its alpha channel (RGBA); otherwise it is flattened to RGB.
+    """
     mat = getattr(m.visual, "material", None)
     tex = getattr(mat, "baseColorTexture", None)
     if tex is not None:
-        return tex.convert("RGB")
+        return tex.convert("RGBA" if alpha else "RGB")
     factor = getattr(mat, "baseColorFactor", None)
-    rgb = tuple(int(c) for c in (factor if factor is not None else (200, 200, 200, 255))[:3])
-    return Image.new("RGB", (4, 4), rgb)
+    rgba = tuple(int(c) for c in (factor if factor is not None else (200, 200, 200, 255)))
+    rgba = rgba if alpha else rgba[:3]
+    return Image.new("RGBA" if alpha else "RGB", (4, 4), rgba)
 
 
 def key_blue(img: Image.Image) -> Image.Image:
@@ -70,10 +76,10 @@ def key_blue(img: Image.Image) -> Image.Image:
     return Image.fromarray(a.astype(np.uint8))
 
 
-def pack_atlas(parts: list[trimesh.Trimesh], edge: int, key: bool) -> Image.Image:
+def pack_atlas(parts: list[trimesh.Trimesh], edge: int, key: bool, alpha: bool = False) -> Image.Image:
     """Grid atlas over the distinct textures; remaps each part's UVs in place."""
-    images = [base_texture(m) for m in parts]
-    if key:
+    images = [base_texture(m, alpha) for m in parts]
+    if key and not alpha:
         images = [key_blue(img) for img in images]
     unique: list[Image.Image] = []
     slot: dict[int, int] = {}
@@ -84,7 +90,9 @@ def pack_atlas(parts: list[trimesh.Trimesh], edge: int, key: bool) -> Image.Imag
     cols = math.ceil(math.sqrt(max(1, len(unique))))
     rows = math.ceil(max(1, len(unique)) / cols)
     cell = edge // cols
-    atlas = Image.new("RGB", (cell * cols, cell * rows), (128, 128, 128))
+    # RGBA atlas: the empty cells stay fully transparent (alpha 0), so no card leaks into them.
+    atlas = Image.new("RGBA", (cell * cols, cell * rows), (128, 128, 128, 0)) if alpha \
+        else Image.new("RGB", (cell * cols, cell * rows), (128, 128, 128))
     for k, img in enumerate(unique):
         c, r = k % cols, k // cols
         atlas.paste(img.resize((cell, cell), Image.LANCZOS), (c * cell, r * cell))
@@ -129,6 +137,7 @@ def main() -> int:
     ap.add_argument("--min-faces", type=int, default=64, help="floor per part when decimating (keeps thin parts such as a lantern's column)")
     ap.add_argument("--key-blue", action="store_true", help="key blue-dominant backdrop pixels to black (card foliage)")
     ap.add_argument("--part", type=int, action="append", help="keep only these parts (index in the scene dump, repeatable)")
+    ap.add_argument("--alpha", action="store_true", help="keep baseColor alpha in an RGBA atlas (ferns, alpha-cut cards)")
     args = ap.parse_args()
 
     parts = parts_of(args.src, args.scale, args.part, args.rotate_y)
@@ -142,7 +151,7 @@ def main() -> int:
             if len(p.faces) > target:
                 parts[i] = decimate_keep_uv(p, target)
 
-    atlas = pack_atlas(parts, args.atlas, args.key_blue)
+    atlas = pack_atlas(parts, args.atlas, args.key_blue, args.alpha)
 
     merged = trimesh.util.concatenate(parts)
     lo, hi = merged.bounds
