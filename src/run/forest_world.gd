@@ -115,7 +115,7 @@ var _extra_spot_cache: Dictionary = {}
 var _back_spot_cache: Dictionary = {}
 var _back_mats: Array[Material] = []
 ## Silhouette of the back layer (N5): ~40 triangles, shared by every back kind's instances.
-var _back_meshes: Array[Mesh] = []
+var _back_meshes: Dictionary = {}
 var _back_tree_nodes: Dictionary = {}
 var _tree_spot_cache: Dictionary = {}
 ## Chunk coord -> {points: Array[Vector4] (x, z, entry, spacing), clearing: int}.
@@ -1155,6 +1155,27 @@ static func _near_base(base: Array, p: Vector2, reach: float) -> bool:
 	return false
 
 
+## Silhouette variants per back-layer kind (N5): picked per tree by a stateless hash, so the wall repeats no shape.
+const BACK_VARIANTS := 3
+
+## Metres from the camera where a back-layer kind starts to show (its draw_from, else the profile's back_near).
+func _back_near_of(e: int) -> float:
+	return _back_near_of_entry(profile.trees[e])
+
+
+func _back_near_of_entry(entry: TreeEntry) -> float:
+	return entry.draw_from if entry.draw_from >= 0.0 else profile.back_near
+
+
+## Chunk keys of every back-layer silhouette (kind × variant), in order.
+func _back_keys() -> Array[int]:
+	var out: Array[int] = []
+	for e in _back_entries():
+		for v in BACK_VARIANTS:
+			out.append(back_key(e, v))
+	return out
+
+
 ## Entry indices of the back-layer kinds (N5).
 func _back_entries() -> Array[int]:
 	var out: Array[int] = []
@@ -1169,8 +1190,20 @@ func _back_entries() -> Array[int]:
 ## so they never stand in a trunk or over a trail. They have no collider and no layout role.
 func _populate_back_trees(root: Node3D, coord: Vector2i) -> void:
 	var spots := _back_spots(coord)
-	for e in spots:
-		root.set_meta("xfs_Back%d" % int(e), spots[e])
+	for key in spots:
+		root.set_meta("xfs_Back%d" % int(key), spots[key])
+	for e in _back_entries():
+		if not profile.trees[e].obstacle:
+			continue
+		var all: Array[Transform3D] = []
+		for v in BACK_VARIANTS:
+			all.append_array(spots.get(back_key(e, v), []))
+		if not all.is_empty():
+			root.add_child(_build_tree_colliders(all, e, root))
+
+## Key of one back-layer silhouette variant in the chunk spots and meta: kind index × 10 + variant.
+static func back_key(e: int, variant: int) -> int:
+	return e * 10 + variant
 
 
 func _back_spots(coord: Vector2i) -> Dictionary:
@@ -1191,7 +1224,9 @@ func _back_spots(coord: Vector2i) -> Dictionary:
 	var out := {}
 	for e in _back_entries():
 		var entry := profile.trees[e]
-		var list: Array[Transform3D] = []
+		var lists: Array = []
+		for v in BACK_VARIANTS:
+			lists.append([] as Array[Transform3D])
 		for p in _take_poisson(coord, e):
 			if _in_clearing(p.x, p.y):
 				continue
@@ -1209,8 +1244,10 @@ func _back_spots(coord: Vector2i) -> Dictionary:
 				continue
 			accepted.append(Vector4(p.x, p.y, float(e), 0.0))
 			var base_y := _mesh_min_height(p.x, p.y, 2.1 * scale) - 0.05 * scale
-			list.append(Transform3D(_trunk_basis(p, entry, yaw, scale), Vector3(p.x - centre.x, base_y, p.y - centre.y)))
-		out[e] = list
+			var variant := clampi(int(_point_random(p.x, p.y, 5) * float(BACK_VARIANTS)), 0, BACK_VARIANTS - 1)
+			(lists[variant] as Array[Transform3D]).append(Transform3D(_trunk_basis(p, entry, yaw, scale), Vector3(p.x - centre.x, base_y, p.y - centre.y)))
+		for v in BACK_VARIANTS:
+			out[back_key(e, v)] = lists[v]
 	_back_spot_cache[coord] = out
 	return out
 
@@ -1982,16 +2019,17 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 			for i in near.size():
 				mm.set_instance_transform(i, near[i])
 		# Back layer (N5): far crowns between back_near and the draw radius, no near copy, no collider.
-		for e in _back_entries():
-			for xf in chunk.get_meta("xfs_Back%d" % e, []):
+		for bkey in _back_keys():
+			var e := bkey / 10
+			for xf in chunk.get_meta("xfs_Back%d" % bkey, []):
 				var placed := xf as Transform3D
 				var bx := base.x + placed.origin.x - origin.x
 				var bz := base.z + placed.origin.z - origin.z
 				var bd2 := bx * bx + bz * bz
-				if bd2 <= draw2 and bd2 >= profile.back_near * profile.back_near:
-					if not back_all.has(e):
-						back_all[e] = [] as Array[Transform3D]
-					(back_all[e] as Array[Transform3D]).append(Transform3D(_grown(placed, growth).basis, placed.origin + base))
+				if bd2 <= draw2 and bd2 >= _back_near_of(e) * _back_near_of(e):
+					if not back_all.has(bkey):
+						back_all[bkey] = [] as Array[Transform3D]
+					(back_all[bkey] as Array[Transform3D]).append(Transform3D(_grown(placed, growth).basis, placed.origin + base))
 		# Scene crowns (D5 redwood): full detail to tree_draw_radius, one MultiMesh for the whole ring.
 		for e in profile.trees.size():
 			if profile.trees[e].is_focal() or profile.trees[e].crown != TreeEntry.Crown.SCENE:
@@ -2006,9 +2044,9 @@ func _refresh_tree_draw(origin: Vector3) -> void:
 					(scene_all[e] as Array[Transform3D]).append(Transform3D(_grown(placed, growth).basis, placed.origin + base))
 					drawn_scene_origins.append(base + placed.origin)
 					drawn_scene_growth.append(growth)
-	for e in _back_entries():
-		var back_list: Array = back_all.get(e, [])
-		var back_node := _back_tree_node(e)
+	for key in _back_keys():
+		var back_list: Array = back_all.get(key, [])
+		var back_node := _back_tree_node(key)
 		back_node.multimesh.instance_count = back_list.size()
 		for i in back_list.size():
 			back_node.multimesh.set_instance_transform(i, back_list[i])
@@ -2052,34 +2090,49 @@ func _scene_tree_node(e: int) -> MultiMeshInstance3D:
 
 
 ## The back-layer MultiMesh of one kind (N5): one node for the whole ring, far crowns only.
-func _back_tree_node(e: int) -> MultiMeshInstance3D:
-	if _back_tree_nodes.has(e):
-		return _back_tree_nodes[e]
+func _back_tree_node(key: int) -> MultiMeshInstance3D:
+	if _back_tree_nodes.has(key):
+		return _back_tree_nodes[key]
 	var inst := MultiMeshInstance3D.new()
-	inst.name = "BackTrees%d" % e
+	inst.name = "BackTrees%d" % key
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = _back_meshes[e]
+	mm.mesh = _back_meshes[key]
 	mm.instance_count = 0
 	inst.multimesh = mm
-	inst.material_override = _back_mats[e]
+	inst.material_override = _back_mats[key / 10]
 	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	_set_view_range(inst)
 	inst.custom_aabb = AABB(Vector3(-400.0, -2.0, -400.0), Vector3(800.0, 24.0, 800.0))
 	add_child(inst)
-	_back_tree_nodes[e] = inst
+	_back_tree_nodes[key] = inst
 	return inst
 
 
 ## A far silhouette (N5 back layer): a tapered trunk and three crown tiers, about 40 triangles. Every
 ## vertex carries the leaf UV (UV.y 2), so the cut-out keeps it whole and it takes the dark foliage
 ## colour: a dark tree-line against the mist, as in the concept.
-static func _build_back_silhouette() -> ArrayMesh:
+static func _build_back_silhouette(variant: int) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var sides := 8
 	var leaf := Vector2(0.5, 2.0)
+	# Variants: 0 three wide tiers (cedar), 1 four narrow tiers (tall pine), 2 two tiers with a flat top.
+	var tiers := 3
+	var tier_r := 2.9
+	var tier_step := 2.1
+	var tier_rise := 3.4
+	if variant == 1:
+		tiers = 4
+		tier_r = 2.2
+		tier_step = 1.6
+		tier_rise = 2.8
+	elif variant == 2:
+		tiers = 2
+		tier_r = 3.2
+		tier_step = 2.6
+		tier_rise = 2.4
 	# Trunk: an open column, 8 sides, from the ground to the first tier.
 	for i in sides:
 		var a0 := TAU * float(i) / float(sides)
@@ -2095,11 +2148,11 @@ static func _build_back_silhouette() -> ArrayMesh:
 		st.set_uv(leaf); st.add_vertex(p0)
 		st.set_uv(leaf); st.add_vertex(q1)
 		st.set_uv(leaf); st.add_vertex(p1)
-	# Three crown tiers: cones of 8 sides, apex up.
-	for tier in 3:
-		var base_y := 2.6 + 2.1 * float(tier)
-		var radius := 2.9 - 0.75 * float(tier)
-		var apex := Vector3(0.0, base_y + 3.4, 0.0)
+	# Crown tiers: cones of 8 sides, apex up.
+	for tier in tiers:
+		var base_y := 2.6 + tier_step * float(tier)
+		var radius := tier_r - 0.75 * float(tier)
+		var apex := Vector3(0.0, base_y + tier_rise, 0.0)
 		for i in sides:
 			var a0 := TAU * float(i) / float(sides)
 			var a1 := TAU * float(i + 1) / float(sides)
@@ -2291,6 +2344,15 @@ func _chunk_ground_material(coord: Vector2i) -> ShaderMaterial:
 ## every point it skips lies within PATH_SIMPLIFY_TOL of it (12 cm, far below a pixel on Quest). The
 ## ground shader loops over these segments per pixel, so their count is kept small.
 static func _simplify_chain(chain: Array[Vector2], out: PackedVector4Array) -> void:
+	# Rounded before the simplification: where two footpath edges meet at a node, their routes
+	# meet at an angle; Chaikin on the joined chain turns that corner into a curve (N5).
+	if chain.size() >= 3:
+		var raw := PackedVector2Array(chain)
+		var curved := ForestPaths._chaikin(raw, 2)
+		var smooth: Array[Vector2] = []
+		for q in curved:
+			smooth.append(q)
+		chain = smooth
 	var i := 0
 	while i < chain.size() - 1:
 		var j := i + 1
@@ -2520,8 +2582,11 @@ func _build_meshes() -> void:
 		var far_key := "tree_far|%s|%d" % [_scene_key(entry.scene), entry.crown]
 		_tree_far_meshes.append(_built_once(far_key, _build_far_tree_mesh.bind(entry)) as Mesh)
 		_tree_far_mats.append(_tree_material(1.0, own_albedo))
-		_back_mats.append(_back_material(own_albedo) if entry.back_layer else null)
-		_back_meshes.append(_built_once("back_silhouette", _build_back_silhouette) as Mesh if entry.back_layer else null)
+		var e := _back_mats.size()
+		_back_mats.append(_back_material(own_albedo, entry) if entry.back_layer else null)
+		for v in BACK_VARIANTS:
+			if entry.back_layer:
+				_back_meshes[back_key(e, v)] = _built_once("back_silhouette_%d" % v, _build_back_silhouette.bind(v)) as Mesh
 		_tree_shapes.append(built.hulls)
 		_tree_chest.append(float(built.chest))
 	if not _tree_chest.is_empty():
@@ -2632,9 +2697,10 @@ func _rock_material() -> ShaderMaterial:
 ## Back layer material (N5): the far crown, dissolving in from back_near to back_near + back_fade.
 ## Its distance haze is a share of the forest's (BACK_HAZE_SHARE): the wall reads as dark trunks against
 ## the mist, as in the concept, instead of melting into it; the near forest keeps the full haze.
-func _back_material(own_albedo: Texture2D) -> ShaderMaterial:
+func _back_material(own_albedo: Texture2D, entry: TreeEntry) -> ShaderMaterial:
 	var mat := _tree_material(1.0, own_albedo)
-	mat.set_shader_parameter("lod_band", Vector2(profile.back_near, profile.back_near + profile.back_fade))
+	var near := _back_near_of_entry(entry)
+	mat.set_shader_parameter("lod_band", Vector2(near, near + profile.back_fade))
 	mat.set_shader_parameter("distance_haze_max", profile.distance_haze_max * BACK_HAZE_SHARE)
 	mat.set_shader_parameter("albedo_texture", TREE_ALBEDO)
 	return mat
