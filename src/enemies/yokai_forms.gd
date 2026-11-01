@@ -13,11 +13,11 @@ const MASK_ALBEDO := "res://assets/models/enemies/yokai_mask_albedo.png"
 const MASK_NORMAL := "res://assets/models/enemies/yokai_mask_normal.png"
 const MASK_ORM := "res://assets/models/enemies/yokai_mask_orm.png"
 ## Tint over the mask albedo (a dark lacquered demon mask, lifted so the horns read), yōkai and Oni.
-const MASK_TINT := Color(2.4, 1.9, 1.6)
+const MASK_TINT := Color(3.2, 2.5, 2.1)
 ## Eye glows sit in the mask's eye sockets, in the head's frame (metres).
-const EYE_X := 0.0248
+const EYE_X := 0.0305
 const EYE_Y := -0.02
-const EYE_Z := 0.112
+const EYE_Z := 0.13
 
 ## (y, rx, rz) rings, bottom to top. The chest is wider than deep and narrows at the hips.
 ## Broad shoulders over a narrower waist; the torso leans forward (CHEST_LEAN, see tube).
@@ -114,14 +114,67 @@ static func mask_orm() -> Texture2D:
 	return load(MASK_ORM) as Texture2D
 
 
+## Both eyes in one surface (one draw): small spheres in the mask's sockets.
 static func eye_mesh() -> Mesh:
-	return _cached("eye", func() -> Mesh:
-		var m := SphereMesh.new()
-		m.radius = 0.0115
-		m.height = 0.023
-		m.radial_segments = 8
-		m.rings = 4
-		return m)
+	return _cached("eyes", func() -> Mesh:
+		var eye := SphereMesh.new()
+		eye.radius = 0.0085
+		eye.height = 0.017
+		eye.radial_segments = 8
+		eye.rings = 4
+		var parts := []
+		for sx in [-1.0, 1.0]:
+			parts.append([eye, Transform3D(Basis(), Vector3(EYE_X * sx, EYE_Y, EYE_Z))])
+		return merged(parts))
+
+
+## Both horns in one ivory surface: tapered tubes from the mask's crown, bent up and out.
+static func horn_mesh() -> Mesh:
+	return _cached("horns", func() -> Mesh:
+		var horn := tube([Vector3(0.0, 0.021, 0.021), Vector3(0.05, 0.015, 0.015),
+			Vector3(0.10, 0.009, 0.009), Vector3(0.13, 0.002, 0.002)], 8, true)
+		var parts := []
+		for sx in [-1.0, 1.0]:
+			var dir := Vector3(0.5 * sx, 0.85, -0.15).normalized()
+			parts.append([horn, Transform3D(Basis(Quaternion(Vector3.UP, dir)), Vector3(0.078 * sx, 0.045, 0.0))])
+		return merged(parts))
+
+
+## One ArrayMesh of several meshes (their first surfaces), each moved by its transform.
+## Used to keep a yōkai's small parts to one draw surface each (N3 budget).
+static func merged(parts: Array) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var idx := PackedInt32Array()
+	for part in parts:
+		var mesh: Mesh = part[0]
+		var xf: Transform3D = part[1]
+		var arrays := MeshSlicer.surface_arrays(mesh)
+		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var n: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		var u: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+		var base := verts.size()
+		for i in v.size():
+			verts.append(xf * v[i])
+			norms.append((xf.basis * n[i]).normalized())
+			uvs.append(u[i])
+		var ix = arrays[Mesh.ARRAY_INDEX]
+		if ix != null:
+			for k in (ix as PackedInt32Array).size():
+				idx.append(base + (ix as PackedInt32Array)[k])
+		else:
+			for k in v.size():
+				idx.append(base + k)
+	var out := []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = norms
+	out[Mesh.ARRAY_TEX_UV] = uvs
+	out[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	return mesh
 
 
 ## A crimson sash band wrapped round the chest or the hips (a tube open at both ends).

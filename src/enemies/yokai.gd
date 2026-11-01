@@ -61,6 +61,7 @@ var _skin := ShaderMaterial.new()
 var _mask_mat := ShaderMaterial.new()
 var _sash := ShaderMaterial.new()
 var _eyes := StandardMaterial3D.new()
+var _horn_mat := StandardMaterial3D.new()
 ## Fog-piercing glow points over the eye slits (EyeGlow).
 var _eye_glows: Array[MeshInstance3D] = []
 var _claw_mat := StandardMaterial3D.new()
@@ -81,12 +82,13 @@ var _petal_burst_done := false
 const DEATH_PETALS := 90
 ## Sky fill on the mask: higher than the skin, so the face and horns keep their form in the dark.
 const MASK_FILL := 0.85
+const HORN_IVORY := Color(0.86, 0.80, 0.66)
 ## Fresnel rim on the mask edges (the shader's fog_rim, no light): the horns and brow read as edges.
 const MASK_RIM := 0.7
 ## Warm emission lift of the mask lacquer (a few percent of its own colour; no light source).
 const MASK_LIFT := Color(0.09, 0.06, 0.05)
 ## Size of the eye glow points in the mask sockets (EyeGlow base size, m).
-const MASK_EYE_GLOW_SIZE := 0.075
+const MASK_EYE_GLOW_SIZE := 0.07
 var _slow_time := 0.0
 var _slow_scale := 1.0
 var _confusion_time := 0.0
@@ -185,7 +187,9 @@ func _ready() -> void:
 	_mask_mat.set_shader_parameter("orm_texture", YokaiForms.mask_orm())
 	_mask_mat.set_shader_parameter("orm_mode", 1)
 	_mask_mat.set_shader_parameter("normal_texture", YokaiForms.mask_normal())
-	_mask_mat.set_shader_parameter("normal_depth", 0.5)
+	_mask_mat.set_shader_parameter("normal_depth", 0.3)
+	# Lacquer without glints: the sparkle on the face came from the specular on the normal map.
+	_mask_mat.set_shader_parameter("specular_scale", 0.25)
 	# Aged, not glowing: the face reads in the fog without shining like a signal.
 	_mask_mat.set_shader_parameter("base_color", YokaiForms.MASK_TINT)
 	_mask_mat.set_shader_parameter("fog_rim", MASK_RIM)
@@ -209,10 +213,13 @@ func _ready() -> void:
 	_sash.set_shader_parameter("waterline_y", -10.0)
 	_sash.set_shader_parameter("fill", 1.60)
 
+	# Old ivory: it catches the moon and reads against the sky at 3 m.
+	_horn_mat.albedo_color = HORN_IVORY
+	_horn_mat.roughness = 0.45
 	_eyes.albedo_color = Color(0.95, 0.18, 0.10)
 	_eyes.emission_enabled = true
 	_eyes.emission = Color(1.6, 0.22, 0.08)
-	_eyes.emission_energy_multiplier = 0.85
+	_eyes.emission_energy_multiplier = 0.5
 
 	_sigil_mat.albedo_color = Color(0.85, 0.16, 0.10)
 	_sigil_mat.emission_enabled = true
@@ -329,7 +336,7 @@ func _reset_spawn_look() -> void:
 	_sash.set_shader_parameter("fill", 1.60)
 	_eyes.albedo_color = Color(0.95, 0.18, 0.10)
 	_eyes.emission = Color(1.6, 0.22, 0.08)
-	_eyes.emission_energy_multiplier = 0.85
+	_eyes.emission_energy_multiplier = 0.5
 	_sigil_mat.albedo_color = Color(0.85, 0.16, 0.10)
 	_sigil_mat.emission = Color(1.35, 0.18, 0.08)
 	_sigil_mat.emission_energy_multiplier = 0.55
@@ -577,13 +584,17 @@ func _decorate_part(part_name: String, part: RagdollPart, def: Dictionary) -> vo
 			mask_mi.material_override = _mask_mat
 			mask_mi.set_meta("keep_on_piece", true)
 			part.add_child(mask_mi)
-			# Glowing eyes in the mask's sockets; the school's light in them (see _apply_element_eyes).
-			for sx in [-1.0, 1.0]:
-				var eye := MeshInstance3D.new()
-				eye.mesh = YokaiForms.eye_mesh()
-				eye.position = Vector3(YokaiForms.EYE_X * sx, YokaiForms.EYE_Y, YokaiForms.EYE_Z)
-				eye.material_override = _eyes
-				part.add_child(eye)
+			# Ivory horns from the crown (N3 fix2: the mask's own horns were lost in the dark).
+			var horns := MeshInstance3D.new()
+			horns.mesh = YokaiForms.horn_mesh()
+			horns.material_override = _horn_mat
+			horns.set_meta("keep_on_piece", true)
+			part.add_child(horns)
+			# Both glowing eyes in the mask's sockets, one surface; the school's light in them.
+			var eyes_mi := MeshInstance3D.new()
+			eyes_mi.mesh = YokaiForms.eye_mesh()
+			eyes_mi.material_override = _eyes
+			part.add_child(eyes_mi)
 			# A little larger than the old eye slits: the dark mask around the eyes takes colour from them.
 			_eye_glows.append(EyeGlow.attach(part, Vector3(0.0, YokaiForms.EYE_Y, YokaiForms.EYE_Z),
 				Color(1.0, 0.24, 0.1), YokaiForms.EYE_X * 2.0, MASK_EYE_GLOW_SIZE))

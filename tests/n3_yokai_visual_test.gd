@@ -19,9 +19,13 @@ const SILHOUETTE_CONTRAST := 0.05
 ## Mean luminance change of the head (mask, horns, eyes) against the fog at 3 m: the face must
 ## read as a face, not a dark patch. Measured on the POST build with a margin.
 const MASK_CONTRAST := 0.08
+## The horns against the sky above the head (silhouette contrast of the pixels they change).
+const HORN_CONTRAST := 0.05
+## The mask's face against the collar under it (mean luminance difference, either direction).
+const FACE_HOOD_LUMA := 0.05
 ## Right eye in the head frame (the mask's socket, YokaiForms.EYE_*). Kept as numbers so the
 ## same scene also runs on the pre-N3 tree for the PRE shots.
-const EYE_LOCAL := Vector3(0.0248, -0.02, 0.112)
+const EYE_LOCAL := Vector3(0.0305, -0.02, 0.13)
 
 var out_dir := ""
 var failures := 0
@@ -96,6 +100,18 @@ func _run_all() -> void:
 	print("mask (head) contrast at 3 m: %.3f (≥ %.2f)" % [mask_contrast, MASK_CONTRAST])
 	_check("the demon mask reads against the fog at 3 m (contrast %.3f ≥ %.2f)" % [mask_contrast, MASK_CONTRAST],
 		mask_contrast >= MASK_CONTRAST)
+	var zones := _head_zones(player, near)
+	var horn_contrast := _silhouette_contrast(shown, fog, zones.horns)
+	var horn_pixels := _changed_pixels(shown, fog, zones.horns)
+	print("horns against the sky at 3 m: contrast %.3f, changed pixels %d" % [horn_contrast, horn_pixels])
+	_check("the horns show against the sky at 3 m (contrast %.3f ≥ %.2f, %d px)" % [horn_contrast, HORN_CONTRAST, horn_pixels],
+		horn_contrast >= HORN_CONTRAST and horn_pixels >= 6)
+	var face := _mean_luma(shown, zones.face)
+	var hood := (_mean_luma(shown, zones.hood_l) + _mean_luma(shown, zones.hood_r)) * 0.5
+	print("face %.3f against hood %.3f (|Δ| %.3f ≥ %.2f)" % [face, hood, absf(face - hood), FACE_HOOD_LUMA])
+	# An absolute difference: the red face separates from the navy collar by hue and luminance together.
+	_check("the mask's face differs in luminance from the collar at 3 m (|Δ| %.3f ≥ %.2f)" % [absf(face - hood), FACE_HOOD_LUMA],
+		absf(face - hood) >= FACE_HOOD_LUMA)
 	# A close look at the face (1.5 m): the mask, eyes and sigil, for the shot log.
 	near.global_position = Vector3(0.0, _ground(director, 0.0, 0.7), 0.7)
 	near.place_at(near.global_position, 0.0)
@@ -152,6 +168,42 @@ func _head_box(player: DesktopPlayer, y: Yokai) -> Rect2i:
 	var edge := player.camera.unproject_position(head.global_position + player.camera.global_basis.x * 0.09)
 	var r := absf(edge.x - centre.x) * 1.3
 	return Rect2i(Vector2i(centre - Vector2(r, r)), Vector2i(Vector2(2.0 * r, 2.0 * r)))
+
+
+## Screen zones of one yōkai's head: the horns above it, the face (centre) and the hood at each side.
+func _head_zones(player: DesktopPlayer, y: Yokai) -> Dictionary:
+	var box := _head_box(player, y)
+	var c := Vector2(box.position) + Vector2(box.size) * 0.5
+	var r := float(box.size.x) * 0.5 / 1.3
+	return {
+		"horns": Rect2i(Vector2i(c + Vector2(-1.5 * r, -2.6 * r)), Vector2i(Vector2(3.0 * r, 1.2 * r))),
+		"face": Rect2i(Vector2i(c + Vector2(-0.45 * r, -0.4 * r)), Vector2i(Vector2(0.9 * r, 0.9 * r))),
+		# The hood (the head's dark neck and collar under the mask; the head sphere is hidden by the
+		# mask, so this is the body the face sits on). The fog beside the head is not measured.
+		"hood_l": Rect2i(Vector2i(c + Vector2(-0.9 * r, 1.0 * r)), Vector2i(Vector2(0.8 * r, 0.5 * r))),
+		"hood_r": Rect2i(Vector2i(c + Vector2(0.1 * r, 1.0 * r)), Vector2i(Vector2(0.8 * r, 0.5 * r))),
+	}
+
+
+func _changed_pixels(with_body: Image, fog: Image, box: Rect2i) -> int:
+	var n := 0
+	for py in range(maxi(box.position.y, 0), mini(box.end.y, with_body.get_height())):
+		for px in range(maxi(box.position.x, 0), mini(box.end.x, with_body.get_width())):
+			var a := fog.get_pixel(px, py)
+			var b := with_body.get_pixel(px, py)
+			if absf(_luma(a) - _luma(b)) + absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b) > 0.04:
+				n += 1
+	return n
+
+
+func _mean_luma(img: Image, box: Rect2i) -> float:
+	var total := 0.0
+	var n := 0
+	for py in range(maxi(box.position.y, 0), mini(box.end.y, img.get_height())):
+		for px in range(maxi(box.position.x, 0), mini(box.end.x, img.get_width())):
+			total += _luma(img.get_pixel(px, py))
+			n += 1
+	return total / float(maxi(n, 1))
 
 
 func _body_box(player: DesktopPlayer, y: Yokai) -> Rect2i:
