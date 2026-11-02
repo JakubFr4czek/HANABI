@@ -2,7 +2,7 @@
 # przebiegiem, budżet wydajności (draw calle, prymitywy, czas klatki) oraz wizualny fuzzing
 # losowych legalnych miejsc w świecie. Renderer programowy: Xvfb + Mesa llvmpipe,
 # Godot gl_compatibility / opengl3 (jak na Queście). Co 2 h i ręcznie, nie blokuje merge'a.
-# Self-hosted runner eepy-box; zawsze leci w całości. Baseline zrzutów trzymany na boxie
+# Self-hosted runner pi2 (Raspberry Pi 4, llvmpipe); perf porównywany z poprzednim runem na tym samym Pi. Baseline zrzutów
 # ($HANABI_CI_CACHE/visual-baseline), aktualizowany tylko z runów na main.
 name: visual-perf
 
@@ -37,8 +37,8 @@ env:
 jobs:
   snapshots-perf:
     name: Fixed screenshots + perf budget
-    runs-on: [self-hosted, hanabi]
-    timeout-minutes: 40
+    runs-on: [self-hosted, pi2]  # Raspberry Pi 2 (4 GB) runs all self-hosted CI; one runner = jobs run one after another
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Runner tools
@@ -62,7 +62,7 @@ jobs:
         run: |
           set -o pipefail
           # shellcheck disable=SC2086
-          timeout 1200 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . $RENDER_ARGS \
+          timeout 3600 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . $RENDER_ARGS \
             res://tests/ci/visual_snapshots.tscn -- --desktop --out="$PWD/ci_out/baseline" 2>&1 | tee ci_out/snapshots.log
           grep -m1 -E 'OpenGL API|Using Device' ci_out/snapshots.log || true
 
@@ -119,8 +119,8 @@ jobs:
 
   visual-fuzz:
     name: Visual fuzz (random legal spots)
-    runs-on: [self-hosted, hanabi]
-    timeout-minutes: 45
+    runs-on: [self-hosted, pi2]  # Raspberry Pi 2 (4 GB) runs all self-hosted CI; one runner = jobs run one after another
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - name: Runner tools
@@ -144,7 +144,7 @@ jobs:
           seed="${SEED:-$GITHUB_RUN_NUMBER}"
           echo "seed=$seed" >> "$GITHUB_OUTPUT"
           # shellcheck disable=SC2086
-          timeout 1800 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . $RENDER_ARGS \
+          timeout 5400 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . $RENDER_ARGS \
             res://tests/ci/visual_fuzz.tscn -- --desktop --seed="$seed" --locations="$LOCATIONS" --dirs=4 \
             --out="$PWD/ci_out/vfuzz" 2>&1 | tee ci_out/vfuzz.log
       - name: Contact sheets
