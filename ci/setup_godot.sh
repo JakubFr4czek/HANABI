@@ -4,10 +4,11 @@
 set -euo pipefail
 GODOT_VERSION="${GODOT_VERSION:-4.7.2}"
 GODOT_DIR="${GODOT_DIR:-$HOME/.godot-bin}"
-BIN="$GODOT_DIR/Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+case "$(uname -m)" in aarch64|arm64) ARCH=arm64 ;; *) ARCH=x86_64 ;; esac  # Raspberry Pi runners are arm64
+BIN="$GODOT_DIR/Godot_v${GODOT_VERSION}-stable_linux.${ARCH}"
 if [[ ! -x "$BIN" ]]; then
   mkdir -p "$GODOT_DIR"
-  url="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+  url="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.${ARCH}.zip"
   echo "Downloading $url"
   curl -fsSL --retry 3 -o "$GODOT_DIR/godot.zip" "$url"
   unzip -o -q "$GODOT_DIR/godot.zip" -d "$GODOT_DIR"
