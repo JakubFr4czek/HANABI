@@ -16,6 +16,7 @@ var failures := 0
 
 func _ready() -> void:
 	await _run()
+	await _pacing_checks()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	get_tree().quit(1 if failures > 0 else 0)
 
@@ -114,6 +115,61 @@ func _run() -> void:
 	director.stop_director()
 	director.clear_enemies()
 	run.queue_free()
+
+
+## N7 pacing (docs/SPAWN_PLAN.md, "N7 – pomiar"): 8 minutes on the real run.tscn forest with
+## the stand-in player (N7PacingSim). Stationary, so no physics frames are needed.
+const PACING_SECONDS := 480.0
+const PACING_SEED := 7
+const DEMO_SECONDS := 180.0
+const MAX_SKIPPED_SHARE := 0.05
+const MAX_QUIET_AFTER_60 := 10.0
+
+
+func _pacing_checks() -> void:
+	var first := await _pacing_run(PACING_SEED, "default", PACING_SECONDS)
+	var s: Dictionary = first.summary
+	var skip_share: float = float(s.skipped) / maxf(float(s.requested), 1.0)
+	_check("8 min: %d spawns requested, %d skipped by P6 (%.1f%%, limit %.0f%%)" % [s.requested, s.skipped, skip_share * 100.0, MAX_SKIPPED_SHARE * 100.0],
+		s.requested >= 40 and skip_share <= MAX_SKIPPED_SHARE)
+	_check("8 min: no spawn (yōkai or guard) in the back sector (%d of %d)" % [s.behind, s.spawned],
+		s.spawned >= 40 and s.behind == 0)
+	_check("8 min: every spawn in the view cone is behind geometry (%d of %d in cone hidden)" % [s.in_cone_occluded, s.in_cone],
+		s.in_cone == s.in_cone_occluded)
+	_check("8 min: no gap longer than %.0f s without a live enemy after 60 s (longest %.1f s)" % [MAX_QUIET_AFTER_60, s.longest_empty_after_60],
+		s.longest_empty_after_60 <= MAX_QUIET_AFTER_60)
+	_check("8 min: never more live yōkai than the Quest cap (max %d)" % s.max_alive,
+		s.max_alive <= WaveProfile.QUEST_YOKAI_CAP)
+	# The 3-minute demo on the real forest: the Oni is placed in [120, 150] s, and the stand-in
+	# player meets the first yōkai in the calm opening (not before 20 s).
+	var demo := await _pacing_run(PACING_SEED, "demo", DEMO_SECONDS)
+	var demo_s: Dictionary = demo.summary
+	_check("Demo 3 min: the Oni is placed at %.1f s, inside [120, 150] s" % demo_s.first_oni,
+		demo_s.first_oni >= 120.0 and demo_s.first_oni <= 150.0)
+	_check("Demo 3 min: the first yōkai reaches the player at %.1f s (after the calm opening)" % demo_s.first_contact,
+		demo_s.first_contact >= 20.0)
+	_check("Demo 3 min: never more live yōkai than the Quest cap (max %d)" % demo_s.max_alive,
+		demo_s.max_alive <= WaveProfile.QUEST_YOKAI_CAP)
+
+
+## One stationary 8-minute run. The summary and spawn list are taken before the run is freed.
+func _pacing_run(seed_value: int, profile_file: String, seconds: float) -> Dictionary:
+	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
+	add_child(run)
+	# The forest streams its first chunks on worker threads: give them time to land, or two
+	# runs with the same seed see different neighbours (and so different spawn points).
+	await _frames(120)
+	run.set_physics_process(false)
+	if profile_file != "default":
+		run.wave_director.profile = load(WaveProfile.preset_path(profile_file)) as WaveProfile
+	var sim := N7PacingSim.new()
+	await sim.play(get_tree(), run, run.wave_director, seconds, seed_value, false)
+	var result := {"summary": sim.summary(), "spawns": sim.spawns}
+	run.queue_free()
+	await _frames(3)
+	return result
+
 
 
 ## Degrees between the direction from [param center] to [param pos] and straight behind a

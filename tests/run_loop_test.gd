@@ -249,14 +249,33 @@ func _spawn_pacing_checks(run: RunGame) -> void:
 	var profile := director.get_profile()
 	var demo := load(WaveProfile.preset_path("demo_gentle")) as WaveProfile
 	var hard := load(WaveProfile.preset_path("hardcore")) as WaveProfile
+	var demo3 := load(WaveProfile.preset_path("demo")) as WaveProfile
 
 	var errors := 0
-	for p in [demo, profile, hard]:
+	for p in [demo, profile, hard, demo3]:
 		for line in p.validate():
 			if line.begins_with("BŁĄD"):
 				errors += 1
-	_check("Wave presets (demo, default, hardcore) load and validate without errors (%d)" % errors,
-		demo != null and hard != null and errors == 0)
+	_check("Wave presets (demo 3 min, demo, default, hardcore) load and validate without errors (%d)" % errors,
+		demo != null and hard != null and demo3 != null and errors == 0)
+
+	# The 3-minute demo (N7): the Oni comes on the first PEAK after 120 s, inside 120–150 s.
+	var demo_oni := -1.0
+	var demo_plan := WavePlanner.new(demo3, 7)
+	for i in 3000:
+		if demo_plan.step(0.1, 0, false).oni:
+			demo_oni = demo_plan.t
+			break
+	_check("Demo: the Oni is cued at %.1f s, inside [120, 150] s" % demo_oni,
+		demo_oni >= 120.0 and demo_oni <= 150.0)
+	# A spawn the director cannot place hands its credits back (N7): the wave keeps its budget.
+	var refund_plan := WavePlanner.new(profile, 5)
+	refund_plan.credits = 5.0
+	refund_plan.refund("elite")
+	refund_plan.refund("swarm")
+	refund_plan.refund("")
+	_check("A refused spawn refunds its credits (5 + elite 4 + swarm 1 = %.0f)" % refund_plan.credits,
+		is_equal_approx(refund_plan.credits, 5.0 + profile.elite_cost + profile.swarm_cost))
 
 	var calm := WavePlanner.simulate(profile, 480.0, 7)
 	var again := WavePlanner.simulate(profile, 480.0, 7)
