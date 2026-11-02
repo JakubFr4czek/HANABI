@@ -1,0 +1,758 @@
+[
+	{
+		"behind": 0,
+		"elites": 0,
+		"first_contact": 12.6,
+		"first_oni": 235.699999999991,
+		"guard_behind": 0,
+		"guard_share": 0.196746226382503,
+		"guards": 17,
+		"in_cone": 0,
+		"in_cone_occluded": 0,
+		"kills": 34,
+		"longest_empty_after_60": 8.19999999999999,
+		"max_alive": 8,
+		"placed": 41,
+		"profile": "default",
+		"reject": {
+			"back": 52,
+			"cone": 43,
+			"geometry": 0
+		},
+		"requested": 42,
+		"samples": [
+			{
+				"cap": 2,
+				"guards": 0,
+				"oni": 0,
+				"skipped": 0,
+				"state": "build",
+				"t": 30.0,
+				"wave": 2,
+				"yokai": 0
+			},
+			{
+				"cap": 3,
+				"guards": 2,
+				"oni": 0,
+				"skipped": 0,
+				"state": "relax",
+				"t": 45.0,
+				"wave": 4,
+				"yokai": 0
+			},
+			{
+				"cap": 3,
+				"guards": 2,
+				"oni": 0,
+				"skipped": 0,
+				"state": "relax",
+				"t": 60.0,
+				"wave": 4,
+				"yokai": 0
+			},
+			{
+				"cap": 3,
+				"guards": 0,
+				"oni": 0,
+				"skipped": 0,
+				"state": "relax",
+				"t": 75.0,
+				"wave": 4,
+				"yokai": 0
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "relax",
+				"t": 315.0,
+				"wave": 13,
+				"yokai": 7
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 330.0,
+				"wave": 14,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 345.0,
+				"wave": 14,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 360.0,
+				"wave": 14,
+				"yokai": 7
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 375.0,
+				"wave": 14,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 390.0,
+				"wave": 14,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 405.0,
+				"wave": 14,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 420.0,
+				"wave": 14,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 435.0,
+				"wave": 14,
+				"yokai": 7
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 450.0,
+				"wave": 14,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "peak",
+				"t": 465.0,
+				"wave": 15,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "peak",
+				"t": 480.0,
+				"wave": 15,
+				"yokai": 7
+			}
+		],
+		"seed": 7,
+		"skipped": 1,
+		"spawned": 58,
+		"walk": true,
+		"wave_yokai": 41
+	},
+	{
+		"behind": 0,
+		"elites": 0,
+		"first_contact": 15.2,
+		"first_oni": 279.399999999995,
+		"guard_behind": 0,
+		"guard_share": 0.182998860142988,
+		"guards": 17,
+		"in_cone": 0,
+		"in_cone_occluded": 0,
+		"kills": 37,
+		"longest_empty_after_60": 8.09999999999999,
+		"max_alive": 8,
+		"placed": 39,
+		"profile": "default",
+		"reject": {
+			"back": 52,
+			"cone": 45,
+			"geometry": 0
+		},
+		"requested": 40,
+		"samples": [
+			{
+				"cap": 2,
+				"guards": 2,
+				"oni": 0,
+				"skipped": 0,
+				"state": "build",
+				"t": 30.0,
+				"wave": 2,
+				"yokai": 0
+			},
+			{
+				"cap": 3,
+				"guards": 2,
+				"oni": 0,
+				"skipped": 0,
+				"state": "peak",
+				"t": 45.0,
+				"wave": 3,
+				"yokai": 1
+			},
+			{
+				"cap": 3,
+				"guards": 0,
+				"oni": 0,
+				"skipped": 0,
+				"state": "relax",
+				"t": 60.0,
+				"wave": 4,
+				"yokai": 0
+			},
+			{
+				"cap": 3,
+				"guards": 0,
+				"oni": 0,
+				"skipped": 0,
+				"state": "build",
+				"t": 75.0,
+				"wave": 5,
+				"yokai": 0
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 315.0,
+				"wave": 12,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 330.0,
+				"wave": 12,
+				"yokai": 7
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 345.0,
+				"wave": 12,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 360.0,
+				"wave": 12,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "relax",
+				"t": 375.0,
+				"wave": 13,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "relax",
+				"t": 390.0,
+				"wave": 13,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "relax",
+				"t": 405.0,
+				"wave": 13,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "relax",
+				"t": 420.0,
+				"wave": 13,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 435.0,
+				"wave": 14,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 450.0,
+				"wave": 14,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 465.0,
+				"wave": 14,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 480.0,
+				"wave": 14,
+				"yokai": 6
+			}
+		],
+		"seed": 11,
+		"skipped": 1,
+		"spawned": 56,
+		"walk": true,
+		"wave_yokai": 39
+	},
+	{
+		"behind": 0,
+		"elites": 0,
+		"first_contact": 52.4000000000005,
+		"first_oni": 185.499999999994,
+		"guard_behind": 0,
+		"guard_share": 0.20424164968394,
+		"guards": 18,
+		"in_cone": 0,
+		"in_cone_occluded": 0,
+		"kills": 38,
+		"longest_empty_after_60": 4.1,
+		"max_alive": 8,
+		"placed": 40,
+		"profile": "default",
+		"reject": {
+			"back": 35,
+			"cone": 26,
+			"geometry": 0
+		},
+		"requested": 40,
+		"samples": [
+			{
+				"cap": 2,
+				"guards": 2,
+				"oni": 0,
+				"skipped": 0,
+				"state": "build",
+				"t": 30.0,
+				"wave": 1,
+				"yokai": 0
+			},
+			{
+				"cap": 3,
+				"guards": 2,
+				"oni": 0,
+				"skipped": 0,
+				"state": "build",
+				"t": 45.0,
+				"wave": 1,
+				"yokai": 1
+			},
+			{
+				"cap": 3,
+				"guards": 2,
+				"oni": 0,
+				"skipped": 0,
+				"state": "build",
+				"t": 60.0,
+				"wave": 2,
+				"yokai": 1
+			},
+			{
+				"cap": 3,
+				"guards": 1,
+				"oni": 0,
+				"skipped": 0,
+				"state": "build",
+				"t": 75.0,
+				"wave": 2,
+				"yokai": 0
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 315.0,
+				"wave": 9,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 330.0,
+				"wave": 9,
+				"yokai": 7
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 345.0,
+				"wave": 9,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 360.0,
+				"wave": 9,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 375.0,
+				"wave": 9,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 390.0,
+				"wave": 9,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 405.0,
+				"wave": 9,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 0,
+				"state": "peak",
+				"t": 420.0,
+				"wave": 9,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 2,
+				"oni": 1,
+				"skipped": 0,
+				"state": "relax",
+				"t": 435.0,
+				"wave": 10,
+				"yokai": 6
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 0,
+				"state": "relax",
+				"t": 450.0,
+				"wave": 10,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 0,
+				"state": "relax",
+				"t": 465.0,
+				"wave": 10,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 0,
+				"state": "relax",
+				"t": 480.0,
+				"wave": 10,
+				"yokai": 7
+			}
+		],
+		"seed": 23,
+		"skipped": 0,
+		"spawned": 58,
+		"walk": true,
+		"wave_yokai": 40
+	},
+	{
+		"behind": 0,
+		"elites": 0,
+		"first_contact": 9.29999999999998,
+		"first_oni": 217.599999999992,
+		"guard_behind": 0,
+		"guard_share": 0.0,
+		"guards": 0,
+		"in_cone": 0,
+		"in_cone_occluded": 0,
+		"kills": 35,
+		"longest_empty_after_60": 8.19999999999999,
+		"max_alive": 8,
+		"placed": 43,
+		"profile": "default",
+		"reject": {
+			"back": 31,
+			"cone": 54,
+			"geometry": 0
+		},
+		"requested": 44,
+		"samples": [
+			{
+				"cap": 2,
+				"guards": 0,
+				"oni": 0,
+				"skipped": 0,
+				"state": "build",
+				"t": 30.0,
+				"wave": 2,
+				"yokai": 0
+			},
+			{
+				"cap": 3,
+				"guards": 0,
+				"oni": 0,
+				"skipped": 0,
+				"state": "relax",
+				"t": 45.0,
+				"wave": 4,
+				"yokai": 0
+			},
+			{
+				"cap": 3,
+				"guards": 0,
+				"oni": 0,
+				"skipped": 0,
+				"state": "relax",
+				"t": 60.0,
+				"wave": 4,
+				"yokai": 0
+			},
+			{
+				"cap": 3,
+				"guards": 0,
+				"oni": 0,
+				"skipped": 0,
+				"state": "build",
+				"t": 75.0,
+				"wave": 5,
+				"yokai": 0
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 315.0,
+				"wave": 14,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 330.0,
+				"wave": 14,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 345.0,
+				"wave": 14,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 360.0,
+				"wave": 14,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "build",
+				"t": 375.0,
+				"wave": 14,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "peak",
+				"t": 390.0,
+				"wave": 15,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "peak",
+				"t": 405.0,
+				"wave": 15,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "peak",
+				"t": 420.0,
+				"wave": 15,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "peak",
+				"t": 435.0,
+				"wave": 15,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "peak",
+				"t": 450.0,
+				"wave": 15,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "peak",
+				"t": 465.0,
+				"wave": 15,
+				"yokai": 8
+			},
+			{
+				"cap": 8,
+				"guards": 0,
+				"oni": 1,
+				"skipped": 1,
+				"state": "peak",
+				"t": 480.0,
+				"wave": 15,
+				"yokai": 8
+			}
+		],
+		"seed": 7,
+		"skipped": 1,
+		"spawned": 43,
+		"walk": false,
+		"wave_yokai": 43
+	}
+]
