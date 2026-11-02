@@ -9,6 +9,7 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(WaveProfile.PRESET_DIR)
 	var failures := 0
 	failures += _save(WaveProfile.new(), "default")
+	failures += _save(_demo(), "demo")
 	failures += _save(_demo_gentle(), "demo_gentle")
 	failures += _save(_hardcore(), "hardcore")
 	quit(1 if failures > 0 else 0)
@@ -19,6 +20,26 @@ func _save(profile: WaveProfile, file: String) -> int:
 	var err := ResourceSaver.save(profile, path)
 	print("PRESET %s -> %s (%s)" % [file, path, "ok" if err == OK else "error %d" % err])
 	return 0 if err == OK else 1
+
+
+## Demo 3 min (N7, `-- --demo`): quiet to 30 s, first contact at 30 s, the budget climbs to a
+## crowded peak by 2 min, the first elite at 100 s, the Oni on the first PEAK after 120 s
+## (the window 120–150 s is a test). Cap 2 → 7, one more every 30 s.
+func _demo() -> WaveProfile:
+	var p := WaveProfile.new()
+	p.calm_seconds = 30.0
+	p.initial_wave_delay = 26.0
+	p.ramp_seconds = 150.0
+	p.rest_calm = 15.0
+	p.rest_full = 4.0
+	p.wave_credits_full = 12.0
+	p.cap_step_seconds = 30.0
+	p.cap_hard = 7
+	p.elite_from_seconds = 100.0
+	p.elite_chance_full = 0.5
+	p.oni_first_seconds = 120.0
+	p.oni_interval = 100.0
+	return p
 
 
 ## Demo: a long, quiet opening; the budget eases in; a lighter cap for the first minutes.
@@ -52,7 +73,7 @@ func _hardcore() -> WaveProfile:
 	p.ramp_seconds = 420.0
 	p.initial_wave_delay = 3.0
 	p.rest_calm = 8.0
-	p.wave_credits_full = 14.0
+	p.wave_credits_full = 20.0
 	p.cap_step_seconds = 30.0
 	p.peak_budget_mult = 1.7
 	p.elite_from_seconds = 120.0

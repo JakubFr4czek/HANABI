@@ -11,6 +11,8 @@ extends Resource
 ## budget (RunPerfBudget). A cap above this is a warning in validate().
 const QUEST_YOKAI_CAP := 8
 const PRESET_DIR := "res://data/waves"
+## Launch argument (after `--`) that plays the 3-minute demo profile.
+const DEMO_FLAG := "--demo"
 
 const GROUP_PACING := "Pacing"
 const GROUP_BUDGET := "Budget"
@@ -242,6 +244,7 @@ func validate() -> PackedStringArray:
 ## Presets as (file name, label). The label is the name shown in the panel.
 static func preset_list() -> Array[Array]:
 	return [
+		["demo", "Demo 3 min"],
 		["demo_gentle", "Demo – łagodny"],
 		["default", "Domyślny"],
 		["hardcore", "Hardcore"],
@@ -256,3 +259,13 @@ static func preset_path(file: String) -> String:
 static func load_default() -> WaveProfile:
 	var res := load(preset_path("default")) as WaveProfile
 	return res if res != null else WaveProfile.new()
+
+
+## The profile of a launch: the 3-minute demo when the game starts with `-- --demo`
+## (docs/SPAWN_PLAN.md §N7), otherwise the default. Read once per WaveDirector.
+static func load_for_launch() -> WaveProfile:
+	if OS.get_cmdline_user_args().has(DEMO_FLAG):
+		var demo := load(preset_path("demo")) as WaveProfile
+		if demo != null:
+			return demo
+	return load_default()
