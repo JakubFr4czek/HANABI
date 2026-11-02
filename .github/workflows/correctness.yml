@@ -29,17 +29,15 @@ concurrency:
 
 env:
   GODOT_VERSION: "4.7.2"
-  # Prebuilt on the box (renamed .so); built from source into the cache dir only if missing.
-  NANO_COVERAGE_ADDON: /home/box/ci-tools/nano-coverage/nano_coverage_godot
-  NANO_COVERAGE_REPO: https://github.com/IgorBayerl/nano-coverage-godot
+    NANO_COVERAGE_REPO: https://github.com/IgorBayerl/nano-coverage-godot
   NANO_COVERAGE_SHA: fce7a0ae9281533456023275504bbd81d74d95be
   LIBGL_ALWAYS_SOFTWARE: "1"
 
 jobs:
   tests:
     name: Headless test suite
-    runs-on: [self-hosted, hanabi]
-    timeout-minutes: 75
+    runs-on: [self-hosted, pi2]  # Raspberry Pi 2 (4 GB) runs all self-hosted CI; one runner = jobs run one after another
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - name: Runner tools
@@ -102,8 +100,8 @@ jobs:
 
   fuzz:
     name: Fuzz (random legal player actions)
-    runs-on: [self-hosted, pi2]  # Raspberry Pi 2 (4 GB): runs in parallel with tests/coverage on the box
-    timeout-minutes: 60
+    runs-on: [self-hosted, pi2]  # Raspberry Pi 2 (4 GB) runs all self-hosted CI; one runner = jobs run one after another
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Godot (box copy in $GODOT_DIR, downloads only if missing)
@@ -173,8 +171,8 @@ jobs:
 
   coverage:
     name: Code coverage (Nano Coverage)
-    runs-on: [self-hosted, hanabi]
-    timeout-minutes: 90
+    runs-on: [self-hosted, pi2]  # Raspberry Pi 2 (4 GB) runs all self-hosted CI; one runner = jobs run one after another
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
       - name: Runner tools
@@ -184,7 +182,11 @@ jobs:
 
       - name: Nano Coverage addon (box prebuilt; build from source only if missing)
         run: |
-          if [ ! -f "$NANO_COVERAGE_ADDON/bin/nano_coverage_godot.linux.editor.x86_64.so" ]; then
+          # Prebuilt once per runner in ~/ci-tools/nano-coverage (arm64 on pi2: .gdextension gets a linux.editor.arm64 entry).
+          NANO_COVERAGE_ADDON="${HANABI_CI_TOOLS:-$HOME/ci-tools}/nano-coverage/nano_coverage_godot"
+          echo "NANO_COVERAGE_ADDON=$NANO_COVERAGE_ADDON" >> "$GITHUB_ENV"
+          case "$(uname -m)" in aarch64|arm64) ARCH=arm64 ;; *) ARCH=x86_64 ;; esac
+          if [ ! -f "$NANO_COVERAGE_ADDON/bin/nano_coverage_godot.linux.editor.$ARCH.so" ]; then
             bash ci/box_tools_check.sh scons g++ git
             src="$RUNNER_TEMP/nano"
             git clone --recursive "$NANO_COVERAGE_REPO" "$src"
@@ -194,10 +196,12 @@ jobs:
             scons -j"$(nproc)" target=editor build_tests=no
             addon=demo/addons/nano_coverage_godot
             # The build names the library lib*.so but the .gdextension expects it without the prefix.
-            so=$(find "$addon/bin" bin -name "libnano_coverage_godot.linux.editor.x86_64.so" 2>/dev/null | head -1)
+            so=$(find "$addon/bin" bin -name "libnano_coverage_godot.linux.editor.$ARCH.so" 2>/dev/null | head -1)
             mkdir -p "$addon/bin"
-            cp "$so" "$addon/bin/nano_coverage_godot.linux.editor.x86_64.so"
-            rm -f "$addon/bin/libnano_coverage_godot.linux.editor.x86_64.so"
+            cp "$so" "$addon/bin/nano_coverage_godot.linux.editor.$ARCH.so"
+            rm -f "$addon/bin/libnano_coverage_godot.linux.editor.$ARCH.so"
+            gdx=$(ls "$addon"/*.gdextension | head -1)
+            grep -q "linux.editor.$ARCH" "$gdx" || echo "linux.editor.$ARCH = \"res://addons/nano_coverage_godot/bin/nano_coverage_godot.linux.editor.$ARCH.so\"" >> "$gdx"
             mkdir -p "$(dirname "$NANO_COVERAGE_ADDON")"
             rm -rf "$NANO_COVERAGE_ADDON.tmp" && cp -r "$addon" "$NANO_COVERAGE_ADDON.tmp" && mv "$NANO_COVERAGE_ADDON.tmp" "$NANO_COVERAGE_ADDON"
           fi
@@ -221,7 +225,7 @@ jobs:
         continue-on-error: true
         run: |
           xvfb-run -a -s "-screen 0 1600x900x24" zsh tools/run_tests.sh 2 > ci_out/tests_instrumented.txt 2>&1 || true
-          timeout 600 "$GODOT" --headless --path . --fixed-fps 90 res://tests/ci/fuzz_runner.tscn -- --xr-sim --seed=1 --steps=150 > ci_out/fuzz_instrumented.log 2>&1 || true
+          timeout 1200 "$GODOT" --headless --path . --fixed-fps 90 res://tests/ci/fuzz_runner.tscn -- --xr-sim --seed=1 --steps=150 > ci_out/fuzz_instrumented.log 2>&1 || true
           grep -E '^testy:' ci_out/tests_instrumented.txt || true
       - name: Report + restore scripts
         if: always() && steps.instrument.outcome != 'skipped'

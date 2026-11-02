@@ -90,8 +90,10 @@ zestaw testów przeszedł; w razie wątpliwości powtórz pojedynczy test (`tool
 Każde ponowne uruchomienie testów po instrumentacji wymaga ponownego `coverage_instrument.gd`, bo raport przywraca skrypty.
 
 ## Raspberry Pi runners (since 2026-11-02)
-- `raspberka` (Pi 1, 2 GB, 100.79.193.114): `security-assets` + `pi-smoke`. gitleaks in `~/ci-tools/bin`.
-- `pi2` (Pi 2 `raspberrypi4b-orchestrator`, 4 GB, 100.117.38.121): `correctness/fuzz` + `code-quality`.
-  Godot 4.7.2 arm64 in `~/ci-tools/godot`, gdtoolkit 4.5.0 venv in `~/ci-tools/venv` (links in `~/ci-tools/bin`),
-  cache in `~/ci-cache`. Runner `~/actions-runner-hanabi`, user systemd unit `gh-runner-hanabi.service` (linger on).
-- The box (`hanabi`) keeps tests, coverage and visual-perf. Import on pi2 takes ~100 s; one fuzz seed of 250 steps takes ~6 min.
+- All self-hosted CI runs on `pi2` (Pi 2 `raspberrypi4b-orchestrator`, 4 GB, 100.117.38.121). One runner, so jobs run one after another.
+  Godot 4.7.2 arm64 in `~/ci-tools/godot`, gdtoolkit 4.5.0 + scons venv in `~/ci-tools/venv` (links in `~/ci-tools/bin`), gitleaks in `~/ci-tools/bin`,
+  Nano Coverage built for arm64 in `~/ci-tools/nano-coverage/nano_coverage_godot`, cache and visual/perf baseline in `~/ci-cache`.
+  Runner `~/actions-runner-hanabi`, user systemd unit `gh-runner-hanabi.service` (linger on).
+- Perf is compared only with the previous run on the same Pi (llvmpipe on ARM), so the budget calibrates itself to the Pi.
+- `raspberka` (Pi 1, 2 GB) and the box (`hanabi`) run nothing. quest-apk stays on `ubuntu-latest`.
+- Import on pi2 takes ~100 s; one fuzz seed of 250 steps takes ~6 min.

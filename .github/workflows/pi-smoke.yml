@@ -1,5 +1,5 @@
-# Smoke check for the Raspberry Pi runner (raspberka, linux-arm64).
-# Only proves the runner picks up jobs and Godot 4.7.2 arm64 runs headless; nothing else targets this runner yet.
+# Smoke check for the Raspberry Pi runner (pi2, linux-arm64).
+# Only proves the runner picks up jobs and Godot 4.7.2 arm64 runs headless; all self-hosted CI runs on pi2.
 name: pi-smoke
 
 on:
@@ -17,7 +17,7 @@ concurrency:
 jobs:
   smoke:
     name: Pi runner smoke
-    runs-on: [self-hosted, raspberka]
+    runs-on: [self-hosted, pi2]  # Raspberry Pi 2 (4 GB) runs all self-hosted CI; one runner = jobs run one after another
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
