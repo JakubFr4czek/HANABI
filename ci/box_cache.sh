@@ -5,7 +5,7 @@
 # $HANABI_CI_CACHE/<name> and the given path inside the checkout.
 set -euo pipefail
 op="$1"; name="$2"; rel="$3"
-root="${HANABI_CI_CACHE:-/home/box/ci-cache}"
+root="${HANABI_CI_CACHE:-$HOME/ci-cache}"
 [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "bad cache name: $name"; exit 1; }
 [[ "$rel" != /* && "$rel" != *..* ]] || { echo "path must be relative to the checkout: $rel"; exit 1; }
 dir="$root/$name"

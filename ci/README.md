@@ -88,3 +88,10 @@ Uwagi: testy instrumentowane są kilka razy wolniejsze, a testy czasowe (np. `on
 `blade_feel_test`, perf-checki) mogą wtedy failować bez zmiany kodu. Wynik pokrycia liczy się z przebiegu, w którym
 zestaw testów przeszedł; w razie wątpliwości powtórz pojedynczy test (`tools/run_one_test.sh <nazwa>`) na zainstrumentowanej kopii.
 Każde ponowne uruchomienie testów po instrumentacji wymaga ponownego `coverage_instrument.gd`, bo raport przywraca skrypty.
+
+## Raspberry Pi runners (since 2026-11-02)
+- `raspberka` (Pi 1, 2 GB, 100.79.193.114): `security-assets` + `pi-smoke`. gitleaks in `~/ci-tools/bin`.
+- `pi2` (Pi 2 `raspberrypi4b-orchestrator`, 4 GB, 100.117.38.121): `correctness/fuzz` + `code-quality`.
+  Godot 4.7.2 arm64 in `~/ci-tools/godot`, gdtoolkit 4.5.0 venv in `~/ci-tools/venv` (links in `~/ci-tools/bin`),
+  cache in `~/ci-cache`. Runner `~/actions-runner-hanabi`, user systemd unit `gh-runner-hanabi.service` (linger on).
+- The box (`hanabi`) keeps tests, coverage and visual-perf. Import on pi2 takes ~100 s; one fuzz seed of 250 steps takes ~6 min.
