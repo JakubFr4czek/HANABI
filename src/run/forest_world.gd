@@ -2572,8 +2572,11 @@ func _build_materials() -> void:
 	_lantern_mat.set_shader_parameter("fill", 0.3)
 	_lantern_mat.set_shader_parameter("specular_scale", 0.0)
 	_lantern_mat.set_shader_parameter("fog_fill", 0.2)
-	# A faint warm glow, weaker than the torii's: no light source, only emission.
-	_lantern_mat.set_shader_parameter("emission_tint", Color(0.10, 0.055, 0.025))
+	# Warm glow of the paper (N6): the tint multiplies the albedo, so only the paper
+	# (yellow in the atlas) lights up; the stone takes a dim warm share. No light source.
+	_lantern_mat.set_shader_parameter("emission_tint", Color(0.72, 0.50, 0.22))
+	# A rim of the sky and fog on the stone's edges: it reads as stone, not as a black pillar.
+	_lantern_mat.set_shader_parameter("fog_rim", 0.5)
 
 
 ## No per-node visibility range: Godot measures it to the node origin, i.e. a

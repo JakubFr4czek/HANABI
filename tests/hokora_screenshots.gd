@@ -89,6 +89,30 @@ func _ready() -> void:
 	await _frames(12)
 	await _shot("07_menu_no_points_hint")
 	run.pause_controller.close()
+
+	# 8. A stone lantern 10 m off on the open ground (D5 lantern, N6): its paper has to read
+	# through the fog. The spot is the first side whose sight line to the lantern is clear.
+	var side := Vector3(-dir.z, 0.0, dir.x)
+	var stand := altar - dir * 6.0
+	stand.y = run.forest_world.height_at(stand.x, stand.z)
+	var lantern_at := stand + side * 10.0
+	for sign_side: float in [1.0, -1.0]:
+		var cand := stand + side * sign_side * 10.0
+		cand.y = run.forest_world.height_at(cand.x, cand.z)
+		var eye := stand + Vector3(0.0, 1.6, 0.0)
+		var q := PhysicsRayQueryParameters3D.create(eye, cand + Vector3(0.0, 0.6, 0.0), ForestWorld.TRUNK_LAYER)
+		if run.get_world_3d().direct_space_state.intersect_ray(q).is_empty():
+			lantern_at = cand
+			break
+	var lantern := MeshInstance3D.new()
+	lantern.name = "ShotLantern"
+	lantern.mesh = run.forest_world._lantern_mesh
+	lantern.material_override = run.forest_world._lantern_mat
+	run.add_child(lantern)
+	lantern.global_position = lantern_at
+	_stand_facing(lantern_at, stand)
+	await _frames(40)
+	await _shot("08_lantern_10m")
 	get_tree().quit(0)
 
 ## Tries 22, 18 and 14 m out, fanned ±18° around the walk-in line, and takes the
