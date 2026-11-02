@@ -1,6 +1,6 @@
 extends Node
-## The HP ring follows the player's real health in the run scene (D14; replaces the old
-## "ring only when critical" rule): the fill is HP/max, the colour runs teal -> amber -> red,
+## The HP bar follows the player's real health in the run scene (D14, F1; replaces the old
+## "bar only when critical" rule): the fill is HP/max, the colour runs teal -> amber -> red,
 ## and the pulse starts below a quarter of health. Damage goes through PlayerHealth, as in play.
 ##   godot --headless --path . --fixed-fps 90 res://tests/point17_diegetic_critical_test.tscn -- --desktop
 
@@ -26,30 +26,30 @@ func _run() -> void:
 	health.hp = health.max_hp
 	run._refresh_hud()
 	await _frames(2)
-	_check("full health: the ring is full and teal", absf(float(hud._ring_cache.get("hp_fill", 0.0)) - 1.0) < 0.01
-		and (hud._ring_cache.get("hp_color") as Color).g > (hud._ring_cache.get("hp_color") as Color).r)
-	_check("full health: no pulse", float(hud._ring_cache.get("hp_pulse", 1.0)) == 0.0)
+	_check("full health: the ring is full and teal", absf(hud.row_fill("hp") - 1.0) < 0.01
+		and hud._hp_colour.g > hud._hp_colour.r)
+	_check("full health: no pulse", not hud.hp_critical)
 
 	health.hp = health.max_hp * 0.5
 	run._refresh_hud()
 	await _frames(2)
-	var half: Color = hud._ring_cache.get("hp_color")
-	_check("half health: the ring is about half and amber (fill %.2f, %s)" % [float(hud._ring_cache.get("hp_fill", 0.0)), half],
-		absf(float(hud._ring_cache.get("hp_fill", 0.0)) - 0.5) < 0.01 and half.r > 0.9 and half.b < 0.3)
+	var half: Color = hud._hp_colour
+	_check("half health: the bar is about half and amber (fill %.2f, %s)" % [hud.row_fill("hp"), half],
+		absf(hud.row_fill("hp") - 0.5) < 0.01 and half.r > 0.9 and half.b < 0.3)
 
 	health.hp = health.max_hp * 0.2
 	run._refresh_hud()
 	await _frames(2)
-	var low: Color = hud._ring_cache.get("hp_color")
-	_check("critical health: the ring is red and pulses (%s)" % [low],
-		low.r > 0.85 and low.g < 0.3 and float(hud._ring_cache.get("hp_pulse", 0.0)) == 1.0)
+	var low: Color = hud._hp_colour
+	_check("critical health: the bar is red and pulses (%s)" % [low],
+		low.r > 0.85 and low.g < 0.3 and hud.hp_critical)
 
-	# The ring is part of the readout, so it only renders when the wrist is raised.
+	# The HP bar is part of the readout, so it only renders when the wrist is raised.
 	var player := run.player as DesktopPlayer
-	_check("lowered wrist: the ring is not drawn", not hud.ring.is_visible_in_tree())
+	_check("lowered wrist: the HP bar is not drawn", not hud.row_labels("hp")[0].is_visible_in_tree())
 	player.wrist_check = true
 	await _frames(20)
-	_check("raised wrist: the ring is drawn", hud.ring.is_visible_in_tree())
+	_check("raised wrist: the HP bar is drawn", hud.row_labels("hp")[0].is_visible_in_tree())
 	player.wrist_check = false
 	run.queue_free()
 
