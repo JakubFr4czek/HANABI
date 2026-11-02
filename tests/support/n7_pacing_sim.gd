@@ -26,6 +26,9 @@ var samples: Array[Dictionary] = []
 var spawns: Array[Dictionary] = []
 ## Every wave opening: {t, wave, state} (the director's own clock).
 var wave_opens: Array[Dictionary] = []
+## [t, Callable] pairs, time-ordered: the callable is awaited once the run clock reaches t
+## (the visual test takes its pictures there, with frames rendered between steps).
+var pauses: Array = []
 var first_contact := -1.0
 var first_oni := -1.0
 var longest_empty := 0.0
@@ -84,6 +87,9 @@ func play(tree: SceneTree, p_run: RunGame, p_director: WaveDirector, seconds: fl
 		director.recall_stragglers(_center)
 		_approach_and_fight()
 		_measure()
+		while not pauses.is_empty() and _t >= float(pauses[0][0]) - 0.0001:
+			var pause: Array = pauses.pop_front()
+			await (pause[1] as Callable).call(_t)
 	director.enemy_spawned.disconnect(_on_spawned)
 	director.stop_director()
 	director.clear_enemies()
@@ -222,7 +228,7 @@ func _measure() -> void:
 		longest_empty = maxf(longest_empty, _empty)
 	else:
 		_empty = 0.0
-	if fmod(_t, SAMPLE_EVERY) < DT * 0.5:
+	if roundi(_t / DT) % roundi(SAMPLE_EVERY / DT) == 0:
 		samples.append({"t": snappedf(_t, 0.1), "yokai": wave_alive, "guards": guard_alive, "oni": oni,
 			"cap": cap, "wave": director.wave, "state": WavePlanner.STATE_NAMES[director._planner.state],
 			"skipped": director.spawn_stats.skipped})
