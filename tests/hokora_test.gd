@@ -657,11 +657,30 @@ func _test_lantern_reads_at_10m() -> void:
 	_check("10 m: the lantern's paper is warm (%.0f°)" % (paper.h * 360.0), rect.size.x >= 8 and _is_warm(paper))
 	_check("10 m: the paper reads brighter than the stone (paper %.2f, stone %.2f)" % [paper_luma, stone_luma],
 		paper_luma > stone_luma + 0.12)
+	# The stone shaft (30–70 % of the lantern's height, centre columns) reads grey, not brown:
+	# low saturation over its lit pixels. Brown wood or a rust tint would fail this.
+	var shaft := Rect2i(rect.position + Vector2i(int(rect.size.x * 0.25), int(rect.size.y * 0.3)),
+		Vector2i(int(rect.size.x * 0.5), int(rect.size.y * 0.4)))
+	var stone := _mean_lit_colour(img, shaft, 0.02)
+	_check("10 m: the stone reads grey, not brown (saturation %.2f of its mean colour, needs < 0.25)" % stone.s,
+		stone.s < 0.25)
 	lantern.queue_free()
 	run.wave_director.clear_enemies()
 
 
 
+
+## The mean colour of the rectangle's pixels brighter than [param min_luma] (the lit part).
+static func _mean_lit_colour(img: Image, rect: Rect2i, min_luma: float) -> Color:
+	var acc := Color(0, 0, 0, 1)
+	var n := 0
+	for y in range(rect.position.y, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			var c := img.get_pixel(x, y)
+			if _luma(c) >= min_luma:
+				acc += c
+				n += 1
+	return Color(acc.r / maxf(float(n), 1.0), acc.g / maxf(float(n), 1.0), acc.b / maxf(float(n), 1.0), 1.0)
 
 ## The pixel helpers (windowed checks only). Each works on the frame the viewport rendered.
 static func _rendering() -> bool:
