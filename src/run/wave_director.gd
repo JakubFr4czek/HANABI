@@ -38,6 +38,12 @@ var reserved_slots := 0
 var _oni_due := false
 ## Test seam: refuse this many Oni placements in a row, as if no legal spot came up.
 var _oni_refusals := 0
+## Ziarno dla strumieni losowych (N7 pomiar). -1 = losowe jak dotąd.
+var _seed_override := -1
+## Telemetria spawnu (N7): ile razy planner chciał wroga, ile wyszło, ile pominięto,
+## oraz ile kandydatów odrzucono i dlaczego. Liczy się w grze i w symulacji.
+var spawn_stats := {"requested": 0, "placed": 0, "skipped": 0,
+	"reject_cone": 0, "reject_back": 0, "reject_geometry": 0}
 const YOKAI_POOL_CAP := 14
 ## Nothing spawns behind the player: the back sector is 120° wide, centred on the
 ## opposite of the view direction, so anything within 60° of "behind" is refused.
@@ -60,8 +66,14 @@ func _notification(what: int) -> void:
 
 func get_profile() -> WaveProfile:
 	if profile == null:
-		profile = WaveProfile.load_default()
+		profile = WaveProfile.load_for_launch()
 	return profile
+
+
+## Fixes the spawn and planner random streams from now on (pacing measurement and tests).
+## The game never calls it: each run then draws a fresh seed, as before.
+func seed_spawns(value: int) -> void:
+	_seed_override = value
 
 
 func start_director() -> void:
@@ -71,7 +83,9 @@ func start_director() -> void:
 	run_seconds = 0.0
 	_planner.profile = get_profile()
 	_planner.reset()
-	_planner.rng.seed = randi()
+	var stream := _seed_override if _seed_override >= 0 else randi()
+	_planner.rng.seed = stream
+	_rng.seed = stream + 1
 	active = true
 	started_this_run = true
 
@@ -141,7 +155,13 @@ func step_director(delta: float, player_pos: Vector3, view_forward: Vector3 = Ve
 		})
 		wave_started.emit(wave, int(_planner.credits))
 	if result.kind != "":
-		spawn_in_fog_ring(player_pos, view_forward, result.kind == "elite")
+		spawn_stats.requested += 1
+		var spawned := spawn_in_fog_ring(player_pos, view_forward, result.kind == "elite")
+		if spawned != null:
+			spawn_stats.placed += 1
+		else:
+			spawn_stats.skipped += 1
+			_planner.refund(result.kind)
 	# The planner cues the Oni once per interval and does not repeat it: a cue the spawner
 	# cannot place stays due here and is retried on every following tick until it lands.
 	if result.oni:
@@ -177,6 +197,23 @@ func spawn_in_fog_ring(target_pos: Vector3 = Vector3.ZERO, view_forward: Vector3
 	return spawn_enemy_at(pos, target_pos, get_profile().roll_swarm_element(run_seconds, _rng))
 
 
+## True when level geometry (trunks, rocks, undergrowth on the yōkai layers) blocks the
+## sight line from [param eye] to [param pos]: a yōkai behind a trunk is out of view.
+func is_hidden_from(eye: Vector3, pos: Vector3) -> bool:
+	var space := get_world_3d().direct_space_state
+	if space == null:
+		return false
+	# Stops 0.5 m short of the target: the ground under a spot on a slope can sit above the
+	# height the spot was sampled at, and a ray that ends in that ground reads as cover.
+	var to_target := pos - eye
+	var length := to_target.length()
+	if length <= 0.5:
+		return false
+	var end := eye + to_target * ((length - 0.5) / length)
+	var query := PhysicsRayQueryParameters3D.create(eye, end, 4 | 8)
+	return not space.intersect_ray(query).is_empty()
+
+
 ## A spawn point on the ring round [param center]: outside the view cone of
 ## [param view_forward] (zero = no cone), clear of the world geometry, and not on top
 ## of a living yōkai, and never in the back sector (see BEHIND_SECTOR_HALF). Tries a few
@@ -190,10 +227,15 @@ func find_spawn_point(center: Vector3, view_forward: Vector3 = Vector3.ZERO) -> 
 	var best_clear := -1.0
 	for i in 16:
 		var angle := _rng.randf() * TAU
-		if has_view and not _is_legal_angle(angle, yaw_view, cone_half):
+		if has_view and absf(angle_difference(yaw_view, angle)) < cone_half:
+			spawn_stats.reject_cone += 1
+			continue
+		if has_view and absf(angle_difference(yaw_view + PI, angle)) < BEHIND_SECTOR_HALF:
+			spawn_stats.reject_back += 1
 			continue
 		var pos := _ring_point(center, angle, _rng.randf_range(p.ring_min, p.ring_max))
 		if not is_clear_of_world(pos):
+			spawn_stats.reject_geometry += 1
 			continue
 		var clear := _separation(pos)
 		if clear > best_clear:

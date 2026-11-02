@@ -29,6 +29,10 @@ const GUARD_SEPARATION := 2.5
 const PLAYER_CLEARANCE := 8.0
 const SPOT_ATTEMPTS := 40
 const TICK := 0.25
+## An anchor whose ring has no room for a group waits this long before the next try.
+const RETRY_SECONDS := 4.0
+## Outcome of one attempt to plan a group on an anchor.
+enum PlanResult { PLANNED, NO_ROOM, NO_SPOTS }
 const GUARD_SEED := 0x47554152  # "GUAR"
 
 var wave_director: WaveDirector
@@ -39,6 +43,9 @@ var hokora_manager: HokoraManager
 ## One record per anchor with a group: {anchor: Node3D, id: int, guards: Array[Yokai], spots: PackedVector3Array}.
 var _posts: Array[Dictionary] = []
 var _tick := TICK
+var _clock := 0.0
+## Anchor instance id -> clock time before which it is not planned again (NO_SPOTS).
+var _retry_at: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 
 
@@ -60,6 +67,7 @@ func step(delta: float, player_pos: Vector3, view_forward: Vector3) -> void:
 		if wave_director != null:
 			wave_director.reserved_slots = 0
 		return
+	_clock += delta
 	_tick += delta
 	if _tick < TICK:
 		return
@@ -70,11 +78,21 @@ func step(delta: float, player_pos: Vector3, view_forward: Vector3) -> void:
 	if _live_guards() > 0:
 		return
 	for anchor in _anchors():
-		if _post_for(anchor).is_empty() and _distance_xz(anchor.global_position, player_pos) <= GUARD_RANGE:
-			if not _plan_group(anchor, player_pos, view_forward):
-				# No room yet: the planner holds back the slots this group needs.
-				wave_director.reserved_slots = MIN_GUARDS
+		var id := anchor.get_instance_id()
+		if not _post_for(anchor).is_empty() or _distance_xz(anchor.global_position, player_pos) > GUARD_RANGE:
+			continue
+		if _clock < float(_retry_at.get(id, 0.0)):
+			continue
+		var result := _plan_group(anchor, player_pos, view_forward)
+		if result == PlanResult.NO_ROOM:
+			# No room yet: the planner holds back the slots this group needs.
+			wave_director.reserved_slots = MIN_GUARDS
 			return
+		if result == PlanResult.NO_SPOTS:
+			# The ring round this anchor has no legal spot now: try again later, others first.
+			_retry_at[id] = _clock + RETRY_SECONDS
+			continue
+		return
 
 
 ## The live guards of [param anchor] (a gate or a shrine).
@@ -123,7 +141,8 @@ func _fill_spots(spots: PackedVector3Array, anchor: Vector3, count: int, player_
 		var from_player := Vector2(x - player_pos.x, z - player_pos.z)
 		if from_player.length() < PLAYER_CLEARANCE:
 			continue
-		if out_of_view and has_view and absf(angle_difference(yaw_view, atan2(from_player.x, from_player.y))) < cone_half:
+		# Nothing spawns in the back sector (P6), whatever the ring allows.
+		if has_view and absf(angle_difference(yaw_view + PI, atan2(from_player.x, from_player.y))) < wave_director.BEHIND_SECTOR_HALF:
 			continue
 		if forest_world.paths != null and forest_world.paths.nearest_point(Vector2(x, z), PATH_CLEARANCE) != Vector2.INF:
 			continue
@@ -132,24 +151,33 @@ func _fill_spots(spots: PackedVector3Array, anchor: Vector3, count: int, player_
 			continue
 		if _too_close(spots, pos):
 			continue
+		# The view cone: the first pass keeps guards out of it; the second pass (a ring with no room
+		# out of view) allows a guard in it only behind geometry (fairness: seen, not popped in).
+		if has_view and absf(angle_difference(yaw_view, atan2(from_player.x, from_player.y))) < cone_half:
+			if out_of_view or not wave_director.is_hidden_from(player_pos + Vector3(0.0, 0.9, 0.0), pos + Vector3(0.0, 0.9, 0.0)):
+				continue
 		spots.append(pos)
 	return spots
 
 
-func _plan_group(anchor: Node3D, player_pos: Vector3, view_forward: Vector3) -> bool:
+func _plan_group(anchor: Node3D, player_pos: Vector3, view_forward: Vector3) -> PlanResult:
 	var id := anchor.get_instance_id()
 	var free := wave_director.concurrent_cap() - wave_director.alive_count()
 	if free < MIN_GUARDS:
-		return false
+		return PlanResult.NO_ROOM
 	var count := mini(_rng.randi_range(MIN_GUARDS, MAX_GUARDS), free)
 	var spots := plan_spots(anchor.global_position, count, player_pos, view_forward)
+	# A group short of MIN_GUARDS is not a group: the anchor is not marked guarded (it stays
+	# eligible), so it never ends up with an empty post.
+	if spots.size() < MIN_GUARDS:
+		return PlanResult.NO_SPOTS
 	var profile := wave_director.get_profile()
 	var guards: Array[Yokai] = []
 	for pos in spots:
 		var element := profile.roll_swarm_element(wave_director.run_seconds, _rng)
 		guards.append(wave_director.spawn_enemy_at(pos, anchor.global_position, element, id))
 	_posts.append({"anchor": anchor, "id": id, "guards": guards, "spots": spots, "released": false})
-	return true
+	return PlanResult.PLANNED
 
 
 ## Drops the records of anchors that were freed or streamed away, and releases the groups
