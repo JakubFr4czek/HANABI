@@ -98,7 +98,7 @@ const GROUP_SIM := "Simulation"
 
 @export_group(GROUP_ONI)
 @export_range(0.0, 900.0, 1.0, "suffix:s") var oni_first_seconds := 180.0
-@export_range(20.0, 900.0, 1.0, "suffix:s") var oni_interval := 100.0
+@export_range(20.0, 900.0, 1.0, "suffix:s") var oni_interval := 200.0
 @export_range(1.0, 20.0, 0.1) var oni_hp_mult := 6.5
 
 ## Only the editor simulation uses these: a stand-in player who kills one yōkai
