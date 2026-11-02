@@ -362,3 +362,29 @@ dwa Oni (180 s i ~280 s), a każde Oni to długi, ciężki pojedynek i mniej zab
 Decyzja: **interwał Oni w profilu domyślnym 100 → 200 s** (`WaveProfile.oni_interval`).
 Wynik: `skilled` 550 s (okno 360–600 s), `average` 6 punktów przy minucie 8 (5–7). Demo
 (`oni_interval` 100) i hardcore (80) mają własne wartości i nie zmieniają się.
+
+### N7 – poprawka 2: test wizualny na run.tscn (okienkowo)
+
+Suita `tests/n7_pacing_visual_test.tscn` (SKIP bez okna). Gra w oknie (xvfb, 960×540) na demo,
+stojący gracz, kamera ustawiana przez test. Sylwetka = piksele pudełka wroga, które różnią się
+między kadrem z wrogiem a kadrem bez wrogów; czas jest zamrożony na obie klatki, bo deszcz i
+cząstki inaczej psuły pomiar (pierwsze przebiegi liczyły deszcz jako wrogów).
+
+Wyniki (ostatni przebieg, `docs/n7/`):
+- start (5 s): 0 sylwetek – zgodnie z cichym otwarciem;
+- pierwszy zasięg wzroku (31 s): wróg 8,1 m, 11 px (próg 8 px) – `2_first_contact.png`;
+- szczyt fali 6 (192 s, PEAK, Oni na polu): 5 żywych, 4 sylwetki w kadrze (próg 3) – `3_peak_pack.png`;
+- losowy kierunek w szczycie: 3 sylwetki – `4_peak_random.png`;
+- Oni (~200 s): 351 px (próg 300) – `5_oni.png`;
+- `enemies_over_time.png`: liczba żywych wrogów z danych symulacji do 260 s.
+
+Oceniam surowo:
+- Sylwetki to nadal placeholdery z D10 (bryłowate postacie); czerwone oczy czytelne, reszta słaba.
+- Kadr startowy i pierwszy zasięg są bardzo ciemne; pierwszy wróg to ledwo widoczne 11 px.
+- Szczyt to 4–5 wrogów na 2–3 m, nie wyraźny tłok: przy capie 7 w tym czasie są 5 żywych.
+  To słabość tempa demo, zostawiona na decyzję balansu.
+- Oni jest mały w kadrze (351 px). Czytelny, ale nie kadr-hero; do poprawy kamerą w demie.
+
+Determinizm pełnej sceny: dwa biegi z tym samym seedem różnią się osią czasu, bo świat fizyki
+(ciała z poprzednich biegów i ładowanie chunków lasu w wątkach) zmienia, które kotwice strażników
+są gotowe na starcie. Determinizm planera (`run_loop_test`) jest sprawdzony.
