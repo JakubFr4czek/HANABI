@@ -4,7 +4,7 @@
 set -uo pipefail
 # The runner is started by run.sh (no systemd on the box), which ignores the runner's .path file,
 # so the box tool dirs are not on PATH by default. Add them for this step and all later steps.
-tools_root="${HANABI_CI_TOOLS:-/home/box/ci-tools}"
+tools_root="${HANABI_CI_TOOLS:-$HOME/ci-tools}"  # /home/box on the box, /home/fraczek on the Pis
 for d in "$tools_root/venv/bin" "$tools_root/bin"; do
   if [[ -d "$d" && ":$PATH:" != *":$d:"* ]]; then
     PATH="$d:$PATH"

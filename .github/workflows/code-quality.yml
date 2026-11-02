@@ -18,7 +18,7 @@ concurrency:
 jobs:
   gdscript:
     name: GDScript lint + format
-    runs-on: [self-hosted, hanabi]
+    runs-on: [self-hosted, pi2]  # Raspberry Pi 2; gdtoolkit in ~/ci-tools
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
