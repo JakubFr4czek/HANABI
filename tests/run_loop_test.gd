@@ -47,18 +47,18 @@ func _run_all() -> void:
 	_check("TrainingDummy is hidden and disabled in RunGame",
 		run.dummy == null or not run.dummy.visible)
 
-	# 1. Diegetic HUD check (no visible 2D CanvasLayer; the wrist ring and readout present).
+	# 1. Diegetic HUD check (no visible 2D CanvasLayer; the wrist HP row and readout present).
 	var any_2d_hud := false
 	for layer in player.find_children("*", "CanvasLayer", true, false):
 		if (layer as CanvasLayer).visible:
 			any_2d_hud = true
 	_check("No floating 2D screen-space UI is visible", not any_2d_hud)
-	_check("Diegetic HUD: nothing on the katana, wrist HP ring + readout present",
+	_check("Diegetic HUD: nothing on the katana, wrist HP row + readout present",
 		run.diegetic_hud != null
 		and run.katana.get_node_or_null("TsubaXpRing") == null
 		and run.katana.get_node_or_null("TsubaXpRingFront") == null
-		and run.diegetic_hud.ring != null
-		and run.diegetic_hud.wrist_label != null)
+		and run.diegetic_hud.row_labels("hp").size() == 2
+		and run.diegetic_hud.row_labels("time").size() == 2)
 	# The readout is drawn only while the wrist is raised (XR: the gesture, see wrist_hud_test).
 	# Desktop stands in with H, so lowered it is hidden and held it shows.
 	var desktop := run.player as DesktopPlayer
@@ -160,8 +160,8 @@ func _run_all() -> void:
 	_check("Level-up gives exactly one skill point (%d -> %d)" % [points_before, run.skill_points],
 		run.skill_points == points_before + 1)
 	var hud := run.diegetic_hud
-	_check("Level-up flashes the fire and shows the new level on the readout",
-		hud._level_flash > 0.0 and hud._level_text.contains("LV %d" % run.level))
+	_check("Level-up flashes the time row and shows the new level on the readout",
+		hud._level_text_left > 0.0 and hud._level_label == "LV %d" % run.level)
 	_check("Level-up keeps playing: state PLAYING, no slow motion (scale %.2f)" % TimeController.time_scale,
 		run.state == RunGame.RunState.PLAYING and TimeController.time_scale > 0.95)
 	_check("Level-up presents no card: no votive plaque in the run",
@@ -177,11 +177,10 @@ func _run_all() -> void:
 	# The level-up readout ("LV n · +1 点") holds for 1.5 s; this check reads the normal readout.
 	run.diegetic_hud._level_text_left = 0.0
 	run._refresh_hud()
-	_check("Diegetic wrist shows score points and kill count separately",
-		run.diegetic_hud.wrist_label.text.contains("pt")
-		and run.diegetic_hud.wrist_label.text.contains("斬 7"))
-	_check("Wrist HP ring does not pulse at healthy HP",
-		float(run.diegetic_hud._ring_cache.get("hp_pulse", 1.0)) == 0.0)
+	run._refresh_hud()
+	_check("Diegetic wrist shows the run time as mm:ss (%s)" % run.diegetic_hud.row_value("time"),
+		run.diegetic_hud.row_value("time") == "%02d:%02d" % [int(run.run_time) / 60, int(run.run_time) % 60])
+	_check("Wrist HP bar does not pulse at healthy HP", not run.diegetic_hud.hp_critical)
 
 	run.calorie_meter.kcal = 45.8
 	player.health.take_hit(999.0, Vector3.ZERO, {"attacker": "Yokai"})

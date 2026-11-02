@@ -1,20 +1,21 @@
 extends Node
 ## The wrist readout (D14), on the real XR rig and in the real run scene.
-## - Clearance: the ring and its text rows never sit in the hand mesh or the katana, at
+## - Clearance: the readout's rows never sit in the hand mesh or the katana, at
 ##   the eye tilt limits and in several katana poses (the readout is a plate in the bracer
 ##   frame; any mesh vertex above it inside its footprint is clipping).
 ## - Gesture: shown only when the wrist is close to the eyes, its forearm level, its face
 ##   turned to them and in view; hysteresis at both edges; a 0.15 s fade; nothing drawn while
 ##   hidden. An upright hand (forearm vertical, back to the eyes) keeps it hidden (P9).
-## - Ring: fill = HP share; colour teal -> amber -> red; pulse only when critical.
-## - No flame (D22): the ring's shader has no fire; the clear centre holds the kcal figure.
-## - Figure (D22): the white kcal number, with its unit under it, is centred in the clear ring,
-##   fits inside it at the widest figure, and has enough contrast against its outline.
-## - Charges (D22): three orbs on the ring's top-right, empty grey until a charge is taken;
-##   each filled orb takes its element's colour, oldest first; a spent or reset charge empties.
+## - Rows (F1): HP, KCAL, ŁADUNKI and CZAS, top to bottom, Latin only. HP's bar is HP/max in
+##   teal -> amber -> red, and pulses only when critical. Every row's text has enough contrast
+##   against its outline, and the rows fit the plate without overlap. set_row adds a row below.
+## - No japanese on the wrist (F1): no kanji or kana in any label, in any state the readout shows.
+## - No shader on the wrist (F1, D22): nothing fiery is drawn; the readout is bars, pips and text.
+## - Charges (D22, F1): three pips in the row ŁADUNKI, empty grey until a charge is taken;
+##   each filled pip takes its element's colour, oldest first; a spent or reset charge empties.
 ## - Kcal (run.tscn): rises with movement, the resting rate standing still, not in a pause,
 ##   and the desktop H key raises the readout.
-## - SANDBOX mark (D9, run.tscn): drawn on the plate, in view and clear of the ring, only in a
+## - SANDBOX mark (D9, run.tscn): drawn on the plate, in view and above the rows, only in a
 ##   sandbox run; a normal run shows nothing.
 ## Run with:
 ##   godot --headless --path . res://tests/wrist_hud_test.tscn -- --desktop
@@ -36,7 +37,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	await _clearance_and_gesture()
-	await _ring_and_figure()
+	await _rows_and_figure()
 	await _kcal_in_run()
 	await _charges_in_run()
 	await _sandbox_mark_in_run()
@@ -114,7 +115,7 @@ func _clearance_and_gesture() -> void:
 		var katana_verts := _world_vertices(_meshes_under(katana))
 		var hits := _readout_hits(katana_verts, hud)
 		_check("readout clears the katana, %s (%d vertices in its footprint)" % [pose_name, hits], hits == 0)
-	# Control: a grip with the blade through the ring centre must be seen as a hit.
+	# Control: a grip with the blade through the readout's centre must be seen as a hit.
 	katana.global_transform = ctrl.global_transform * Transform3D(Basis.IDENTITY, -grip + hud.wrist_unit.position)
 	await get_tree().physics_frame
 	var through := _readout_hits(_world_vertices(_meshes_under(katana)), hud)
@@ -124,7 +125,7 @@ func _clearance_and_gesture() -> void:
 	# Gesture: a readout that is near, faces the eyes and is in view shows; the rest hides it.
 	_place_readout(hud, cam, 0.25, 15.0)
 	await _frames(20)
-	_check("gesture: wrist close, face to the eyes, in view: readout shows", hud.wrist_face.visible and hud.ring.is_visible_in_tree())
+	_check("gesture: wrist close, face to the eyes, in view: readout shows", hud.wrist_face.visible and hud.row_labels("hp")[0].is_visible_in_tree())
 
 	_place_readout(hud, cam, 0.6, 15.0)
 	await _frames(20)
@@ -237,17 +238,16 @@ func _meshes_under(root: Node) -> Array:
 
 
 ## Vertices (world space) that sit above the readout's plate inside its footprint.
-## The footprint is the ring disc and the rows of text under it. The plate frame is the
-## face's, so a vertex is "above" when its height in that frame is above the margin.
+## The footprint is the rows column: its half width with a margin, from the top row down past
+## the last row (the old readout's rectangle is inside it). The plate frame is the face's, so a
+## vertex is "above" when its height in that frame is above the margin.
 func _readout_hits(verts: PackedVector3Array, hud: DiegeticHud) -> int:
 	var inv := hud.wrist_face.global_transform.affine_inverse()
 	var hits := 0
-	var disc := DiegeticHud.ELEMENT_RADIUS + 0.002
 	for w in verts:
 		var p := inv * w
-		var in_ring := Vector2(p.x, p.z).length() <= disc
-		var in_rows := absf(p.x) <= 0.024 and p.z >= 0.0 and p.z <= 0.066
-		if (in_ring or in_rows) and p.y > -CLEAR_MARGIN:
+		var in_rows := absf(p.x) <= 0.031 and p.z >= -0.040 and p.z <= 0.072
+		if in_rows and p.y > -CLEAR_MARGIN:
 			hits += 1
 	return hits
 
@@ -275,74 +275,132 @@ func _drawn_under(hud: DiegeticHud) -> int:
 	return n
 
 
-# --- Ring and figure -----------------------------------------------------------------
+# --- Rows and figures (F1) -----------------------------------------------------------
 
-func _ring_and_figure() -> void:
+func _rows_and_figure() -> void:
 	# Colour rule: teal when healthy, amber at half, red when critical.
 	var full := DiegeticHud.hp_color(1.0)
 	var half := DiegeticHud.hp_color(0.5)
 	var low := DiegeticHud.hp_color(0.2)
-	_check("ring colour at 100%% is teal (%s)" % [full], full.g > full.r and full.b > full.r and full.g > 0.7)
-	_check("ring colour at 50%% is amber (%s)" % [half], half.r > 0.9 and half.g > 0.55 and half.g < 0.7 and half.b < 0.3)
-	_check("ring colour at 20%% is red (%s)" % [low], low.r > 0.85 and low.g < 0.3 and low.b < 0.3)
+	_check("HP colour at 100%% is teal (%s)" % [full], full.g > full.r and full.b > full.r and full.g > 0.7)
+	_check("HP colour at 50%% is amber (%s)" % [half], half.r > 0.9 and half.g > 0.55 and half.g < 0.7 and half.b < 0.3)
+	_check("HP colour at 20%% is red (%s)" % [low], low.r > 0.85 and low.g < 0.3 and low.b < 0.3)
 	_check("colour runs smoothly: 75%% lies between amber and teal",
 		DiegeticHud.hp_color(0.75).g > half.g and DiegeticHud.hp_color(0.75).g < full.g)
 
 	var run: RunGame = RUN_SCENE.instantiate()
 	run.skip_run_intro = true
+	run.high_score_path = "user://test_wrist_rows_save.cfg"
 	add_child(run)
 	await _frames(8)
 	var hud := run.diegetic_hud
 	var health := (run.player as DesktopPlayer).health
+
+	# The rows, top to bottom: HP, KCAL, ŁADUNKI, CZAS (F1).
+	_check("rows read top to bottom: HP, KCAL, ŁADUNKI, CZAS (%s)" % [hud.row_keys()],
+		hud.row_keys() == ["hp", "kcal", "charges", "time"])
+	_check("row labels read HP, KCAL, ŁADUNKI, CZAS",
+		hud.row_label("hp") == "HP" and hud.row_label("kcal") == "KCAL"
+		and hud.row_label("charges") == "ŁADUNKI" and hud.row_label("time") == "CZAS")
+
 	# HP is set on the player and refreshed the way play does it (RunGame refreshes every tick).
 	for case in [[100.0, 1.0], [50.0, 0.5], [20.0, 0.2]]:
 		health.hp = health.max_hp * float(case[1])
 		run._refresh_hud()
 		await _frames(1)
-		var fill: float = hud._ring_cache.get("hp_fill", -1.0)
-		_check("ring fill is HP/max at %.0f%% (fill %.2f)" % [case[0], fill], absf(fill - case[1]) < 0.01)
+		var fill := hud.row_fill("hp")
+		_check("HP bar is HP/max at %.0f%% (fill %.2f)" % [case[0], fill], absf(fill - case[1]) < 0.01)
+		_check("HP row reads current / max (%s)" % hud.row_value("hp"),
+			hud.row_value("hp") == "%d / %d" % [ceili(health.hp), ceili(health.max_hp)])
 	health.hp = health.max_hp
 	run._refresh_hud()
 	await _frames(1)
-	_check("no pulse at full health", float(hud._ring_cache.get("hp_pulse", 1.0)) == 0.0)
+	_check("no pulse at full health", not hud.hp_critical)
 	health.hp = health.max_hp * 0.2
 	run._refresh_hud()
 	await _frames(1)
-	_check("pulse when critical (20%%)", float(hud._ring_cache.get("hp_pulse", 0.0)) == 1.0)
+	_check("pulse when critical (20%%)", hud.hp_critical)
+	_check("critical HP bar is red", hud._hp_colour.r > 0.85 and hud._hp_colour.g < 0.3)
 	health.hp = health.max_hp
 	run._refresh_hud()
 
-	# No flame: the ring's shader has no fire uniforms and no fire code.
-	var uniforms: Array[String] = []
-	for u in DiegeticHud.RING_SHADER.get_shader_uniform_list():
-		uniforms.append(u.name)
-	var has_flame := uniforms.any(func(n: String) -> bool: return n.contains("flame"))
-	_check("no flame: the ring shader has no flame uniform", not has_flame)
-	_check("no flame: the ring shader has no fire noise or tongue", not (DiegeticHud.RING_SHADER.code.contains("fbm") or DiegeticHud.RING_SHADER.code.contains("tongue")))
-
-	# The kcal figure: white, the unit under it, the pair centred in the clear ring.
+	# Latin only: no kanji or kana on the readout, in every state it can show.
 	await _frames(2)
-	var hud_kcal := hud.kcal_label
-	var unit := hud.kcal_unit_label
-	_check("kcal figure is white", DiegeticHud.KCAL_COLOR == Color(1.0, 1.0, 1.0) and hud_kcal.modulate.r > 0.9)
-	_check("kcal unit reads 'kcal' under the figure (%s)" % unit.text, unit.text == "kcal" and unit.position.z > hud_kcal.position.z)
-	var inner := DiegeticHud.RING_RADIUS - DiegeticHud.RING_WIDTH * 0.5
-	var block := _plate_box(hud, hud_kcal).merge(_plate_box(hud, unit))
-	var off := block.get_center().length()
-	_check("kcal figure is centred in the ring (%.4f m off centre: x %.4f, z %.4f)" % [off, block.get_center().x, block.get_center().y], off < 0.0012)
-	var corners := [block.position, block.end, Vector2(block.position.x, block.end.y), Vector2(block.end.x, block.position.y)]
-	var reach := 0.0
-	for c: Vector2 in corners:
-		reach = maxf(reach, c.length())
-	_check("kcal figure sits inside the clear ring (reach %.4f m, inner %.4f m)" % [reach, inner], reach < inner)
-	# The widest figure the meter can show still fits: four digits at the figure's font size.
-	var wide := hud_kcal.font.get_string_size("9999", HORIZONTAL_ALIGNMENT_CENTER, -1, DiegeticHud.KCAL_FONT) * hud_kcal.pixel_size
-	var wide_reach := Vector2(wide.x, wide.y).length() * 0.5
-	_check("four-digit kcal fits inside the clear ring (reach %.4f m)" % wide_reach, wide_reach < inner)
-	var ratio := _contrast(DiegeticHud.KCAL_COLOR, Color(hud_kcal.outline_modulate.r, hud_kcal.outline_modulate.g, hud_kcal.outline_modulate.b))
-	_check("kcal figure contrast against its outline is at least 4.5:1 (%.1f)" % ratio, ratio >= 4.5 and hud_kcal.outline_size > 0)
+	_check("no japanese on the readout at rest (%s)" % [_japanese_on_readout(hud)], _japanese_on_readout(hud).is_empty())
+	run.element_system.imbue(Elements.SAKURA, 20.0)
+	await _frames(2)
+	_check("imbued: the charges row shows the seconds left (%s)" % hud.row_value("charges"),
+		hud.row_value("charges").ends_with(" s") and hud.row_value("charges").trim_suffix(" s").is_valid_int())
+	_check("no japanese with an element imbued (%s)" % [_japanese_on_readout(hud)], _japanese_on_readout(hud).is_empty())
+	hud.flash_level_up(3)
+	await _frames(2)
+	_check("level-up flash: the time row reads LV 3 and +1 PT (%s / %s)" % [hud.row_label("time"), hud.row_value("time")],
+		hud.row_label("time") == "LV 3" and hud.row_value("time") == "+1 PT")
+	_check("no japanese on the level-up flash (%s)" % [_japanese_on_readout(hud)], _japanese_on_readout(hud).is_empty())
+	hud._level_text_left = 0.0
+	hud.update_hud(health.hp, health.max_hp, 0, 30, 3, 1, 0, 0, 0.0, Elements.NONE, 0, "速 5 s")
+	await _frames(2)
+	_check("buffs in kanji are not drawn on the wrist (%s)" % [_japanese_on_readout(hud)], _japanese_on_readout(hud).is_empty())
+	run.element_system.reset()
+	await _frames(2)
+
+	# Time: CZAS reads mm:ss of the run.
+	run.run_time = 125.0
+	run._refresh_hud()
+	await _frames(1)
+	_check("CZAS reads the run time as mm:ss (%s)" % hud.row_value("time"), hud.row_value("time") == "02:05")
+
+	# Contrast: every row's text against its outline (WCAG 4.5:1).
+	var worst := 99.0
+	for k in hud.row_keys():
+		for l in hud.row_labels(k):
+			var lab := l as Label3D
+			var c := _contrast(Color(lab.modulate.r, lab.modulate.g, lab.modulate.b),
+				Color(lab.outline_modulate.r, lab.outline_modulate.g, lab.outline_modulate.b))
+			worst = minf(worst, c)
+	_check("row text contrast against its outline is at least 4.5:1 (worst %.1f)" % worst, worst >= 4.5)
+
+	# Layout: each row's text is inside the column and sits below the row above it, no overlap.
+	var half_w := DiegeticHud.PANEL_HALF_WIDTH + 0.0015
+	var fits := true
+	var stacked := true
+	var above_bottom := -INF
+	for k in hud.row_keys():
+		var box := _plate_box(hud, hud.row_labels(k)[0]).merge(_plate_box(hud, hud.row_labels(k)[1]))
+		fits = fits and absf(box.position.x) <= half_w and absf(box.end.x) <= half_w
+		stacked = stacked and box.position.y >= above_bottom
+		above_bottom = box.end.y
+	_check("the rows fit the column (half width %.4f m)" % half_w, fits)
+	_check("the rows stack top to bottom without overlap", stacked)
+
+	# F6/F7 API: a new row set with set_row lands under CZAS and shows.
+	hud.set_row("stamina", "STAMINA", "100", 1.0, DiegeticHud.TEAL)
+	await _frames(2)
+	var stamina := hud.row_labels("stamina")
+	_check("set_row adds a row under CZAS (%d rows)" % hud.row_keys().size(),
+		hud.row_keys().size() == 5 and hud.row_keys()[4] == "stamina")
+	_check("the new row carries its label, value and bar", stamina.size() == 2 and stamina[0].text == "STAMINA"
+		and stamina[1].text == "100" and absf(hud.row_fill("stamina") - 1.0) < 0.001)
+	_check("the new row sits below CZAS", _plate_box(hud, stamina[0]).position.y >= _plate_box(hud, hud.row_labels("time")[0]).end.y)
+	hud.set_row("stamina", "STAMINA", "40", 0.4, DiegeticHud.TEAL)
+	await _frames(1)
+	_check("set_row updates an existing row in place (%s, fill %.2f)" % [hud.row_value("stamina"), hud.row_fill("stamina")],
+		hud.row_keys().size() == 5 and hud.row_value("stamina") == "40" and absf(hud.row_fill("stamina") - 0.4) < 0.01)
 	run.queue_free()
 	await _frames(2)
+
+
+## Japanese characters (hiragana, katakana, CJK ideographs) on any label of the readout.
+func _japanese_on_readout(hud: DiegeticHud) -> Array[String]:
+	var found: Array[String] = []
+	for l in hud.wrist_face.find_children("*", "Label3D", true, false):
+		var text := (l as Label3D).text
+		for i in text.length():
+			var cp := text.unicode_at(i)
+			if (cp >= 0x3040 and cp <= 0x30FF) or (cp >= 0x4E00 and cp <= 0x9FFF):
+				found.append("%s: %s" % [l.name, text])
+				break
+	return found
 
 
 func _contrast(a: Color, b: Color) -> float:
@@ -403,9 +461,9 @@ func _kcal_in_run() -> void:
 	var player := run.player as DesktopPlayer
 	player.wrist_check = true
 	await _frames(20)
-	_check("H held raises the wrist readout", hud.wrist_face.visible and hud.kcal_label.visible)
-	_check("the readout figure is the kcal estimate (%s)" % hud.kcal_label.text,
-		hud.kcal_label.text == str(floori(meter.kcal)))
+	_check("H held raises the wrist readout", hud.wrist_face.visible and hud.row_labels("kcal")[1].visible)
+	_check("the readout figure is the kcal estimate (%s)" % hud.row_value("kcal"),
+		hud.row_value("kcal") == str(floori(meter.kcal)))
 	player.wrist_check = false
 	await _frames(20)
 	_check("H released: the readout hides and draws nothing", not hud.wrist_face.visible and _drawn_under(hud) == 0)
@@ -415,7 +473,7 @@ func _kcal_in_run() -> void:
 
 ## D9: a sandbox run wears a small amber SANDBOX mark on the plate, and only that run does. Checked
 ## in the real run scene with the wrist raised: the mark is drawn, sits on the plate, is in the
-## camera's view and does not sit on the ring. A normal run draws nothing.
+## camera's view and sits above the rows. A normal run draws nothing.
 func _sandbox_mark_in_run() -> void:
 	var real_path := VrComfortSettings.settings_path
 	VrComfortSettings.settings_path = "user://test_wrist_sandbox.cfg"
@@ -449,9 +507,8 @@ func _sandbox_mark_in_run() -> void:
 	_check("the mark sits on the plate (x %.4f..%.4f, z %.4f..%.4f)" % [left, right, top, bottom],
 		left >= -half.x and right <= half.x and top >= -half.y and bottom <= half.y)
 	_check("the mark is in the camera's view", cam.is_position_in_frustum(label.global_position))
-	var nearest := Vector2(clampf(0.0, left, right), clampf(0.0, top, bottom)).length()
-	_check("the mark stays clear of the ring (%.4f m from its centre, ring %.4f m)" % [nearest, DiegeticHud.RING_RADIUS + DiegeticHud.RING_WIDTH],
-		nearest > DiegeticHud.RING_RADIUS + DiegeticHud.RING_WIDTH)
+	_check("the mark sits above the first row (bottom %.4f, first row %.4f)" % [bottom, DiegeticHud.row_top(0)],
+		bottom < DiegeticHud.row_top(0))
 	player.wrist_check = false
 	run.queue_free()
 	await _frames(4)
@@ -513,8 +570,7 @@ func _charges_in_run() -> void:
 
 
 func _orb(hud: DiegeticHud, index: int) -> Color:
-	var v = hud._ring_mat.get_shader_parameter("charge_%d" % index)
-	return v if v is Color else Color(v.x, v.y, v.z, v.w)
+	return hud.charge_slots()[index]
 
 
 func _orbs_filled(hud: DiegeticHud) -> Array:

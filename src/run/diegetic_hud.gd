@@ -1,55 +1,58 @@
 class_name DiegeticHud
 extends Node3D
-## Wrist readout (docs/GDD.md §6, §15; D14). On the back of the left wrist:
-## - a transparent HP ring: its length is the health share, its colour runs teal
-##   (full) -> amber (half) -> red (a quarter and below), and it breathes gently
-##   when critical. No panel, no frame behind it;
-## - inside the ring, the white kcal estimate ([CalorieMeter]) over a clear centre;
-## - outside the ring, a hairline for the time left on the imbued element;
-## - over the ring's top-right, three charge orbs (D21, D22): an empty orb is a grey
-##   outline, a filled one takes its element's colour. Oldest charge first;
-## - under the ring: the element and its seconds, the two ability glyphs (bright
-##   when ready) and the run line (rank, kills, points, XP, buffs).
+## Wrist readout (docs/GDD.md §6, §15; D14, F1). On the back of the left wrist, a plain
+## column of Latin rows, each a label, a value and, where it has one, a bar or pips:
+## - HP: a bar (teal -> amber -> red, pulsing when critical) and the current / max;
+## - KCAL: the estimate from [CalorieMeter] as a bar (full at KCAL_BAR_FULL) and a figure;
+## - ŁADUNKI: the charges held (D21) as pips in their element's colour, oldest first; while an
+##   element is imbued, its seconds left in the element's colour beside them;
+## - CZAS: the run time, mm:ss. A level-up flashes here for a moment (LV n, +1 PT).
+## Further rows (STAMINA, DUSZE) are added with [method set_row] and sit under the last one.
+## No panel, no frame behind them, and no japanese glyphs: the wrist is Latin only (F1).
 ## It is drawn only while the wrist is raised to the face (the check-the-watch
 ## gesture: close, forearm level, face turned to the eyes, in view), with hysteresis and
 ## a short fade. A hand held upright with its back to the eyes does not show it. Hidden, its subtree is hidden, so it costs no draw calls. On desktop the
 ## same readout is held on H. Nothing is drawn on the katana, and the text sits on the
-## forearm side of the ring, where the hand mesh falls away (wrist_hud_test).
+## forearm side of the back of the wrist, where the hand mesh falls away (wrist_hud_test).
 
-const RING_SHADER := preload("res://src/shaders/wrist_ring.gdshader")
-## Bundled font: the system fonts the plate used before do not exist on Quest.
 const HUD_FONT_PATH := "res://assets/fonts/YujiBoku-Regular.ttf"
 
-## The quad the ring is drawn on (metres). The ring and its arcs stay inside it.
+## The plate (metres): the readout's frame, the lean compensation and the SANDBOX corner.
 const PLATE_SIZE := Vector2(0.06, 0.06)
-## Ring centre in the controller frame: on the back of the wrist, just past the palm.
-## Text up is -Z. The rows of text sit below the ring, toward the elbow, so they never
-## reach over the hand.
+## Readout origin in the controller frame: on the back of the wrist, just past the palm.
+## Text up is -Z (toward the hand); the rows run toward the elbow (+Z).
 const RING_OFFSET := Vector3(0.0, 0.064, 0.098)
-const RING_RADIUS := 0.0170
-const RING_WIDTH := 0.0042
-const ELEMENT_RADIUS := 0.0236
-const ELEMENT_WIDTH := 0.0014
-## The three charge orbs (D22): centre radius, orb radius, and clockwise angles from 12 o'clock.
-const CHARGE_RADIUS := 0.0277
-const CHARGE_SIZE := 0.0019
-const CHARGE_ANGLES := Vector3(0.17, 0.61, 1.05)
-const CHARGE_EMPTY_COLOR := Color(0.3, 0.3, 0.34)
-## Text rows, as plate-up offsets from the ring centre (negative is below the ring).
-const ELEMENT_ROW_UP := -0.0300
-const ABILITY_ROW_UP := -0.0366
-## Half the gap between the two ability glyphs (m), either side of the centre line.
-const ABILITY_SPREAD := 0.0075
-const STATUS_ROW_UP := -0.0432
 const LABEL_Y := 0.0021
-const KCAL_FONT := 34
-const KCAL_UNIT_FONT := 14
-## Kcal figure and unit, as plate-up offsets from the ring centre: the pair is centred on it.
-const KCAL_ROW_UP := 0.0017
-const KCAL_UNIT_ROW_UP := -0.0053
-const ELEMENT_FONT := 22
-const ABILITY_FONT := 18
-const STATUS_FONT := 19
+
+## The column (plate frame, z = plate depth). Row i's top edge sits at ROW_TOP + i * ROW_PITCH.
+const PANEL_HALF_WIDTH := 0.0275
+const ROW_TOP := -0.0195
+const ROW_PITCH := 0.0153
+const ROW_LABEL_DOWN := 0.0040
+const ROW_BAR_DOWN := 0.0101
+const BAR_HEIGHT := 0.0029
+const PIP_SIZE := 0.0039
+const PIP_PITCH := 0.0052
+const LABEL_FONT := 22
+const VALUE_FONT := 28
+const SANDBOX_FONT := 18
+const GUARD_FONT := 22
+
+const TEAL := Color(0.36, 0.84, 0.72)
+const AMBER := Color(0.98, 0.64, 0.24)
+const RED := Color(0.95, 0.2, 0.16)
+const HP_WARN_RATIO := 0.5
+const HP_CRITICAL_RATIO := 0.25
+const TRACK_COLOR := Color(0.08, 0.08, 0.1, 0.55)
+const CHARGE_EMPTY_COLOR := Color(0.3, 0.3, 0.34)
+const LABEL_COLOR := Color(0.82, 0.84, 0.88)
+const VALUE_COLOR := Color(1.0, 1.0, 1.0)
+const KCAL_BAR_COLOR := Color(0.98, 0.84, 0.52)
+## The kcal bar fills at this estimate (kcal): a bar for a whole run, not a goal.
+const KCAL_BAR_FULL := 100.0
+const SANDBOX_COLOR := Color(1.0, 0.7, 0.3)
+const PARRY_GLOW_SECONDS := 0.42
+const LEVEL_TEXT_SECONDS := 1.5
 
 ## Show and hide limits: the wrist to the eyes (m), the angle between the readout's
 ## face and the eyes (deg), the forearm's lift above level (deg), and the fade time (s).
@@ -66,45 +69,24 @@ const FADE_SECONDS := 0.15
 const DESKTOP_OFFSET := Vector3(-0.16, -0.14, -0.30)
 
 const MAX_FACE_TILT_DEG := 10.0
-const TEAL := Color(0.36, 0.84, 0.72)
-const AMBER := Color(0.98, 0.64, 0.24)
-const RED := Color(0.95, 0.2, 0.16)
-const HP_WARN_RATIO := 0.5
-const HP_CRITICAL_RATIO := 0.25
-## D9: the SANDBOX mark, amber, in the plate's top-left corner. The top is the only free edge:
-## the element, ability and status rows all hang below the ring, and the ring keeps its clearance.
-const SANDBOX_FONT := 18
-const SANDBOX_COLOR := Color(1.0, 0.7, 0.3)
-const KCAL_COLOR := Color(1.0, 1.0, 1.0)
-const PARRY_GLOW_SECONDS := 0.42
-const LEVEL_FLASH_SECONDS := 0.6
-const LEVEL_TEXT_SECONDS := 1.5
 
 var wrist_unit: Node3D
 var wrist_face: Node3D
-var ring: MeshInstance3D
-## The white kcal figure inside the ring.
-var kcal_label: Label3D
-## The small "kcal" under the figure.
-var kcal_unit_label: Label3D
-## The imbued element: its kanji and the seconds left, under the ring.
-var element_label: Label3D
-## The ability glyphs: A and B, each bright when its ability is ready.
-var ability_a_label: Label3D
-var ability_b_label: Label3D
-## The run line and the buffs, under the element rows.
-var wrist_label: Label3D
-## Debug builds: a small red count of RuntimeGuard violations on the plate,
-## so a problem is noticed in the headset (details in the console / log).
-var guard_label: Label3D
-## D9: a sandbox run marks itself on the plate, so no demo is mistaken for a real run.
+var _font: Font
+## The SANDBOX mark (D9), in the plate's top-left corner, clear of the rows.
 var sandbox_label: Label3D
 var _sandbox_run := false
+## Debug builds: a small red count of RuntimeGuard violations on the plate.
+var guard_label: Label3D
 
-var _ring_mat := ShaderMaterial.new()
-## The charges held (D21), oldest first, as the orbs show them. Set from charges_changed.
-var _charges: Array[String] = []
-var _ring_cache := {}
+## The rows by key, in the order they were added (top to bottom).
+var _rows := {}
+var _row_keys: Array[String] = []
+var _labels: Array[Label3D] = []
+## Every bar and pip material, with its resting alpha: the fade scales the alpha.
+var _mat_alpha := {}
+var _bars: Array[MeshInstance3D] = []
+
 var _presence := 0.0
 var _raised := false
 var _follow_eyes := false
@@ -113,13 +95,20 @@ var _view_camera: Camera3D
 var _elements: ElementSystem
 var _calories: CalorieMeter
 var _parry_glow := 0.0
-var _level_flash := 0.0
 var _level_text_left := 0.0
 var _level_text := ""
-var _stats := {}
-## Whether the imbued element is in its last seconds (the element figure beats).
+var _level_label := ""
+var _hp := 100.0
+var _max_hp := 100.0
+var _hp_colour := TEAL
+## HP at or under a quarter: the bar pulses.
+var hp_critical := false
+var _run_seconds := 0.0
+## The charges held (D21), oldest first, as the pips show them. Set from charges_changed.
+var _charges: Array[String] = []
+## Whether the imbued element is in its last seconds (its seconds beat).
 var _element_warn := false
-## Real seconds since the HUD started; drives the element's beat (shaders have TIME, scripts do not).
+## Real seconds since the HUD started; drives the beats (shaders have TIME, scripts do not).
 var _clock := 0.0
 
 
@@ -164,70 +153,34 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	wrist_face.visible = false
 	wrist_unit.add_child(wrist_face)
 
-	ring = MeshInstance3D.new()
-	ring.name = "WristRing"
-	var quad := QuadMesh.new()
-	quad.size = PLATE_SIZE
-	ring.mesh = quad
-	ring.material_override = _ring_mat
-	ring.position = Vector3(0.0, 0.0017, 0.0)
-	ring.rotation.x = -PI * 0.5
-	_no_shadow(ring)
-	_ring_mat.shader = RING_SHADER
-	_ring_mat.set_shader_parameter("size", PLATE_SIZE)
-	_ring_mat.set_shader_parameter("ring_radius", RING_RADIUS)
-	_ring_mat.set_shader_parameter("ring_width", RING_WIDTH)
-	_ring_mat.set_shader_parameter("element_radius", ELEMENT_RADIUS)
-	_ring_mat.set_shader_parameter("element_width", ELEMENT_WIDTH)
-	_ring_mat.set_shader_parameter("charge_radius", CHARGE_RADIUS)
-	_ring_mat.set_shader_parameter("charge_size", CHARGE_SIZE)
-	_ring_mat.set_shader_parameter("charge_angles", CHARGE_ANGLES)
-	_ring_mat.set_shader_parameter("charge_0", _charge_slot(0))
-	_ring_mat.set_shader_parameter("charge_1", _charge_slot(1))
-	_ring_mat.set_shader_parameter("charge_2", _charge_slot(2))
-	wrist_face.add_child(ring)
-
-	# Figures in Godot's built-in sans (the brush font's "1" reads as "7"), kanji
-	# from the bundled brush font as the fallback.
+	# Figures in Godot's built-in sans (the brush font's "1" reads as "7"); the bundled
+	# brush font is only the fallback for glyphs the sans lacks.
 	var font := FontVariation.new()
 	font.base_font = ThemeDB.fallback_font
 	if ResourceLoader.exists(HUD_FONT_PATH):
 		font.fallbacks = [load(HUD_FONT_PATH)]
 	font.variation_embolden = 0.35
-	kcal_label = _make_label("KcalLabel", font, KCAL_FONT, _row(KCAL_ROW_UP))
-	kcal_label.modulate = KCAL_COLOR
-	kcal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	kcal_unit_label = _make_label("KcalUnitLabel", font, KCAL_UNIT_FONT, _row(KCAL_UNIT_ROW_UP))
-	kcal_unit_label.text = "kcal"
-	kcal_unit_label.modulate = KCAL_COLOR
-	kcal_unit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	element_label = _make_label("ElementLabel", font, ELEMENT_FONT, _row(ELEMENT_ROW_UP))
-	element_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ability_a_label = _make_label("AbilityALabel", font, ABILITY_FONT, _row(ABILITY_ROW_UP) - Vector3(ABILITY_SPREAD, 0.0, 0.0))
-	ability_a_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ability_b_label = _make_label("AbilityBLabel", font, ABILITY_FONT, _row(ABILITY_ROW_UP) + Vector3(ABILITY_SPREAD, 0.0, 0.0))
-	ability_b_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wrist_label = _make_label("WristLabel", font, STATUS_FONT, _row(STATUS_ROW_UP))
-	wrist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wrist_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	wrist_label.line_spacing = -2.0
-	for l in _labels():
-		# The figures sit on the ring and the orbs: draw them after the quad.
-		l.render_priority = 2
-		wrist_face.add_child(l)
+	_font = font
+
+	# The four rows of F1, in reading order. F6 (stamina) and F7 (souls) add theirs with set_row.
+	_add_row("hp", "HP")
+	_add_row("kcal", "KCAL")
+	_add_row("charges", "ŁADUNKI")
+	_add_row("time", "CZAS")
 
 	sandbox_label = _make_label("SandboxLabel", font, SANDBOX_FONT, Vector3(-PLATE_SIZE.x * 0.5 + 0.002, LABEL_Y, -PLATE_SIZE.y * 0.5 + 0.0038))
 	sandbox_label.text = "SANDBOX"
 	sandbox_label.modulate = SANDBOX_COLOR
-	sandbox_label.render_priority = 2
 	sandbox_label.visible = false
 	wrist_face.add_child(sandbox_label)
+	_labels.append(sandbox_label)
 
 	if RuntimeGuard.enabled:
-		guard_label = _make_label("GuardLabel", font, 22, Vector3(PLATE_SIZE.x * 0.5 - 0.006, LABEL_Y, -PLATE_SIZE.y * 0.5 + 0.006))
+		guard_label = _make_label("GuardLabel", font, GUARD_FONT, Vector3(PLATE_SIZE.x * 0.5 - 0.006, LABEL_Y, -PLATE_SIZE.y * 0.5 + 0.006))
 		guard_label.modulate = Color(1.0, 0.25, 0.2)
 		guard_label.visible = false
 		wrist_face.add_child(guard_label)
+		_labels.append(guard_label)
 
 	if player is XRPlayer:
 		var xr := player as XRPlayer
@@ -254,12 +207,135 @@ func _setup_wrist_unit(player: Node3D) -> void:
 		player.add_child(wrist_unit)
 
 
-func _row(up: float) -> Vector3:
-	return Vector3(0.0, LABEL_Y, -up)
+## The top edge of row [param index] in the plate frame (z; negative is toward the hand).
+static func row_top(index: int) -> float:
+	return ROW_TOP + float(index) * ROW_PITCH
 
 
-func _labels() -> Array[Label3D]:
-	return [kcal_label, kcal_unit_label, element_label, ability_a_label, ability_b_label, wrist_label]
+## Adds a row to the readout (F1 API). A row is a label on the left and a value on the right,
+## with a bar under them when [param ratio] is 0..1, or pips when [param pips] is given.
+## [method set_row] creates a row the first time its key is used, so F6 and F7 only call it.
+func set_row(key: String, label_text: String, value_text: String, ratio: float = -1.0,
+		colour: Color = TEAL, pips: Array[Color] = [], value_colour: Color = VALUE_COLOR) -> void:
+	var row: Dictionary = _rows.get(key, {})
+	if row.is_empty():
+		row = _add_row(key, label_text)
+	_set_text(row.label, label_text)
+	_set_text(row.value, value_text)
+	row.value.modulate = value_colour
+	var has_pips := not pips.is_empty()
+	var has_bar := ratio >= 0.0 and not has_pips
+	row.track.visible = has_bar
+	row.fill.visible = has_bar and ratio > 0.0
+	if has_bar:
+		var share := clampf(ratio, 0.0001, 1.0)
+		row.fill.scale.x = share
+		row.fill.position.x = -PANEL_HALF_WIDTH + share * PANEL_HALF_WIDTH
+		_paint(row.fill_mat, colour)
+	for i in row.pips.size():
+		var pip: MeshInstance3D = row.pips[i]
+		pip.visible = has_pips and i < pips.size()
+		if pip.visible:
+			_paint(row.pip_mats[i], pips[i] if pips[i].a > 0.5 else CHARGE_EMPTY_COLOR)
+	_rows[key] = row
+	if not _row_keys.has(key):
+		_row_keys.append(key)
+
+
+## The row's value text, or "" for an unknown key (tests and the F6/F7 readers).
+func row_value(key: String) -> String:
+	var row: Dictionary = _rows.get(key, {})
+	return "" if row.is_empty() else (row.value as Label3D).text
+
+
+## The row's label text, or "" for an unknown key.
+func row_label(key: String) -> String:
+	var row: Dictionary = _rows.get(key, {})
+	return "" if row.is_empty() else (row.label as Label3D).text
+
+
+## The bar's share in 0..1 (0 when the row has no bar or is unknown).
+func row_fill(key: String) -> float:
+	var row: Dictionary = _rows.get(key, {})
+	if row.is_empty() or not (row.fill as MeshInstance3D).visible:
+		return 0.0
+	return (row.fill as MeshInstance3D).scale.x
+
+
+## The row's label and value nodes, for the contrast and layout checks.
+func row_labels(key: String) -> Array[Label3D]:
+	var row: Dictionary = _rows.get(key, {})
+	if row.is_empty():
+		return []
+	return [row.label, row.value]
+
+
+## The row keys in the order they sit on the readout, top to bottom.
+func row_keys() -> Array[String]:
+	return _row_keys.duplicate()
+
+
+## One row: its label and value and its bar and pips, as nodes.
+func _add_row(key: String, label_text: String) -> Dictionary:
+	var index := _row_keys.size()
+	var top := row_top(index)
+	var row := {}
+	row.label = _make_label("%sLabel" % key.capitalize(), _font, LABEL_FONT, Vector3(-PANEL_HALF_WIDTH, LABEL_Y, top + ROW_LABEL_DOWN))
+	(row.label as Label3D).horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	(row.label as Label3D).modulate = LABEL_COLOR
+	(row.label as Label3D).text = label_text
+	row.value = _make_label("%sValue" % key.capitalize(), _font, VALUE_FONT, Vector3(PANEL_HALF_WIDTH, LABEL_Y, top + ROW_LABEL_DOWN))
+	(row.value as Label3D).horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var bar_z := top + ROW_BAR_DOWN
+	row.track = _quad("%sTrack" % key.capitalize(), Vector3(0.0, LABEL_Y, bar_z), Vector2(PANEL_HALF_WIDTH * 2.0, BAR_HEIGHT), TRACK_COLOR)
+	row.fill = _quad("%sFill" % key.capitalize(), Vector3(0.0, LABEL_Y, bar_z), Vector2(PANEL_HALF_WIDTH * 2.0, BAR_HEIGHT), TEAL)
+	row.fill_mat = (row.fill as MeshInstance3D).material_override
+	row.pips = []
+	row.pip_mats = []
+	for i in ElementSystem.MAX_CHARGES:
+		var at := Vector3(-PANEL_HALF_WIDTH + PIP_SIZE * 0.5 + float(i) * PIP_PITCH, LABEL_Y, bar_z)
+		var pip := _quad("%sPip%d" % [key.capitalize(), i], at, Vector2(PIP_SIZE, PIP_SIZE), CHARGE_EMPTY_COLOR)
+		row.pips.append(pip)
+		row.pip_mats.append(pip.material_override)
+	for l in [row.label, row.value]:
+		wrist_face.add_child(l)
+		_labels.append(l)
+		l.visible = false
+	for m in [row.track, row.fill] + row.pips:
+		wrist_face.add_child(m)
+		_bars.append(m)
+		m.visible = false
+	_rows[key] = row
+	_row_keys.append(key)
+	return row
+
+
+## A flat bar or pip, lying on the plate like the labels, unshaded and faded with the readout.
+func _quad(node_name: String, at: Vector3, size: Vector2, colour: Color) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = node_name
+	var quad := QuadMesh.new()
+	quad.size = size
+	mi.mesh = quad
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = colour
+	mat.render_priority = 2
+	mi.material_override = mat
+	mi.position = at
+	mi.rotation.x = -PI * 0.5
+	_no_shadow(mi)
+	_mat_alpha[mat] = colour.a
+	return mi
+
+
+## Sets a bar or pip colour (its alpha is the fade, set each frame).
+func _paint(mat: StandardMaterial3D, rgb: Color) -> void:
+	var c := mat.albedo_color
+	if c.r == rgb.r and c.g == rgb.g and c.b == rgb.b:
+		return
+	mat.albedo_color = Color(rgb.r, rgb.g, rgb.b, c.a)
 
 
 func _no_shadow(mi: GeometryInstance3D) -> void:
@@ -276,12 +352,12 @@ func _make_label(node_name: String, font: Font, size: int, at: Vector3) -> Label
 	l.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	l.shaded = false
 	l.double_sided = false
-	l.outline_size = 8
+	l.outline_size = 14
 	l.outline_modulate = Color(0.03, 0.02, 0.02, 0.95)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.modulate = Color(0.95, 0.92, 0.85, 0.98)
-	# Text up is -Z on the plate; glyphs float just over the ring and keep
+	# Text up is -Z on the plate; glyphs float just over the bars and keep
 	# the depth test, so the hand still occludes them.
 	l.position = at
 	l.rotation.x = -PI * 0.5
@@ -295,10 +371,9 @@ func _process(delta: float) -> void:
 	_clock += delta
 	_parry_glow = maxf(_parry_glow - delta, 0.0)
 	var was_flashing := _level_text_left > 0.0
-	_level_flash = maxf(_level_flash - delta, 0.0)
 	_level_text_left = maxf(_level_text_left - delta, 0.0)
 	if was_flashing and _level_text_left <= 0.0:
-		_refresh_status()
+		_level_label = ""
 	_orient_wrist_face(delta)
 
 	var was_raised := _raised
@@ -308,11 +383,11 @@ func _process(delta: float) -> void:
 	_presence = move_toward(_presence, 1.0 if _raised else 0.0, delta / FADE_SECONDS)
 	# The state is kept current even while hidden, so a raised wrist shows the right
 	# figures at once; only the drawing (the subtree's visibility) follows the gesture.
-	_refresh_ring()
-	_refresh_element()
-	_refresh_kcal()
+	_refresh_rows()
 	wrist_face.visible = _presence > 0.0
-	for label in _labels():
+	if wrist_face.visible:
+		_fade_plate()
+	for label in _labels:
 		label.visible = _presence > 0.02 and label.text != ""
 		label.modulate.a = 0.98 * _presence
 		label.outline_modulate.a = 0.95 * _presence
@@ -326,6 +401,26 @@ func _process(delta: float) -> void:
 			guard_label.text = "! %d" % n
 
 
+## Every bar and pip takes the readout's fade in its alpha; the HP bar also breathes when critical
+## and brightens on a parry.
+func _fade_plate() -> void:
+	if hp_critical or _parry_glow > 0.0:
+		var hp_row: Dictionary = _rows.get("hp", {})
+		if not hp_row.is_empty():
+			var beat := 0.55 + 0.45 * (0.5 + 0.5 * sin(_clock * 6.0)) if hp_critical else 1.0
+			var glow := clampf(_parry_glow / PARRY_GLOW_SECONDS, 0.0, 1.0) * 0.6
+			var rgb := _hp_colour * beat
+			rgb = rgb.lerp(Color.WHITE, glow)
+			var fill_mat: StandardMaterial3D = hp_row.fill_mat
+			fill_mat.albedo_color = Color(rgb.r, rgb.g, rgb.b, fill_mat.albedo_color.a)
+	for mi in _bars:
+		var mat := mi.material_override as StandardMaterial3D
+		var c := mat.albedo_color
+		var a: float = _mat_alpha[mat] * _presence
+		if absf(c.a - a) > 0.001:
+			mat.albedo_color = Color(c.r, c.g, c.b, a)
+
+
 func _trigger_wrist_haptic() -> void:
 	if wrist_unit == null:
 		return
@@ -336,8 +431,8 @@ func _trigger_wrist_haptic() -> void:
 			ctrl.trigger_haptic_pulse("haptic", 0.0, amp, 0.04, 0.0)
 
 
-## The check-the-watch gesture (XR): the wrist close to the eyes, its forearm level, its
-## face turned to them and in view, with hysteresis so it does not flicker at the edge.
+## The check-the-watch gesture (XR): the wrist close to the eyes, its forearm level, its face
+## turned to them and in view, with hysteresis so it does not flicker at the edge.
 ## Desktop: H held.
 func _gesture_held() -> bool:
 	if _bound_player is DesktopPlayer:
@@ -366,55 +461,45 @@ func _camera() -> Camera3D:
 	return get_viewport().get_camera_3d() if get_viewport() else null
 
 
-## Pushes a uniform only when it changed (a shader uniform write is not free).
-func _set_ring(key: String, value: Variant) -> void:
-	if _ring_cache.get(key) == value:
+## Pushes the rows' values from the state held here: HP, kcal, the charges and the imbue,
+## the run time (or the level-up flash). Text is only written when it changed.
+func _refresh_rows() -> void:
+	if _rows.is_empty():
 		return
-	_ring_cache[key] = value
-	_ring_mat.set_shader_parameter(key, value)
+	var hp_ratio := clampf(_hp / maxf(_max_hp, 1.0), 0.0, 1.0)
+	_hp_colour = hp_color(hp_ratio)
+	hp_critical = hp_ratio < HP_CRITICAL_RATIO
+	set_row("hp", "HP", "%d / %d" % [ceili(_hp), ceili(_max_hp)], hp_ratio, _hp_colour)
+
+	var kcal := 0.0 if _calories == null else _calories.kcal
+	set_row("kcal", "KCAL", str(floori(kcal)), clampf(kcal / KCAL_BAR_FULL, 0.0, 1.0), KCAL_BAR_COLOR)
+
+	var pips: Array[Color] = []
+	for i in ElementSystem.MAX_CHARGES:
+		pips.append(_charge_slot(i))
+	var element_value := ""
+	var element_colour := VALUE_COLOR
+	var es := _elements if _elements and is_instance_valid(_elements) else null
+	_element_warn = es != null and es.current_element != Elements.NONE and es.is_fade_warning
+	if es and es.current_element != Elements.NONE:
+		var tint := Elements.accent_color(es.current_element).lightened(0.35)
+		# The last seconds of an imbue beat, like the blade and the element arc do.
+		var beat := 0.35 + 0.65 * (0.5 + 0.5 * sin(_clock * 18.8496)) if _element_warn else 1.0
+		element_colour = Color(tint * beat, 1.0)
+		element_value = "%d s" % ceili(es.element_time_remaining)
+	set_row("charges", "ŁADUNKI", element_value, -1.0, VALUE_COLOR, pips, element_colour)
+
+	if _level_text_left > 0.0:
+		var no_pips: Array[Color] = []
+		set_row("time", _level_label, _level_text, -1.0, VALUE_COLOR, no_pips, KCAL_BAR_COLOR)
+	else:
+		set_row("time", "CZAS", _clock_text(_run_seconds))
 
 
-func _refresh_ring() -> void:
-	_set_ring("presence", snappedf(_presence, 0.01))
-	var flash := _level_flash / LEVEL_FLASH_SECONDS
-	_set_ring("glow", snappedf(clampf(maxf(_parry_glow / PARRY_GLOW_SECONDS, flash), 0.0, 1.0), 0.02))
-
-
-func _refresh_element() -> void:
-	if _elements == null or not is_instance_valid(_elements):
-		return
-	var es := _elements
-	var element := es.current_element
-	var active := element != Elements.NONE
-	_set_ring("element_on", 1.0 if active else 0.0)
-	_set_ring("element_fill", snappedf(es.imbue_ratio() if active else 0.0, 0.004))
-	_element_warn = active and es.is_fade_warning
-	if not active:
-		_set_text(element_label, "")
-		_set_text(ability_a_label, "")
-		_set_text(ability_b_label, "")
-		return
-	_set_ring("element_color", Elements.accent_color(element))
-	var tint := Elements.accent_color(element).lightened(0.35)
-	_set_text(element_label, "%s %d" % [Elements.build_label(element), ceili(es.element_time_remaining)])
-	# The last seconds of an imbue beat, like the blade and the element arc do.
-	var beat := 0.35 + 0.65 * (0.5 + 0.5 * sin(_clock * 18.8496)) if _element_warn else 1.0
-	# Brightness only: the alpha belongs to the fade in _process.
-	element_label.modulate = Color(tint * beat, element_label.modulate.a)
-	_set_text(ability_a_label, Elements.ability_glyph(element, 1))
-	_set_text(ability_b_label, Elements.ability_glyph(element, 2))
-	ability_a_label.modulate = Color(ability_colour(tint, es.ability_ready_ratio(1)), ability_a_label.modulate.a)
-	ability_b_label.modulate = Color(ability_colour(tint, es.ability_ready_ratio(2)), ability_b_label.modulate.a)
-
-
-## An ability glyph: dim while its ability recharges, the element's light once ready.
-static func ability_colour(tint: Color, ready: float) -> Color:
-	return Color(0.42, 0.4, 0.48).lerp(tint, clampf(ready, 0.0, 1.0))
-
-
-func _refresh_kcal() -> void:
-	var value := 0 if _calories == null else floori(_calories.kcal)
-	_set_text(kcal_label, str(value))
+## mm:ss for the run time.
+static func _clock_text(seconds: float) -> String:
+	var total := maxi(floori(seconds), 0)
+	return "%02d:%02d" % [total / 60, total % 60]
 
 
 func _set_text(label: Label3D, value: String) -> void:
@@ -422,31 +507,56 @@ func _set_text(label: Label3D, value: String) -> void:
 		label.text = value
 
 
-## The engraved run line (plan section (f), D12): rank, kills and score; then XP to the
-## next rank, the skill points to spend and the wave; then any buffs.
-func _refresh_status() -> void:
-	if _stats.is_empty():
-		return
-	var first: String = "位 %d · 斬 %d · %d pt" % [_stats.level, _stats.kills, _stats.score]
-	if _level_text_left > 0.0:
-		first = _level_text
-	var lines := [first, "XP %d/%d · 点 %d · 波 %d" % [_stats.xp, _stats.xp_to_next, _stats.points, _stats.wave]]
-	if _stats.buff != "":
-		lines.append(_stats.buff)
-	_set_text(wrist_label, "\n".join(lines))
+## Shows or hides the SANDBOX mark (D9): true for a run that used the sandbox.
+func set_sandbox_run(on: bool) -> void:
+	_sandbox_run = on
 
 
-func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, wave: int, score: int, kills: int, run_seconds: float, active_element: String, points: int = 0, buff_text: String = "") -> void:
-	var hp_ratio := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
-	_set_ring("hp_fill", snappedf(hp_ratio, 0.004))
-	_set_ring("hp_color", hp_color(hp_ratio))
-	_set_ring("hp_pulse", 1.0 if hp_ratio < HP_CRITICAL_RATIO else 0.0)
-	_stats = {"xp": xp, "xp_to_next": xp_to_next, "level": level, "wave": wave, "score": score,
-		"kills": kills, "points": points, "buff": buff_text}
-	_refresh_status()
+func on_parry() -> void:
+	_parry_glow = PARRY_GLOW_SECONDS
 
 
-## Hands the HUD the element system it mirrors (called once by RunGame). The charge orbs
+## The charge slots as the shader-free pips take them: the element's colour with alpha 1 when
+## filled, alpha 0 when empty; oldest first.
+func charge_slots() -> Array[Color]:
+	var out: Array[Color] = []
+	for i in ElementSystem.MAX_CHARGES:
+		out.append(_charge_slot(i))
+	return out
+
+
+## One pip's value: its element's colour, and alpha as the fill (1 charged, 0 empty).
+func _charge_slot(index: int) -> Color:
+	if index < _charges.size():
+		var accent := Elements.accent_color(_charges[index])
+		return Color(accent.r, accent.g, accent.b, 1.0)
+	return Color(CHARGE_EMPTY_COLOR, 0.0)
+
+
+## A level-up (D12): a short flash of the time row, which reads LV n and +1 PT for a moment.
+func flash_level_up(new_level: int) -> void:
+	_level_label = "LV %d" % new_level
+	_level_text = "+1 PT"
+	_level_text_left = LEVEL_TEXT_SECONDS
+
+
+func update_wrist_attachment(player: Node3D) -> void:
+	if player is XRPlayer and wrist_unit:
+		var xr := player as XRPlayer
+		var offhand: XRController3D = xr.get_offhand_controller() if xr.has_method("get_offhand_controller") else xr.left_controller
+		if wrist_unit.get_parent() != offhand and offhand != null:
+			wrist_unit.reparent(offhand)
+			var is_right := (offhand == xr.right_controller)
+			wrist_unit.position = RING_OFFSET
+			wrist_unit.rotation = Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(14.0 if is_right else -14.0))
+
+
+func _on_comfort_settings_changed() -> void:
+	if _bound_player:
+		update_wrist_attachment(_bound_player)
+
+
+## Hands the HUD the element system it mirrors (called once by RunGame). The charge pips
 ## follow its charges_changed signal, so they change the moment a charge is taken or spent.
 func bind_elements(es: ElementSystem) -> void:
 	_elements = es
@@ -455,22 +565,12 @@ func bind_elements(es: ElementSystem) -> void:
 	_on_charges_changed(es.get_charges())
 
 
-## The orbs take the charges' colours, oldest first; the slots past the last charge are empty.
+## The pips take the charges' colours, oldest first; the slots past the last charge are empty.
 func _on_charges_changed(charges: Array[String]) -> void:
 	_charges = charges.duplicate()
-	for i in ElementSystem.MAX_CHARGES:
-		_ring_mat.set_shader_parameter("charge_%d" % i, _charge_slot(i))
 
 
-## One orb's shader value: its element's colour, and alpha as the fill (1 charged, 0 empty).
-func _charge_slot(index: int) -> Color:
-	if index < _charges.size():
-		var accent := Elements.accent_color(_charges[index])
-		return Color(accent.r, accent.g, accent.b, 1.0)
-	return Color(CHARGE_EMPTY_COLOR, 0.0)
-
-
-## Hands the HUD the calorie meter it shows inside the ring (called once by RunGame).
+## Hands the HUD the calorie meter it shows (called once by RunGame).
 func bind_calories(meter: CalorieMeter) -> void:
 	_calories = meter
 
@@ -501,33 +601,9 @@ func _orient_wrist_face(delta: float) -> void:
 	wrist_face.position.y = sin(lean) * PLATE_SIZE.x * 0.57
 
 
-## Shows or hides the SANDBOX mark (D9): true for a run that used the sandbox.
-func set_sandbox_run(on: bool) -> void:
-	_sandbox_run = on
-
-
-func on_parry() -> void:
-	_parry_glow = PARRY_GLOW_SECONDS
-
-
-## A level-up (D12): a short glow on the ring and the new level for the run line.
-func flash_level_up(new_level: int) -> void:
-	_level_flash = LEVEL_FLASH_SECONDS
-	_level_text = "位 LV %d  ·  +1 点" % new_level
-	_level_text_left = LEVEL_TEXT_SECONDS
-
-
-func update_wrist_attachment(player: Node3D) -> void:
-	if player is XRPlayer and wrist_unit:
-		var xr := player as XRPlayer
-		var offhand: XRController3D = xr.get_offhand_controller() if xr.has_method("get_offhand_controller") else xr.left_controller
-		if wrist_unit.get_parent() != offhand and offhand != null:
-			wrist_unit.reparent(offhand)
-			var is_right := (offhand == xr.right_controller)
-			wrist_unit.position = RING_OFFSET
-			wrist_unit.rotation = Vector3(deg_to_rad(6.0), 0.0, deg_to_rad(14.0 if is_right else -14.0))
-
-
-func _on_comfort_settings_changed() -> void:
-	if _bound_player:
-		update_wrist_attachment(_bound_player)
+## The state of the readout, from the run (RunGame calls this every tick).
+func update_hud(hp: float, max_hp: float, xp: int, xp_to_next: int, level: int, wave: int, score: int, kills: int, run_seconds: float, active_element: String, points: int = 0, buff_text: String = "") -> void:
+	_hp = hp
+	_max_hp = max_hp
+	_run_seconds = run_seconds
+	_refresh_rows()

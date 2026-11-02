@@ -131,7 +131,7 @@ func _run_all() -> void:
 		RunPerfBudget.MAX_DRAW_CALLS - open_est.draw_calls >= 30)
 	run.pause_controller.close()
 
-	# E3/D14: the wrist readout (HP ring, element arc) stays a handful of meshes, and the
+	# E3/D14/F1: the wrist readout (HP and KCAL bars, charge pips) stays a handful of meshes, and the
 	# element effects add no lights or draw calls of their own beyond one halo per gate.
 	var plate_meshes := 0
 	for mi in run.diegetic_hud.wrist_unit.find_children("*", "MeshInstance3D", true, false):
