@@ -13,6 +13,10 @@ extends Node
 ##   in the same places; a 1.5 km walk meets a rare number of them
 ## - Every shrine, the opening one included, stands on a spur within 8 m of the footpath
 ##   network, and the spur is built from the path to its offering table
+## - The house is the scanned asset (SamRi shrine, tris within budget, wet forest shader)
+##   and one candle light stands in the whole run: the nearest lit shrine only (N6)
+## - Windowed only (pixels, SKIP headless): a shrine 20 m out reads as a warm spot brighter
+##   than the sky, and at 3 m its body is not a black silhouette (N6)
 ## godot --headless --path . --fixed-fps 90 res://tests/hokora_test.tscn -- --desktop
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
@@ -54,6 +58,9 @@ func _run_all() -> void:
 	await _test_placement_clear_of_colliders()
 	await _test_shrines_on_footpath()
 	await _test_density_along_a_walk()
+	await _test_shrine_is_the_asset()
+	await _test_one_candle_light()
+	await _test_shrine_reads_in_the_fog()
 
 	run.queue_free()
 
@@ -487,6 +494,120 @@ func _dismissed_count(cards: Array) -> int:
 		if is_instance_valid(c) and (c as VotiveTablet).is_dismissed:
 			n += 1
 	return n
+
+
+## The house is the scanned asset (N6): a mesh from the baked glb, within the triangle budget,
+## wearing the forest's wet shader with the scan's atlas, not a procedural box.
+func _test_shrine_is_the_asset() -> void:
+	_fresh_run()
+	await _frames(8)
+	var shrine := run.hokora_manager.shrine_at(Vector2i.ZERO)
+	var house := shrine.find_child("Samri", true, false) as Node3D
+	_check("The shrine has the scanned house under its model slot", house != null)
+	if house == null:
+		return
+	var meshes := HokoraShrine._mesh_instances(house)
+	var tris := 0
+	var box := false
+	for mi in meshes:
+		tris += ForestWorld._triangles(mi.mesh)
+		box = box or mi.mesh is BoxMesh
+	_check("The house is a mesh from the asset, not a box (%d parts)" % meshes.size(), not meshes.is_empty() and not box)
+	_check("The house stays within 3000 triangles (%d)" % tris, tris > 0 and tris <= 3000)
+	var mat := meshes[0].material_override as ShaderMaterial if not meshes.is_empty() else null
+	_check("The house wears the wet forest shader with its scan atlas",
+		mat != null and mat.shader == HokoraShrine.WET_SHADER and mat.get_shader_parameter("albedo_texture") != null)
+
+
+## One candle light for the whole run: it lights only the lit shrine nearest the player, and
+## a used shrine lets it go out (N6, Quest 3 light budget).
+func _test_one_candle_light() -> void:
+	_fresh_run()
+	await _frames(8)
+	var shrine := run.hokora_manager.shrine_at(Vector2i.ZERO)
+	_teleport_next_to(shrine)
+	await _frames(6)
+	var candle := shrine.get_node_or_null("CandleLight") as OmniLight3D
+	_check("The shrine has its candle light, off until the player is near", candle != null)
+	if candle == null:
+		return
+	var lit_lights := _visible_candle_lights()
+	_check("Only the nearest lit shrine shows its candle light (%d visible)" % lit_lights, lit_lights == 1 and candle.visible)
+	shrine.consume()
+	await _frames(4)
+	_check("A used shrine lets its candle light go out (%d visible)" % _visible_candle_lights(), _visible_candle_lights() == 0)
+
+
+func _visible_candle_lights() -> int:
+	var n := 0
+	for node in get_tree().get_nodes_in_group("hokora_shrines"):
+		var light := node.get_node_or_null("CandleLight") as OmniLight3D
+		if light != null and light.visible:
+			n += 1
+	return n
+
+
+## Windowed only. 20 m out, the candle's halo is a warm spot (hue orange to yellow) and
+## brighter than the sky behind it. At 3 m the shrine's body is not a black silhouette.
+## Headless renders nothing, so this prints SKIP there (the run's pixel checks happen windowed).
+func _test_shrine_reads_in_the_fog() -> void:
+	if not ShotProbe.rendering():
+		print("SKIP  the shrine reads in the fog (windowed only: pixels)")
+		return
+	_fresh_run()
+	await _frames(8)
+	var shrine := run.hokora_manager.shrine_at(Vector2i.ZERO)
+	var viewport := get_viewport().get_visible_rect().size
+	var xform := shrine.global_transform
+	var halo_local := AABB(HokoraShrine.LANTERN_LOCAL - Vector3(0.9, 0.9, 0.9), Vector3(1.8, 1.8, 1.8))
+	var body_local := AABB(Vector3(-0.8, 0.0, -0.6), Vector3(1.6, 1.5, 1.2))
+
+	_stand_at_distance(shrine, 20.0)
+	await _frames(40)
+	var img := get_viewport().get_texture().get_image()
+	var glow := ShotProbe.box_rect(player.camera, xform, halo_local, viewport)
+	var sky := Rect2i(0, 0, int(viewport.x), int(viewport.y * 0.25))
+	var sky_luma := ShotProbe.quantile_luma(img, sky, 0.5)
+	var warm := ShotProbe.bright_colour(img, glow, 0.02)
+	_check("20 m: the candle's glow is a warm hue (%.0f°, sat %.2f)" % [warm.h * 360.0, warm.s],
+		glow.size.x > 0 and ShotProbe.is_warm(warm))
+	_check("20 m: the glow is brighter than the sky (glow %.2f, sky %.2f)" % [ShotProbe.luma(warm), sky_luma],
+		ShotProbe.luma(warm) > sky_luma + 0.08)
+
+	_stand_at_distance(shrine, 3.2)
+	await _frames(40)
+	img = get_viewport().get_texture().get_image()
+	var body := ShotProbe.box_rect(player.camera, xform, body_local, viewport)
+	var body_luma := ShotProbe.mean_luma(img, body)
+	_check("3 m: the body is not a black silhouette (mean luma %.3f over %d x %d px)" % [body_luma, body.size.x, body.size.y],
+		body.size.x >= 60 and body_luma > SHRINE_BODY_MIN_LUMA)
+
+
+## The threshold below which the body reads as a silhouette (mean luma, 0..1).
+const SHRINE_BODY_MIN_LUMA := 0.1
+
+
+## Puts the player [param distance] m from the shrine, on the walk-in side, with a clear sight
+## line to its candle (so no trunk hides the body).
+func _stand_at_distance(shrine: HokoraShrine, distance: float) -> void:
+	var altar := shrine.altar_position()
+	var from := Vector3(run.spawn.global_position.x, 0.0, run.spawn.global_position.z)
+	var dir := (Vector3(altar.x, 0.0, altar.z) - from).normalized()
+	var candle := shrine.global_transform * HokoraShrine.LANTERN_LOCAL
+	var space := run.get_world_3d().direct_space_state
+	var stand := Vector3(altar.x, 0.0, altar.z) - dir * distance
+	for deg in [0.0, 6.0, -6.0, 12.0, -12.0, 18.0, -18.0]:
+		var d: Vector3 = dir.rotated(Vector3.UP, deg_to_rad(deg))
+		var cand := Vector3(altar.x, 0.0, altar.z) - d * distance
+		cand.y = run.forest_world.height_at(cand.x, cand.z)
+		var q := PhysicsRayQueryParameters3D.create(cand + Vector3(0.0, 1.6, 0.0), candle, ForestWorld.TRUNK_LAYER)
+		if space.intersect_ray(q).is_empty():
+			stand = cand
+			break
+	stand.y = run.forest_world.height_at(stand.x, stand.z)
+	var yaw := atan2(-(altar.x - stand.x), -(altar.z - stand.z))
+	player.teleport(stand, yaw)
+	run.forest_world.finish_pending()
 
 
 func _fresh_run() -> void:

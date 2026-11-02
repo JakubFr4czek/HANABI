@@ -39,6 +39,10 @@ uniform float fog_rim : hint_range(0.0, 2.5) = 0.0;
 uniform float specular_scale : hint_range(0.0, 1.0) = 1.0;
 // When above 0, the sky fill is the fog color instead of a cool self-light.
 uniform float fog_fill : hint_range(0.0, 1.0) = 0.0;
+// Moss on the up-facing parts (roof tops, steps, plinth caps). 0 = off (the default).
+// Patchy: a noise mask keeps it from covering the whole surface evenly.
+uniform float moss_amount : hint_range(0.0, 1.0) = 0.0;
+uniform vec3 moss_color : source_color = vec3(0.16, 0.26, 0.10);
 
 global uniform vec4 storm_fog_color;
 
@@ -109,6 +113,11 @@ void fragment() {
 		float cavity = 0.58 + 0.42 * clamp(wn.y * 0.5 + 0.5, 0.0, 1.0);
 		cavity -= noise2(wp.xz * 2.8) * 0.1 * procedural_ao;
 		col *= mix(1.0, cavity, procedural_ao);
+	}
+	if (moss_amount > 0.0) {
+		float patch = smoothstep(0.42, 0.7, noise2(wp.xz * 5.0 + wp.y * 3.0));
+		float moss = moss_amount * up * patch;
+		col = mix(col, moss_color * (0.7 + 0.5 * noise2(wp.xz * 22.0)), moss);
 	}
 	float rough_soaked = rough_dry * mix(1.0, 0.82, soak);
 
