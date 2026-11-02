@@ -103,7 +103,10 @@ def pack_atlas(parts: list[trimesh.Trimesh], edge: int, key: bool, alpha: bool =
         uv = np.asarray(raw_uv, dtype=np.float64) if raw_uv is not None else np.zeros((len(m.vertices), 2))
         uv = np.clip(uv, 0.0, 1.0)  # scans are not tiling: a UV of exactly 1.0 must stay on its cell
         uv[:, 0] = (c + uv[:, 0]) / cols
-        uv[:, 1] = (r + uv[:, 1]) / rows
+        # trimesh keeps V up (glTF V flipped) and writes it back flipped, so the atlas row is
+        # counted from the top here: a row-0 cell must come out in the top half of the glTF V.
+        # Without this the stone of the lantern sampled the brown wood cell (N6).
+        uv[:, 1] = 1.0 - (r + 1.0 - uv[:, 1]) / rows
         m.visual = trimesh.visual.TextureVisuals(uv=uv, material=trimesh.visual.material.PBRMaterial(baseColorTexture=atlas))
     return atlas
 
