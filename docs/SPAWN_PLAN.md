@@ -353,3 +353,12 @@ Decyzje:
   zrobiony, więc wymóg „≥ N sylwetek" nie jest sprawdzony.
 - Determinizm na pełnej scenie (patrz wyżej).
 - Balans na prawdziwym spacerze: pomiar to model gracza ze stałym DPS, nie playtest.
+
+### N7 – poprawka 1: balans dobrego gracza (skill_tree_data_test)
+
+Po naprawach przerw dobry gracz (`skilled`, model balansu) dochodził do mistrzowskiej
+techniki (8 punktów) dopiero po 600 s; na HEAD było 560 s. Przyczyna: w 600 s mieszczą się
+dwa Oni (180 s i ~280 s), a każde Oni to długi, ciężki pojedynek i mniej zabójstw (61 zamiast 63).
+Decyzja: **interwał Oni w profilu domyślnym 100 → 200 s** (`WaveProfile.oni_interval`).
+Wynik: `skilled` 550 s (okno 360–600 s), `average` 6 punktów przy minucie 8 (5–7). Demo
+(`oni_interval` 100) i hardcore (80) mają własne wartości i nie zmieniają się.
