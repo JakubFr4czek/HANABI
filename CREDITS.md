@@ -46,6 +46,7 @@ These are also shown in game on the `CreditsLabel` under the controls board at t
 - "Japanese Stone Lantern" by Sahir Virmani (https://sketchfab.com/3d-models/japanese-stone-lantern-e0417d1e05984727a50f9ab1451d162d), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (scaled to metres, textures packed into one atlas).
 - "Fern" by zvanstone (https://sketchfab.com/3d-models/fern-0773992894ef4747b94f03e6eb69d620), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (decimated to 299 triangles, scaled to metres, RGBA atlas, `tools/prep_forest_assets.py`).
 - "Giant Redwood" by rhcreations (https://sketchfab.com/3d-models/giant-redwood-1a2052c58869479eb7b204d5cdc7c63a), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (decimated to about 6k triangles, textures packed into one atlas).
+- "Small Japanese Shrine" by SamRi (https://sketchfab.com/3d-models/small-japanese-shrine-b78796a957a24cb092092a15efcec040), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (scaled to metres, base on the origin, textures packed into one 2K atlas, `tools/prep_forest_assets.py`; N6 hokora house).
 
 ## Thanks (optional credits for CC0 packs available to the project)
 Quaternius, Kay Lousberg, Poly Haven (Greg Zaal and team), Grab3D, Pixor, Tozan, Ruskerdax, Vacuous BGM, Casual Garage Coder, FencerDevLog, celyk (GPUTrail), Jnn, Scott Harding, Singapore Wind Symphony Percussion Ensemble, Araki Kodō III;
