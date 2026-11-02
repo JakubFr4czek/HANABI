@@ -201,7 +201,7 @@ jobs:
             cp "$so" "$addon/bin/nano_coverage_godot.linux.editor.$ARCH.so"
             rm -f "$addon/bin/libnano_coverage_godot.linux.editor.$ARCH.so"
             gdx=$(ls "$addon"/*.gdextension | head -1)
-            grep -q "linux.editor.$ARCH" "$gdx" || echo "linux.editor.$ARCH = \"res://addons/nano_coverage_godot/bin/nano_coverage_godot.linux.editor.$ARCH.so\"" >> "$gdx"
+            grep -q "linux.editor.$ARCH" "$gdx" || printf '\nlinux.editor.%s = "res://addons/nano_coverage_godot/bin/nano_coverage_godot.linux.editor.%s.so"\n' "$ARCH" "$ARCH" >> "$gdx"  # file has no trailing newline
             mkdir -p "$(dirname "$NANO_COVERAGE_ADDON")"
             rm -rf "$NANO_COVERAGE_ADDON.tmp" && cp -r "$addon" "$NANO_COVERAGE_ADDON.tmp" && mv "$NANO_COVERAGE_ADDON.tmp" "$NANO_COVERAGE_ADDON"
           fi
