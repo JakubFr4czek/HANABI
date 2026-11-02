@@ -1,3 +1,5 @@
+> **Uwaga (F1, 02.11):** pierścień i napisy z kanji zostały zastąpione czterema wierszami łacińskimi (HP, KCAL, ŁADUNKI, CZAS). Opis aktualny: `docs/f1/README.md`. Poniższy opis dotyczy wersji D14.
+
 # D14: Nowy HUD na nadgarstku (Wrist HUD)
 
 Dokumentacja realizacji zadania D14 zgodnie z wytycznymi GDD i ustaleniami Jakuba.

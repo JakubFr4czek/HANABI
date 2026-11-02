@@ -390,8 +390,8 @@ func _test_readability() -> void:
 	# A reset lets the light drain for a moment: skip past it.
 	run.katana._fade_msec -= int(BladeBody.FADE_SECONDS * 1000.0) + 50
 	run.katana._update_blade_material()
-	_check("plain steel: the wrist shows no element arc, no kanji and no count",
-		hud._ring_cache.get("element_on") == 0.0 and hud.element_label.text == "" and hud.ability_a_label.text == "")
+	_check("plain steel: the wrist shows no imbue seconds and no kanji (ŁADUNKI value %s)" % hud.row_value("charges"),
+		hud.row_value("charges") == "" and _japanese_free(hud))
 	_check("plain steel: the blade has no element light", float(_blade_param("element_glow")) == 0.0)
 	var steel: ShaderMaterial = run.katana._get_blade_material()
 	_check("plain steel: no rim-light pass (no extra draw call)", steel.next_pass == null)
@@ -414,12 +414,10 @@ func _test_readability() -> void:
 			rim != null and float(rim.get_shader_parameter("rim_strength")) > 0.5
 			and rim.get_shader_parameter("rim_color") == Vector3(
 				BladeBody.RIM[el].color.r, BladeBody.RIM[el].color.g, BladeBody.RIM[el].color.b))
-		_check("%s: the wrist shows %s and both ability glyphs" % [el, Elements.build_label(el)],
-			hud.element_label.text.begins_with(Elements.build_label(el))
-			and hud.ability_a_label.text == Elements.ability_glyph(el, 1)
-			and hud.ability_b_label.text == Elements.ability_glyph(el, 2))
+		_check("%s: the wrist shows the imbue seconds in Latin, no kanji (%s)" % [el, hud.row_value("charges")],
+			hud.row_value("charges").ends_with(" s") and _japanese_free(hud))
 
-	# The numbers on the wrist follow the system: time arc, count, button glyphs.
+	# The numbers on the wrist follow the system: the imbue seconds in the charges row (F1).
 	elem_sys.reset()
 	elem_sys.imbue(Elements.STORM, 20.0)
 	elem_sys.element_time_remaining = 12.0
@@ -427,14 +425,8 @@ func _test_readability() -> void:
 	elem_sys.ability_2_cooldown = elem_sys.ability_cooldown_total(2) * 0.5
 	await _frames(3)
 	var tint := Elements.accent_color(Elements.STORM).lightened(0.35)
-	_check("the element arc shows the time left (12/20 = %.2f)" % float(hud._ring_cache.get("element_fill")),
-		absf(float(hud._ring_cache.get("element_fill")) - 0.6) < 0.02 and hud.element_label.text == "%s 12" % Elements.build_label(Elements.STORM))
-	_check("button A reads ready, button B half recharged (A %.2f, B %.2f)" % [elem_sys.ability_ready_ratio(1), elem_sys.ability_ready_ratio(2)],
-		_rgb_close(hud.ability_a_label.modulate, DiegeticHud.ability_colour(tint, 1.0))
-		and _rgb_close(hud.ability_b_label.modulate, DiegeticHud.ability_colour(tint, 0.5)))
-	elem_sys.execute_ability_1(Vector3.FORWARD)
-	await _frames(3)
-	_check("firing A dims its glyph until it recharges", _rgb_close(hud.ability_a_label.modulate, DiegeticHud.ability_colour(tint, 0.0)))
+	_check("the charges row shows the time left (12 s, got %s)" % hud.row_value("charges"),
+		hud.row_value("charges") == "12 s" and _rgb_close(hud.row_labels("charges")[1].modulate, tint))
 
 	# The last 3 s: the blade and the crest beat together, on the imbue clock.
 	_check("no warning beat before the last 3 s", float(_blade_param("element_warn")) == 0.0 and not hud._element_warn)
@@ -464,7 +456,7 @@ func _test_readability() -> void:
 	_check("expiry: then plain steel", float(_blade_param("element_glow")) == 0.0)
 	_check("expiry: the rim-light pass leaves the blade with the glow", steel.next_pass == null)
 	await _frames(3)
-	_check("expiry: the wrist element arc goes again", hud._ring_cache.get("element_on") == 0.0 and hud.element_label.text == "")
+	_check("expiry: the wrist shows no imbue seconds again", hud.row_value("charges") == "")
 
 
 func _rgb_close(c: Color, want: Color) -> bool:
@@ -505,3 +497,14 @@ func _frames(count: int) -> void:
 
 func _seconds(seconds: float) -> void:
 	await _frames(int(seconds * Engine.physics_ticks_per_second))
+
+
+## No kanji or kana on the wrist readout (F1).
+func _japanese_free(hud: DiegeticHud) -> bool:
+	for l in hud.wrist_face.find_children("*", "Label3D", true, false):
+		var text := (l as Label3D).text
+		for i in text.length():
+			var cp := text.unicode_at(i)
+			if (cp >= 0x3040 and cp <= 0x30FF) or (cp >= 0x4E00 and cp <= 0x9FFF):
+				return false
+	return true

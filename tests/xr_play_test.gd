@@ -110,7 +110,7 @@ func _fight(tag: String, seconds: float) -> void:
 			# Every few seconds bring the left wrist up to read the plate.
 			if fmod(t, 6.0) < 0.8:
 				_raise_wrist()
-				if run.diegetic_hud.wrist_label.visible:
+				if run.diegetic_hud.row_labels("time")[0].visible:
 					wrist_seen = true
 			else:
 				_rest_left()
@@ -217,7 +217,7 @@ func _rest_left() -> void:
 
 
 ## Left forearm level in front of the face, back of the wrist toward the eyes: the check-the-watch
-## pose (P9; an upright hand does not show the readout). The readout (the ring on the back of the
+## pose (P9; an upright hand does not show the readout). The readout (the rows on the back of the
 ## wrist) lands about 0.27 m from the eyes: inside the gesture's 0.35 m (wrist_hud_test pins the limits).
 func _raise_wrist() -> void:
 	var b := _body_basis()
