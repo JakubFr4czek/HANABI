@@ -248,3 +248,108 @@ Co jest słabe i zostaje otwarte:
 - **Brak relaksu widocznego w kadrze**: sawtooth jest w liczbach (fale 3 i 4),
   ale przy pełnym capie nie przekłada się na mniej wrogów w czasie.
 
+
+## N7 – pomiar (tempo walki, przegląd P5/P6/D10)
+
+Zlecenie: 3-minutowe demo ma pokazać „survivor-like" od pierwszej minuty, a nocne zmiany
+P5/P6/D10 miały przejść review. Najpierw zmierzono, potem poprawiono.
+
+### Metoda
+
+Prawdziwa scena `run.tscn` (las, torii, kapliczki, `WaveDirector`, `AnchorGuards`), krok
+czasu 0,1 s, bez czekania w czasie rzeczywistym dla biegów stojących. Gracz stoi na
+platformie albo idzie losowym kursem (1,3 m/s, zmiana kierunku co 4–10 s, rozglądanie się
+±40°). Wrogowie idą do gracza z prędkością `move_speed`; strażnicy idą tylko, gdy gracz jest
+w 14 m, inaczej trzymają posterunek. Gracz zabija dotartego wroga po `hp / sim_player_dps`
+plus `sim_gap` (ten sam model co `WavePlanner.simulate`). Symulacja: `tests/support/n7_pacing_sim.gd`
+(`N7PacingSim`). Diagnostyka (runner, wykres) zostaje poza repo; wyniki w `docs/n7/`.
+Seedy: 7, 11, 23 (spacer) i 7 (stanie). Okno: 8 minut run time.
+
+### Stan wyjściowy (przed poprawkami, `docs/n7/before.*`)
+
+| bieg | zespawnowano (strażnicy) | za plecami | w stożku, bez zasłonięcia | pierwszy kontakt | pierwsze Oni | najdłuższa przerwa bez wroga (po 60 s) |
+|---|---|---|---|---|---|---|
+| spacer 7 | 63 (23) | **9** (wszystkie strażnicy) | **7** | 17,6 s | 207 s | **25,2 s** |
+| spacer 11 | 54 (14) | **4** | **4** | 51,3 s | 244 s | **20,8 s** |
+| spacer 23 | 59 (20) | **2** | **4** | 52,4 s | 186 s | 0 s |
+| stanie 7 | 43 (2) | **2** | 0 | 48,7 s | 186 s | 0 s |
+
+Udział strażników w zajętych slotach capu: 19–33 %. Pominięte spawny P6: 0 w każdym biegu
+(brak głodzenia w tej symulacji; zmierzone, nie założone). Szczyt: 6–8 żywych przy capie 8.
+
+### Co znaleziono i naprawiono (osobne commity)
+
+1. **Strażnicy za plecami (P6 łamane przez strażników).** `AnchorGuards._fill_spots` nie
+   sprawdzał sektora 120° za graczem; wszystkie 15 spawnów za plecami to strażnicy.
+   Naprawa: reguła sektora w obu przebiegach.
+2. **Strażnicy w stożku widzenia bez zasłonięcia (łamanie reguły fair z GDD §7).** Drugi
+   przebieg (pierścień bez miejsca poza widokiem) dopuszczał stożek bez sprawdzenia. Naprawa:
+   w stożku tylko zza geometrii (`WaveDirector.is_hidden_from`, promień kończy 0,5 m przed
+   celem, żeby grunt na zboczu nie był liczony jako osłona).
+3. **Grupa strażników z zerem lub jednym członkiem zapisywała kotwicę jako obsadzoną.** Brama
+   bez strażników już nigdy ich nie dostawała. Naprawa: grupa poniżej `MIN_GUARDS` nie jest
+   zapisywana; kotwica dostaje 4 s przerwy i inne kotwice mają pierwszeństwo.
+4. **Pominięty spawn zjadał kredyty fali** (planer odejmował koszt przed decyzją directora).
+   Naprawa: `WavePlanner.refund`; spawn ponowi się w następnym ticku.
+5. **Fale RELAX w otwarciu były puste** (budżet 1 × 0,5 = 0,5 < koszt wroga 1), a odpoczynek
+   po nich do 25 s dawał przerwy bez wroga (25 s w spacerze 7). Naprawa: od 60 s fala zawsze
+   kupuje co najmniej jednego wroga; pole puste przez 8 s po 60 s otwiera następną falę od razu.
+   Otwarcie (przed 60 s) zostaje bez zmian.
+6. **Komentarz XP w `run_game.gd` mówił „150 + 45”**, a wartość w kodzie i GDD §6 to 60 + 40
+   (`ElementBalance`). Krzywa jest zgodna z GDD; zmieniono tylko nieaktualny komentarz.
+
+Bez zmian (przejrzane, bez błędu): Oni ma zawsze 9,2 m na pierścieniu poza sektorem za
+plecami i ponawia się co tick (`_oni_due`); XP 60 + 40; +40 % obrażeń i +25 % częstości (85e6d3e)
+to świadoma zmiana balansu, nie błąd.
+
+### Stan po poprawkach (`docs/n7/final.*`, wykres `docs/n7/after_alive.png`)
+
+| bieg | zespawnowano (strażnicy) | za plecami | w stożku bez zasłonięcia | pominięte | pierwszy kontakt | pierwsze Oni | najdłuższa przerwa po 60 s | szczyt |
+|---|---|---|---|---|---|---|---|---|
+| spacer 7 | 58 (17) | 0 | 0 | 1 z 42 (2,4 %) | 12,6 s | 236 s | 8,2 s | 8 |
+| spacer 11 | 56 (17) | 0 | 0 | 1 z 40 (2,5 %) | 15,2 s | 279 s | 8,1 s | 8 |
+| spacer 23 | 58 (18) | 0 | 0 | 0 z 40 | 52,4 s | 186 s | 4,1 s | 8 |
+| stanie 7 | 43 (0) | 0 | 0 | 1 z 44 (2,3 %) | 9,3 s | 218 s | 8,2 s | 8 |
+
+Strażnicy zjadają mniej, bo przestali stać za plecami i w stożku; ich udział w slotach
+capu: 18–20 % (spacer) i 0 % (stanie, bez strażników w zasięgu).
+
+### Demo 3 min (`data/waves/demo.tres`, `-- --demo`)
+
+Przebieg stojący, seed 7, `docs/n7/`: pierwszy kontakt 29 s (spokojny start), fale szczytowe
+w 67 s, 145 s, 335 s, pierwsze Oni **145 s** (w oknie 120–150 s, test w `back_spawn_test`),
+szczyt 7 żywych przy capie 7, najdłuższa przerwa 6,6 s, 1 z 44 spawnów pominięty (2,3 %).
+Mieszanka szkół i elita: elita od 100 s (`elite_from_seconds`), szansa rośnie do 0,5 na końcu
+rampy (150 s). W tym biegu elita nie wypadła, bo kredyty na elitę (4) przy 100–150 s nie są
+pewne; to do sprawdzenia na prawdziwym spacerze.
+
+Decyzje:
+- **Przełącznik: argument `-- --demo`** (`WaveProfile.load_for_launch`). Przełącznik w
+  Settings > SANDBOX nie powstał: na Quest demo włącza się ręcznie na komputerze do nagrania.
+- Preset `demo` jest w generatorze (`tools/waves/make_presets.gd`) i w doku Fale. Domyślny
+  profil (`default.tres`) bez zmian liczb; zmieniło się zachowanie przez poprawki 1–5.
+- `rest_calm` demo = 15 s: wartość dobrana do okna Oni (13 s → 121 s, 14 s → 124 s,
+  15 s → 145 s; okno 120–150 s).
+- Preset **hardcore** ma `wave_credits_full` 20 (było 14). Powód: po naprawie przerw domyślny
+  profil spawnuje 48 w 8 minut, a hardcore 48; test „hardcore > default" wymaga więcej. Hardcore
+  nadal narasta szybciej i ma elity wcześniej.
+
+### Testy
+
+- `back_spawn_test`: 8 minut stanie (seed 7) – pominięte ≤ 5 %, zero spawnów za plecami, każdy
+  spawn w stożku zasłonięty, przerwa ≤ 10 s po 60 s, szczyt ≤ cap Quest; demo – Oni w [120, 150] s,
+  pierwszy kontakt ≥ 20 s, szczyt ≤ cap. Dodatkowo istniejące sprawdzenia (tył, Oni, maruderzy).
+- `run_loop_test`: demo Oni w [120, 150] s (planer), zwrot kredytów (`refund`), presety demo
+  i pozostałe walidują bez BŁĘDÓW, pierwsza minuta ≤ 4.
+- Determinizm: planer z seedem daje ten sam przebieg (`run_loop_test`). Na pełnej scenie
+  NIE udało się tego potwierdzić: dwa biegi z tym samym seedem różnią się osią czasu, bo
+  świat fizyki (ciała z poprzedniego biegu, ładowanie chunków lasu) wpływa na kotwice strażników.
+  Sprawdzenie zostało usunięte z testu (nie zostawiam testu, który nie przechodzi). Do zrobienia.
+
+### Czego nie zrobiono
+
+- **Screenshoty z gry (start, pierwszy kontakt, szczyt, Oni) i test pikseli w trybie
+  okienkowym** (`docs/n7/`): nie wykonano w tej sesji. Zrzut „szczyt" nie jest jeszcze
+  zrobiony, więc wymóg „≥ N sylwetek" nie jest sprawdzony.
+- Determinizm na pełnej scenie (patrz wyżej).
+- Balans na prawdziwym spacerze: pomiar to model gracza ze stałym DPS, nie playtest.
