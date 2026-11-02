@@ -2584,7 +2584,7 @@ func _build_materials() -> void:
 	_lantern_mat.set_shader_parameter("fog_rim", 1.0)
 	_lantern_mat.set_shader_parameter("fill", 0.6)
 	_lantern_mat.set_shader_parameter("fog_fill", 0.5)
-	_lantern_mat.set_shader_parameter("sky_lit", 0.3)
+	_lantern_mat.set_shader_parameter("sky_lit", 0.8)
 
 
 ## No per-node visibility range: Godot measures it to the node origin, i.e. a

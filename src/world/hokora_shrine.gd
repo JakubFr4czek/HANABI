@@ -41,8 +41,8 @@ const ALTAR_LOCAL := Vector3(0.0, 0.46, 0.78)
 ## The candle, behind the front lattice of the house: the warm point the halo and light sit on.
 const LANTERN_LOCAL := Vector3(0.0, 0.42, 0.3)
 ## The candle's light: warm, short range, no shadows. Lit only for the nearest lit shrine.
-const CANDLE_LIGHT_RANGE := 3.5
-const CANDLE_LIGHT_ENERGY := 7.0
+const CANDLE_LIGHT_RANGE := 4.0
+const CANDLE_LIGHT_ENERGY := 8.0
 const CANDLE_LIGHT_COLOR := Color(1.0, 0.62, 0.32)
 ## The light hangs in front of the house, over the offering table: the candle is behind the
 ## front wall, so a light there would leave the front faces (the ones the player sees) dark.
@@ -312,12 +312,12 @@ func _dress_model(model: Node3D) -> void:
 	_shrine_mat.set_shader_parameter("fill", 1.0)
 	_shrine_mat.set_shader_parameter("specular_scale", 0.15)
 	_shrine_mat.set_shader_parameter("fog_fill", 1.0)
-	_shrine_mat.set_shader_parameter("sky_lit", 0.3)
+	_shrine_mat.set_shader_parameter("sky_lit", 1.0)
 	_shrine_mat.set_shader_parameter("procedural_ao", 0.2)
 	_shrine_mat.set_shader_parameter("fog_rim", 0.6)
 	# Faint warm self-light on the scan's own texture: the form of the wood reads at night
 	# even where the candle does not reach (the candle is the warm point, this is the body).
-	_shrine_mat.set_shader_parameter("emission_tint", Color(0.8, 0.48, 0.24))
+	_shrine_mat.set_shader_parameter("emission_tint", Color(0.9, 0.55, 0.28))
 	_shrine_mat.set_shader_parameter("moss_amount", 0.8)
 	_shrine_mat.set_shader_parameter("moss_color", MOSS_COLOR)
 	for mi in meshes:
