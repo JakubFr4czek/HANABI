@@ -2574,9 +2574,17 @@ func _build_materials() -> void:
 	_lantern_mat.set_shader_parameter("fog_fill", 0.2)
 	# Warm glow of the paper (N6): the tint multiplies the albedo, so only the paper
 	# (yellow in the atlas) lights up; the stone takes a dim warm share. No light source.
-	_lantern_mat.set_shader_parameter("emission_tint", Color(0.72, 0.50, 0.22))
+	_lantern_mat.set_shader_parameter("emission_tint", Color(0.9, 0.6, 0.26))
+	# Only the paper (bright, saturated in the atlas) glows; the stone and the dark wood stay
+	# grey and unlit (N6). Moss on the up-facing caps of the stone.
+	_lantern_mat.set_shader_parameter("paper_gate", 1.0)
+	_lantern_mat.set_shader_parameter("moss_amount", 0.5)
+	_lantern_mat.set_shader_parameter("moss_color", Color(0.24, 0.38, 0.14))
 	# A rim of the sky and fog on the stone's edges: it reads as stone, not as a black pillar.
-	_lantern_mat.set_shader_parameter("fog_rim", 0.5)
+	_lantern_mat.set_shader_parameter("fog_rim", 1.0)
+	_lantern_mat.set_shader_parameter("fill", 0.6)
+	_lantern_mat.set_shader_parameter("fog_fill", 0.5)
+	_lantern_mat.set_shader_parameter("sky_lit", 0.3)
 
 
 ## No per-node visibility range: Godot measures it to the node origin, i.e. a
