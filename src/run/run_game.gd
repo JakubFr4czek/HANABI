@@ -600,7 +600,7 @@ func _on_opening_strike_finished() -> void:
 
 
 ## XP needed to advance from [param current_level] to the next one (D12): linear,
-## 150 + 45 per level. One skill point comes with each level.
+## 60 + 40 per level (ElementBalance). One skill point comes with each level.
 static func xp_for_level(current_level: int) -> int:
 	return ElementBalance.XP_FIRST_LEVEL + ElementBalance.XP_LEVEL_STEP * maxi(current_level - 1, 0)
 
