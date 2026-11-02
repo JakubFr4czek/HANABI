@@ -21,7 +21,7 @@ env:
 jobs:
   checks:
     name: Secrets, licences, size
-    runs-on: [self-hosted, hanabi]
+    runs-on: [self-hosted, raspberka]  # Raspberry Pi 1 (2 GB): no Godot here, only python/git/gitleaks
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
           # Preinstalled on the box runner; download into the job temp dir only if missing.
           gl=$(command -v gitleaks || true)
           if [ -z "$gl" ]; then
-            curl -fsSL -o "$RUNNER_TEMP/gl.tgz" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+            curl -fsSL -o "$RUNNER_TEMP/gl.tgz" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_$( [ "$(uname -m)" = aarch64 ] && echo arm64 || echo x64 ).tar.gz"
             tar -xzf "$RUNNER_TEMP/gl.tgz" -C "$RUNNER_TEMP" gitleaks
             gl="$RUNNER_TEMP/gitleaks"
           fi
