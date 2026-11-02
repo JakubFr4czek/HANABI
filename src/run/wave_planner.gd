@@ -7,6 +7,11 @@ extends RefCounted
 ## the panel's table is the game's curve (docs/SPAWN_PLAN.md §3).
 
 enum State { BUILD, PEAK, RELAX }
+## Once the field has been empty this long (after QUIET_FROM), the next wave opens at once.
+## N7: rests of 14 s × 1.8 gave 25 s of nothing on the screen; this caps the gap at ~8 s.
+const MAX_QUIET_GAP := 8.0
+## Run time from which the empty-field shortcut applies (the calm opening keeps its rests).
+const QUIET_FROM := 60.0
 
 const STATE_NAMES := {State.BUILD: "build", State.PEAK: "peak", State.RELAX: "relax"}
 
@@ -25,6 +30,7 @@ var _rest_timer := 0.0
 var _spawn_timer := 0.0
 var _oni_next_at := 0.0
 var _oni_pending := false
+var _empty_for := 0.0
 
 
 func _init(p_profile: WaveProfile = null, seed_value: int = 0) -> void:
@@ -44,6 +50,7 @@ func reset() -> void:
 	_spawn_timer = 0.0
 	_oni_next_at = profile.oni_first_seconds
 	_oni_pending = false
+	_empty_for = 0.0
 
 
 ## Director state of wave number [param n] (1-based). Deterministic: every
@@ -81,6 +88,13 @@ func step(dt: float, alive: int, oni_alive: bool) -> Dictionary:
 	if t >= _oni_next_at and not oni_alive:
 		_oni_pending = true
 
+	# Empty field for MAX_QUIET_GAP seconds: the rest is over (a gap of 25 s in N7).
+	if alive == 0 and not wave_open and t >= QUIET_FROM:
+		_empty_for += dt
+		if _empty_for >= MAX_QUIET_GAP:
+			_rest_timer = minf(_rest_timer, 0.0)
+	else:
+		_empty_for = 0.0
 	if not wave_open:
 		_rest_timer -= dt
 		if _rest_timer <= 0.0:
@@ -107,7 +121,13 @@ func _open_wave(out: Dictionary) -> void:
 			mult = profile.peak_budget_mult
 		State.RELAX:
 			mult = profile.relax_budget_mult
-	credits = profile.wave_credits(t) * mult
+	var budget := profile.wave_credits(t) * mult
+	# From QUIET_FROM a wave always buys at least one yōkai: a RELAX wave on 0.5 credits used to
+	# open and close with nothing on the field (N7: the 60–75 s gap). The calm opening keeps its
+	# designed quiet relax waves.
+	if t >= QUIET_FROM:
+		budget = maxf(budget, profile.swarm_cost)
+	credits = budget
 	wave_open = true
 	_wave_timer = 0.0
 	_spawn_timer = 0.0
@@ -121,6 +141,15 @@ func _open_wave(out: Dictionary) -> void:
 func _close_wave() -> void:
 	wave_open = false
 	_rest_timer = profile.rest_after(state, t)
+
+
+## Gives back the credits of a spawn the director could not place this tick (no legal spot),
+## so the wave keeps its budget and the next tick tries again at once.
+func refund(kind: String) -> void:
+	if kind == "":
+		return
+	credits += profile.elite_cost if kind == "elite" else profile.swarm_cost
+	_spawn_timer = 0.0
 
 
 ## An elite when the credits cover it, the run is past elite_from_seconds, and the roll hits.
