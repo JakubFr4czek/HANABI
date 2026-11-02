@@ -16,9 +16,9 @@ on:
         required: false
         default: ""
       vfuzz_locations:
-        description: "Visual fuzz locations"
+        description: "Visual fuzz locations (4 on the Pi: llvmpipe on ARM ~1 min per frame)"
         required: false
-        default: "12"
+        default: "4"
 
 permissions:
   contents: read
@@ -138,7 +138,7 @@ jobs:
         continue-on-error: true
         env:
           SEED: ${{ github.event.inputs.vfuzz_seed }}
-          LOCATIONS: ${{ github.event.inputs.vfuzz_locations || '12' }}
+          LOCATIONS: ${{ github.event.inputs.vfuzz_locations || '4' }}
         run: |
           set -o pipefail
           seed="${SEED:-$GITHUB_RUN_NUMBER}"
