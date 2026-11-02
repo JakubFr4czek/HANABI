@@ -43,6 +43,12 @@ uniform float fog_fill : hint_range(0.0, 1.0) = 0.0;
 // Patchy: a noise mask keeps it from covering the whole surface evenly.
 uniform float moss_amount : hint_range(0.0, 1.0) = 0.0;
 uniform vec3 moss_color : source_color = vec3(0.16, 0.26, 0.10);
+// 1 = the emission tint lights only the bright, saturated parts of the albedo (paper, lamp
+// windows); the grey and dark parts (stone, dark wood) stay unlit. 0 = the whole albedo (default).
+uniform float paper_gate : hint_range(0.0, 1.0) = 0.0;
+// Lifts the albedo by a share of itself, as if lit by the open sky / moonlit mist, so a dark
+// scan (stone, black-lacquered wood) keeps its form at night. 0 = off (default).
+uniform float sky_lit : hint_range(0.0, 1.0) = 0.0;
 
 global uniform vec4 storm_fog_color;
 
@@ -130,7 +136,10 @@ void fragment() {
 	if (fog_fill > 0.0) {
 		sky = storm_fog_color.rgb * sky_fill * fog_fill;
 	}
-	vec3 emission = flash_color * flash + sky + tex * emission_tint;
+	float tex_luma = dot(tex, vec3(0.2126, 0.7152, 0.0722));
+	float tex_sat = max(max(tex.r, tex.g), tex.b) - min(min(tex.r, tex.g), tex.b);
+	float gate = mix(1.0, smoothstep(0.4, 0.65, tex_luma) * smoothstep(0.15, 0.35, tex_sat), paper_gate);
+	vec3 emission = flash_color * flash + sky + tex * emission_tint * gate + col * sky_lit;
 	if (fog_rim > 0.0) {
 		vec3 view_dir = normalize((INV_VIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
 		float rim = pow(clamp(1.0 - abs(dot(normalize(wn), view_dir)), 0.0, 1.0), 2.4);

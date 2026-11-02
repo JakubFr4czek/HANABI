@@ -67,58 +67,8 @@ func _run_all() -> void:
 	var stats := forest.stats()
 	_check("Forest draw calls stay in budget with the new kinds (%d)" % stats.draws, stats.draws <= 150)
 
-	await _lantern_reads_at_10m(run)
-
 	run.queue_free()
 	await _frames(2)
-
-
-## Windowed only (N6): a stone lantern 10 m off, on open ground, shows its warm paper against
-## the stone. The paper is the brightest share of the lantern's rectangle; the stone is the rest.
-## Headless renders nothing, so this prints SKIP there.
-func _lantern_reads_at_10m(run: RunGame) -> void:
-	if not ShotProbe.rendering():
-		print("SKIP  the stone lantern reads at 10 m (windowed only: pixels)")
-		return
-	var forest := run.forest_world
-	var player := run.player as DesktopPlayer
-	var altar_free := Vector3(run.spawn.global_position.x, 0.0, run.spawn.global_position.z)
-	var lantern_at := Vector3.ZERO
-	var stand := Vector3.ZERO
-	var space := run.get_world_3d().direct_space_state
-	# The first side (and then the other way round) whose sight line from the stand is free of trunks.
-	for k in 12:
-		var yaw := TAU * float(k) / 12.0
-		var ahead := Vector3(sin(yaw), 0.0, cos(yaw))
-		var s0 := altar_free + ahead * 8.0
-		s0.y = forest.height_at(s0.x, s0.z)
-		var l0 := s0 + ahead * 10.0
-		l0.y = forest.height_at(l0.x, l0.z)
-		var q := PhysicsRayQueryParameters3D.create(s0 + Vector3(0.0, 1.6, 0.0), l0 + Vector3(0.0, 0.7, 0.0), ForestWorld.TRUNK_LAYER)
-		if space.intersect_ray(q).is_empty():
-			stand = s0
-			lantern_at = l0
-			break
-	var lantern := MeshInstance3D.new()
-	lantern.name = "ProbeLantern"
-	lantern.mesh = forest._lantern_mesh
-	lantern.material_override = forest._lantern_mat
-	run.add_child(lantern)
-	lantern.global_position = lantern_at
-	var face := atan2(-(lantern_at.x - stand.x), -(lantern_at.z - stand.z))
-	player.teleport(stand, face)
-	forest.finish_pending()
-	await _frames(40)
-	var img := player.get_viewport().get_texture().get_image()
-	var viewport := player.get_viewport().get_visible_rect().size
-	var rect := ShotProbe.box_rect(player.camera, Transform3D(Basis(), lantern_at), AABB(Vector3(-0.4, 0.0, -0.4), Vector3(0.8, 1.5, 0.8)), viewport)
-	var paper := ShotProbe.bright_colour(img, rect, 0.03)
-	var paper_luma := ShotProbe.luma(paper)
-	var stone_luma := ShotProbe.quantile_luma(img, rect, 0.5)
-	_check("10 m: the lantern's paper is warm (%.0f°)" % (paper.h * 360.0), rect.size.x >= 8 and ShotProbe.is_warm(paper))
-	_check("10 m: the paper reads brighter than the stone (paper %.2f, stone %.2f)" % [paper_luma, stone_luma],
-		paper_luma > stone_luma + 0.12)
-	lantern.queue_free()
 
 
 func _redwood_mesh(forest: ForestWorld) -> Mesh:

@@ -61,6 +61,7 @@ func _run_all() -> void:
 	await _test_shrine_is_the_asset()
 	await _test_one_candle_light()
 	await _test_shrine_reads_in_the_fog()
+	await _test_lantern_reads_at_10m()
 
 	run.queue_free()
 
@@ -551,7 +552,7 @@ func _visible_candle_lights() -> int:
 ## brighter than the sky behind it. At 3 m the shrine's body is not a black silhouette.
 ## Headless renders nothing, so this prints SKIP there (the run's pixel checks happen windowed).
 func _test_shrine_reads_in_the_fog() -> void:
-	if not ShotProbe.rendering():
+	if not _rendering():
 		print("SKIP  the shrine reads in the fog (windowed only: pixels)")
 		return
 	_fresh_run()
@@ -565,20 +566,20 @@ func _test_shrine_reads_in_the_fog() -> void:
 	_stand_at_distance(shrine, 20.0)
 	await _frames(40)
 	var img := get_viewport().get_texture().get_image()
-	var glow := ShotProbe.box_rect(player.camera, xform, halo_local, viewport)
+	var glow := _box_rect(player.camera, xform, halo_local, viewport)
 	var sky := Rect2i(0, 0, int(viewport.x), int(viewport.y * 0.25))
-	var sky_luma := ShotProbe.quantile_luma(img, sky, 0.5)
-	var warm := ShotProbe.bright_colour(img, glow, 0.02)
+	var sky_luma := _quantile_luma(img, sky, 0.5)
+	var warm := _bright_colour(img, glow, 0.02)
 	_check("20 m: the candle's glow is a warm hue (%.0f°, sat %.2f)" % [warm.h * 360.0, warm.s],
-		glow.size.x > 0 and ShotProbe.is_warm(warm))
-	_check("20 m: the glow is brighter than the sky (glow %.2f, sky %.2f)" % [ShotProbe.luma(warm), sky_luma],
-		ShotProbe.luma(warm) > sky_luma + 0.08)
+		glow.size.x > 0 and _is_warm(warm))
+	_check("20 m: the glow is brighter than the sky (glow %.2f, sky %.2f)" % [_luma(warm), sky_luma],
+		_luma(warm) > sky_luma + 0.08)
 
 	_stand_at_distance(shrine, 3.2)
 	await _frames(40)
 	img = get_viewport().get_texture().get_image()
-	var body := ShotProbe.box_rect(player.camera, xform, body_local, viewport)
-	var body_luma := ShotProbe.mean_luma(img, body)
+	var body := _box_rect(player.camera, xform, body_local, viewport)
+	var body_luma := _mean_luma(img, body)
 	_check("3 m: the body is not a black silhouette (mean luma %.3f over %d x %d px)" % [body_luma, body.size.x, body.size.y],
 		body.size.x >= 60 and body_luma > SHRINE_BODY_MIN_LUMA)
 
@@ -608,6 +609,133 @@ func _stand_at_distance(shrine: HokoraShrine, distance: float) -> void:
 	var yaw := atan2(-(altar.x - stand.x), -(altar.z - stand.z))
 	player.teleport(stand, yaw)
 	run.forest_world.finish_pending()
+
+
+## Windowed only (N6): a stone lantern 10 m off, on open ground, shows its warm paper against
+## the stone. The paper is the brightest share of the lantern's rectangle; the stone is the rest.
+## Headless renders nothing, so this prints SKIP there.
+func _test_lantern_reads_at_10m() -> void:
+	if not _rendering():
+		print("SKIP  the stone lantern reads at 10 m (windowed only: pixels)")
+		return
+	_fresh_run()
+	await _frames(8)
+	var forest := run.forest_world
+	var altar_free := Vector3(run.spawn.global_position.x, 0.0, run.spawn.global_position.z)
+	var lantern_at := Vector3.ZERO
+	var stand := Vector3.ZERO
+	var space := run.get_world_3d().direct_space_state
+	# The first side (and then the other way round) whose sight line from the stand is free of trunks.
+	for k in 12:
+		var yaw := TAU * float(k) / 12.0
+		var ahead := Vector3(sin(yaw), 0.0, cos(yaw))
+		var s0 := altar_free + ahead * 8.0
+		s0.y = forest.height_at(s0.x, s0.z)
+		var l0 := s0 + ahead * 10.0
+		l0.y = forest.height_at(l0.x, l0.z)
+		var q := PhysicsRayQueryParameters3D.create(s0 + Vector3(0.0, 1.6, 0.0), l0 + Vector3(0.0, 0.7, 0.0), ForestWorld.TRUNK_LAYER)
+		if space.intersect_ray(q).is_empty():
+			stand = s0
+			lantern_at = l0
+			break
+	var lantern := MeshInstance3D.new()
+	lantern.name = "ProbeLantern"
+	lantern.mesh = forest._lantern_mesh
+	lantern.material_override = forest._lantern_mat
+	run.add_child(lantern)
+	lantern.global_position = lantern_at
+	var face := atan2(-(lantern_at.x - stand.x), -(lantern_at.z - stand.z))
+	player.teleport(stand, face)
+	forest.finish_pending()
+	await _frames(40)
+	var img := player.get_viewport().get_texture().get_image()
+	var viewport := player.get_viewport().get_visible_rect().size
+	var rect := _box_rect(player.camera, Transform3D(Basis(), lantern_at), AABB(Vector3(-0.4, 0.0, -0.4), Vector3(0.8, 1.5, 0.8)), viewport)
+	var paper := _bright_colour(img, rect, 0.03)
+	var paper_luma := _luma(paper)
+	var stone_luma := _quantile_luma(img, rect, 0.5)
+	_check("10 m: the lantern's paper is warm (%.0f°)" % (paper.h * 360.0), rect.size.x >= 8 and _is_warm(paper))
+	_check("10 m: the paper reads brighter than the stone (paper %.2f, stone %.2f)" % [paper_luma, stone_luma],
+		paper_luma > stone_luma + 0.12)
+	lantern.queue_free()
+	run.wave_director.clear_enemies()
+
+
+
+
+## The pixel helpers (windowed checks only). Each works on the frame the viewport rendered.
+static func _rendering() -> bool:
+	return DisplayServer.get_name() != "headless"
+
+
+## Screen rectangle covered by [param local] (a box in [param xform]'s space), clamped to
+## the viewport. Empty when every corner is behind the camera.
+static func _box_rect(cam: Camera3D, xform: Transform3D, local: AABB, viewport: Vector2) -> Rect2i:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for i in 8:
+		var corner := local.position + local.size * Vector3(i & 1, (i >> 1) & 1, (i >> 2) & 1)
+		var world := xform * corner
+		if cam.is_position_behind(world):
+			continue
+		var p := cam.unproject_position(world)
+		lo = lo.min(p)
+		hi = hi.max(p)
+	if lo.x == INF:
+		return Rect2i()
+	var r := Rect2i(Vector2i(lo.floor()), Vector2i((hi - lo).ceil()))
+	return r.intersection(Rect2i(Vector2i.ZERO, Vector2i(viewport)))
+
+
+## Rec.709 luma of a colour (sRGB values as stored in the frame).
+static func _luma(c: Color) -> float:
+	return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+
+
+## Mean luma over the rectangle.
+static func _mean_luma(img: Image, rect: Rect2i) -> float:
+	var sum := 0.0
+	var n := 0
+	for y in range(rect.position.y, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			sum += _luma(img.get_pixel(x, y))
+			n += 1
+	return sum / maxf(float(n), 1.0)
+
+
+## Luma at quantile [param q] (0..1) over the rectangle.
+static func _quantile_luma(img: Image, rect: Rect2i, q: float) -> float:
+	var values := PackedFloat32Array()
+	for y in range(rect.position.y, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			values.append(_luma(img.get_pixel(x, y)))
+	if values.is_empty():
+		return 0.0
+	values.sort()
+	return values[clampi(int(q * float(values.size())), 0, values.size() - 1)]
+
+
+## Mean colour of the brightest [param share] of the rectangle's pixels (0..1).
+static func _bright_colour(img: Image, rect: Rect2i, share: float) -> Color:
+	var px: Array[Color] = []
+	for y in range(rect.position.y, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			px.append(img.get_pixel(x, y))
+	if px.is_empty():
+		return Color.BLACK
+	px.sort_custom(func(a: Color, b: Color) -> bool: return _luma(a) > _luma(b))
+	var n := maxi(1, int(share * float(px.size())))
+	var acc := Color(0, 0, 0, 1)
+	for k in n:
+		acc += px[k]
+	return Color(acc.r / n, acc.g / n, acc.b / n, 1.0)
+
+
+## True for a warm colour: hue between [param lo] and [param hi] degrees (orange to yellow
+## by default) and enough saturation to read as a colour, not as grey fog.
+static func _is_warm(c: Color, lo := 10.0, hi := 70.0, min_sat := 0.35) -> bool:
+	var h := c.h * 360.0
+	return h >= lo and h <= hi and c.s >= min_sat
 
 
 func _fresh_run() -> void:
