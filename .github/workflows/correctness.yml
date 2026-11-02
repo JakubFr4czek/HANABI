@@ -29,7 +29,7 @@ concurrency:
 
 env:
   GODOT_VERSION: "4.7.2"
-    NANO_COVERAGE_REPO: https://github.com/IgorBayerl/nano-coverage-godot
+  NANO_COVERAGE_REPO: https://github.com/IgorBayerl/nano-coverage-godot
   NANO_COVERAGE_SHA: fce7a0ae9281533456023275504bbd81d74d95be
   LIBGL_ALWAYS_SOFTWARE: "1"
 
