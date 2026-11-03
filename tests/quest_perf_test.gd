@@ -113,14 +113,18 @@ func _run_all() -> void:
 	var feet := player.global_position
 	menu.update_pointer("mouse", feet + Vector3(0.0, 1.65, 0.0), -menu.global_basis.z, false, false)
 	await _frames(6)
+	await _frames(30)  # N9: past the lift animation
 	var menu_draws := 0
 	for mi in menu.find_children("*", "MeshInstance3D", true, false):
 		if (mi as MeshInstance3D).is_visible_in_tree():
-			menu_draws += 1
+			menu_draws += (mi as MeshInstance3D).mesh.get_surface_count()
+	# Worst case in VR: paper + frame + two beams + two reticles.
+	var frame_surfaces := (menu.get_node("Board/Frame") as MeshInstance3D).mesh.get_surface_count()
+	_check("N9: the lacquer frame, fittings and back plate are one draw call (%d surface)" % frame_surfaces, frame_surfaces == 1)
 	var open_est := RunPerfProbe.estimate_scene_cost(run)
 	var open_lights := RunPerfProbe.count_dynamic_lights(run)
 	var open_voices := RunPerfProbe.count_audio_voices(run)
-	_check("Menu open: the panel and pointers add at most 6 draw calls (%d)" % menu_draws, menu_draws >= 1 and menu_draws <= 6)
+	_check("Menu open: the board and pointers add at most 6 draw calls (%d surfaces, 2 + 2 per VR hand at worst)" % menu_draws, menu_draws >= 2 and menu_draws <= 6)
 	_check("Menu open: draw calls still under Quest budget (%d <= %d)" % [open_est.draw_calls, RunPerfBudget.MAX_DRAW_CALLS],
 		open_est.draw_calls <= RunPerfBudget.MAX_DRAW_CALLS)
 	_check("Menu open: no extra lights (%d <= %d) and voices stay bounded (%d <= %d)" % [open_lights, RunPerfBudget.MAX_DYNAMIC_LIGHTS, open_voices, RunPerfBudget.MAX_AUDIO_VOICES],
@@ -230,6 +234,8 @@ func _check_quest_export_preset() -> void:
 	var included := PackedStringArray(String(cfg.get_value(preset, "include_filter", "")).split(",", false))
 	_check("Quest pack includes the title plate text (include_filter)",
 		included.has("assets/text/INTRO_TEXT.md") and FileAccess.file_exists("res://assets/text/INTRO_TEXT.md"))
+	_check("N9: Quest pack includes the in-game credits list (include_filter)",
+		included.has("data/credits.json") and FileAccess.file_exists("res://data/credits.json"))
 
 
 func _check(label: String, ok: bool) -> void:

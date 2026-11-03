@@ -31,6 +31,11 @@ const CLEARANCE_DEPTH := 0.4
 const SIDE_MARGIN := 0.1
 const DISTANCE_STEP := 0.05
 const YAW_OFFSETS_DEG: Array[float] = [0.0, 25.0, -25.0, 50.0, -50.0]
+## N9: when no spot fits the full-size panel, the same search runs once more with
+## the panel at this fraction of its size (the N9 menu board shrinks a little below
+## the pre-N9 card: 1.09 m, body text 0.74°, fine print 0.6°) before falling back to drawing on top. Only tight spots
+## (a yōkai or trunk at arm's length) ever see it.
+const COMPACT_FIT := 0.72
 
 
 ## Panel pose for a viewer at [param head] facing [param heading] (flat, any
@@ -41,21 +46,22 @@ static func place(space: PhysicsDirectSpaceState3D, head: Vector3, heading: Vect
 		ground_height: Callable = Callable(), exclude: Array[RID] = []) -> Dictionary:
 	var flat := Vector3(heading.x, 0.0, heading.z)
 	flat = flat.normalized() if flat.length_squared() > 1e-6 else Vector3.FORWARD
-	for offset_deg in YAW_OFFSETS_DEG:
-		var dir := flat.rotated(Vector3.UP, deg_to_rad(offset_deg))
-		var dist := DEFAULT_DISTANCE
-		while dist >= MIN_DISTANCE - 0.001:
-			var xf := _panel_transform(head, dir, dist, size, ground_height)
-			var scale := dist / DEFAULT_DISTANCE
-			if is_clear(space, head, xf, size * scale, exclude):
-				return {"transform": xf, "distance": dist, "scale": scale,
-						"yaw_offset_deg": offset_deg, "blocked": false}
-			dist -= DISTANCE_STEP
+	for fit in [1.0, COMPACT_FIT]:
+		for offset_deg in YAW_OFFSETS_DEG:
+			var dir := flat.rotated(Vector3.UP, deg_to_rad(offset_deg))
+			var dist := DEFAULT_DISTANCE
+			while dist >= MIN_DISTANCE - 0.001:
+				var xf := _panel_transform(head, dir, dist, size * fit, ground_height)
+				var scale: float = dist / DEFAULT_DISTANCE * fit
+				if is_clear(space, head, xf, size * scale, exclude):
+					return {"transform": xf, "distance": dist, "scale": scale,
+							"yaw_offset_deg": offset_deg, "blocked": false, "compact": fit < 1.0}
+				dist -= DISTANCE_STEP
 	# Nothing is clear: the minimum distance straight ahead, flagged so the
 	# caller draws the panel on top of whatever it overlaps.
 	var fb_xf := _panel_transform(head, flat, MIN_DISTANCE, size, ground_height)
 	return {"transform": fb_xf, "distance": MIN_DISTANCE, "scale": MIN_DISTANCE / DEFAULT_DISTANCE,
-			"yaw_offset_deg": 0.0, "blocked": true}
+			"yaw_offset_deg": 0.0, "blocked": true, "compact": false}
 
 
 ## Panel centre [param distance] along [param dir] from the head, facing back

@@ -17,6 +17,9 @@ extends Node
 ## - the panel is placed with [UiPlacement] so it never intersects geometry.
 ##
 ## Left Menu button (tap) or Tab / M toggles, Esc and the close button close.
+## N9: the board lifts with a paper-and-wood sound and a light pulse on the
+## menu hand, and is set down with a lower knock; on the CREDITS page the
+## thumbstick of the hand pointing at the board (or the mouse wheel) scrolls.
 
 signal opened
 signal closed
@@ -84,7 +87,8 @@ func open() -> void:
 		blade_el = run_game.element_system.current_element
 		blade_left = run_game.element_system.element_time_remaining
 	menu.open(run_game, pose, blade_el, blade_left, _hint_text())
-	Sfx.play_at("ofuda_slice", pose.transform.origin, -12.0, 4.0, 0.85)
+	Sfx.play_at("menu_open", pose.transform.origin, -10.0, 4.0, 1.0)
+	_haptic("left", 0.22, 0.05)
 	GameEvents.log_event("skill_menu_opened", {"points": run_game.skill_points, "blocked": bool(pose.blocked), "distance": snappedf(float(pose.distance), 0.01)})
 	opened.emit()
 
@@ -95,7 +99,7 @@ func close() -> void:
 	is_open = false
 	menu.close()
 	_release_world()
-	Sfx.play_at("ofuda_slice", _head_position(), -14.0, 4.0, 0.7)
+	Sfx.play_at("menu_close", menu.global_position, -12.0, 4.0, 1.0)
 	GameEvents.log_event("skill_menu_closed", {})
 	closed.emit()
 
@@ -145,11 +149,19 @@ func _on_run_ended(_summary: Dictionary) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if is_open and event is InputEventMouseButton and event.pressed:
+		var wheel := (event as InputEventMouseButton).button_index
+		if wheel == MOUSE_BUTTON_WHEEL_UP or wheel == MOUSE_BUTTON_WHEEL_DOWN:
+			menu.scroll_credits(-1 if wheel == MOUSE_BUTTON_WHEEL_UP else 1)
+			get_viewport().set_input_as_handled()
+			return
 	# Menu hotkeys: handled here, before the rig and the weapon switch see them.
 	if not is_open or not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	var key: int = (event as InputEventKey).physical_keycode
 	match key:
+		KEY_K:
+			menu.select_credits()
 		KEY_ESCAPE:
 			close()
 		KEY_1, KEY_2, KEY_3, KEY_4:
@@ -163,7 +175,7 @@ func _input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not is_open and not offering_open:
 		return
 	if run_game.state != RunGame.RunState.PLAYING:
@@ -173,7 +185,7 @@ func _process(_delta: float) -> void:
 	# The blade rides the hand while the world is held, for the choice too (D12).
 	_follow_katana()
 	if is_open:
-		_feed_pointers()
+		_feed_pointers(SkillTreeMenu.real_delta(delta))
 
 
 # --- Placement ---------------------------------------------------------------------
@@ -198,7 +210,8 @@ func _compute_pose() -> Dictionary:
 		ground = run_game.forest_world.height_at
 	var holder: Node3D = head if head else (run_game as Node3D)
 	var space: PhysicsDirectSpaceState3D = holder.get_world_3d().direct_space_state
-	return UiPlacement.place(space, head_pos, heading, SkillTreeMenu.PANEL_SIZE, ground)
+	# N9: the whole board, frame included, must find free air.
+	return UiPlacement.place(space, head_pos, heading, SkillTreeMenu.OUTER_SIZE, ground)
 
 
 # --- Freezing ----------------------------------------------------------------------
@@ -260,7 +273,7 @@ func _set_locomotion(enabled: bool) -> void:
 
 # --- Pointers ----------------------------------------------------------------------
 
-func _feed_pointers() -> void:
+func _feed_pointers(real_seconds: float) -> void:
 	if player is XRPlayer:
 		var xr := player as XRPlayer
 		for side in ["left", "right"]:
@@ -273,6 +286,7 @@ func _feed_pointers() -> void:
 			down = value > TRIGGER_PRESS or (down and value > TRIGGER_RELEASE)
 			_trigger_down[side] = down
 			menu.update_pointer(side, c.global_position, -c.global_basis.z, down)
+			menu.stick_scroll(side, c.get_vector2("primary").y, real_seconds)
 	elif player is DesktopPlayer:
 		var cam := (player as DesktopPlayer).camera
 		var origin := cam.global_position
@@ -294,5 +308,5 @@ func _haptic(pointer_id: String, amplitude: float, seconds: float) -> void:
 
 func _hint_text() -> String:
 	if player is XRPlayer:
-		return "TRIGGER  select   ·   MENU  close"
-	return "CLICK  select   ·   1-4  school   ·   5/C  settings   ·   ENTER  unlock   ·   ESC  close"
+		return "TRIGGER  select   ·   STICK  scroll   ·   MENU  close"
+	return "CLICK  select   ·   1-4  school   ·   5/C  settings   ·   K  credits   ·   ENTER  unlock   ·   ESC  close"

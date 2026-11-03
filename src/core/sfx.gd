@@ -30,6 +30,10 @@ const CATEGORIES := {
 	"element_fade": ["res://assets/audio/sfx/hanabi_proc", "element_fade"],
 	# Hokora shrine handbell (D1, D12): rings on approach and on every hand touch.
 	"hokora_suzu": ["res://assets/audio/sfx/hanabi_proc", "hokora_suzu"],
+	# N9: the lacquer menu board lifting, being set down, and a paper-and-wood tick per choice.
+	"menu_open": ["res://assets/audio/sfx/hanabi_proc", "menu_open"],
+	"menu_close": ["res://assets/audio/sfx/hanabi_proc", "menu_close"],
+	"menu_tick": ["res://assets/audio/sfx/hanabi_proc", "menu_tick"],
 	# Bonshō temple bell cues (Zadanie 5)
 	"bonsho": ["res://assets/audio/sfx/bonsho", "bonsho_run_start"],
 	"bonsho_oni": ["res://assets/audio/sfx/bonsho", "bonsho_oni"],

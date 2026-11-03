@@ -7,23 +7,31 @@ extends Control
 ## plus layout: it never spends points (the menu does, through
 ## RunGame.unlock_skill) and answers [method hit_test] for the pointer.
 ##
-## Layout (1600 x 1000 px, about 1 px per headset pixel at 1.1 m):
+## Layout (1600 x 1000 px, about 1 px per headset pixel at 1.1 m; 0.9 mm a pixel
+## on the 1.44 m board, so 22 px body text is 1° tall and 18 px fine print 0.84°):
 ## header (title, points balance, close) / four element tabs / the five-node
 ## tree of the chosen element on the left / detail + UNLOCK button on the right /
 ## footer (controls, what is on the blade).
 
 const SIZE := Vector2(1600.0, 1000.0)
 
-# --- Palette: sumi lacquer, gilt edging, cinnabar seals. -----------------------
-const LACQUER := Color(0.040, 0.038, 0.056, 0.95)
-const LACQUER_RAISED := Color(0.075, 0.07, 0.095, 0.98)
-const LACQUER_SUNK := Color(0.022, 0.021, 0.032, 0.98)
+# --- Palette: warm kuro-urushi lacquer over washi, gilt edging, cinnabar seals. ---
+## N9: the ground is a warm lacquered paper (never full black), with a faint washi
+## texture on top ([method _washi_textures]); text colours are warm to match.
+const LACQUER := Color(0.082, 0.060, 0.055, 1.0)
+const LACQUER_RAISED := Color(0.122, 0.092, 0.084, 0.98)
+const LACQUER_SUNK := Color(0.050, 0.037, 0.035, 0.98)
+const LACQUER_HOT := Color(0.17, 0.125, 0.11, 0.98)
 const GILT := Color(0.80, 0.66, 0.42)
 const GILT_DIM := Color(0.80, 0.66, 0.42, 0.34)
-const PAPER := Color(0.94, 0.91, 0.84)
-const DIM := Color(0.62, 0.62, 0.70)
-const FAINT := Color(0.42, 0.42, 0.52)
-const CINNABAR := Color(0.86, 0.29, 0.21)
+const PAPER := Color(0.95, 0.92, 0.85)
+const DIM := Color(0.72, 0.68, 0.62)
+const FAINT := Color(0.52, 0.48, 0.44)
+const CINNABAR := Color(0.88, 0.31, 0.22)
+## Text sizes (px) the readability check holds every page to: body copy and the
+## smallest fine print (docs/n9/README.md: 1° and 0.7° from the eyes).
+const BODY_TEXT_PX := 22
+const MIN_TEXT_PX := 18
 
 const ROLE_CAPTION := {1: "AWAKENING", 2: "ABILITY 1", 3: "ABILITY 2", 4: "RESONANCE", 5: "MASTER"}
 const ROLE_LONG := {
@@ -58,8 +66,9 @@ const PAGE_ACCESS := 2
 const PAGE_CONTROLS := 3
 const PAGE_AI := 4
 const PAGE_SANDBOX := 5
-const PAGE_NAMES := ["AUDIO", "MOVEMENT", "ACCESS", "CONTROLS", "AI BOSS", "SANDBOX"]
-const PAGE_KANJI := ["音", "移", "補", "操", "知", "試"]
+const PAGE_CREDITS := 6
+const PAGE_NAMES := ["AUDIO", "MOVEMENT", "ACCESS", "CONTROLS", "AI BOSS", "SANDBOX", "CREDITS"]
+const PAGE_KANJI := ["音", "移", "補", "操", "知", "試", "謝"]
 const PAGE_SUBTITLE := [
 	"Four buses in 10 % steps. SFX plays a cue as you change it.",
 	"Vignette, turning, walking pace and seated height.",
@@ -67,21 +76,29 @@ const PAGE_SUBTITLE := [
 	"Both Quest 3 controllers. The katana follows your dominant hand.",
 	"Meta Muse Spark / Llama model configuration, API key and AI combat.",
 	"Demo and test mode: all skills unlocked. Off by default.",
+	"Every outside model, texture, sound, font and plugin: author, source, licence.",
 ]
-## Six sub-tabs of equal width across the 1468 px page (D9 added SANDBOX).
+## Seven sub-tabs of equal width across the 1468 px page (D9 added SANDBOX, N9 CREDITS).
 const SUBNAV_RECTS := {
-	"page_audio": Rect2(66.0, 218.0, 232.0, 44.0),
-	"page_move": Rect2(312.0, 218.0, 232.0, 44.0),
-	"page_access": Rect2(558.0, 218.0, 232.0, 44.0),
-	"page_controls": Rect2(804.0, 218.0, 232.0, 44.0),
-	"page_ai": Rect2(1050.0, 218.0, 232.0, 44.0),
-	"page_sandbox": Rect2(1296.0, 218.0, 232.0, 44.0),
+	"page_audio": Rect2(66.0, 218.0, 196.0, 44.0),
+	"page_move": Rect2(278.0, 218.0, 196.0, 44.0),
+	"page_access": Rect2(490.0, 218.0, 196.0, 44.0),
+	"page_controls": Rect2(702.0, 218.0, 196.0, 44.0),
+	"page_ai": Rect2(914.0, 218.0, 196.0, 44.0),
+	"page_sandbox": Rect2(1126.0, 218.0, 196.0, 44.0),
+	"page_credits": Rect2(1338.0, 218.0, 196.0, 44.0),
 }
 const SUBNAV_PAGE := {
 	"page_audio": PAGE_AUDIO, "page_move": PAGE_MOVE,
 	"page_access": PAGE_ACCESS, "page_controls": PAGE_CONTROLS,
-	"page_ai": PAGE_AI, "page_sandbox": PAGE_SANDBOX,
+	"page_ai": PAGE_AI, "page_sandbox": PAGE_SANDBOX, "page_credits": PAGE_CREDITS,
 }
+## N9 credits list: rows on screen, row height, first row's top, rows per scroll button press.
+const CREDITS_PATH := "res://data/credits.json"
+const CREDITS_ROWS := 6
+const CREDITS_ROW_H := 92.0
+const CREDITS_TOP := 324.0
+const CREDITS_STEP := 5
 const SETTINGS_RECTS := {
 	PAGE_AUDIO: {
 		"vol_master_dn": Rect2(884.0, 308.0, 84.0, 64.0),
@@ -148,6 +165,10 @@ const SETTINGS_RECTS := {
 		"sandbox_on": Rect2(460.0, 384.0, 320.0, 56.0),
 		"sandbox_off": Rect2(800.0, 384.0, 320.0, 56.0),
 	},
+	PAGE_CREDITS: {
+		"credits_up": Rect2(1424.0, 324.0, 96.0, 150.0),
+		"credits_down": Rect2(1424.0, 728.0, 96.0, 150.0),
+	},
 }
 const NODE_SIZE := Vector2(340.0, 120.0)
 const TREE_COLUMN := {1: 500.0, 2: 270.0, 3: 730.0, 4: 500.0, 5: 500.0}
@@ -183,6 +204,15 @@ var abilities: Array[Dictionary] = []
 var hint_text := ""
 ## Transient detail-pane message (why a purchase failed).
 var status_text := ""
+## First row of the credits list on screen (N9).
+var credits_first := 0
+## Every text size (px) the last draw used -> how many strings (readability test).
+var drawn_text_sizes: Dictionary = {}
+## When true (tests), each string of the last draw: {"text", "size", "center": canvas px}.
+var record_text := false
+var drawn_text: Array[Dictionary] = []
+## Names of the credits rows the last draw put on the page (tests).
+var drawn_credit_names: Array[String] = []
 var _flash_id := ""
 var _flash_t := -1.0
 var _deny_t := -1.0
@@ -263,6 +293,42 @@ func owned_count(el: String) -> int:
 	return c
 
 
+## The credits rows (data/credits.json entries, then the closing note as a last row).
+static func credits_rows() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var data := credits_data()
+	for e in data.get("entries", []):
+		out.append(e as Dictionary)
+	if String(data.get("closing", "")) != "":
+		out.append({"kind": "NOTE", "name": "Made for HANABI", "author": "", "source": "",
+				"license": "CC0", "use": String(data.closing)})
+	return out
+
+
+static var _credits_cache: Dictionary = {}
+
+
+static func credits_data() -> Dictionary:
+	if _credits_cache.is_empty():
+		var f := FileAccess.open(CREDITS_PATH, FileAccess.READ)
+		if f != null:
+			var parsed: Variant = JSON.parse_string(f.get_as_text())
+			if parsed is Dictionary:
+				_credits_cache = parsed
+	return _credits_cache
+
+
+func credits_max_first() -> int:
+	return maxi(0, credits_rows().size() - CREDITS_ROWS)
+
+
+## Moves the credits list by [param rows]; false when it is already at that end.
+func scroll_credits(rows: int) -> bool:
+	var before := credits_first
+	credits_first = clampi(credits_first + rows, 0, credits_max_first())
+	return credits_first != before
+
+
 # --- Geometry --------------------------------------------------------------------
 
 func tab_rect(i: int) -> Rect2:
@@ -325,9 +391,36 @@ func button_spec(id: String) -> Dictionary:
 
 # --- Drawing ---------------------------------------------------------------------
 
+static var _washi: Array[Texture2D] = []
+
+
+## Two greyscale noise sheets made once by the engine (FastNoiseLite, native, a
+## few ms): soft mottling, and long thin fibres (stretched cellular noise).
+static func _washi_textures() -> Array[Texture2D]:
+	if _washi.is_empty():
+		var mottle := FastNoiseLite.new()
+		mottle.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+		mottle.seed = 9
+		mottle.frequency = 0.018
+		mottle.fractal_octaves = 4
+		_washi.append(ImageTexture.create_from_image(mottle.get_image(320, 200)))
+		var fibre := FastNoiseLite.new()
+		fibre.noise_type = FastNoiseLite.TYPE_CELLULAR
+		fibre.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
+		fibre.seed = 23
+		fibre.frequency = 0.09
+		fibre.fractal_type = FastNoiseLite.FRACTAL_NONE
+		# 800 x 160 drawn on 1600 x 1000: fibres run long and mostly across the sheet.
+		_washi.append(ImageTexture.create_from_image(fibre.get_image(800, 160)))
+	return _washi
+
+
 func _draw() -> void:
 	if tree == null:
 		return
+	drawn_text_sizes.clear()
+	drawn_text.clear()
+	drawn_credit_names.clear()
 	_draw_backdrop()
 	_draw_header()
 	_draw_tabs()
@@ -343,7 +436,22 @@ func _draw() -> void:
 func _text(s: String, pos: Vector2, font_size: int, color: Color,
 		align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0, weight := 500) -> void:
 	var f := UiTypography.font(weight)
+	if s != "":
+		_note_text(f, s, pos, font_size, align, width, -1.0)
 	draw_string(f, Vector2(pos.x, pos.y + f.get_ascent(font_size)), s, align, width, font_size, color)
+
+
+func _note_text(f: Font, s: String, pos: Vector2, font_size: int, align: int, width: float, wrap: float) -> void:
+	drawn_text_sizes[font_size] = int(drawn_text_sizes.get(font_size, 0)) + 1
+	if not record_text:
+		return
+	var w := wrap if wrap > 0.0 else f.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var x := pos.x + w * 0.5
+	if width > 0.0 and align == HORIZONTAL_ALIGNMENT_CENTER:
+		x = pos.x + width * 0.5
+	elif width > 0.0 and align == HORIZONTAL_ALIGNMENT_RIGHT:
+		x = pos.x + width - w * 0.5
+	drawn_text.append({"text": s, "size": font_size, "center": Vector2(x, pos.y + font_size * 0.6)})
 
 
 ## Largest font size (≤ [param max_size]) at which the longest word of
@@ -374,6 +482,8 @@ func _fit_line(s: String, width: float, max_size: int, weight := 500, min_size :
 func _wrapped(s: String, pos: Vector2, font_size: int, color: Color, width: float,
 		max_lines := -1, align := HORIZONTAL_ALIGNMENT_LEFT, weight := 500) -> float:
 	var f := UiTypography.font(weight)
+	if s != "":
+		_note_text(f, s, pos, font_size, align, width, width)
 	draw_multiline_string(f, Vector2(pos.x, pos.y + f.get_ascent(font_size)), s, align, width,
 			font_size, max_lines, color)
 	return f.get_multiline_string_size(s, align, width, font_size, max_lines).y
@@ -393,12 +503,17 @@ func _box(rect: Rect2, bg: Color, border: Color, border_w: int, radius: int,
 	draw_style_box(sb, rect)
 
 
+## N9: the paper fills the whole canvas edge to edge (the board's frame is the
+## border now): warm lacquer, washi mottling and fibres, a lantern sheen, a gilt hairline.
 func _draw_backdrop() -> void:
-	_box(Rect2(Vector2.ZERO, SIZE), LACQUER, Color(GILT, 0.8), 3, 28)
-	_box(Rect2(Vector2(14, 14), SIZE - Vector2(28, 28)), Color(0, 0, 0, 0), GILT_DIM, 1, 20)
+	draw_rect(Rect2(Vector2.ZERO, SIZE), LACQUER)
+	var washi := _washi_textures()
+	draw_texture_rect(washi[0], Rect2(Vector2.ZERO, SIZE), false, Color(1.0, 0.86, 0.72, 0.075))
+	draw_texture_rect(washi[1], Rect2(Vector2.ZERO, SIZE), false, Color(1.0, 0.93, 0.84, 0.045))
+	_box(Rect2(Vector2(14, 14), SIZE - Vector2(28, 28)), Color(0, 0, 0, 0), GILT_DIM, 1, 6)
 	# Soft sheen from the top, like lacquer under a lantern.
-	draw_polygon(PackedVector2Array([Vector2(26, 26), Vector2(SIZE.x - 26, 26),
-			Vector2(SIZE.x - 26, 330), Vector2(26, 330)]),
+	draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(SIZE.x, 0),
+			Vector2(SIZE.x, 330), Vector2(0, 330)]),
 			PackedColorArray([Color(1, 1, 1, 0.045), Color(1, 1, 1, 0.045), Color(1, 1, 1, 0), Color(1, 1, 1, 0)]))
 	# Corner brackets.
 	for c in [Vector2(34, 34), Vector2(SIZE.x - 34, 34), Vector2(34, SIZE.y - 34), Vector2(SIZE.x - 34, SIZE.y - 34)]:
@@ -444,13 +559,13 @@ func _draw_tabs() -> void:
 		if active:
 			bg = Color(accent.r * 0.20, accent.g * 0.20, accent.b * 0.20, 0.98)
 		elif hot:
-			bg = Color(0.11, 0.105, 0.14, 0.98)
+			bg = LACQUER_HOT
 		var border := Color(accent, 0.95) if active else (Color(GILT, 0.8) if hot else GILT_DIM)
 		_box(r, bg, border, 3 if active else 2, 14)
 		if is_settings:
 			_text("安", r.position + Vector2(16, 4), 62, accent if active or hot else Color(accent, 0.75))
 			_text("SETTINGS", r.position + Vector2(86, 12), 30, PAPER if active else DIM)
-			_text("VR CONFIG", r.position + Vector2(88, 54), 18, Color(accent, 0.9) if active else Color(DIM, 0.8))
+			_text("VR · CREDITS", r.position + Vector2(88, 54), 18, Color(accent, 0.9) if active else Color(DIM, 0.8))
 		else:
 			var el: String = Elements.COMBAT_ELEMENTS[i]
 			_text(Elements.build_label(el), r.position + Vector2(16, 4), 62, accent if active or hot else Color(accent, 0.75))
@@ -533,7 +648,7 @@ func _draw_node(n: Dictionary, accent: Color) -> void:
 			shadow = 16
 			shadow_col = Color(accent, 0.38)
 		"available":
-			bg = Color(0.095, 0.09, 0.12, 0.98)
+			bg = Color(0.14, 0.104, 0.095, 0.98)
 			border = Color(accent, 0.55 + 0.4 * pulse) if affordable else Color(GILT, 0.7)
 			border_w = 3
 			title_col = PAPER
@@ -730,6 +845,8 @@ func _draw_settings() -> void:
 			_draw_ai()
 		PAGE_SANDBOX:
 			_draw_sandbox()
+		PAGE_CREDITS:
+			_draw_credits()
 		_:
 			_draw_controls()
 
@@ -741,12 +858,13 @@ func _draw_subnav() -> void:
 		var active := page == settings_page
 		var hot := String(hover.get("kind", "")) == "settings" and String(hover.get("key", "")) == key
 		var bg := Color(SETTINGS_ACCENT.r * 0.20, SETTINGS_ACCENT.g * 0.20, SETTINGS_ACCENT.b * 0.20, 0.98) if active \
-			else (Color(0.11, 0.105, 0.14, 0.98) if hot else LACQUER_RAISED)
+			else (LACQUER_HOT if hot else LACQUER_RAISED)
 		var border := Color(SETTINGS_ACCENT, 0.95) if active else (Color(GILT, 0.8) if hot else GILT_DIM)
 		_box(r, bg, border, 2 if active else 1, 12)
 		var col := PAPER if (active or hot) else DIM
 		var label := "%s  %s" % [PAGE_KANJI[page], PAGE_NAMES[page]]
-		_text(label, r.position + Vector2(0, (r.size.y - 24.0) * 0.5 - 8.0), 24, col, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 600 if active else 500)
+		var fs := _fit_line(label, r.size.x - 14.0, 24, 600 if active else 500, MIN_TEXT_PX)
+		_text(label, r.position + Vector2(0, (r.size.y - float(fs)) * 0.5 - 8.0), fs, col, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 600 if active else 500)
 		if active:
 			draw_line(r.position + Vector2(16, r.size.y - 1), r.position + Vector2(r.size.x - 16, r.size.y - 1), SETTINGS_ACCENT, 3.0, true)
 
@@ -758,13 +876,13 @@ func _settings_button(key: String, label: String, is_active: bool, accent := SET
 		return
 	var hot := String(hover.get("kind", "")) == "settings" and String(hover.get("key", "")) == key
 	var bg := Color(accent.r * 0.28, accent.g * 0.28, accent.b * 0.28, 0.98) if is_active \
-		else (Color(0.12, 0.115, 0.16, 0.98) if hot else LACQUER_SUNK)
+		else (LACQUER_HOT if hot else LACQUER_SUNK)
 	var border := Color(accent, 0.95) if is_active else (Color(GILT, 0.85) if hot else GILT_DIM)
 	var text_col := PAPER if is_active else (Color(PAPER, 0.95) if hot else DIM)
 	_box(r, bg, border, 2 if (is_active or hot) else 1, 10)
 	var weight := 600 if is_active else 500
 	# Long labels shrink to fit the button instead of being cut.
-	var fsize := mini(font_size, _fit_line(label, r.size.x - 16.0, font_size, weight, 16)) if r.size.x >= 100.0 else 20
+	var fsize := mini(font_size, _fit_line(label, r.size.x - 16.0, font_size, weight, MIN_TEXT_PX)) if r.size.x >= 100.0 else 20
 	_text(label, r.position + Vector2(0, (r.size.y - float(fsize)) * 0.5 - 8.0), fsize, text_col,
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, weight)
 
@@ -1108,3 +1226,59 @@ func _draw_ai() -> void:
 	_wrapped(help1, Vector2(130.0, 655.0), 20, DIM, 1340.0, 1)
 	_wrapped(help2, Vector2(130.0, 690.0), 20, DIM, 1340.0, 1)
 	_wrapped(help3, Vector2(130.0, 725.0), 20, DIM, 1340.0, 1)
+
+
+## CREDITS page (N9): every outside asset with author, source and licence, from
+## data/credits.json (the same list is generated into CREDITS.md). Six rows show;
+## the gilt arrows (trigger), the thumbstick or the mouse wheel scroll.
+func _draw_credits() -> void:
+	var rows := credits_rows()
+	credits_first = clampi(credits_first, 0, credits_max_first())
+	_box(Rect2(66.0, 268.0, 1468.0, 632.0), LACQUER_RAISED, GILT_DIM, 2, 16)
+	_text("謝   WITH THANKS TO", Vector2(90.0, 280.0), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, 800.0, 600)
+	var last := mini(credits_first + CREDITS_ROWS, rows.size())
+	_text("%d – %d  OF  %d" % [credits_first + 1, last, rows.size()], Vector2(1000.0, 284.0), 22, DIM,
+			HORIZONTAL_ALIGNMENT_RIGHT, 400.0)
+	for i in range(credits_first, last):
+		_draw_credit_row(rows[i], CREDITS_TOP + float(i - credits_first) * CREDITS_ROW_H)
+		drawn_credit_names.append(String(rows[i].get("name", "")))
+	# Scroll arrows and the track between them.
+	var at_top := credits_first <= 0
+	var at_end := credits_first >= credits_max_first()
+	_settings_button("credits_up", "", false)
+	_settings_button("credits_down", "", false)
+	for key in ["credits_up", "credits_down"]:
+		var r := settings_rect(key)
+		var c := r.get_center()
+		var up: bool = key == "credits_up"
+		var spent := at_top if up else at_end
+		var dy := -1.0 if up else 1.0
+		var col := Color(GILT, 0.35) if spent else GILT
+		draw_polyline(PackedVector2Array([c + Vector2(-22.0, 10.0 * -dy), c + Vector2(0.0, 12.0 * dy), c + Vector2(22.0, 10.0 * -dy)]), col, 4.0, true)
+	var track := Rect2(1466.0, 490.0, 12.0, 222.0)
+	_box(track, LACQUER_SUNK, GILT_DIM, 1, 6)
+	var span := float(maxi(rows.size(), 1))
+	var thumb_h := maxf(28.0, track.size.y * float(CREDITS_ROWS) / span)
+	var frac := 0.0 if credits_max_first() == 0 else float(credits_first) / float(credits_max_first())
+	_box(Rect2(track.position.x, track.position.y + (track.size.y - thumb_h) * frac, track.size.x, thumb_h), GILT, GILT, 1, 6)
+
+
+func _draw_credit_row(e: Dictionary, y: float) -> void:
+	var x := 96.0
+	var name_x := 236.0
+	var width := 1160.0
+	var kind := String(e.get("kind", ""))
+	_text(kind, Vector2(x, y + 6.0), MIN_TEXT_PX, Color(GILT, 0.9), HORIZONTAL_ALIGNMENT_LEFT, 128.0, 600)
+	var licence := String(e.get("license", ""))
+	var lic_col := Color(0.96, 0.62, 0.50) if licence.contains("BY") else SETTINGS_ACCENT
+	var name := String(e.get("name", ""))
+	_text(name, Vector2(name_x, y), _fit_line(name, 760.0, 26, 600, BODY_TEXT_PX), PAPER, HORIZONTAL_ALIGNMENT_LEFT, 760.0, 600)
+	_text(licence, Vector2(1010.0, y + 3.0), _fit_line(licence, 386.0, BODY_TEXT_PX, 600, MIN_TEXT_PX), lic_col,
+			HORIZONTAL_ALIGNMENT_RIGHT, 386.0, 600)
+	var author := String(e.get("author", ""))
+	var line2 := String(e.get("use", "")) if author == "" else "by %s   ·   %s" % [author, String(e.get("use", ""))]
+	_text(line2, Vector2(name_x, y + 33.0), _fit_line(line2, width, BODY_TEXT_PX, 500, MIN_TEXT_PX), DIM, HORIZONTAL_ALIGNMENT_LEFT, width)
+	var src := String(e.get("source", ""))
+	if src != "":
+		_text(src, Vector2(name_x, y + 61.0), _fit_line(src, width, 20, 500, MIN_TEXT_PX), Color(GILT, 0.85), HORIZONTAL_ALIGNMENT_LEFT, width)
+	draw_line(Vector2(x, y + CREDITS_ROW_H - 6.0), Vector2(1400.0, y + CREDITS_ROW_H - 6.0), GILT_DIM, 1.0, true)

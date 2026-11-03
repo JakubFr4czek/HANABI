@@ -68,6 +68,7 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `katana/grab3d_katana/` | https://grab3d.com/models/weapons/katana/ | Grab3D | CC0 1.0 |
 | `assets/audio/sfx/hanabi_proc/*.wav` (run stingers, forest wind, element imbue cues `imbue_*`, `element_fade`) | `scripts/generate_hanabi_proc_audio.py` in repo | Jakub Frączek / HANABI | CC0 (procedural) |
 | `assets/audio/sfx/hanabi_proc/grab_steel_0.wav`, `crickets_loop.wav` (D13) | `tools/gen_d13_audio.py` in repo | Jakub Frączek / HANABI | CC0 (procedural) |
+| `assets/audio/sfx/hanabi_proc/menu_open_0.wav`, `menu_close_0.wav`, `menu_tick_0.wav`, `menu_tick_1.wav` (N9 menu board: paper rustle, wood knock, tick) | `tools/gen_n9_menu_audio.py` in repo | Jakub Frączek / HANABI | CC0 (procedural) |
 | `assets/icons/*.png` (app icon, adaptive layers), `assets/splash/hanabi_boot.png` (D13) | composed from `assets_incoming/splash/` (HANABI splash art, firework graphic from the asset pack) | Nanjo (for HANABI) | Project-own art, AI-generated for HANABI by Nanjo (firework graphic per the asset pack README); not third-party, no external licence |
 | `assets/models/environment/forest_trees/` (run forest MultiMesh; Grab3D cherry, canopy simplified, albedo recolored for night fog) | https://grab3d.com/models/nature/cherry-blossom-tree/ | Grab3D | CC0 1.0 |
 | `assets/models/environment/forest_quaternius/tree_simple_quaternius.glb` (unused fallback mesh) | https://quaternius.com/packs/simplenature.html | Quaternius | CC0 |

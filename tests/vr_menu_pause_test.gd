@@ -14,6 +14,11 @@ extends Node
 ## - closing resumes everything, the katana is still in the hand, and a
 ##   parry slow-mo keeps the time it had left across the pause
 ## - music is low-passed (750 Hz, -8 dB) while paused and restored after
+## - N9: the board lifts in ≤ 0.3 s of real time with the world paused, never
+##   through Engine.time_scale, and is set down after closing; its text is ≥ 1°
+##   (body) and ≥ 0.7° (fine print) from the eyes wherever it sits on the bent board
+## - N9: the CREDITS page opens and scrolls with the trigger and the thumbstick;
+##   every CC BY asset has its author, and CREDITS.md / LICENSES.md agree with it
 ##   godot --headless --path . --fixed-fps 90 res://tests/vr_menu_pause_test.tscn -- --xr-sim
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
@@ -82,8 +87,211 @@ func _run_all() -> void:
 	await _test_locomotion_speed_boost()
 	await _test_offering_touch_in_vr()
 	await _test_view_buttons_and_height()
+	await _test_board_lifts_in_real_time()
+	await _test_text_angular_size()
+	await _test_credits_page()
+	_test_credits_data()
 	_test_ui_source_has_one_spending_path()
 	run.queue_free()
+
+
+# --- N9. The board as an object --------------------------------------------------
+
+## Opening lifts and unfolds the board in OPEN_SECONDS of real time. A slow-mo left
+## on Engine.time_scale (forced here every frame) must not slow it: the animation
+## counts real seconds, the world stays paused throughout, and the menu never
+## writes Engine.time_scale. Closing sets it down in CLOSE_SECONDS the same way.
+func _test_board_lifts_in_real_time() -> void:
+	run.start_run()
+	run.wave_director.stop_director()
+	await _frames(4)
+	ctl.open()
+	var board := menu.get_node("Board") as Node3D
+	_check("N9: right after opening the board is folded low (progress %.2f, height %.2f, %.3f m down)" % [
+			menu.open_progress(), board.scale.y, -board.position.y],
+		menu.open_progress() < 0.05 and board.scale.y < 0.2 and board.position.y < -0.03)
+	# The forced 0.25 scale has no time effect behind it: the runtime guard would
+	# (rightly) call it stuck, so it looks away for these two loops only.
+	var guard_was := RuntimeGuard.is_physics_processing()
+	RuntimeGuard.set_physics_process(false)
+	var frames := 0
+	var paused_all_along := true
+	var half_height := -1.0
+	while menu.is_animating() and frames < 90:
+		Engine.time_scale = 0.25  # a stale slow-mo: delta shrinks, real time does not
+		await get_tree().physics_frame
+		frames += 1
+		paused_all_along = paused_all_along and get_tree().paused
+		if frames == ceili(SkillTreeMenu.OPEN_SECONDS * 0.5 * 90.0):
+			half_height = board.scale.y
+	_check("N9: the menu never touched Engine.time_scale (%.2f)" % Engine.time_scale, absf(Engine.time_scale - 0.25) < 1e-4)
+	Engine.time_scale = 1.0
+	_check("N9: the lift ends within 0.3 s of real time under a 0.25 time scale (%d frames = %.3f s)" % [frames, frames / 90.0],
+		frames <= ceili(0.3 * 90.0) and menu.open_progress() >= 1.0)
+	_check("N9: it eases out: more than half unfolded at half time (height %.2f)" % half_height, half_height > 0.6)
+	_check("N9: at rest the board stands exactly at its pose (scale %s, offset %s)" % [board.scale, board.position],
+		board.scale.is_equal_approx(Vector3.ONE) and board.position.is_zero_approx())
+	_check("N9: the world was paused for the whole lift", paused_all_along and get_tree().paused)
+	_check("N9: paper-and-wood sounds are loaded (open, close, tick)",
+		Sfx._streams.has("menu_open") and Sfx._streams.has("menu_close") and Sfx._streams.has("menu_tick"))
+	ctl.close()
+	_check("N9: closing hands the world back at once", not get_tree().paused and not menu.is_open and menu.visible)
+	frames = 0
+	while menu.visible and frames < 60:
+		Engine.time_scale = 0.25
+		await get_tree().physics_frame
+		frames += 1
+	Engine.time_scale = 1.0
+	RuntimeGuard.set_physics_process(guard_was)
+	_check("N9: the board is set down and hidden within %.2f s real time (%d frames)" % [SkillTreeMenu.CLOSE_SECONDS, frames],
+		not menu.visible and frames <= ceili(SkillTreeMenu.CLOSE_SECONDS * 90.0) + 1)
+	await _frames(2)
+
+
+## N9: every string of every page, measured where it sits on the bent board from
+## the real head: body copy (≥ BODY_TEXT_PX) at least 1° at the board's centre
+## distance and 0.85° anywhere, the smallest fine print at least 0.7° anywhere.
+func _test_text_angular_size() -> void:
+	ctl.open()
+	await _frames(30)
+	var c := menu.canvas
+	c.record_text = true
+	var head := _camera().global_position
+	var centre_d := head.distance_to(menu.canvas_to_world(SkillTreeCanvas.SIZE * 0.5))
+	var body_centre := menu.text_angle_deg(SkillTreeCanvas.BODY_TEXT_PX, centre_d)
+	_check("N9: body text (%d px) is %.2f° tall from %.2f m (≥ 1°)" % [SkillTreeCanvas.BODY_TEXT_PX, body_centre, centre_d], body_centre >= 1.0)
+	var pages: Array = []
+	for el in Elements.COMBAT_ELEMENTS:
+		pages.append(["tree " + String(el), false, el, 0])
+	for page in SkillTreeCanvas.PAGE_NAMES.size():
+		pages.append(["settings " + String(SkillTreeCanvas.PAGE_NAMES[page]), true, "", page])
+	var worst_fine := INF
+	var worst_fine_label := ""
+	var worst_body := INF
+	var worst_body_label := ""
+	var smallest := 1000
+	var strings := 0
+	for pg: Array in pages:
+		if pg[1]:
+			c.is_settings_tab = true
+			c.settings_page = int(pg[3])
+		else:
+			menu.select_element(String(pg[2]))
+		menu._redraw_now()
+		await _frames(3)
+		for t: Dictionary in c.drawn_text:
+			strings += 1
+			var size := int(t.size)
+			smallest = mini(smallest, size)
+			var deg := menu.text_angle_deg(size, head.distance_to(menu.canvas_to_world(t.center)))
+			if deg < worst_fine:
+				worst_fine = deg
+				worst_fine_label = "%s: '%s' %d px" % [pg[0], t.text, size]
+			if size >= SkillTreeCanvas.BODY_TEXT_PX and deg < worst_body:
+				worst_body = deg
+				worst_body_label = "%s: '%s' %d px" % [pg[0], t.text, size]
+	c.record_text = false
+	c.is_settings_tab = false
+	print("    N9 text: %d strings, smallest %d px, worst fine %.2f° (%s), worst body %.2f° (%s)" % [strings, smallest, worst_fine, worst_fine_label, worst_body, worst_body_label])
+	_check("N9: all %d strings of %d pages were measured" % [strings, pages.size()], strings > 200)
+	_check("N9: no string is smaller than %d px (smallest %d)" % [SkillTreeCanvas.MIN_TEXT_PX, smallest], smallest >= SkillTreeCanvas.MIN_TEXT_PX)
+	_check("N9: the smallest-looking string is still %.2f° (≥ 0.7°): %s" % [worst_fine, worst_fine_label], worst_fine >= 0.7)
+	_check("N9: body text is %.2f° even at the board's far edge (≥ 0.85°): %s" % [worst_body, worst_body_label], worst_body >= 0.85)
+	ctl.close()
+	await _frames(20)
+
+
+## N9: the CREDITS page through the real pointer: tab, sub-tab, the gilt arrows
+## with the trigger, the thumbstick of the pointing hand, and back to the top.
+func _test_credits_page() -> void:
+	var c := await _open_settings()
+	await _click_page("page_credits")
+	_check("N9: the CREDITS sub-tab opens with a trigger click", c.is_settings_tab and c.settings_page == SkillTreeCanvas.PAGE_CREDITS)
+	menu._redraw_now()
+	await _frames(3)
+	var rows := SkillTreeCanvas.credits_rows()
+	_check("N9: the credits page shows the first %d of %d rows (%s)" % [SkillTreeCanvas.CREDITS_ROWS, rows.size(), c.drawn_credit_names],
+		c.credits_first == 0 and c.drawn_credit_names.size() == SkillTreeCanvas.CREDITS_ROWS and c.drawn_credit_names[0] == String(rows[0].name))
+	await _click("left", c.settings_rect("credits_down").get_center())
+	_check("N9: the down arrow scrolls %d rows (first %d)" % [SkillTreeCanvas.CREDITS_STEP, c.credits_first], c.credits_first == SkillTreeCanvas.CREDITS_STEP)
+	for _i in 12:
+		await _click("left", c.settings_rect("credits_down").get_center())
+	menu._redraw_now()
+	await _frames(3)
+	_check("N9: scrolling stops at the last row (first %d of max %d, last shown '%s')" % [c.credits_first, c.credits_max_first(), c.drawn_credit_names.back() if not c.drawn_credit_names.is_empty() else ""],
+		c.credits_first == c.credits_max_first() and not c.drawn_credit_names.is_empty() and c.drawn_credit_names.back() == String(rows.back().name))
+	await _click("left", c.settings_rect("credits_up").get_center())
+	_check("N9: the up arrow scrolls back (first %d)" % c.credits_first, c.credits_first == c.credits_max_first() - SkillTreeCanvas.CREDITS_STEP)
+	# Thumbstick: the right hand rests on the list and pushes the stick up for half a second.
+	var before := c.credits_first
+	await _aim("right", Vector2(700.0, 600.0))
+	sim.set_stick("right", Vector2(0.0, 1.0))
+	await _frames(45)
+	sim.set_stick("right", Vector2.ZERO)
+	await _frames(2)
+	var moved := before - c.credits_first
+	_check("N9: the thumbstick of the pointing hand scrolls up (%d -> %d rows)" % [before, c.credits_first], moved >= 3 and moved <= 6)
+	sim.set_stick("right", Vector2(0.0, 1.0))
+	await _frames(400)
+	sim.set_stick("right", Vector2.ZERO)
+	_check("N9: and stops at the top (first %d)" % c.credits_first, c.credits_first == 0)
+	await _release_triggers()
+	await _tap_menu_button()
+	await _frames(20)
+	_check("N9: the menu closes from the credits page", not ctl.is_open and not menu.visible and not get_tree().paused)
+	c.settings_page = SkillTreeCanvas.PAGE_AUDIO
+
+
+## N9: the credits data says who made what, and the repo's licence files agree.
+func _test_credits_data() -> void:
+	var data := SkillTreeCanvas.credits_data()
+	var entries: Array = data.get("entries", [])
+	_check("N9: data/credits.json lists the outside assets (%d entries)" % entries.size(), entries.size() >= 30)
+	var missing: Array[String] = []
+	var by_without_author: Array[String] = []
+	var unknown: Array[String] = []
+	var kinds := {}
+	for e: Dictionary in entries:
+		kinds[String(e.get("kind", ""))] = true
+		for field in ["kind", "name", "author", "source", "license", "use"]:
+			if String(e.get(field, "")).strip_edges() == "":
+				missing.append("%s.%s" % [e.get("name", "?"), field])
+		var author := String(e.get("author", "")).strip_edges()
+		if String(e.get("license", "")).contains("BY") and (author == "" or author.contains("nieznany")):
+			by_without_author.append(String(e.get("name", "")))
+		if author.contains("nieznany"):
+			unknown.append(String(e.get("name", "")))
+	_check("N9: every entry has name, author, source, licence and use (%s)" % [missing], missing.is_empty())
+	_check("N9: every CC BY asset names its author (%s)" % [by_without_author], by_without_author.is_empty())
+	_check("N9: models, textures, sounds, music, fonts and plugins are all covered (%s)" % [kinds.keys()],
+		kinds.has("MODEL") and kinds.has("TEXTURE") and kinds.has("SOUND") and kinds.has("MUSIC") and kinds.has("FONT") and kinds.has("PLUGIN"))
+	# Every CC BY row of LICENSES.md (assets in use) is credited in game, by its source URL.
+	var sources := {}
+	for e: Dictionary in entries:
+		sources[String(e.source)] = true
+	var lic := FileAccess.get_file_as_string("res://LICENSES.md")
+	var section := lic.get_slice("## Assets in use", 1).get_slice("## Generated in-project", 0)
+	var uncredited: Array[String] = []
+	var by_rows := 0
+	var url_re := RegEx.create_from_string("https?://[^ |,)]+")
+	for line in section.split("\n"):
+		if not line.begins_with("|") or not line.contains("CC BY"):
+			continue
+		by_rows += 1
+		var m := url_re.search(line)
+		if m == null or not sources.has(m.get_string()):
+			uncredited.append(line.left(80))
+	_check("N9: all %d CC BY rows of LICENSES.md are in the in-game credits (%s)" % [by_rows, uncredited], by_rows >= 8 and uncredited.is_empty())
+	# CREDITS.md carries the same list (tools/gen_credits.py).
+	var credits_md := FileAccess.get_file_as_string("res://CREDITS.md")
+	var not_in_md: Array[String] = []
+	for e: Dictionary in entries:
+		if not credits_md.contains(String(e.name).replace("|", "\\|")) or not credits_md.contains(String(e.source)):
+			not_in_md.append(String(e.name))
+	_check("N9: CREDITS.md lists every in-game credit with its source (%s)" % [not_in_md], not_in_md.is_empty())
+	var todo := FileAccess.get_file_as_string("res://docs/CREDITS_TODO.md")
+	var not_in_todo := unknown.filter(func(n: String) -> bool: return not todo.contains(n))
+	_check("N9: unknown authors (%s) are listed in docs/CREDITS_TODO.md" % [unknown], not_in_todo.is_empty())
 
 
 # --- D12. Shrine touch in VR --------------------------------------------------------
@@ -148,7 +356,12 @@ func _test_menu_button_tap_toggles() -> void:
 	_check("pausing never uses Engine.time_scale = 0 (%.2f)" % Engine.time_scale, Engine.time_scale > 0.99)
 	_check("the menu processes while paused", menu.process_mode == Node.PROCESS_MODE_ALWAYS and menu.visible)
 	await _tap_menu_button()
-	_check("tapping Left Menu again closes it", not ctl.is_open and not menu.visible and not get_tree().paused)
+	_check("tapping Left Menu again closes it at once (no input, world running)",
+		not ctl.is_open and not menu.is_open and not get_tree().paused)
+	# N9: the board is set down over CLOSE_SECONDS, then the whole menu is hidden.
+	await _frames(ceili(SkillTreeMenu.CLOSE_SECONDS * 90.0) + 2)
+	_check("and the board is down and hidden %.2f s later" % SkillTreeMenu.CLOSE_SECONDS,
+		not ctl.is_open and not menu.visible and not get_tree().paused)
 
 
 # --- 1b. E3: nothing important lives only on the wrist plate -----------------------------

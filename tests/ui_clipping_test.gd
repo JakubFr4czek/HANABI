@@ -116,6 +116,7 @@ func _test_blocked_falls_back_to_on_top() -> void:
 	var menu := run.pause_controller.menu
 	_check("a blocked panel is drawn on top (no_depth_test, priority %d)" % menu._panel_mat.render_priority,
 		menu.drawn_on_top and menu._panel_mat.no_depth_test and menu._panel_mat.render_priority >= 100)
+	_check("N9: its lacquer frame is drawn on top with it (no half-buried frame)", menu._frame_mat.no_depth_test)
 	run.pause_controller.close()
 	_clear_blockers()
 	await _frames(2)
@@ -171,9 +172,11 @@ func _test_hills() -> void:
 			var feet := await _stand_at(Vector3(spot.x, 0.0, spot.y), yaw)
 			var pose := _pose()
 			var xf: Transform3D = pose.transform
-			var half: Vector2 = SkillTreeMenu.PANEL_SIZE * 0.5 * float(pose.scale)
+			# N9: the board's real lower edge (frame included, on the bend).
+			var half: Vector2 = SkillTreeMenu.OUTER_SIZE * 0.5
+			var sc := float(pose.scale)
 			for sx in [-1.0, 0.0, 1.0]:
-				var corner := xf * Vector3(half.x * sx, -half.y, 0.0)
+				var corner := xf * (SkillTreeMenu.surface_point(half.x * sx, -half.y, 0.0) * sc)
 				var gap := corner.y - forest.height_at(corner.x, corner.z)
 				worst_bottom = minf(worst_bottom, gap)
 				if gap < 0.1:
@@ -265,6 +268,15 @@ func _end_run(clear_blockers: bool = true) -> void:
 func _test_material_guarantees() -> void:
 	var menu := run.pause_controller.menu
 	_check("panel material ignores fog (menu stays crisp in the milk fog)", menu._panel_mat.disable_fog)
+	_check("N9: the frame ignores fog too and is unshaded (baked lantern light, no scene lights)",
+		menu._frame_mat.disable_fog and menu._frame_mat.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED)
+	_check("N9: placement keeps the whole board clear, frame included (%s >= %s)" % [SkillTreeMenu.OUTER_SIZE, SkillTreeMenu.PANEL_SIZE],
+		SkillTreeMenu.OUTER_SIZE.x > SkillTreeMenu.PANEL_SIZE.x and run.pause_controller.get_script().source_code.contains("SkillTreeMenu.OUTER_SIZE"))
+	# The bent board stays inside the depth UiPlacement keeps free around its plane.
+	var aabb := (menu.get_node("Board/Frame") as MeshInstance3D).mesh.get_aabb()
+	_check("N9: the curved frame (z %.3f..%.3f m) stays inside the ±%.2f m slab UiPlacement clears" % [aabb.position.z, aabb.end.z, UiPlacement.CLEARANCE_DEPTH * 0.5],
+		aabb.position.z >= -UiPlacement.CLEARANCE_DEPTH * 0.5 and aabb.end.z <= UiPlacement.CLEARANCE_DEPTH * 0.5
+		and aabb.size.x <= SkillTreeMenu.OUTER_SIZE.x + 0.001 and aabb.size.y <= SkillTreeMenu.OUTER_SIZE.y + 0.001)
 	_check("panel sorts in a high render priority (%d)" % menu._panel_mat.render_priority, menu._panel_mat.render_priority >= 100)
 	_check("pointer beam and reticle are always on top of the panel",
 		menu._beam_mat.no_depth_test and menu._reticle_mat.no_depth_test
@@ -348,22 +360,27 @@ func _space() -> PhysicsDirectSpaceState3D:
 	return run.get_world_3d().direct_space_state
 
 
-## Samples across the (scaled) panel; counts those within 5 cm of any solid.
+## Samples across the (scaled) board as it is really built (N9): the curved
+## frame face in front and the back plate behind, frame included, 7 x 5 each.
+## Counts samples within 5 cm of any solid (of 70).
 func _overlaps(pose: Dictionary) -> int:
 	var xf: Transform3D = pose.transform
-	var half: Vector2 = SkillTreeMenu.PANEL_SIZE * 0.5 * float(pose.scale)
+	var sc := float(pose.scale)
+	var half: Vector2 = SkillTreeMenu.OUTER_SIZE * 0.5
 	var shape := SphereShape3D.new()
 	shape.radius = 0.05
 	var q := PhysicsShapeQueryParameters3D.new()
 	q.shape = shape
 	q.collision_mask = UiPlacement.MASK
 	var hits := 0
-	for ix in 7:
-		for iy in 5:
-			var local := Vector3(lerpf(-half.x, half.x, float(ix) / 6.0), lerpf(-half.y, half.y, float(iy) / 4.0), 0.0)
-			q.transform = Transform3D(Basis.IDENTITY, xf * local)
-			if not _space().intersect_shape(q, 1).is_empty():
-				hits += 1
+	for depth in [SkillTreeMenu.FRAME_FRONT, -SkillTreeMenu.BOARD_DEPTH]:
+		for ix in 7:
+			for iy in 5:
+				var local := SkillTreeMenu.surface_point(lerpf(-half.x, half.x, float(ix) / 6.0),
+						lerpf(-half.y, half.y, float(iy) / 4.0), depth) * sc
+				q.transform = Transform3D(Basis.IDENTITY, xf * local)
+				if not _space().intersect_shape(q, 1).is_empty():
+					hits += 1
 	return hits
 
 
@@ -379,7 +396,7 @@ func _plaque_overlaps(plaque: VotiveTablet) -> int:
 
 func _check_pose(label: String, pose: Dictionary) -> void:
 	var overlaps := _overlaps(pose)
-	_check("%s: nothing within 5 cm of the panel (%d of 35 samples; blocked flag %s)" % [label, overlaps, pose.blocked],
+	_check("%s: nothing within 5 cm of the board, frame and back plate (%d of 70 samples; blocked flag %s)" % [label, overlaps, pose.blocked],
 		overlaps == 0 and not bool(pose.blocked))
 	var head := get_tree().get_first_node_in_group("player_head") as Node3D
 	var d: float = head.global_position.distance_to((pose.transform as Transform3D).origin)
