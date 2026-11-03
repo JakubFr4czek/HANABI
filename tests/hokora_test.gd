@@ -22,7 +22,12 @@ extends Node
 ##   choice exactly once (a second press while open and a press after the cut do nothing), the
 ##   candle flares, and the used shrine never shows its prompt again
 ## - Windowed only: at 1.5 m the lit sign sits whole in the frame and its ink reads on the paper
-## godot --headless --path . --fixed-fps 90 res://tests/hokora_test.tscn -- --desktop [--only-f3]
+## - F7 soul vessels: a seed plans exactly SoulVesselManager.COUNT vessels, MIN_SPACING apart,
+##   each within 8 m of the footpath network, the same spots every run; A/X (reach_for_offering)
+##   in reach releases one exactly once and the wrist row reads DUSZE n/N; N/N saves the village
+##   (state GAME_OVER, village_saved, the stele says so). Windowed: the vessel's glow reads in the
+##   frame from 8 m (with `--f7-shots`: screenshots to docs/f7/)
+## godot --headless --path . --fixed-fps 90 res://tests/hokora_test.tscn -- --desktop [--only-f3 | --only-f7]
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
 const TEST_SAVE_PATH := "user://test_hokora_high_score.cfg"
@@ -51,6 +56,10 @@ func _run_all() -> void:
 	run.wave_director.clear_enemies()
 	await _frames(4)
 
+	if "--only-f7" in OS.get_cmdline_user_args():
+		await _test_f7_soul_vessels()
+		run.queue_free()
+		return
 	await _test_walking_up_opens_nothing()
 	await _test_prompt_only_in_reach()
 	await _test_key_press_opens_once()
@@ -74,6 +83,7 @@ func _run_all() -> void:
 	await _test_one_candle_light()
 	await _test_shrine_reads_in_the_fog()
 	await _test_lantern_reads_at_10m()
+	await _test_f7_soul_vessels()
 
 	run.queue_free()
 
@@ -938,3 +948,146 @@ func _check(label: String, ok: bool) -> void:
 func _frames(count: int) -> void:
 	for i in count:
 		await get_tree().physics_frame
+
+
+# --- F7: soul vessels ------------------------------------------------------------------
+
+func _test_f7_soul_vessels() -> void:
+	_fresh_run()
+	await _frames(6)
+	var sv := run.soul_vessels
+	var spots := sv.spots.duplicate()
+	_check("F7: the seed plans exactly %d soul vessels (%d)" % [SoulVesselManager.COUNT, spots.size()],
+		spots.size() == SoulVesselManager.COUNT)
+	var min_gap := INF
+	for i in spots.size():
+		for j in range(i + 1, spots.size()):
+			min_gap = minf(min_gap, Vector2(spots[i].x - spots[j].x, spots[i].z - spots[j].z).length())
+	_check("F7: vessels stand >= %.0f m apart (closest %.1f m)" % [SoulVesselManager.MIN_SPACING, min_gap],
+		min_gap >= SoulVesselManager.MIN_SPACING)
+	var reachable := true
+	for p in spots:
+		if run.forest_world.paths.nearest_point(Vector2(p.x, p.z), 8.0) == Vector2.INF:
+			reachable = false
+	_check("F7: every vessel is within 8 m of a footpath", reachable)
+	_fresh_run()
+	await _frames(2)
+	_check("F7: a new run lays the vessels in the same places", run.soul_vessels.spots == spots)
+	# Release one: stand beside it, press A/X (reach_for_offering) twice.
+	await _f7_stand_near(0, 1.4)
+	var v := sv.vessel(0)
+	_check("F7: walking near builds the vessel (komainu scan + glow)", v != null and v.get_node_or_null("Komainu") != null)
+	run.reach_for_offering()
+	run.reach_for_offering()
+	await _frames(3)
+	_check("F7: one press releases one soul, a second press on it does nothing (%d)" % sv.released_count(),
+		sv.released_count() == 1 and sv.is_released(0))
+	_check("F7: the wrist reads DUSZE 1/%d (%s %s)" % [spots.size(), run.diegetic_hud.row_label("souls"), run.diegetic_hud.row_value("souls")],
+		run.diegetic_hud.row_label("souls") == "DUSZE" and run.diegetic_hud.row_value("souls") == "1/%d" % spots.size())
+	_check("F7: the run goes on after one soul", run.state == RunGame.RunState.PLAYING)
+	if _rendering() and "--f7-shots" in OS.get_cmdline_user_args():
+		await _frames(50)
+		await _f7_shot("f7_release.png")
+	for i in range(1, spots.size()):
+		await _f7_stand_near(i, 1.4)
+		run.reach_for_offering()
+		await _frames(2)
+	_check("F7: %d/%d souls released" % [sv.released_count(), spots.size()], sv.released_count() == spots.size())
+	_check("F7: all souls = the village is saved, the run ends", run.state == RunGame.RunState.GAME_OVER and run.village_saved)
+	var saved_label := false
+	for l in run._end_screen_root.find_children("*", "Label3D", true, false):
+		if (l as Label3D).text == "THE VILLAGE IS SAVED":
+			saved_label = true
+	_check("F7: the stele reads THE VILLAGE IS SAVED", saved_label)
+	if _rendering() and "--f7-shots" in OS.get_cmdline_user_args():
+		await _frames(20)
+		await _f7_shot("f7_win.png")
+	await _test_f7_vessel_reads_at_8m()
+
+
+## Stands the player [param meters] from vessel [param i] on its footpath side, facing it.
+func _f7_stand_near(i: int, meters: float) -> void:
+	var at: Vector3 = run.soul_vessels.spots[i]
+	var path := run.forest_world.paths.nearest_point(Vector2(at.x, at.z), 8.0)
+	var dir := Vector2(path.x - at.x, path.y - at.z)
+	dir = dir.normalized() if dir.length() > 0.1 else Vector2(0, 1)
+	var stand := Vector3(at.x + dir.x * meters, 0.0, at.z + dir.y * meters)
+	stand.y = run.forest_world.height_at(stand.x, stand.z)
+	player.teleport(stand, atan2(-(at.x - stand.x), -(at.z - stand.z)))
+	run.forest_world.finish_pending()
+	await _frames(4)
+
+
+func _f7_shot(file: String) -> void:
+	await RenderingServer.frame_post_draw
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://docs/f7"))
+	player.get_viewport().get_texture().get_image().save_png(ProjectSettings.globalize_path("res://docs/f7/" + file))
+	print("SHOT  docs/f7/" + file)
+
+
+## Windowed only: from 8 m, with a free sight line, the vessel's wisp is the brightest,
+## cool spot of its rectangle and stands clear of the forest behind it.
+func _test_f7_vessel_reads_at_8m() -> void:
+	if not _rendering():
+		print("SKIP  F7: the soul vessel reads at 8 m (windowed only: pixels)")
+		return
+	_fresh_run()
+	await _frames(6)
+	var sv := run.soul_vessels
+	var space := run.get_world_3d().direct_space_state
+	var best := -1
+	var stand := Vector3.ZERO
+	var at := Vector3.ZERO
+	for i in sv.spots.size():
+		at = sv.spots[i]
+		for k in 16:
+			var yaw := TAU * float(k) / 16.0
+			var s := at + Vector3(sin(yaw), 0.0, cos(yaw)) * 8.0
+			s.y = run.forest_world.height_at(s.x, s.z)
+			var q := PhysicsRayQueryParameters3D.create(s + Vector3(0, 1.6, 0), at + Vector3(0, SoulVessel.WISP_Y, 0), ForestWorld.TRUNK_LAYER)
+			if space.intersect_ray(q).is_empty() and run.forest_world.is_clear_of_props(s.x, s.z, 0.6):
+				best = i
+				stand = s
+				break
+		if best >= 0:
+			break
+	_check("F7: some vessel has a free 8 m sight line", best >= 0)
+	if best < 0:
+		return
+	at = sv.spots[best]
+	player.teleport(stand, atan2(-(at.x - stand.x), -(at.z - stand.z)))
+	run.forest_world.finish_pending()
+	_look_down(4.0)
+	await _frames(60)
+	var v := sv.vessel(best)
+	var viewport := player.get_viewport().get_visible_rect().size
+	var rect := _box_rect(player.camera, Transform3D(Basis(), at), AABB(Vector3(-0.6, 0.0, -0.6), Vector3(1.2, 1.6, 1.2)), viewport)
+	v.visible = false
+	await _frames(3)
+	await RenderingServer.frame_post_draw
+	var before := player.get_viewport().get_texture().get_image()
+	if "--f7-shots" in OS.get_cmdline_user_args():
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://docs/f7"))
+		before.save_png(ProjectSettings.globalize_path("res://docs/f7/f7_before_8m.png"))
+	v.visible = true
+	await _frames(3)
+	await RenderingServer.frame_post_draw
+	var img := player.get_viewport().get_texture().get_image()
+	if "--f7-shots" in OS.get_cmdline_user_args():
+		img.save_png(ProjectSettings.globalize_path("res://docs/f7/f7_vessel_8m.png"))
+		print("SHOT  docs/f7/f7_before_8m.png, f7_vessel_8m.png")
+	var centre := Vector2(viewport) * 0.5
+	var in_frame := rect.size.x >= 6 and rect.size.y >= 6
+	_check("F7: 8 m: the vessel sits in the frame (%s)" % rect, in_frame)
+	var glow := _bright_colour(img, rect, 0.04)
+	var bg := _bright_colour(before, rect, 0.04)
+	_check("F7: 8 m: the glow lifts the vessel above the forest (luma %.2f vs %.2f without it)" % [_luma(glow), _luma(bg)],
+		_luma(glow) > _luma(bg) + 0.12)
+	_check("F7: 8 m: the glow is cool soul-blue, not warm (hue %.0f°)" % (glow.h * 360.0),
+		glow.b > glow.r and glow.h * 360.0 > 160.0 and glow.h * 360.0 < 240.0)
+	_check("F7: 8 m: the vessel stands near the middle of the view", Vector2(rect.get_center()).distance_to(centre) < viewport.x * 0.3)
+	# The wrist readout with the counter (desktop pins it to the camera).
+	if "--f7-shots" in OS.get_cmdline_user_args():
+		await _f7_stand_near(best, 1.6)
+		await _frames(30)
+		await _f7_shot("f7_prompt.png")

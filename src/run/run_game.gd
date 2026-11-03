@@ -57,6 +57,10 @@ var run_used_sandbox := false
 ## Hokora shrines this run gave their buff (D12). Reset every run.
 var shrines_claimed := 0
 var hokora_manager: HokoraManager = null
+## F7: the run's goal, the soul vessels (not SoulOrb). All released = the village is saved.
+var soul_vessels: SoulVesselManager = null
+## F7: true when the run ended because every soul was released.
+var village_saved := false
 var shrine_offering: ShrineOffering = null
 ## Timed buffs from the shrine choices (D12). Reset every run.
 var buffs := RunBuffs.new()
@@ -274,6 +278,13 @@ func _configure_run_forest() -> void:
 	else:
 		hokora_manager.prompt_key = OS.get_keycode_string(OFFERING_KEY)
 		hokora_manager.prompt_action = "MAKE AN OFFERING"
+	if soul_vessels == null:
+		soul_vessels = SoulVesselManager.new()
+		soul_vessels.name = "SoulVessels"
+		add_child(soul_vessels)
+		soul_vessels.soul_released.connect(_on_soul_released)
+	soul_vessels.setup(forest_world, player, forest_world.torii_manager)
+	soul_vessels.key_text = "A / X" if player is XRPlayer else OS.get_keycode_string(OFFERING_KEY)
 	# D13: wind, crickets and a far temple bell; silent until the run starts (splash, end screen).
 	if get_node_or_null("RunForestAmbience") == null:
 		forest_ambience = RunForestAmbience.new()
@@ -517,6 +528,9 @@ func start_run() -> void:
 	# After the forest: the opening shrine is validated against the chunks around the spawn.
 	if hokora_manager and spawn:
 		hokora_manager.reset(spawn.global_position, -spawn.global_transform.basis.z)
+	if soul_vessels and spawn:
+		soul_vessels.reset(spawn.global_position)
+	village_saved = false
 	set_seal_progress([])
 
 	var health := _player_health()
@@ -799,7 +813,18 @@ func _offering_haptic() -> void:
 ## reach for the nearest altar or bell for one physics frame. VR hands also
 ## still open it by touch; the shrine's own reach check applies either way.
 func reach_for_offering() -> void:
+	# F7: a soul vessel in reach takes the press first (it never also opens a shrine).
+	if state == RunState.PLAYING and soul_vessels and soul_vessels.try_release():
+		return
 	_desktop_reach = true
+
+
+## F7: one soul more on the wrist; the last one saves the village and ends the run.
+func _on_soul_released(_index: int, released: int, total: int) -> void:
+	_offering_haptic()
+	_refresh_hud()
+	if released >= total and state == RunState.PLAYING:
+		_end_run(true)
 
 
 ## The suzu (P8): a hand or the blade tip on the bell, with the player in reach, stores
@@ -1009,9 +1034,15 @@ func compute_score() -> int:
 
 
 func _on_player_died() -> void:
+	_end_run(false)
+
+
+## Ends the run: death ([param saved] false) or every soul released (F7, true).
+func _end_run(saved: bool) -> void:
 	if state == RunState.GAME_OVER:
 		return
 	state = RunState.GAME_OVER
+	village_saved = saved
 	if distant_fireworks:
 		distant_fireworks.set_enabled(false)
 	# Per-run progression ends with the run (E2c, D12): points, unlocks and buffs reset.
@@ -1024,7 +1055,8 @@ func _on_player_died() -> void:
 	TimeController.clear()
 	# D13: no freeze on death. The world sinks into a slow fall while the sound
 	# is ducked and low-passed (Music and Ambience go quiet, UI clicks stay sharp).
-	TimeController.death_fall(DEATH_FALL_SEC)
+	if not saved:
+		TimeController.death_fall(DEATH_FALL_SEC)
 	Sfx.set_pause_ducking(true, DEATH_FALL_SEC)
 	if forest_ambience:
 		forest_ambience.set_active(false)
@@ -1052,6 +1084,9 @@ func _on_player_died() -> void:
 		"level": level,
 		"wave": wave_director.wave,
 		"shrines": shrines_claimed,
+		"souls": soul_vessels.released_count() if soul_vessels else 0,
+		"souls_total": soul_vessels.total() if soul_vessels else 0,
+		"saved": saved,
 		"build": element_system.build_summary() if element_system else "Unbound",
 		"kcal": floori(calorie_meter.kcal) if calorie_meter else 0,
 		"sandbox": run_used_sandbox,
@@ -1121,6 +1156,10 @@ func _build_end_screen(summary: Dictionary) -> void:
 		["chiru", 34, 0.00128, Color(0.66, 0.68, 0.78), 0.075],
 		["%d pt" % int(summary.score), 40, 0.00140, Color(0.88, 0.9, 0.96), 0.022],
 	]
+	if summary.get("saved", false):
+		# F7: every soul released. 救 (sukui, salvation) in the souls' pale blue.
+		rows[0] = ["救", 104, 0.00250, SoulVessel.SOUL_COLOR * 1.15, 0.215]
+		rows[1] = ["THE VILLAGE IS SAVED", 34, 0.00128, Color(0.82, 0.9, 1.0), 0.075]
 	if summary.get("new_record", false):
 		rows.append(["★ NEW RECORD", 28, 0.00112, Color(1.1, 0.78, 0.42), -0.012])
 	elif summary.get("sandbox", false):
@@ -1139,7 +1178,7 @@ func _build_end_screen(summary: Dictionary) -> void:
 		board.add_child(lbl)
 
 	# One line for what the run gave back: shrines found (D1).
-	var shrine_line := "祠  ×%d  visited" % shrines_claimed
+	var shrine_line := "祠  ×%d  visited   ·   魂  %d / %d  freed" % [shrines_claimed, int(summary.get("souls", 0)), int(summary.get("souls_total", 0))]
 	var upg_lbl := MemorialTypography.stele_label(shrine_line, 28, 0.00108, Color(0.74, 0.8, 0.92), Vector3(0, -0.19, 0.024))
 	upg_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	board.add_child(upg_lbl)
@@ -1195,6 +1234,11 @@ func _refresh_hud() -> void:
 	var max_hp_val := health.max_hp if health else 100.0
 	var elem := element_system.visual_element() if element_system else (katana.element if katana else Elements.NONE)
 	diegetic_hud.update_hud(hp_val, max_hp_val, xp, xp_to_next, level, maxi(wave_director.wave, 1), score, kills, run_time, elem, skill_points, buffs.hud_text())
+	# F7: the souls freed this run, under the F1 rows.
+	if soul_vessels and soul_vessels.total() > 0:
+		var freed := soul_vessels.released_count()
+		var total := soul_vessels.total()
+		diegetic_hud.set_row("souls", "DUSZE", "%d/%d" % [freed, total], float(freed) / float(total), SoulVessel.SOUL_COLOR)
 
 
 func _on_parry_diegetic(_info: Dictionary) -> void:
