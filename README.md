@@ -1,5 +1,11 @@
 # HANABI (花火)
 
+**Cut your way through an endless, foggy yōkai forest with a real physics katana.** HANABI is a VR melee survivor-like for Meta Quest 3, set on the night of a village matsuri: the sword has weight, stops on walls and splits enemies along the plane of a clean cut. Four elemental schools (Sakura, Storm, Ink, Shadow) form a counter ring, shrines offer ofuda buffs, and every few minutes an Oni arrives whose tactics and taunts come from Meta's Muse Spark model, reading how you fight. Submission text: [`docs/SUBMISSION.md`](docs/SUBMISSION.md).
+
+**Install on Quest 3:** download the `hanabi.apk` artifact of the **quest-apk** GitHub Actions workflow and sideload it with `adb install -r hanabi.apk` (Developer Mode); step by step in [`docs/QUEST_TEST.md`](docs/QUEST_TEST.md). **Build / run from source:** open the project in Godot 4.7.2 (see [Requirements](#requirements) and [Run on Meta Quest](#run-on-meta-quest-standalone) below).
+
+---
+
 VR melee survivor-like for Meta Quest: Blade & Sorcery–style physics swordplay in a foggy, procedurally generated dark Japan. Built with **Godot 4.7 (GDScript) + OpenXR**, for the Meta Global AI Developer Hackathon 2026.
 
 The design reference is [`docs/GDD.md`](docs/GDD.md). The elemental architecture plan is [`docs/ELEMENTS_PLAN.md`](docs/ELEMENTS_PLAN.md). The development brief is [`docs/HANABI_agent_prompt.md`](docs/HANABI_agent_prompt.md).
