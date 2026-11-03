@@ -86,6 +86,8 @@ const OPENING_STRIKE_SCENE := preload("res://scenes/cinematic/opening_strike.tsc
 var run_cinematic: OpeningStrike
 var forest_ambience: RunForestAmbience
 var restart_ema: VotiveTablet = null
+## N10: smoothed window camera for recording the demo (null on Quest).
+var spectator: SpectatorCamera = null
 var _boot_splash_played := false
 
 var _souls_root: Node3D
@@ -105,6 +107,8 @@ func _ready() -> void:
 	add_to_group("run_game")
 	super._ready()
 	QuestPerfOverlay.attach_if_needed(self)
+	# N10: demo-recording camera on the window (PC only, off until F7).
+	spectator = SpectatorCamera.attach_if_supported(self)
 	GameEvents.log_event("session_start", {"scene": "run", "xr": is_xr_available() and not OS.get_cmdline_user_args().has("--desktop")})
 
 	if katana:

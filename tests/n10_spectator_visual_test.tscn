@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/n10_spectator_visual_test.gd" id="1_n10"]
+
+[node name="N10SpectatorVisualTest" type="Node"]
+script = ExtResource("1_n10")

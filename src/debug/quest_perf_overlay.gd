@@ -27,6 +27,7 @@ static func attach_if_needed(root: Node) -> void:
 
 func _init() -> void:
 	layer = 128
+	add_to_group(SpectatorCamera.DEBUG_GROUP)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
