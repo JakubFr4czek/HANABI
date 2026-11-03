@@ -298,8 +298,8 @@ func _rows_and_figure() -> void:
 	var health := (run.player as DesktopPlayer).health
 
 	# The rows, top to bottom: HP, KCAL, ŁADUNKI, CZAS (F1).
-	_check("rows read top to bottom: HP, KCAL, ŁADUNKI, CZAS, STAMINA (%s)" % [hud.row_keys()],
-		hud.row_keys() == ["hp", "kcal", "charges", "time", "stamina"])
+	_check("rows read top to bottom: HP, KCAL, ŁADUNKI, CZAS, STAMINA, DUSZE (%s)" % [hud.row_keys()],
+		hud.row_keys() == ["hp", "kcal", "charges", "time", "stamina", "souls"])
 	_check("row labels read HP, KCAL, ŁADUNKI, CZAS",
 		hud.row_label("hp") == "HP" and hud.row_label("kcal") == "KCAL"
 		and hud.row_label("charges") == "ŁADUNKI" and hud.row_label("time") == "CZAS")
@@ -373,6 +373,16 @@ func _rows_and_figure() -> void:
 		above_bottom = box.end.y
 	_check("the rows fit the column (half width %.4f m)" % half_w, fits)
 	_check("the rows stack top to bottom without overlap", stacked)
+	# F6 rev.: label (left) and value (right) keep a gap on every row; on ŁADUNKI the value clears the pips.
+	var worst_gap := INF
+	for k in hud.row_keys():
+		var lv := hud.row_labels(k)
+		var right_of_label: float = lv[0].position.x + DiegeticHud.text_width(lv[0])
+		if k == "charges":
+			right_of_label = -DiegeticHud.PANEL_HALF_WIDTH + float(ElementSystem.MAX_CHARGES - 1) * DiegeticHud.PIP_PITCH + DiegeticHud.PIP_SIZE
+		var left_of_value: float = lv[1].position.x - DiegeticHud.text_width(lv[1])
+		worst_gap = minf(worst_gap, left_of_value - right_of_label)
+	_check("every row keeps a gap between label and value (worst %.4f m)" % worst_gap, worst_gap >= DiegeticHud.LABEL_VALUE_GAP - 0.0002)
 
 	# F6: the run's stamina row sits under CZAS and follows the bar (amber when winded).
 	var stamina := hud.row_labels("stamina")
@@ -394,15 +404,15 @@ func _rows_and_figure() -> void:
 	hud.set_row("probe", "PROBA", "100", 1.0, DiegeticHud.TEAL)
 	await _frames(2)
 	var probe := hud.row_labels("probe")
-	_check("set_row adds a row under STAMINA (%d rows)" % hud.row_keys().size(),
-		hud.row_keys().size() == 6 and hud.row_keys()[5] == "probe")
+	_check("set_row adds a row at the bottom (%d rows)" % hud.row_keys().size(),
+		hud.row_keys().size() == 7 and hud.row_keys()[6] == "probe")
 	_check("the new row carries its label, value and bar", probe.size() == 2 and probe[0].text == "PROBA"
 		and probe[1].text == "100" and absf(hud.row_fill("probe") - 1.0) < 0.001)
-	_check("the new row sits below STAMINA", _plate_box(hud, probe[0]).position.y >= _plate_box(hud, stamina[0]).end.y)
+	_check("the new row sits below DUSZE", _plate_box(hud, probe[0]).position.y >= _plate_box(hud, hud.row_labels("souls")[0]).end.y)
 	hud.set_row("probe", "PROBA", "40", 0.4, DiegeticHud.TEAL)
 	await _frames(1)
 	_check("set_row updates an existing row in place (%s, fill %.2f)" % [hud.row_value("probe"), hud.row_fill("probe")],
-		hud.row_keys().size() == 6 and hud.row_value("probe") == "40" and absf(hud.row_fill("probe") - 0.4) < 0.01)
+		hud.row_keys().size() == 7 and hud.row_value("probe") == "40" and absf(hud.row_fill("probe") - 0.4) < 0.01)
 	run.queue_free()
 	await _frames(2)
 

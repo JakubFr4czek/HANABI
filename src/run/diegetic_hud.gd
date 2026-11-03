@@ -38,6 +38,12 @@ const PLATE_PAD := 0.0055
 const PLATE_COLOR := Color(0.035, 0.04, 0.07, 0.72)
 const LABEL_FONT := 31
 const VALUE_FONT := 39
+## F6 rev.: a fixed gap (m) between a row's label (left edge) and its value (right edge); a value
+## that would not fit shrinks, then the label, so nothing touches or overlaps.
+const LABEL_VALUE_GAP := 0.0045
+## The value on a pip row (ŁADUNKI) sits on the pips' line, smaller so it clears the label above.
+const PIP_VALUE_FONT := 30
+const MIN_FIT_FONT := 20
 const SANDBOX_FONT := 18
 const GUARD_FONT := 22
 
@@ -71,7 +77,8 @@ const SHOW_FOREARM_DEG := 35.0
 const HIDE_FOREARM_DEG := 50.0
 const FADE_SECONDS := 0.15
 ## Desktop: where the readout hangs in front of the camera while H is held.
-const DESKTOP_OFFSET := Vector3(-0.16, -0.14, -0.30)
+## F6 rev.: higher than before so all rows (plate grows downward with F6/F7 rows) stay in frame.
+const DESKTOP_OFFSET := Vector3(-0.16, -0.07, -0.30)
 
 const MAX_FACE_TILT_DEG := 10.0
 
@@ -239,6 +246,7 @@ func set_row(key: String, label_text: String, value_text: String, ratio: float =
 	var has_pips := not pips.is_empty()
 	# With pips the value sits on the pips' line, right of them; otherwise on the label's line.
 	row.value.position.z = row_top(int(row.index)) + (ROW_BAR_DOWN if has_pips else ROW_LABEL_DOWN)
+	_fit_row_text(row, pips.size() if has_pips else 0)
 	var has_bar := ratio >= 0.0 and not has_pips
 	row.track.visible = has_bar
 	row.fill.visible = has_bar and ratio > 0.0
@@ -255,6 +263,40 @@ func set_row(key: String, label_text: String, value_text: String, ratio: float =
 	_rows[key] = row
 	if not _row_keys.has(key):
 		_row_keys.append(key)
+
+
+## Rendered width (m) of a label's text at [param size] (its own font size when -1).
+static func text_width(l: Label3D, size: int = -1) -> float:
+	if l.font == null or l.text.is_empty():
+		return 0.0
+	return l.font.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, l.font_size if size < 0 else size).x * l.pixel_size
+
+
+## Keeps the label (left) and value (right) of a row apart by LABEL_VALUE_GAP inside the column.
+## On a pip row the value shares its line with [param pip_count] pips instead of the label.
+## Sizes are worked out first and set only when they change (a Label3D re-shapes on every set).
+func _fit_row_text(row: Dictionary, pip_count: int) -> void:
+	var label := row.label as Label3D
+	var value := row.value as Label3D
+	var room := PANEL_HALF_WIDTH * 2.0
+	var ls := LABEL_FONT
+	var vs := PIP_VALUE_FONT if pip_count > 0 else VALUE_FONT
+	if pip_count > 0:
+		var pips_w := float(pip_count - 1) * PIP_PITCH + PIP_SIZE
+		while vs > MIN_FIT_FONT and pips_w + LABEL_VALUE_GAP + text_width(value, vs) > room:
+			vs -= 1
+		while ls > MIN_FIT_FONT and text_width(label, ls) > room:
+			ls -= 1
+	else:
+		while vs > ls and text_width(label, ls) + LABEL_VALUE_GAP + text_width(value, vs) > room:
+			vs -= 1
+		while ls > MIN_FIT_FONT and text_width(label, ls) + LABEL_VALUE_GAP + text_width(value, vs) > room:
+			ls -= 1
+			vs = mini(vs, ls)
+	if label.font_size != ls:
+		label.font_size = ls
+	if value.font_size != vs:
+		value.font_size = vs
 
 
 ## The row's value text, or "" for an unknown key (tests and the F6/F7 readers).
