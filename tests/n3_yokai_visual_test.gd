@@ -50,11 +50,20 @@ func _ready() -> void:
 
 
 func _run_all() -> void:
+	# Deterministic bodies: the pose variation and sway draw from the global RNG.
+	seed(0x4E3132)
 	var run: RunGame = RUN_SCENE.instantiate()
 	run.skip_run_intro = true
 	# The run-start controls hint (added after N3) floats over the yōkai's head in this view.
 	run.controls_hint_shown = true
 	add_child(run)
+	# Deterministic weather: no lightning may flash a frame (the horns-on-sky check depends on it).
+	var storm := run.get_node_or_null("Arena/StormLightning") as StormLightning
+	if storm:
+		storm.set_process(false)
+		storm.visible = false
+		storm._strike_age = -1.0
+		storm._set_flash(0.0)
 	var player := run.player as DesktopPlayer
 	var director := run.wave_director
 	director.stop_director()

@@ -21,7 +21,9 @@ const SEVERABLE := ["arm_l", "arm_r", "leg_l", "leg_r", "head"]
 const SKIN_BASE := Color(0.165, 0.155, 0.225)
 ## N12: moon-silver fresnel rim on the body (shader emission, no light source): the silhouette
 ## separates from the storm fog at 3–8 m. A school or elite tints it a little (SCHOOL_RIM_MIX).
-const SKIN_RIM := Color(0.26, 0.28, 0.36)
+const SKIN_RIM := Color(0.34, 0.38, 0.50)
+## Width of the rim band (fresnel power; lower = wider, the whole outline reads at 4 m).
+const SKIN_RIM_POWER := 1.7
 const SCHOOL_RIM_MIX := 0.4
 ## N12: underside shading of the skin (the shader's procedural_ao): a soft top-to-bottom
 ## gradient over each rounded form instead of one flat colour.
@@ -90,6 +92,7 @@ const DEATH_PETALS := 90
 ## Sky fill on the mask: higher than the skin, so the face and horns keep their form in the dark.
 const MASK_FILL := 0.85
 const HORN_IVORY := Color(0.86, 0.80, 0.66)
+const HORN_LIFT := 0.5
 ## Fresnel rim on the mask edges (the shader's fog_rim, no light): the horns and brow read as edges.
 const MASK_RIM := 0.7
 ## Warm emission lift of the mask lacquer (a few percent of its own colour; no light source).
@@ -188,6 +191,8 @@ func _ready() -> void:
 	_skin.set_shader_parameter("flash_color", Color(1.0, 0.36, 0.22))
 	_skin.set_shader_parameter("procedural_ao", SKIN_AO)
 	_skin.set_shader_parameter("rim_tint", SKIN_RIM)
+	_skin.set_shader_parameter("rim_power", SKIN_RIM_POWER)
+	_skin.set_shader_parameter("albedo_texture", _skin_gradient())
 
 	# The demon mask (N3): its own albedo, ORM and normal map through the wet shader. The
 	# albedo is a dark lacquer; the base colour lifts it to an aged, desaturated tone.
@@ -225,6 +230,11 @@ func _ready() -> void:
 	# Old ivory: it catches the moon and reads against the sky at 3 m.
 	_horn_mat.albedo_color = HORN_IVORY
 	_horn_mat.roughness = 0.45
+	# N12 fix1: without a lightning flash the ivory went as dark as the night sky behind it;
+	# a lift of its own colour (no light source) keeps it pale bone against the sky at 3 m.
+	_horn_mat.emission_enabled = true
+	_horn_mat.emission = HORN_IVORY
+	_horn_mat.emission_energy_multiplier = HORN_LIFT
 	_eyes.albedo_color = Color(0.95, 0.18, 0.10)
 	_eyes.emission_enabled = true
 	_eyes.emission = Color(1.6, 0.22, 0.08)
@@ -340,6 +350,7 @@ func _reset_spawn_look() -> void:
 	_skin.set_shader_parameter("fill", 1.65)
 	_skin.set_shader_parameter("flash", 0.0)
 	_set_rim(SKIN_RIM)
+	_horn_mat.emission_energy_multiplier = HORN_LIFT
 	_mask_mat.set_shader_parameter("fill", MASK_FILL)
 	_mask_mat.set_shader_parameter("flash", 0.0)
 	_sash.set_shader_parameter("base_color", Color(0.46, 0.055, 0.075))
@@ -380,6 +391,26 @@ func _apply_kind_visuals() -> void:
 	_sash.set_shader_parameter("base_color", accent.darkened(0.55))
 	_claw_mat.emission = ember * 1.2
 	_set_rim(SKIN_RIM.lerp(accent * 0.3, 0.6))
+
+
+## N12 fix1: albedo along each form's length (UV.y = ring, bottom to top): the top of every
+## form darkens into the joint – a shadowed collar under the mask, darker shoulders and hips –
+## so the mask stands off the body and the forms read as rounded, not flat-coloured.
+static var _gradient_tex: GradientTexture2D
+
+
+static func _skin_gradient() -> GradientTexture2D:
+	if _gradient_tex == null:
+		var g := Gradient.new()
+		g.offsets = PackedFloat32Array([0.0, 0.72, 1.0])
+		g.colors = PackedColorArray([Color(1, 1, 1), Color(0.97, 0.97, 0.97), Color(0.5, 0.5, 0.52)])
+		_gradient_tex = GradientTexture2D.new()
+		_gradient_tex.gradient = g
+		_gradient_tex.width = 4
+		_gradient_tex.height = 64
+		_gradient_tex.fill_from = Vector2(0, 0)
+		_gradient_tex.fill_to = Vector2(0, 1)
+	return _gradient_tex
 
 
 ## The body's fresnel rim colour (N12); the death dissolve fades it with the eyes.
@@ -630,7 +661,7 @@ func _decorate_part(part_name: String, part: RagdollPart, def: Dictionary) -> vo
 			for sx in [-1.0, 1.0]:
 				var sode := MeshInstance3D.new()
 				sode.mesh = YokaiForms.ellipsoid(0.055, 0.09, 0.10)
-				sode.position = Vector3(0.20 * sx, 0.12, 0.0)
+				sode.position = Vector3(0.235 * sx, 0.15, 0.045)
 				sode.rotation.z = deg_to_rad(-18.0 * sx)
 				sode.material_override = _sash
 				part.add_child(sode)
@@ -657,7 +688,7 @@ func _decorate_part(part_name: String, part: RagdollPart, def: Dictionary) -> vo
 			for c_idx in [-1, 0, 1]:
 				var claw := MeshInstance3D.new()
 				claw.mesh = YokaiForms.claw()
-				claw.position = Vector3(c_idx * 0.024, -0.32, 0.028)
+				claw.position = Vector3(c_idx * 0.024, -0.40, 0.04)
 				claw.rotation.x = deg_to_rad(18.0)
 				claw.material_override = _claw_mat
 				part.add_child(claw)
@@ -958,6 +989,7 @@ func _physics_process(delta: float) -> void:
 		EyeGlow.set_glow(_eye_glows, maxf(0.0, 1.0 - t * 2.5))
 		_sigil_mat.emission_energy_multiplier = maxf(0.0, (1.0 - t * 2.0) * 0.55)
 		_skin.set_shader_parameter("rim_tint", _rim * maxf(0.0, 1.0 - t * 2.0))
+		_horn_mat.emission_energy_multiplier = HORN_LIFT * maxf(0.0, 1.0 - t * 2.0)
 		# The body falls limp; once it is down (or after the longest fall)
 		# it comes apart into sakura petals that the wind carries off.
 		if _dissolve_timer >= _dissolve_duration or (_dissolve_timer >= 0.3 and _body_landed()):

@@ -22,24 +22,31 @@ const EYE_Z := 0.13
 ## (y, rx, rz) rings, bottom to top. The chest is wider than deep and narrows at the hips.
 ## Broad shoulders over a narrower waist; the torso leans forward (CHEST_LEAN, see tube).
 const CHEST_RINGS := [
-	Vector3(-0.235, 0.118, 0.078), Vector3(-0.21, 0.150, 0.096), Vector3(-0.09, 0.176, 0.112),
-	Vector3(0.04, 0.186, 0.124), Vector3(0.15, 0.198, 0.120), Vector3(0.198, 0.182, 0.108),
-	Vector3(0.222, 0.140, 0.088), Vector3(0.236, 0.080, 0.058),
+	Vector3(-0.235, 0.104, 0.072), Vector3(-0.20, 0.126, 0.086), Vector3(-0.10, 0.150, 0.100),
+	Vector3(0.02, 0.182, 0.114), Vector3(0.12, 0.226, 0.122), Vector3(0.172, 0.242, 0.116),
+	Vector3(0.212, 0.206, 0.096), Vector3(0.236, 0.132, 0.074), Vector3(0.250, 0.066, 0.046),
 ]
-## N12: a rounded trapezius (low, so the mask keeps the sky beside it) over the shoulders (the last three rings) instead of a flat
-## cap, and a domed belly under the chest; ORGANIC_LUMP breaks the turned-on-a-lathe look and
-## SHOULDER_HUNCH raises and swells one side (a lightly crooked, hunched body).
+## N12 fix1: a V torso – a narrow waist (0.10) under broad, rounded shoulders (0.24) with a
+## low trapezius dome (the mask keeps the sky beside it); ORGANIC_LUMP breaks the
+## turned-on-a-lathe look and SHOULDER_HUNCH raises and swells one side.
 const ORGANIC_LUMP := 0.06
 const SHOULDER_HUNCH := 0.05
-const CHEST_LEAN := 0.22
+const CHEST_LEAN := 0.30
 ## Limb profiles: (fraction of the capsule's height, fraction of its radius), top to bottom.
 ## Bulky, not sticks: full upper arm and forearm belly, thin wrist; thick thigh and calf, thin ankle.
 const ARM_PROFILE := [Vector2(-0.54, 0.40), Vector2(-0.5, 0.70), Vector2(-0.4, 0.95), Vector2(-0.2, 1.20), Vector2(0.05, 1.02), Vector2(0.30, 1.30), Vector2(0.5, 1.38), Vector2(0.57, 0.95)]
 const LEG_PROFILE := [Vector2(-0.54, 0.45), Vector2(-0.5, 0.75), Vector2(-0.35, 1.00), Vector2(-0.2, 1.22), Vector2(0.0, 1.12), Vector2(0.3, 1.45), Vector2(0.5, 1.30), Vector2(0.56, 0.85)]
+## N12 fix1: a long clawed hand (arm) and a foot (leg) merged into the limb's mesh (no extra
+## draw): (half sizes x, y, z), offset in the limb's frame. The foot sits on the foot box of
+## yokai.gd (offset (0, -0.40, 0.04)), so the body visibly stands on the ground.
+const HAND_SIZE := Vector3(0.036, 0.062, 0.020)
+const HAND_OFFSET := Vector3(0.0, -0.315, 0.012)
+const FOOT_SIZE := Vector3(0.050, 0.032, 0.115)
+const FOOT_OFFSET := Vector3(0.0, -0.395, 0.05)
 ## The visible head: inside the mask, never through its face (the collision sphere is 0.115).
 const HEAD_VISUAL_RADIUS := 0.088
 const PELVIS_RINGS := [Vector3(-0.085, 0.122, 0.080), Vector3(0.0, 0.140, 0.092), Vector3(0.085, 0.132, 0.086)]
-const WRAP_RINGS := [Vector3(0.02, 0.178, 0.106), Vector3(0.13, 0.176, 0.104)]
+const WRAP_RINGS := [Vector3(0.0, 0.180, 0.116), Vector3(0.11, 0.224, 0.128)]
 const OBI_RINGS := [Vector3(0.0, 0.146, 0.098), Vector3(0.08, 0.148, 0.100)]
 ## A torn hakama on the hips: an open skirt whose hem is ragged (see tube's jag).
 const HAKAMA_RINGS := [Vector3(-0.02, 0.150, 0.098), Vector3(-0.14, 0.175, 0.118), Vector3(-0.25, 0.192, 0.135)]
@@ -66,7 +73,11 @@ static func body_mesh(part_name: String, def: Dictionary) -> Mesh:
 					var rings: Array = []
 					for step in profile:
 						rings.append(Vector3(float(step.x) * h, float(step.y) * r, float(step.y) * r))
-					return tube(rings, 10, true, 0.0, 0.0, ORGANIC_LUMP * 0.7))
+					var limb := tube(rings, 10, true, 0.0, 0.0, ORGANIC_LUMP * 0.7)
+					var is_arm := part_name.begins_with("arm_")
+					var sz := HAND_SIZE if is_arm else FOOT_SIZE
+					return merged([[limb, Transform3D()],
+						[ellipsoid(sz.x, sz.y, sz.z, 8), Transform3D(Basis(), HAND_OFFSET if is_arm else FOOT_OFFSET)]]))
 			return _cached("capsule_%.3f_%.3f" % [r, h], func() -> Mesh:
 				var m := CapsuleMesh.new()
 				m.radius = r
@@ -212,7 +223,7 @@ static func claw() -> Mesh:
 		var c := CylinderMesh.new()
 		c.top_radius = 0.0015
 		c.bottom_radius = 0.0075
-		c.height = 0.15
+		c.height = 0.21
 		c.radial_segments = 5
 		c.rings = 1
 		return c)
@@ -256,8 +267,8 @@ static func tube(rings: Array, segs: int, caps: bool, jag: float = 0.0, lean: fl
 			var b := r * segs + (s + 1) % segs
 			var c := (r + 1) * segs + s
 			var d := (r + 1) * segs + (s + 1) % segs
-			_add_tri(verts, idx, a, c, b)
-			_add_tri(verts, idx, b, c, d)
+			_add_tri(verts, idx, a, c, b, lean)
+			_add_tri(verts, idx, b, c, d, lean)
 	if caps and n >= 2:
 		for e in [0, n - 1]:
 			var ring: Vector3 = rings[e]
@@ -281,10 +292,11 @@ static func tube(rings: Array, segs: int, caps: bool, jag: float = 0.0, lean: fl
 
 
 ## Adds triangle a,b,c with its winding turned so it faces away from the body axis.
-static func _add_tri(verts: PackedVector3Array, idx: PackedInt32Array, a: int, b: int, c: int) -> void:
+static func _add_tri(verts: PackedVector3Array, idx: PackedInt32Array, a: int, b: int, c: int, lean: float = 0.0) -> void:
 	var p0 := verts[a]
 	var centroid := (p0 + verts[b] + verts[c]) / 3.0
-	var outward := centroid - Vector3(0.0, centroid.y, 0.0)
+	# The body axis leans with the rings (z = lean * y): outward is measured from it.
+	var outward := centroid - Vector3(0.0, centroid.y, lean * centroid.y)
 	_add_tri_facing(verts, idx, a, b, c, outward)
 
 
