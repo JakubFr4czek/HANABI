@@ -160,6 +160,7 @@ const SETTINGS_RECTS := {
 		"ai_key_clear": Rect2(780.0, 370.0, 220.0, 56.0),
 		"ai_lang_pl": Rect2(1020.0, 370.0, 160.0, 56.0),
 		"ai_lang_en": Rect2(1200.0, 370.0, 160.0, 56.0),
+		"ai_overlay": Rect2(130.0, 762.0, 520.0, 52.0),
 	},
 	PAGE_SANDBOX: {
 		"sandbox_on": Rect2(460.0, 384.0, 320.0, 56.0),
@@ -1227,6 +1228,10 @@ func _draw_ai() -> void:
 	_wrapped(help1, Vector2(130.0, 655.0), 20, DIM, 1340.0, 1)
 	_wrapped(help2, Vector2(130.0, 690.0), 20, DIM, 1340.0, 1)
 	_wrapped(help3, Vector2(130.0, 725.0), 20, DIM, 1340.0, 1)
+	var overlay := VrComfortSettings.ai_demo_overlay if VrComfortSettings else false
+	_settings_button("ai_overlay", "DEMO OVERLAY „ONI MYŚLI”: " + ("WŁ." if overlay else "WYŁ."), overlay)
+	_text("Tabliczka pod dymkiem bossa: taktyka i źródło (ai / fallback) – do nagrania wideo.",
+		Vector2(670.0, 776.0), 20, DIM, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 500)
 
 
 ## CREDITS page (N9): every outside asset with author, source and licence, from

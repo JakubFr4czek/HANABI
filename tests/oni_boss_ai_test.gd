@@ -8,6 +8,8 @@ extends Node
 ##  5. Three telegraphed attacks (slam, sweep, thrust) with windup -> strike progression.
 ##  6. Phase behavioral shifts (shorter windup scale in Phase 3).
 ##  7. AI Brain integration & resilience (whitelisting, instant fallback on null/malformed).
+##  N8. Meta AI end-to-end on run.tscn against a local mock API server (real HTTP over
+##      loopback): cadence 2–5 s, tactic executed, bubble + overlay, every error -> fallback.
 ##  8. Real pixel contrast & 8m fog readability on rendered run.tscn frame.
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
@@ -39,6 +41,7 @@ func _run_all() -> void:
 	await _test_ai_brain_mock_and_failsafe()
 	_test_http_reply_parsing()
 	await _test_f5_katana_boss_in_run()
+	await _test_n8_meta_ai_end_to_end()
 	await _test_real_pixel_contrast_and_fog_readability()
 
 
@@ -805,3 +808,167 @@ func _test_f5_katana_boss_in_run() -> void:
 		defeated.hit and not director.has_active_oni())
 	run.queue_free()
 	await _frames(4)
+
+
+# --- N8: Meta AI end-to-end against the local mock API ---------------------------------
+
+func _test_n8_meta_ai_end_to_end() -> void:
+	print("\n[TEST] N8. Meta AI end-to-end: run.tscn + local mock chat-completions server")
+	var server := MetaApiMockServer.new()
+	add_child(server)
+	var started := server.start()
+	_check("mock API server listens on loopback (port %d)" % server.port, started == OK)
+	var old := [VrComfortSettings.ai_endpoint, VrComfortSettings.meta_api_key,
+		VrComfortSettings.ai_boss_enabled, VrComfortSettings.ai_demo_overlay]
+	VrComfortSettings.ai_endpoint = server.endpoint()
+	VrComfortSettings.meta_api_key = "test-key-not-a-secret"
+	VrComfortSettings.ai_boss_enabled = true
+	VrComfortSettings.ai_demo_overlay = true
+	_check("debug build honours the loopback endpoint (%s)" % OniAiClient.resolve_endpoint(server.endpoint()),
+		OniAiClient.resolve_endpoint(server.endpoint()) == server.endpoint())
+
+	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
+	add_child(run)
+	await _frames(8)
+	var player := run.player as DesktopPlayer
+	var health := run.get_tree().get_first_node_in_group("player_health") as PlayerHealth
+	if health:
+		health.max_hp = 100000.0
+		health.hp = 100000.0
+	var director := run.wave_director
+	director.stop_director()
+	director.clear_enemies()
+	# Telemetry: the player's last cuts all travel right -> left with fire on the blade.
+	var cam := get_viewport().get_camera_3d()
+	var right := cam.global_basis.x if cam else Vector3.RIGHT
+	for k in 5:
+		GameEvents.log_event("hit", {"attacker": "katana", "element": "fire", "direction": -right})
+	var boss := director.spawn_oni_boss(player.global_position)
+	var brain := boss.brain as OniBossBrain
+	var client := brain.ai_client
+	boss.global_position = player.global_position + Vector3(0.0, 0.0, -2.4)
+	boss.reset_body()
+	var sent: Array[int] = []
+	client.request_sent.connect(func(_u: String) -> void: sent.append(Engine.get_physics_frames()))
+	var got: Array[Dictionary] = []
+	client.decision_received.connect(func(d: Dictionary) -> void: got.append(d))
+	brain._ai_timer = 0.3
+	var hz := float(Engine.physics_ticks_per_second)
+	var first_ai := -1
+	var first_ai_abs := -1
+	var p0 := Vector3.ZERO
+	var side := Vector3.ZERO
+	var lateral := 0.0
+	var bubble_text := ""
+	var thought := ""
+	for f in int(14.0 * hz):
+		await get_tree().physics_frame
+		if first_ai < 0 and got.size() > 0 and String(got[0].get("source", "")) == "ai":
+			first_ai = f
+			first_ai_abs = Engine.get_physics_frames()
+			bubble_text = boss.speech_bubble.get_text() if boss.speech_bubble.is_showing() else ""
+			thought = boss.speech_bubble.get_thought() if boss.speech_bubble.is_overlay_showing() else ""
+			p0 = boss.root_part().global_position
+			var fwd := player.global_position - p0
+			fwd.y = 0.0
+			side = Vector3(fwd.normalized().z, 0.0, -fwd.normalized().x)
+		if first_ai >= 0 and f == first_ai + 120:
+			lateral = (boss.root_part().global_position - p0).dot(side)
+	_check("the boss asked the mock API over HTTP (%d requests)" % server.requests.size(), server.requests.size() >= 3)
+	_check("first AI reply arrives within 1 s of the request (%d frames)" % (first_ai_abs - (sent[0] if sent.size() > 0 else 0)),
+		first_ai >= 0 and sent.size() > 0 and first_ai_abs - sent[0] <= int(hz))
+	var gaps_ok := sent.size() >= 3
+	var gaps: Array[float] = []
+	for k in range(1, sent.size()):
+		var g := float(sent[k] - sent[k - 1]) / hz
+		gaps.append(snappedf(g, 0.01))
+		gaps_ok = gaps_ok and g >= 1.95 and g <= 5.05
+	_check("requests every 2–5 s, never per frame (gaps %s)" % [gaps], gaps_ok)
+	_check("Authorization carries the Settings key as Bearer", server.auth_headers.size() > 0
+		and server.auth_headers[0] == "Bearer test-key-not-a-secret")
+	var req: Dictionary = server.requests[0] if server.requests.size() > 0 else {}
+	var user_json: Variant = {}
+	if req.has("messages") and (req.messages as Array).size() >= 2:
+		user_json = JSON.parse_string(String(req.messages[1].get("content", "")))
+	var style: Dictionary = (user_json as Dictionary).get("player_style", {}) if user_json is Dictionary else {}
+	_check("prompt carries the player's style (%s)" % style,
+		String(style.get("cut_from", "")) == "right" and String(style.get("favourite_element", "")) == "fire")
+	_check("the mock reply sets the tactic flank_left (got %s)" % brain.current_tactic,
+		got.size() > 0 and String(got[0].get("tactic", "")) == "flank_left")
+	_check("flank_left is executed: the boss steps to its left (%.2f m)" % lateral, lateral > 0.25)
+	var applied := events.filter(func(e: Dictionary) -> bool:
+		return e.get("type") == "oni_ai_decision_applied" and e.get("source") == "ai" and e.get("tactic") == "flank_left")
+	_check("the run log records the AI tactic with the boss position (%d entries)" % applied.size(),
+		applied.size() > 0 and applied[0].has("x"))
+	_check("the AI speech shows in the bubble ('%s')" % bubble_text, bubble_text == "You always cut from the right.")
+	_check("demo overlay names tactic and source ('%s')" % thought,
+		thought.begins_with("Oni myśli: flank_left") and thought.contains("ai"))
+	# The bubble fades after a few seconds when no new line comes.
+	brain._ai_timer = 999.0
+	await _frames(int((OniSpeechBubble.DEFAULT_DURATION + OniSpeechBubble.FADE_OUT_TIME + 0.4) * hz))
+	_check("the bubble is gone a few seconds after the last line", not boss.speech_bubble.is_showing())
+	_check("the overlay stays while the setting is on", boss.speech_bubble.is_overlay_showing())
+	VrComfortSettings.ai_demo_overlay = false
+	await _frames(3)
+	_check("overlay off in Settings -> slip hidden", not boss.speech_bubble.is_overlay_showing())
+
+	# Errors: every one falls back locally, the frame never stalls.
+	for mode in ["401", "500", "garbage", "bad_content"]:
+		server.mode = mode
+		var r := await _n8_ask(client)
+		_check("%s -> local fallback (%s, %d frames, worst frame %.0f ms)" % [mode, r.d.get("fallback_reason", ""), r.frames, r.worst_ms],
+			String(r.d.get("source", "")) == "fallback" and r.frames <= 60 and r.worst_ms < 250.0)
+	server.mode = "hang"
+	var t := await _n8_ask(client, int(OniAiClient.TIMEOUT_SECONDS * hz) + 40)
+	var limit := int(ceil(OniAiClient.TIMEOUT_SECONDS * hz)) + 2
+	_check("timeout -> fallback the tick the deadline passes (%s, %d frames <= %d, worst frame %.0f ms)" % [t.d.get("fallback_reason", ""), t.frames, limit, t.worst_ms],
+		String(t.d.get("fallback_reason", "")) == "timeout" and t.frames <= limit and t.worst_ms < 250.0
+		and not client._is_busy)
+	server.mode = "ok"
+	server.decision = {"tactic": "teleport_behind_player", "attack": "nuke", "speech": "Hah."}
+	var w := await _n8_ask(client)
+	_check("tactic outside the whitelist -> duelist's own logic (got %s / %s)" % [w.d.get("tactic"), w.d.get("attack")],
+		String(w.d.get("source")) == "ai" and String(w.d.get("tactic")) == "duel"
+		and OniAiClient.VALID_ATTACKS.has(String(w.d.get("attack"))))
+	server.decision = {"tactic": "aggressive", "speech": "Twoje cięcia zawsze idą z prawej strony, wędrowcze, a ja to widzę od samego początku tej walki w lesie."}
+	var l := await _n8_ask(client)
+	var sp := String(l.d.get("speech", ""))
+	_check("too-long speech is clipped at a word (%d chars: '%s')" % [sp.length(), sp],
+		sp.length() <= OniAiClient.MAX_SPEECH_CHARS and sp.ends_with("…") and sp.begins_with("Twoje cięcia"))
+	# No key: answered locally at once, nothing sent.
+	VrComfortSettings.meta_api_key = ""
+	var before := server.requests.size()
+	var nk := {"d": {}}
+	var sends := sent.size()
+	client.request_decision({"phase": 1}, func(d: Dictionary) -> void: nk.d = d)
+	_check("no key -> fallback synchronously, no request, no traffic",
+		String(nk.d.get("source", "")) == "fallback" and sent.size() == sends and server.requests.size() == before)
+
+	VrComfortSettings.ai_endpoint = old[0]
+	VrComfortSettings.meta_api_key = old[1]
+	VrComfortSettings.ai_boss_enabled = old[2]
+	VrComfortSettings.ai_demo_overlay = old[3]
+	run.queue_free()
+	server.queue_free()
+	await _frames(4)
+
+
+## One request through the real HTTP client; returns the decision, frames waited and the
+## worst wall-clock frame time while waiting.
+func _n8_ask(client: OniAiClient, max_frames: int = 90) -> Dictionary:
+	var box := {"d": {}, "done": false}
+	client._is_busy = false
+	client.request_decision({"phase": 1, "distance": 2.0}, func(d: Dictionary) -> void:
+		box.d = d
+		box.done = true)
+	var frames := 0
+	var worst := 0.0
+	var last := Time.get_ticks_usec()
+	while not box.done and frames < max_frames:
+		await get_tree().process_frame
+		var now := Time.get_ticks_usec()
+		worst = maxf(worst, (now - last) / 1000.0)
+		last = now
+		frames += 1
+	return {"d": box.d, "frames": frames, "worst_ms": worst}

@@ -9,6 +9,8 @@ extends Node
 ## - Supports mock provider for zero-latency, networkless automated testing.
 
 signal decision_received(decision: Dictionary)
+## N8: a request left for the API (url only, never the key) – tests count the cadence.
+signal request_sent(url: String)
 
 const DEFAULT_META_ENDPOINT := "https://api.meta.ai/v1/chat/completions"
 const META_ENDPOINT := DEFAULT_META_ENDPOINT
@@ -19,6 +21,11 @@ const DEFAULT_MODEL := "muse-spark-1.3"
 const MELEE_STANDOFF_MIN := 1.4
 const MELEE_STANDOFF_MAX := 1.9
 const TIMEOUT_SECONDS := 3.0
+## N8: the boss says one short line; longer replies are cut at a word boundary + "…".
+const MAX_SPEECH_CHARS := 60
+## N8 (debug/test only): `-- --oni-ai-endpoint=http://127.0.0.1:PORT/v1/chat/completions`
+## points the client at a local mock server. Release builds ignore it and any http:// URL.
+const ENDPOINT_ARG := "--oni-ai-endpoint="
 const VALID_TACTICS: Array[String] = [
 	"stalk", "advance", "retreat", "circle_left", "circle_right", "attack", "taunt",
 	# F5: the katana duelist boss (masked swordsman) picks among these.
@@ -79,6 +86,10 @@ var _request_hook: Callable
 var last_request_url := ""
 var _pending_callback: Callable
 var _is_busy := false
+## Seconds the request in flight has been waiting (counted in game frames, so a stalled
+## socket can never hold the fight: past [constant TIMEOUT_SECONDS] the fallback answers).
+var _inflight_s := 0.0
+var _inflight_state := {}
 var _rng := RandomNumberGenerator.new()
 ## F5: true when the client drives the katana duelist boss (prompt and fallback use
 ## the swordsman's tactics; the fallback tactic "duel" = the duelist's own logic).
@@ -89,9 +100,86 @@ func _ready() -> void:
 	_rng.seed = randi()
 	_http = HTTPRequest.new()
 	_http.name = "AiHttp"
-	_http.timeout = TIMEOUT_SECONDS
+	# The frame-counted deadline in _process answers first; this is only a backstop.
+	_http.timeout = TIMEOUT_SECONDS + 2.0
 	add_child(_http)
 	_http.request_completed.connect(_on_http_request_completed)
+
+
+func _process(delta: float) -> void:
+	if not _is_busy:
+		return
+	_inflight_s += delta
+	if _inflight_s >= TIMEOUT_SECONDS:
+		# Timeout: drop the request and answer locally in this very tick.
+		if _http != null:
+			_http.cancel_request()
+		_is_busy = false
+		var cb := _pending_callback
+		_pending_callback = Callable()
+		var fallback := local_fallback_decision(_inflight_state)
+		fallback["fallback_reason"] = "timeout"
+		if cb.is_valid():
+			cb.call(fallback)
+		decision_received.emit(fallback)
+
+
+## The endpoint actually used: Settings, then the debug command-line override; an
+## http:// or loopback URL only counts in a debug build (tests, the local mock server).
+static func resolve_endpoint(configured: String) -> String:
+	var ep := configured.strip_edges()
+	if OS.is_debug_build():
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with(ENDPOINT_ARG):
+				ep = a.substr(ENDPOINT_ARG.length()).strip_edges()
+	if ep == "":
+		return DEFAULT_META_ENDPOINT
+	if not OS.is_debug_build() and not ep.begins_with("https://"):
+		return DEFAULT_META_ENDPOINT
+	return ep
+
+
+## N8 telemetry: 2–3 plain facts about how the player fights, from the player's own hits
+## in the event log. [param right] = the player's view right vector (flat).
+## {"cut_from": "right"|"left"|"above"|"mixed", "favourite_element": String, "cuts": int}
+static func player_style_facts(hits: Array, right: Vector3) -> Dictionary:
+	var from_right := 0
+	var from_left := 0
+	var from_above := 0
+	var elements := {}
+	var n := 0
+	for h in hits:
+		if not (h is Dictionary):
+			continue
+		var d: Variant = h.get("direction", Vector3.ZERO)
+		if not (d is Vector3) or (d as Vector3).length_squared() < 0.01:
+			continue
+		n += 1
+		var dir := (d as Vector3).normalized()
+		if dir.y < -0.6:
+			from_above += 1
+		elif dir.dot(right) < -0.3:
+			from_right += 1  # the blade travels right -> left
+		elif dir.dot(right) > 0.3:
+			from_left += 1
+		var el := String(h.get("element", "physical"))
+		elements[el] = int(elements.get(el, 0)) + 1
+	var facts := {"cuts": n}
+	if n == 0:
+		return facts
+	var best := maxi(from_right, maxi(from_left, from_above))
+	var side := "mixed"
+	if best >= maxi(2, int(ceil(n * 0.55))):
+		side = "right" if best == from_right else ("left" if best == from_left else "above")
+	facts["cut_from"] = side
+	var fav := ""
+	var fav_n := 0
+	for el in elements:
+		if int(elements[el]) > fav_n:
+			fav = String(el)
+			fav_n = int(elements[el])
+	facts["favourite_element"] = fav
+	return facts
 
 
 ## Injects a test mock callable: `func(state: Dictionary) -> Dictionary`.
@@ -150,6 +238,7 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 		active = settings.is_meta_ai_active()
 
 	if not active or key == "" or _is_busy:
+		# Quietly local: no key / AI off / a request still in flight. Nothing is logged.
 		var fallback := local_fallback_decision(state)
 		callback.call(fallback)
 		decision_received.emit(fallback)
@@ -176,6 +265,8 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 		+ "\"target_distance\": float between 1.5 and 1.9, "
 		+ "\"speech\": short taunt in %s, max 8 words, under 60 chars}."
 	) % speech_lang
+	var style_hint := (" The user JSON has player_style (cut_from: the side the player usually cuts from;"
+		+ " favourite_element). When it is known, the speech may mock that habit, e.g. 'You always cut from the right'.")
 	if katana_mode:
 		sys_prompt = (
 			"You are the combat intelligence of a masked ronin swordsman (katana, Oni mask) in a VR Japanese dark-fantasy sword duel. "
@@ -185,6 +276,7 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 			+ "\"target_distance\": float between 1.4 and 1.9, "
 			+ "\"speech\": short taunt in %s, max 8 words, under 60 chars}."
 		) % speech_lang
+	sys_prompt += style_hint
 
 	var body_dict := {
 		"model": model,
@@ -198,12 +290,14 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 
 	var json_body := JSON.stringify(body_dict)
 	# The endpoint comes from Settings (fallback: the Meta default constant).
-	var endpoint := DEFAULT_META_ENDPOINT
+	var configured := ""
 	if settings != null and settings.has_method("get_effective_meta_api_endpoint"):
-		var configured: String = settings.get_effective_meta_api_endpoint()
-		if configured.strip_edges() != "":
-			endpoint = configured.strip_edges()
+		configured = settings.get_effective_meta_api_endpoint()
+	var endpoint := resolve_endpoint(configured)
 	last_request_url = endpoint
+	_inflight_s = 0.0
+	_inflight_state = state.duplicate()
+	request_sent.emit(endpoint)
 	var err := OK
 	if _request_hook.is_valid():
 		err = int(_request_hook.call(endpoint, headers, json_body))
@@ -225,7 +319,8 @@ func _on_http_request_completed(result: int, response_code: int, _headers: Packe
 	_pending_callback = Callable()
 
 	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
-		var fallback := local_fallback_decision({})
+		var fallback := local_fallback_decision(_inflight_state)
+		fallback["fallback_reason"] = "http_%d" % response_code if result == HTTPRequest.RESULT_SUCCESS else "net_%d" % result
 		if cb.is_valid():
 			cb.call(fallback)
 		decision_received.emit(fallback)
@@ -234,7 +329,8 @@ func _on_http_request_completed(result: int, response_code: int, _headers: Packe
 	var text := body.get_string_from_utf8().strip_edges()
 	var json := JSON.new()
 	if json.parse(text) != OK or not (json.data is Dictionary):
-		var fallback := local_fallback_decision({})
+		var fallback := local_fallback_decision(_inflight_state)
+		fallback["fallback_reason"] = "bad_json"
 		if cb.is_valid():
 			cb.call(fallback)
 		decision_received.emit(fallback)
@@ -259,13 +355,14 @@ func _on_http_request_completed(result: int, response_code: int, _headers: Packe
 
 	var inner_json := JSON.new()
 	if inner_json.parse(content) != OK or not (inner_json.data is Dictionary):
-		var fallback := local_fallback_decision({})
+		var fallback := local_fallback_decision(_inflight_state)
+		fallback["fallback_reason"] = "bad_content"
 		if cb.is_valid():
 			cb.call(fallback)
 		decision_received.emit(fallback)
 		return
 
-	var decision := _validate_decision(inner_json.data as Dictionary, {})
+	var decision := _validate_decision(inner_json.data as Dictionary, _inflight_state)
 	decision["source"] = "ai"
 	if cb.is_valid():
 		cb.call(decision)
@@ -293,11 +390,7 @@ func _validate_decision(raw: Dictionary, state: Dictionary) -> Dictionary:
 
 	var speech := String(raw.get("speech", fallback.speech)).strip_edges()
 	# Strip non-printable / control characters and sanitize length
-	speech = speech.replace("\n", " ").replace("\r", " ").replace("\"", "").replace("'", "")
-	while speech.contains("  "):
-		speech = speech.replace("  ", " ")
-	if speech.length() > 80:
-		speech = speech.substr(0, 77) + "..."
+	speech = clip_speech(speech)
 	if speech == "":
 		speech = fallback.speech
 
@@ -308,6 +401,27 @@ func _validate_decision(raw: Dictionary, state: Dictionary) -> Dictionary:
 		"speech": speech,
 		"source": "ai",
 	}
+
+
+## One printable line of at most [constant MAX_SPEECH_CHARS] chars, cut at a word + "…".
+static func clip_speech(text: String) -> String:
+	var out := ""
+	for i in text.length():
+		var c := text.unicode_at(i)
+		if c < 32 or c == 127:
+			out += " "
+		elif c != 34 and c != 96 and c != 60 and c != 62:  # no quotes, backticks, <>
+			out += String.chr(c)
+	out = out.strip_edges()
+	while out.contains("  "):
+		out = out.replace("  ", " ")
+	if out.length() > MAX_SPEECH_CHARS:
+		var cut := out.substr(0, MAX_SPEECH_CHARS - 1)
+		var sp := cut.rfind(" ")
+		if sp >= MAX_SPEECH_CHARS / 2:
+			cut = cut.substr(0, sp)
+		out = cut.strip_edges().trim_suffix(",").trim_suffix(".") + "…"
+	return out
 
 
 ## Produces deterministic offline combat tactics and atmospheric taunts.

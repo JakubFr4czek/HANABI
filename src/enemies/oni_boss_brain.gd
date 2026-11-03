@@ -11,6 +11,9 @@ extends DuelistBrain
 
 signal speech_requested(text: String)
 signal phase_changed(new_phase: int)
+## N8: what the boss decided and who decided it ("ai" | "fallback" | "mock") – the demo
+## overlay under the speech bubble shows it.
+signal thought_changed(tactic: String, attack: String, source: String)
 
 const AI_POLL_INTERVAL := 3.5
 
@@ -160,7 +163,28 @@ func _gather_combat_state(ctx: Dictionary) -> Dictionary:
 		"distance": snappedf(dist, 0.1),
 		"phase": phase,
 		"player_recent_actions": _recent_player_actions.duplicate(),
+		"player_style": _player_style(),
 	}
+
+
+## N8: 2–3 facts about the player's style from the event log (own hits only).
+func _player_style() -> Dictionary:
+	var right := Vector3.RIGHT
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam != null:
+		right = cam.global_basis.x
+		right.y = 0.0
+		right = right.normalized() if right.length_squared() > 1e-4 else Vector3.RIGHT
+	var boss_name := ""
+	var boss := body as TrainingDummy
+	if boss != null and boss.profile != null:
+		boss_name = boss.profile.display_name
+	var hits: Array = []
+	for h in GameEvents.recent(40, "hit"):
+		# Hits the boss itself dealt are not the player's style.
+		if boss_name == "" or String(h.get("attacker", "")) != boss_name:
+			hits.append(h)
+	return OniAiClient.player_style_facts(hits, right)
 
 
 func _on_ai_decision(decision: Dictionary) -> void:
@@ -170,12 +194,18 @@ func _on_ai_decision(decision: Dictionary) -> void:
 		speech_requested.emit(speech)
 	if katana_mode:
 		_apply_katana_tactic(String(decision.get("tactic", "duel")), String(decision.get("attack", "")))
+		thought_changed.emit(current_tactic, String(decision.get("attack", "")), String(decision.get("source", "fallback")))
+		var pos := body.global_position if body != null and body.is_inside_tree() else Vector3.ZERO
 		GameEvents.log_event("oni_ai_decision_applied", {
 			"tactic": current_tactic,
 			"attack": decision.get("attack", ""),
 			"source": decision.get("source", "fallback"),
+			"reason": decision.get("fallback_reason", ""),
+			"x": snappedf(pos.x, 0.01), "z": snappedf(pos.z, 0.01),
 		})
 		return
+	thought_changed.emit(String(decision.get("tactic", "advance")), String(decision.get("attack", "")),
+		String(decision.get("source", "fallback")))
 
 	var tactic: String = decision.get("tactic", "advance")
 	match tactic:

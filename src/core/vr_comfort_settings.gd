@@ -58,6 +58,9 @@ var ai_boss_enabled: bool = true
 var meta_api_key: String = ""
 var ai_model: String = "muse-spark-1.3"
 var ai_language: String = "pl"
+## N8: the "Oni myśli: <taktyka> – <źródło>" plate under the boss's bubble, for the
+## demo video. Off by default.
+var ai_demo_overlay: bool = false
 ## Sandbox (D9): off by default. Read by RunGame, which passes it to SkillTreeData.sandbox.
 var sandbox_enabled: bool = false
 const DEFAULT_META_ENDPOINT := "https://api.meta.ai/v1/chat/completions"
@@ -124,6 +127,7 @@ func load_settings() -> void:
 		ai_model = String(cfg.get_value("meta_ai", "model", ai_model))
 		ai_language = String(cfg.get_value("meta_ai", "language", ai_language))
 		ai_endpoint = String(cfg.get_value("meta_ai", "endpoint", DEFAULT_META_ENDPOINT))
+		ai_demo_overlay = bool(cfg.get_value("meta_ai", "demo_overlay", ai_demo_overlay))
 
 	apply_audio()
 
@@ -156,6 +160,7 @@ func save_settings() -> void:
 	cfg.set_value("meta_ai", "model", ai_model)
 	cfg.set_value("meta_ai", "language", ai_language)
 	cfg.set_value("meta_ai", "endpoint", ai_endpoint)
+	cfg.set_value("meta_ai", "demo_overlay", ai_demo_overlay)
 	cfg.set_value("sandbox", "enabled", sandbox_enabled)
 
 	var err := cfg.save(settings_path)
@@ -238,6 +243,11 @@ func set_meta_api_endpoint(ep: String) -> void:
 	save_settings()
 
 ## Sandbox on or off (D9). Saved at once; RunGame follows through [signal settings_changed].
+func set_ai_demo_overlay(enabled: bool) -> void:
+	ai_demo_overlay = enabled
+	save_settings()
+
+
 func set_sandbox_enabled(enabled: bool) -> void:
 	sandbox_enabled = enabled
 	save_settings()
@@ -460,6 +470,7 @@ func reset_to_defaults(player: Node3D = null) -> void:
 	flash_percent = 100
 	haptic_percent = 100
 	ai_boss_enabled = true
+	ai_demo_overlay = false
 	sandbox_enabled = false
 	apply_audio()
 	if player:

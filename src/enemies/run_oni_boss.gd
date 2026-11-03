@@ -161,6 +161,7 @@ func _ready() -> void:
 	if brain is OniBossBrain:
 		var oni_brain := brain as OniBossBrain
 		oni_brain.speech_requested.connect(func(text: String): speech_bubble.show_speech(text))
+		oni_brain.thought_changed.connect(speech_bubble.set_thought)
 
 
 func _physics_process(delta: float) -> void:

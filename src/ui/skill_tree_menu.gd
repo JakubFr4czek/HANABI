@@ -926,6 +926,8 @@ func _handle_settings_action(key: String, pointer_id: String) -> void:
 						VrComfortSettings.set_meta_api_key(text)
 			"ai_key_clear":
 				VrComfortSettings.set_meta_api_key("")
+			"ai_overlay":
+				VrComfortSettings.set_ai_demo_overlay(not VrComfortSettings.ai_demo_overlay)
 			"ai_lang_pl":
 				VrComfortSettings.set_ai_language("pl")
 			"ai_lang_en":
