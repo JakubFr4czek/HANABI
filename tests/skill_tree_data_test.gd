@@ -350,7 +350,12 @@ func _test_sandbox_page_layout() -> void:
 		inside = inside and panel.encloses(tabs[i])
 		for j in range(i + 1, tabs.size()):
 			apart = apart and not tabs[i].intersects(tabs[j])
-	_check("the six settings sub-tabs sit inside the panel and do not overlap", tabs.size() == 6 and inside and apart)
+	# N9 added CREDITS: one sub-tab per settings page (seven), each leading to its own page.
+	var pages := {}
+	for key: String in SkillTreeCanvas.SUBNAV_PAGE:
+		pages[SkillTreeCanvas.SUBNAV_PAGE[key]] = true
+	_check("the %d settings sub-tabs (one per page) sit inside the panel and do not overlap" % tabs.size(),
+		tabs.size() == SkillTreeCanvas.PAGE_NAMES.size() and tabs.size() == 7 and pages.size() == tabs.size() and inside and apart)
 	var page := Rect2(66.0, 268.0, 1468.0, 300.0)
 	var buttons: Array[Rect2] = []
 	for key: String in SkillTreeCanvas.SETTINGS_RECTS[SkillTreeCanvas.PAGE_SANDBOX]:

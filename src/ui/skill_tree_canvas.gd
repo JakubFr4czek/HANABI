@@ -18,10 +18,10 @@ const SIZE := Vector2(1600.0, 1000.0)
 # --- Palette: warm kuro-urushi lacquer over washi, gilt edging, cinnabar seals. ---
 ## N9: the ground is a warm lacquered paper (never full black), with a faint washi
 ## texture on top ([method _washi_textures]); text colours are warm to match.
-const LACQUER := Color(0.082, 0.060, 0.055, 1.0)
-const LACQUER_RAISED := Color(0.122, 0.092, 0.084, 0.98)
-const LACQUER_SUNK := Color(0.050, 0.037, 0.035, 0.98)
-const LACQUER_HOT := Color(0.17, 0.125, 0.11, 0.98)
+const LACQUER := Color(0.165, 0.118, 0.098, 1.0)
+const LACQUER_RAISED := Color(0.205, 0.150, 0.126, 0.98)
+const LACQUER_SUNK := Color(0.105, 0.074, 0.064, 0.98)
+const LACQUER_HOT := Color(0.27, 0.195, 0.16, 0.98)
 const GILT := Color(0.80, 0.66, 0.42)
 const GILT_DIM := Color(0.80, 0.66, 0.42, 0.34)
 const PAPER := Color(0.95, 0.92, 0.85)
@@ -508,8 +508,8 @@ func _box(rect: Rect2, bg: Color, border: Color, border_w: int, radius: int,
 func _draw_backdrop() -> void:
 	draw_rect(Rect2(Vector2.ZERO, SIZE), LACQUER)
 	var washi := _washi_textures()
-	draw_texture_rect(washi[0], Rect2(Vector2.ZERO, SIZE), false, Color(1.0, 0.86, 0.72, 0.075))
-	draw_texture_rect(washi[1], Rect2(Vector2.ZERO, SIZE), false, Color(1.0, 0.93, 0.84, 0.045))
+	draw_texture_rect(washi[0], Rect2(Vector2.ZERO, SIZE), false, Color(1.0, 0.86, 0.72, 0.10))
+	draw_texture_rect(washi[1], Rect2(Vector2.ZERO, SIZE), false, Color(1.0, 0.93, 0.84, 0.03))
 	_box(Rect2(Vector2(14, 14), SIZE - Vector2(28, 28)), Color(0, 0, 0, 0), GILT_DIM, 1, 6)
 	# Soft sheen from the top, like lacquer under a lantern.
 	draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(SIZE.x, 0),
@@ -648,7 +648,7 @@ func _draw_node(n: Dictionary, accent: Color) -> void:
 			shadow = 16
 			shadow_col = Color(accent, 0.38)
 		"available":
-			bg = Color(0.14, 0.104, 0.095, 0.98)
+			bg = Color(0.23, 0.17, 0.145, 0.98)
 			border = Color(accent, 0.55 + 0.4 * pulse) if affordable else Color(GILT, 0.7)
 			border_w = 3
 			title_col = PAPER

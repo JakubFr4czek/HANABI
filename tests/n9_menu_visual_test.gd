@@ -164,7 +164,7 @@ func _check_frame(img: Image) -> void:
 	notes.clear()
 	for sx in [-1.0, 1.0]:
 		for sy in [-1.0, 1.0]:
-			var p := _sp(sx * (half.x + fw - 0.06), sy * (half.y + fw * 0.5 + 0.001), face + 0.0028)
+			var p := _sp(sx * (half.x + fw - 0.04), sy * (half.y + fw * 0.5 + 0.001), face + 0.0028)
 			var c := _avg(img, _px(p))
 			var ok := c.r > 0.3 and c.r > c.g and c.g > c.b and c.r - c.b > 0.12
 			gold += 1 if ok else 0

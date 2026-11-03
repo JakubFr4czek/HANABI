@@ -34,12 +34,12 @@ signal denied(node_id: String, reason: String)
 ## 0.84° (docs/n9/README.md); 0.9 mm per canvas pixel both ways.
 const PANEL_SIZE := Vector2(1.44, 0.9)
 ## Radius of the cylinder the board is bent on (vertical axis on the viewer's side).
-const CURVE_RADIUS := 2.4
+const CURVE_RADIUS := 3.0
 ## Frame: width around the paper, how far its face stands in front of the paper,
 ## how far the back plate sits behind it (metres, before scaling).
 const FRAME_WIDTH := 0.036
-const FRAME_FRONT := 0.014
-const BOARD_DEPTH := 0.030
+const FRAME_FRONT := 0.016
+const BOARD_DEPTH := 0.036
 ## The whole board, frame included: what UiPlacement must keep clear.
 const OUTER_SIZE := Vector2(PANEL_SIZE.x + 2.0 * FRAME_WIDTH, PANEL_SIZE.y + 2.0 * FRAME_WIDTH)
 ## Columns of the curved meshes.
@@ -64,8 +64,8 @@ const STICK_SCROLL_RATE := 7.0
 const STICK_DEADZONE := 0.35
 ## Lantern light baked into the frame, in board space (above left, from the viewer's side).
 const LIGHT_DIR := Vector3(-0.38, 0.62, 0.69)
-const LACQUER_COLOR := Color(0.105, 0.032, 0.028)
-const GOLD_COLOR := Color(0.80, 0.63, 0.37)
+const LACQUER_COLOR := Color(0.21, 0.055, 0.045)
+const GOLD_COLOR := Color(0.66, 0.50, 0.28)
 
 var run_game: RunGame
 var canvas: SkillTreeCanvas
@@ -464,10 +464,10 @@ static func build_frame_mesh() -> ArrayMesh:
 			var ux: float = sx * (half.x + fw - 0.005)
 			var uy: float = sy * (half.y + fw - 0.005)
 			# Horizontal arm along the top/bottom rail, vertical arm along the side rail.
-			_slab(st, minf(ux, ux - sx * 0.11), maxf(ux, ux - sx * 0.11),
-					minf(uy, uy - sy * (fw - 0.012)), maxf(uy, uy - sy * (fw - 0.012)), face, face + 0.0028)
+			_slab(st, minf(ux, ux - sx * 0.07), maxf(ux, ux - sx * 0.07),
+					minf(uy, uy - sy * (fw - 0.012)), maxf(uy, uy - sy * (fw - 0.012)), face, face + 0.0022)
 			_slab(st, minf(ux, ux - sx * (fw - 0.012)), maxf(ux, ux - sx * (fw - 0.012)),
-					minf(uy, uy - sy * 0.11), maxf(uy, uy - sy * 0.11), face, face + 0.0028)
+					minf(uy, uy - sy * 0.07), maxf(uy, uy - sy * 0.07), face, face + 0.0022)
 	return st.commit()
 
 
@@ -552,7 +552,7 @@ static func shade(p: Vector3, n: Vector3, gold: bool) -> Color:
 	var fres := pow(1.0 - clampf(n.dot(v), 0.0, 1.0), 4.0)
 	var c: Color
 	if gold:
-		c = GOLD_COLOR * (0.40 + 0.55 * ndl) + Color(1.0, 0.88, 0.62) * (0.55 * pow(ndh, 10.0))
+		c = GOLD_COLOR * (0.40 + 0.55 * ndl) + Color(1.0, 0.88, 0.62) * (0.30 * pow(ndh, 14.0))
 	else:
 		c = LACQUER_COLOR * (0.62 + 0.75 * ndl) + Color(1.0, 0.90, 0.80) * (0.20 * pow(ndh, 16.0) + 0.05 * fres)
 	return Color(minf(c.r, 1.0), minf(c.g, 1.0), minf(c.b, 1.0), 1.0)

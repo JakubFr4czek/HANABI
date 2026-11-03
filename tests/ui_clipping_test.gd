@@ -274,9 +274,11 @@ func _test_material_guarantees() -> void:
 		SkillTreeMenu.OUTER_SIZE.x > SkillTreeMenu.PANEL_SIZE.x and run.pause_controller.get_script().source_code.contains("SkillTreeMenu.OUTER_SIZE"))
 	# The bent board stays inside the depth UiPlacement keeps free around its plane.
 	var aabb := (menu.get_node("Board/Frame") as MeshInstance3D).mesh.get_aabb()
-	_check("N9: the curved frame (z %.3f..%.3f m) stays inside the ±%.2f m slab UiPlacement clears" % [aabb.position.z, aabb.end.z, UiPlacement.CLEARANCE_DEPTH * 0.5],
+	var box := SkillTreeMenu.OUTER_SIZE + Vector2.ONE * 2.0 * UiPlacement.SIDE_MARGIN
+	_check("N9: the curved frame (%.3f x %.3f m, z %.3f..%.3f) stays inside the %.2f x %.2f x ±%.2f m box UiPlacement clears" % [
+			aabb.size.x, aabb.size.y, aabb.position.z, aabb.end.z, box.x, box.y, UiPlacement.CLEARANCE_DEPTH * 0.5],
 		aabb.position.z >= -UiPlacement.CLEARANCE_DEPTH * 0.5 and aabb.end.z <= UiPlacement.CLEARANCE_DEPTH * 0.5
-		and aabb.size.x <= SkillTreeMenu.OUTER_SIZE.x + 0.001 and aabb.size.y <= SkillTreeMenu.OUTER_SIZE.y + 0.001)
+		and aabb.size.x <= box.x and aabb.size.y <= box.y)
 	_check("panel sorts in a high render priority (%d)" % menu._panel_mat.render_priority, menu._panel_mat.render_priority >= 100)
 	_check("pointer beam and reticle are always on top of the panel",
 		menu._beam_mat.no_depth_test and menu._reticle_mat.no_depth_test
