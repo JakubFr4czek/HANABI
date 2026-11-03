@@ -29,7 +29,7 @@
     {"kind": "SOUND", "name": "Interface Sounds", "author": "Kenney", "source": "https://kenney.nl/assets/interface-sounds", "license": "CC0 1.0", "use": "Run stings"},
     {"kind": "SOUND", "name": "AMB Rain Loop 1", "author": "Kresiek The Furry", "source": "https://opengameart.org/content/amb-rain-loop-1", "license": "CC0", "use": "Rain"},
     {"kind": "SOUND", "name": "Rain + Long Thunder", "author": "WuxiaScrub", "source": "https://opengameart.org/content/rain-long-thunder", "license": "CC0", "use": "Thunder rolls"},
-    {"kind": "SOUND", "name": "thunderclap", "author": "autor nieznany", "source": "https://opengameart.org/sites/default/files/thunderclap.ogg", "license": "CC0", "use": "Thunder roll"},
+    {"kind": "SOUND", "name": "Thunder (thunderclap.ogg)", "author": "Jerimee", "source": "https://opengameart.org/content/thunder", "license": "CC-BY 3.0", "use": "Thunder roll"},
     {"kind": "MUSIC", "name": "Oriental Somber", "author": "Tozan", "source": "https://opengameart.org/content/oriental-somber", "license": "CC0", "use": "Run music"},
     {"kind": "MUSIC", "name": "Taiko (Scott Harding), Singapore Wind Symphony Percussion Ensemble", "author": "Scott Harding; recording uploaded by Teohui", "source": "https://commons.wikimedia.org/wiki/File:02_Taiko2_(short).oga", "license": "CC0 1.0", "use": "Taiko layer of the run music"},
     {"kind": "MUSIC", "name": "Shika no Tōne (鹿の遠音)", "author": "Araki Kodō III (performer)", "source": "https://commons.wikimedia.org/wiki/File:Shikanotoone_new.ogg", "license": "Public Domain", "use": "Shakuhachi layer of the run music"},

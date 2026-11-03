@@ -9,3 +9,5 @@ CC0 storm ambience (commit to repo).
 - rain_thunder_sample.ogg — WuxiaScrub, OpenGameArt "Rain + Long Thunder" (CC0)
   https://opengameart.org/content/rain-long-thunder
   (source for optional thunder rolls; primary thunder uses thunder_clap_0.wav)
+
+NOTE (3 Nov 2026): thunderclap comes from https://opengameart.org/content/thunder by Jerimee and is licensed CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/), not CC0. Attribution is given in CREDITS.md and the in-game Credits screen.

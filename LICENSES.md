@@ -27,7 +27,7 @@ Update this file whenever an asset or plugin is added (see `docs/GDD.md`, sectio
 | `assets/audio/sfx/impact/impactPlank_medium_*.ogg`, `impactPunch_heavy_*.ogg` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 |
 | `assets/audio/sfx/cc0_combat/*.ogg` | https://kenney.nl/assets/impact-sounds | Kenney | CC0 1.0 (`assets/audio/sfx/cc0_combat/LICENSE.txt`) |
 | `assets/audio/sfx/kenney_run/*.ogg` | https://kenney.nl/assets/interface-sounds & https://kenney.nl/assets/impact-sounds | Kenney | CC0 1.0 (`assets/audio/sfx/kenney_run/LICENSE.txt`) |
-| `assets/audio/sfx/cc0_storm/*` | https://opengameart.org/content/amb-rain-loop-1 , https://opengameart.org/content/rain-long-thunder , thunderclap WAV on OGA | Kresiek The Furry / WuxiaScrub / OGA submitters | CC0 (`assets/audio/sfx/cc0_storm/LICENSE.txt`) |
+| `assets/audio/sfx/cc0_storm/*` | https://opengameart.org/content/amb-rain-loop-1 , https://opengameart.org/content/rain-long-thunder , https://opengameart.org/content/thunder (thunderclap) | Kresiek The Furry / WuxiaScrub / Jerimee | CC0 / CC0 / **CC-BY 3.0** (thunderclap) (`assets/audio/sfx/cc0_storm/LICENSE.txt`) |
 | `assets/audio/sfx/bonsho/bonsho_*.wav` | https://commons.wikimedia.org/wiki/File:Bonsyou5599.ogg | Jnn | **CC BY 2.1 JP** / FAL / CC BY-SA (`assets/audio/sfx/bonsho/LICENSE.txt`) |
 | `assets/audio/music/cc0_run/orientalsomber.ogg` | https://opengameart.org/content/oriental-somber | Tozan | CC0 |
 | `assets/audio/music/cc0_run/shakuhachi_taiko_layer.wav` | in-project arrangement of CC0 taiko (Scott Harding / Singapore Wind Symphony) & public domain shakuhachi (Araki Kodō III) recordings | Singapore Wind Symphony / Araki Kodō III / HANABI | CC0 1.0 (`assets/audio/music/cc0_run/LICENSE.txt`) |

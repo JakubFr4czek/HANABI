@@ -52,7 +52,7 @@ HANABI (花火) by Jakub Frączek, made for the Meta Global AI Developer Hackath
 | Interface Sounds | Kenney | https://kenney.nl/assets/interface-sounds | CC0 1.0 | Run stings |
 | AMB Rain Loop 1 | Kresiek The Furry | https://opengameart.org/content/amb-rain-loop-1 | CC0 | Rain |
 | Rain + Long Thunder | WuxiaScrub | https://opengameart.org/content/rain-long-thunder | CC0 | Thunder rolls |
-| thunderclap | autor nieznany | https://opengameart.org/sites/default/files/thunderclap.ogg | CC0 | Thunder roll |
+| Thunder (thunderclap.ogg) | Jerimee | https://opengameart.org/content/thunder | CC-BY 3.0 | Thunder roll |
 
 ### Music
 
