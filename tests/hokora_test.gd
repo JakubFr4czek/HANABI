@@ -985,6 +985,12 @@ func _test_f7_soul_vessels() -> void:
 	_check("F7: the wrist reads DUSZE 1/%d (%s %s)" % [spots.size(), run.diegetic_hud.row_label("souls"), run.diegetic_hud.row_value("souls")],
 		run.diegetic_hud.row_label("souls") == "DUSZE" and run.diegetic_hud.row_value("souls") == "1/%d" % spots.size())
 	_check("F7: the run goes on after one soul", run.state == RunGame.RunState.PLAYING)
+	var sign := v.get_node("Sign") as Label3D
+	_check("F7 r1: the vessel sign is big and drawn over the world (%d px × %.5f, no_depth_test %s)" % [sign.font_size, sign.pixel_size, sign.no_depth_test],
+		float(sign.font_size) * sign.pixel_size >= 2.0 * 34.0 * 0.0011 and sign.no_depth_test and sign.outline_size >= 12)
+	var light := v.get_node("SoulLight") as OmniLight3D
+	_check("F7 r1: the soul light is soft and above the statue (energy base %.2f, y %.2f)" % [0.45, light.position.y],
+		light.position.y >= SoulVessel.LIGHT_Y - 0.01 and light.omni_range <= 2.8)
 	if _rendering() and "--f7-shots" in OS.get_cmdline_user_args():
 		await _frames(50)
 		await _f7_shot("f7_release.png")
@@ -999,6 +1005,10 @@ func _test_f7_soul_vessels() -> void:
 		if (l as Label3D).text == "THE VILLAGE IS SAVED":
 			saved_label = true
 	_check("F7: the stele reads THE VILLAGE IS SAVED", saved_label)
+	var souls_lbl := run._end_screen_root.find_child("SoulsFreedLabel", true, false) as Label3D
+	_check("F7 r1: the souls row has its own line, readable and on the stele (%s)" % (souls_lbl.text if souls_lbl else "none"),
+		souls_lbl != null and float(souls_lbl.font_size) * souls_lbl.pixel_size >= 0.045
+		and souls_lbl.position.y - 0.025 > -0.31 and souls_lbl.text.contains("5 / 5"))
 	if _rendering() and "--f7-shots" in OS.get_cmdline_user_args():
 		await _frames(20)
 		await _f7_shot("f7_win.png")
@@ -1087,7 +1097,16 @@ func _test_f7_vessel_reads_at_8m() -> void:
 		glow.b > glow.r and glow.h * 360.0 > 160.0 and glow.h * 360.0 < 240.0)
 	_check("F7: 8 m: the vessel stands near the middle of the view", Vector2(rect.get_center()).distance_to(centre) < viewport.x * 0.3)
 	# The wrist readout with the counter (desktop pins it to the camera).
+	# F7 r1: at 2 m the stone keeps its texture, it is not burned white by the soul light.
+	await _f7_stand_near(best, 2.0)
+	_look_down(28.0)
+	await _frames(30)
+	await RenderingServer.frame_post_draw
+	var close := player.get_viewport().get_texture().get_image()
+	var srect := _box_rect(player.camera, Transform3D(Basis(), at), AABB(Vector3(-0.2, 0.05, -0.2), Vector3(0.4, 0.5, 0.4)), viewport)
+	var stone_mid := _quantile_luma(close, srect, 0.5)
+	var stone_hi := _quantile_luma(close, srect, 0.9)
+	_check("F7 r1: 2 m: the statue is not burned white (median luma %.2f < 0.7, p90 %.2f < 0.92)" % [stone_mid, stone_hi],
+		srect.size.x >= 8 and stone_mid < 0.7 and stone_hi < 0.92)
 	if "--f7-shots" in OS.get_cmdline_user_args():
-		await _f7_stand_near(best, 1.6)
-		await _frames(30)
 		await _f7_shot("f7_prompt.png")

@@ -13,6 +13,8 @@ const MODEL := preload("res://assets/models/props/komainu/komainu_scan.glb")
 const MODEL_HEIGHT := 0.62
 ## Height of the wisp above the ground, metres.
 const WISP_Y := 0.95
+## The soul light hangs this high (metres), well above the statue's head.
+const LIGHT_Y := 1.7
 const SOUL_COLOR := Color(0.62, 0.86, 1.0)
 ## The candle-like light only burns within this many metres of the player (≤1 at once:
 ## vessels stand ≥ SoulVesselManager.MIN_SPACING apart).
@@ -46,23 +48,34 @@ func _ready() -> void:
 	_light = OmniLight3D.new()
 	_light.name = "SoulLight"
 	_light.light_color = SOUL_COLOR
-	_light.light_energy = 1.1
-	_light.omni_range = 3.2
+	# F7 r1: soft and high above the statue, so the stone keeps its texture at 2 m
+	# (1.1 at wisp height burned the scan white). The 8 m read comes from the halo.
+	_light.light_energy = 0.45
+	_light.omni_range = 2.6
+	_light.omni_attenuation = 1.6
 	_light.shadow_enabled = false
-	_light.position.y = WISP_Y
+	_light.position.y = LIGHT_Y
 	_light.visible = false
 	add_child(_light)
 	_sign = Label3D.new()
 	_sign.name = "Sign"
-	_sign.font = MemorialTypography.engraving_font()
-	_sign.font_size = 34
-	_sign.pixel_size = 0.0011
+	# F7 r1: same face and contrast as the F4 controls hint, 2x+ the first size,
+	# drawn over trunks and rain so it always reads.
+	_sign.font = UiTypography.font(600)
+	_sign.font_size = 64
+	_sign.pixel_size = 0.00125
 	_sign.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
 	_sign.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sign.modulate = Color(0.9, 0.95, 1.0)
-	_sign.outline_size = 8
-	_sign.outline_modulate = Color(0.02, 0.02, 0.04, 0.9)
-	_sign.position.y = 1.32
+	_sign.modulate = Color(0.95, 0.97, 1.0)
+	_sign.outline_size = 18
+	_sign.outline_modulate = Color(0.01, 0.01, 0.02, 0.95)
+	_sign.shaded = false
+	_sign.double_sided = true
+	_sign.no_depth_test = true
+	_sign.render_priority = 15
+	_sign.outline_render_priority = 14
+	_sign.line_spacing = 4.0
+	_sign.position.y = 1.45
 	_sign.visible = false
 	add_child(_sign)
 
@@ -147,10 +160,10 @@ func step(delta: float, player_pos: Vector3, prompted: bool, key_text: String) -
 	_halo.scale = Vector3.ONE * (0.92 + 0.12 * breath)
 	var flat := Vector2(player_pos.x - global_position.x, player_pos.z - global_position.z).length()
 	_light.visible = flat < LIGHT_RADIUS
-	_light.light_energy = 0.9 + 0.35 * breath
+	_light.light_energy = 0.38 + 0.12 * breath
 	_sign.visible = prompted
 	if prompted:
-		_sign.text = "A villager's soul is sealed in this stone.\n%s  RELEASE IT" % key_text
+		_sign.text = "A villager's soul\nis sealed in this stone.\n%s  ·  RELEASE IT" % key_text
 
 
 ## Lets the soul go once; returns false when it was already released.
@@ -177,8 +190,8 @@ func _step_release(delta: float) -> void:
 	_wisp_mat.albedo_color = Color(SOUL_COLOR.r * fade * 1.4, SOUL_COLOR.g * fade * 1.4, SOUL_COLOR.b * fade * 1.4, 1.0)
 	_halo.position.y = _wisp.position.y - 0.15
 	_halo_mat.albedo_color = Color(SOUL_COLOR.r * 0.55 * fade, SOUL_COLOR.g * 0.55 * fade, SOUL_COLOR.b * 0.55 * fade, 1.0)
-	_light.position.y = _wisp.position.y
-	_light.light_energy = 2.4 * sin(k * PI) + 0.01
+	_light.position.y = maxf(_wisp.position.y, LIGHT_Y)
+	_light.light_energy = 1.0 * sin(k * PI) + 0.01
 	if k >= 1.0:
 		_release_t = -1.0
 		_wisp.visible = false

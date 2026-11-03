@@ -1169,19 +1169,22 @@ func _build_end_screen(summary: Dictionary) -> void:
 	if kcal_burned > 0:
 		stat_text += "  ·  %d kcal" % kcal_burned
 	# Discreet: the stats sit low in contrast under the word, not on a banner.
-	rows.append([stat_text, 26, 0.00100, Color(0.68, 0.71, 0.8), -0.040])
-	rows.append(["BEST  %d" % int(summary.high_score), 24, 0.00100, Color(0.56, 0.6, 0.7), -0.082])
-	rows.append(["BUILD  %s" % String(summary.get("build", "Unbound")), 26, 0.00100, Color(0.7, 0.62, 0.84), -0.124])
+	rows.append([stat_text, 30, 0.00112, Color(0.74, 0.77, 0.86), -0.042])
+	rows.append(["BEST  %d" % int(summary.high_score), 30, 0.00112, Color(0.66, 0.7, 0.8), -0.084])
+	rows.append(["BUILD  %s" % String(summary.get("build", "Unbound")), 30, 0.00112, Color(0.76, 0.68, 0.9), -0.126])
 	for row in rows:
 		var lbl := MemorialTypography.stele_label(String(row[0]), int(row[1]), float(row[2]), row[3] as Color, Vector3(0, float(row[4]), 0.024))
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		board.add_child(lbl)
 
-	# One line for what the run gave back: shrines found (D1).
-	var shrine_line := "祠  ×%d  visited   ·   魂  %d / %d  freed" % [shrines_claimed, int(summary.get("souls", 0)), int(summary.get("souls_total", 0))]
-	var upg_lbl := MemorialTypography.stele_label(shrine_line, 28, 0.00108, Color(0.74, 0.8, 0.92), Vector3(0, -0.19, 0.024))
+	# What the run gave back (D1): shrines found, and on its own row the souls freed (F7).
+	var upg_lbl := MemorialTypography.stele_label("祠  ×%d  visited" % shrines_claimed, 34, 0.00122, Color(0.8, 0.85, 0.95), Vector3(0, -0.178, 0.024))
 	upg_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	board.add_child(upg_lbl)
+	var soul_lbl := MemorialTypography.stele_label("魂  %d / %d  freed" % [int(summary.get("souls", 0)), int(summary.get("souls_total", 0))], 38, 0.00128, SoulVessel.SOUL_COLOR, Vector3(0, -0.238, 0.024))
+	soul_lbl.name = "SoulsFreedLabel"
+	soul_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	board.add_child(soul_lbl)
 
 	# A wooden votive plaque (絵馬 ema) hangs to the right of the stele: slice it to
 	# begin a fresh run. It is not Ofuda and never reads as currency (D1).
