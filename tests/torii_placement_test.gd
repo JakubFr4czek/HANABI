@@ -17,6 +17,9 @@ func _ready() -> void:
 
 
 func _run_all() -> void:
+	# The data sweep first: it builds worlds of its own, and runs with no run scene alive.
+	await _check_gates_on_footpaths_by_seed()
+
 	var run: RunGame = RUN_SCENE.instantiate()
 	run.skip_run_intro = true
 	add_child(run)
@@ -235,6 +238,102 @@ func _run_all() -> void:
 		min_pair_sep >= 70.0 - 0.01)
 
 	run.queue_free()
+
+
+## F2: over 20 worlds, every decorative and senbon gate that stands by a footpath sits on its
+## rendered centre line (<= 0.3 m) with the passage along it (<= 10 deg), and no trunk, tree or
+## lantern stands in any gate's passage (posts included, with a 0.6 m margin). Data only: the gate
+## plan, the tree spots and the origin chunk's props, with no physics queries.
+func _check_gates_on_footpaths_by_seed() -> void:
+	var started := Time.get_ticks_msec()
+	var base := WorldGenProfile.load_active()
+	var size := 0.0
+	var gates_checked := 0
+	var off_path := 0
+	var worst_off := 0.0
+	var worst_ang := 0.0
+	var off_centre := 0
+	var angled := 0
+	var trunks_in_opening := 0
+	var props_in_opening := 0
+	var half := ForestWorld.TORII_OPENING_HALF + Vector2(ForestWorld.TORII_OPENING_PAD, ForestWorld.TORII_OPENING_PAD)
+	for i in 20:
+		var p := base.duplicate() as WorldGenProfile
+		p.world_seed = 1000 + i * 7919
+		var fw := ForestWorld.new()
+		fw.profile = p
+		add_child(fw)
+		fw._apply_profile()
+		size = fw._chunk_size
+		var gate_poses: Array[Vector4] = []
+		for ox in range(-1, 2):
+			for oz in range(-1, 2):
+				for g in fw._torii_plan(Vector2i(ox, oz)):
+					gate_poses.append(g)
+		for g in gate_poses:
+			var c := Vector2(g.x, g.y)
+			var n := fw.paths.smooth_nearest(c, ToriiManager.PATH_ALIGN_RADIUS, ForestWorld.PATH_SIMPLIFY_TOL)
+			gates_checked += 1
+			if n == Vector4.ZERO:
+				off_path += 1
+			else:
+				var dist := c.distance_to(Vector2(n.x, n.y))
+				worst_off = maxf(worst_off, dist)
+				if dist > 0.3:
+					off_centre += 1
+				var pass_dir := Vector2(sin(g.z), cos(g.z))
+				var ang := rad_to_deg(acos(clampf(absf(pass_dir.dot(Vector2(n.z, n.w))), 0.0, 1.0)))
+				worst_ang = maxf(worst_ang, ang)
+				if ang > 10.0:
+					angled += 1
+			# The gate's passage in its own frame: x across the path, z along it.
+			var along := Vector2(sin(g.z), cos(g.z))
+			var across := Vector2(cos(g.z), -sin(g.z))
+			# Trunks reach the passage from the chunks the passage touches: its own, and a neighbour
+			# only when the gate lies within the reach of the shared border.
+			var cc := Vector2i(roundi(c.x / size), roundi(c.y / size))
+			var reach := ForestWorld.TORII_OPENING_HALF.length() + ForestWorld.TORII_OPENING_PAD
+			for ax in range(-1, 2):
+				for az in range(-1, 2):
+					if ax != 0 and absf(c.x - (cc.x + ax * 0.5) * size) > reach:
+						continue
+					if az != 0 and absf(c.y - (cc.y + az * 0.5) * size) > reach:
+						continue
+					var k := cc + Vector2i(ax, az)
+					var centre := Vector2(k) * size
+					var trunks: Array = []
+					trunks.append_array(fw._tree_spots(k).get("spots", []))
+					trunks.append_array(fw._extra_tree_spots(k).get("spots", []))
+					for key in fw._back_spots(k):
+						for t in fw._back_spots(k)[key]:
+							trunks.append(Vector4(centre.x + (t as Transform3D).origin.x, centre.y + (t as Transform3D).origin.z, 0.0, 0.0))
+					for t in trunks:
+						var q := Vector2(t.x, t.y) - c
+						if absf(q.dot(across)) <= half.x and absf(q.dot(along)) <= half.y:
+							trunks_in_opening += 1
+		# Lanterns and boulders of the origin chunk, against every gate of the ring.
+		var root := fw._make_chunk(Vector2i.ZERO)
+		for key in ["lantern_world_positions", "undergrowth_world_positions"]:
+			for v in root.get_meta(key, []):
+				var q3: Vector3 = v
+				for g in gate_poses:
+					var d := Vector2(q3.x - g.x, q3.z - g.y)
+					var along := Vector2(sin(g.z), cos(g.z))
+					var across := Vector2(cos(g.z), -sin(g.z))
+					if absf(d.dot(across)) <= half.x and absf(d.dot(along)) <= half.y:
+						props_in_opening += 1
+		fw.queue_free()
+	print("F2 sweep took %.1f s" % ((Time.get_ticks_msec() - started) / 1000.0))
+	_check("Footpath gates checked over 20 worlds (%d gates, %d off the paths)" % [gates_checked, off_path],
+		gates_checked >= 20)
+	_check("Footpath gates sit on the rendered centre line within 0.3 m (%d off, worst %.2f m)" % [off_centre, worst_off],
+		off_centre == 0)
+	_check("Footpath gates face along the path within 10 deg (%d off, worst %.1f deg)" % [angled, worst_ang],
+		angled == 0)
+	_check("No trunk or tree stands in a gate's passage (hits=%d)" % trunks_in_opening,
+		trunks_in_opening == 0)
+	_check("No lantern or boulder stands in a gate's passage (hits=%d)" % props_in_opening,
+		props_in_opening == 0)
 
 
 ## Closest distance between two active gates (INF with fewer than two).

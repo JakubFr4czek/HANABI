@@ -288,24 +288,12 @@ func spawn_gate_at(wx: float, wz: float, elem: String = "") -> ToriiGate:
 func _path_yaw(wx: float, wz: float) -> float:
 	if forest_world == null or forest_world.paths == null:
 		return NAN
-	var p := Vector2(wx, wz)
-	var reach := Vector2(PATH_ALIGN_RADIUS, PATH_ALIGN_RADIUS)
-	var segments := forest_world.paths.segments_in_rect(Rect2(p - reach, reach * 2.0))
-	var best := INF
-	var tangent := Vector2.ZERO
-	for k in range(0, segments.size() - 1, 2):
-		var a := segments[k]
-		var b := segments[k + 1]
-		if (b - a).length_squared() < 1e-9:
-			continue
-		var d := ForestPaths.segment_distance(p, a, b)
-		if d < best:
-			best = d
-			tangent = (b - a).normalized()
-	if best > PATH_ALIGN_RADIUS:
+	# The rendered centre line (what the player walks), not the raw route under it.
+	var n := forest_world.paths.smooth_nearest(Vector2(wx, wz), PATH_ALIGN_RADIUS, ForestWorld.PATH_SIMPLIFY_TOL)
+	if n == Vector4.ZERO:
 		return NAN
 	# The passage direction is (sin yaw, cos yaw), the convention of the player-facing branch.
-	return atan2(tangent.x, tangent.y)
+	return atan2(n.z, n.w)
 
 
 func _player_pos() -> Vector3:

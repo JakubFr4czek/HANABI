@@ -70,6 +70,12 @@ const SITE_OVERSAMPLE := 3
 ## Kinds seed the per-chunk streams: gates 1, lanterns 2, undergrowth
 ## 3 + its index in the profile (trees use PoissonDisk, see _potential_trunks).
 const KIND_TORII := 1
+## The passage of a decorative gate, in its own frame: half width (across the path, past the posts) and
+## half depth (along the path). Trunks, lanterns and boulders keep out of it plus TORII_OPENING_PAD.
+const TORII_OPENING_HALF := Vector2(1.35, 1.0)
+const TORII_OPENING_PAD := 0.6
+## Decorative gates within this distance of a footpath are set on its centre line (see _torii_path_pose).
+const TORII_PATH_SNAP := 3.5
 const KIND_LANTERN := 2
 const KIND_UNDERGROWTH := 3
 ## Lantern parts (size, centre) shared by the mesh and its collider.
@@ -122,6 +128,8 @@ var _back_meshes: Dictionary = {}
 var _shrine_reserves: Array[Vector2] = []
 var _back_tree_nodes: Dictionary = {}
 var _tree_spot_cache: Dictionary = {}
+## Decorative gates per chunk (see _torii_plan).
+var _torii_plan_cache: Dictionary = {}
 ## Chunk coord -> {points: Array[Vector4] (x, z, entry, spacing), clearing: int}.
 var _potential_cache: Dictionary = {}
 ## Chunk coord -> PackedFloat32Array: distance to the nearest path at every terrain vertex.
@@ -265,6 +273,7 @@ func reset(anchor: Vector3 = Vector3.INF, facing: Vector3 = Vector3.ZERO) -> voi
 	_poisson_jobs.clear()
 	_trunk_cells.clear()
 	_tree_spot_cache.clear()
+	_torii_plan_cache.clear()
 	_extra_spot_cache.clear()
 	_back_spot_cache.clear()
 	_potential_cache.clear()
@@ -297,6 +306,7 @@ func _apply_profile() -> void:
 	_terrain_res = profile.terrain_resolution
 	var seed_mix := profile.world_seed
 	_tree_spot_cache.clear()
+	_torii_plan_cache.clear()
 	_extra_spot_cache.clear()
 	_back_spot_cache.clear()
 	_potential_cache.clear()
@@ -623,9 +633,8 @@ func _make_chunk(coord: Vector2i, terrain_mesh: ArrayMesh = null) -> Node3D:
 	root.add_child(_build_terrain_collider(terrain.mesh as ArrayMesh))
 
 	var clearing_props := 0
-	_collect_senbon_corridor(root, coord)
 	clearing_props += _populate_trees(root, coord)
-	clearing_props += _populate_props(root, "Torii", _torii_mesh, _torii_mat, _torii_spec(), coord, KIND_TORII)
+	clearing_props += _populate_torii(root, coord)
 	clearing_props += _populate_extra_trees(root, coord)
 	_populate_back_trees(root, coord)
 	clearing_props += _populate_props(root, "Lanterns", _lantern_mesh, _lantern_mat, _lantern_spec(), coord, KIND_LANTERN)
@@ -714,21 +723,14 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 	# Deterministic per chunk and kind, so a recycled chunk grows back the same.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([coord.x, coord.y, kind, 0x464F52]) ^ profile.world_seed
-	# Torii existence is a separate hash (not the rng stream), so grouping
-	# gates never moves trees or other props.
-	var torii_exists := kind != KIND_TORII or _hash01(_hash_coord(coord, 1, 77) ^ profile.world_seed, 0) < profile.torii_chunk_chance
-	# Keep-out: trees first, then everything already placed — gates never grow
-	# through a trunk, lanterns and boulders keep their distance too. Neighbour
-	# chunks' spots are already cached (their meshes queried mounds), so gates
-	# near a border respect them too. Gates in one group stay close (they form
-	# corridors), so torii check trees wide but each other narrow.
-	# Gates keep to the base trunks only: layout-after trunks come after the gate plan.
-	var tree_keep := _tree_trunk_points(coord) if kind == KIND_TORII else _prop_trunk_points(coord)
+	# Keep-out: trees first, then everything already placed, and the gates' passages (the
+	# gate plan is data, so the order of chunk builds does not matter).
+	var tree_keep := _prop_trunk_points(coord)
 	var field := _path_field(coord)
 	# Boulders keep the same clearance from the trail as trunks do (see _tree_spots).
 	var path_keep := _path_half_width() + profile.path_tree_clearance
 	var placed: Array = []
-	var gates_here: Array = root.get_meta("torii_world_positions", []) if kind == KIND_LANTERN else []
+	var gates_near: Array = _torii_gates_ring(coord) if kind == KIND_LANTERN else []
 	for p in _sites_for(rng, coord, spec):
 		var lx: float = p.x
 		var lz: float = p.y
@@ -737,9 +739,9 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 		if _in_clearing(wx, wz):
 			clearing_hits += 1
 			continue
-		if kind == KIND_LANTERN and _near_gate_of_chunk(gates_here, wx, wz):
+		if kind == KIND_LANTERN and _near_gate_of_chunk(gates_near, wx, wz):
 			continue
-		if torii_manager and torii_manager.is_near_gate(wx, wz, GATE_CLEAR_OF_LIVE_GATE):
+		if _in_torii_opening(wx, wz, TORII_OPENING_PAD):
 			continue
 		if bool(spec.avoid_path) and not field.is_empty() and _field_at(field, Vector2(lx, lz)) < path_keep:
 			continue
@@ -748,19 +750,10 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 		if bool(spec.get("path_only", false)) and not field.is_empty() and _field_at(field, Vector2(lx, lz)) < _path_half_width() + 0.6:
 			continue
 		var density := _scatter_noise.get_noise_2d(wx * profile.density_frequency, wz * profile.density_frequency) * 0.5 + 0.5
-		if kind == KIND_TORII:
-			# Only chosen chunks hold gates; inside one, most candidates
-			# stay, so gates come in small groups for the same draw calls.
-			if not torii_exists:
-				continue
-			if rng.randf() > profile.torii_group_keep:
-				continue
-		elif density < float(spec.cluster):
+		if density < float(spec.cluster):
 			continue
 		var hy := height_at(wx, wz)
 		var scale := rng.randf_range(float(spec.scale_min), float(spec.scale_max))
-		if kind == KIND_TORII:
-			scale = torii_scale_for_height(rng.randf_range(profile.torii_height_min, profile.torii_height_max))
 		var grow := float(spec.grow)
 		var tree_clear := float(spec.tree_clear) + scale * grow
 		if _spot_blocked(tree_keep, wx, wz, tree_clear):
@@ -769,27 +762,17 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 		if _spot_blocked(placed, wx, wz, prop_clear):
 			continue
 		placed.append(Vector3(wx, wz, prop_clear * 0.5))
-		if kind == KIND_TORII:
-			# Gates stand upright: drop the whole frame below the lowest
-			# ground under its span so no leg floats downhill.
-			hy = _mesh_min_height(wx, wz, 2.0) - 0.05
-		else:
-			# Boulders sit half-buried instead of balancing on the slope.
-			hy -= float(spec.bury) * scale
+		# Boulders sit half-buried instead of balancing on the slope.
+		hy -= float(spec.bury) * scale
 		var angle := rng.randf() * TAU
 		var basis := Basis.from_euler(Vector3(0.0, angle, 0.0)) * Basis.from_scale(Vector3.ONE * scale)
-		var xf := Transform3D(basis, Vector3(lx, hy, lz))
-		transforms.append(xf)
+		transforms.append(Transform3D(basis, Vector3(lx, hy, lz)))
 		if transforms.size() >= int(spec.max):
 			break
 		var props: Array = root.get_meta("prop_world_positions", [])
 		props.append(Vector3(wx, hy, wz))
 		root.set_meta("prop_world_positions", props)
-		if kind == KIND_TORII:
-			var gates: Array = root.get_meta("torii_world_positions", [])
-			gates.append(Vector3(wx, hy, wz))
-			root.set_meta("torii_world_positions", gates)
-		elif kind >= KIND_UNDERGROWTH:
+		if kind >= KIND_UNDERGROWTH:
 			var stones: Array = root.get_meta("undergrowth_world_positions", [])
 			stones.append(Vector3(wx, hy, wz))
 			root.set_meta("undergrowth_world_positions", stones)
@@ -797,23 +780,113 @@ func _populate_props(root: Node3D, label: String, mesh: Mesh, mat: Material, spe
 			var lanterns: Array = root.get_meta("lantern_world_positions", [])
 			lanterns.append(Vector3(wx, hy, wz))
 			root.set_meta("lantern_world_positions", lanterns)
-	if kind == KIND_TORII:
-		# Senbon corridors ride the same MultiMesh (one draw call): a node per
-		# corridor cost a draw each against the Quest cap.
-		transforms.append_array(root.get_meta("senbon_pending", []))
-		root.set_meta("senbon_pending", [])
 	if not transforms.is_empty():
 		_commit_multimesh(root, label, mesh, mat, transforms)
 		# The kind's placed transforms, kept on the chunk like the trees' (headless reads of a
 		# MultiMesh buffer come back as identity, so the tests read these).
 		root.set_meta("xfs_" + label, transforms)
-		if kind == KIND_TORII:
-			root.add_child(_build_torii_colliders(transforms, root))
-		elif kind == KIND_LANTERN:
+		if kind == KIND_LANTERN:
 			root.add_child(_build_lantern_colliders(transforms, root))
 		elif spec.obstacle:
 			root.add_child(_build_undergrowth_colliders(transforms, undergrowth_index, root))
 	return clearing_hits
+
+
+## Decorative gates of one chunk: the footpath sites, snapped onto the rendered centre line, minus
+## the ones in clearings, on the base trunks, or too close to each other. Decided from the path,
+## the base trunks and the chunk's own seed only, so every chunk computes the same plan whatever
+## order the chunks are built in. Vector4(x, z, yaw, scale) per gate, world xz.
+func _torii_plan(coord: Vector2i) -> Array[Vector4]:
+	if _torii_plan_cache.has(coord):
+		return _torii_plan_cache[coord]
+	var out: Array[Vector4] = []
+	var spec := _torii_spec()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([coord.x, coord.y, KIND_TORII, 0x464F52]) ^ profile.world_seed
+	# Only chosen chunks hold gates; inside one, most candidates stay, so gates come in small groups.
+	var torii_exists := _hash01(_hash_coord(coord, 1, 77) ^ profile.world_seed, 0) < profile.torii_chunk_chance
+	var tree_keep := _tree_trunk_points(coord)
+	var placed: Array = []
+	var origin := Vector2(float(coord.x), float(coord.y)) * _chunk_size
+	if torii_exists:
+		for p in _sites_for(rng, coord, spec):
+			var wx := origin.x + p.x
+			var wz := origin.y + p.y
+			# A gate near a footpath stands on its centre line, facing along it (see _torii_path_pose).
+			var pose := _torii_path_pose(wx, wz)
+			if not is_nan(pose.z):
+				wx = pose.x
+				wz = pose.y
+			if _in_clearing(wx, wz):
+				continue
+			if rng.randf() > profile.torii_group_keep:
+				continue
+			var scale := torii_scale_for_height(rng.randf_range(profile.torii_height_min, profile.torii_height_max))
+			if _spot_blocked(tree_keep, wx, wz, float(spec.tree_clear)):
+				continue
+			var prop_clear := float(spec.prop_clear)
+			if _spot_blocked(placed, wx, wz, prop_clear):
+				continue
+			placed.append(Vector3(wx, wz, prop_clear * 0.5))
+			var yaw := pose.z if not is_nan(pose.z) else rng.randf() * TAU
+			out.append(Vector4(wx, wz, yaw, scale))
+			if out.size() >= int(spec.max):
+				break
+	out.append_array(_senbon_plan(coord))
+	_torii_plan_cache[coord] = out
+	return out
+
+
+## Places the decorative gates of one chunk from its plan (see _torii_plan).
+func _populate_torii(root: Node3D, coord: Vector2i) -> int:
+	var transforms: Array[Transform3D] = []
+	for g in _torii_plan(coord):
+		var wx := g.x
+		var wz := g.y
+		# Live gates keep their own clear space; the decorative gate is left out there.
+		if torii_manager and torii_manager.is_near_gate(wx, wz, GATE_CLEAR_OF_LIVE_GATE):
+			continue
+		# Gates stand upright: drop the whole frame below the lowest ground under its span.
+		var hy := _mesh_min_height(wx, wz, 2.0) - 0.05
+		var basis := Basis.from_euler(Vector3(0.0, g.z, 0.0)) * Basis.from_scale(Vector3.ONE * g.w)
+		transforms.append(Transform3D(basis, Vector3(wx - root.position.x, hy, wz - root.position.z)))
+		var props: Array = root.get_meta("prop_world_positions", [])
+		props.append(Vector3(wx, hy, wz))
+		root.set_meta("prop_world_positions", props)
+		var gates: Array = root.get_meta("torii_world_positions", [])
+		gates.append(Vector3(wx, hy, wz))
+		root.set_meta("torii_world_positions", gates)
+	if not transforms.is_empty():
+		_commit_multimesh(root, "Torii", _torii_mesh, _torii_mat, transforms)
+		root.set_meta("xfs_Torii", transforms)
+		root.add_child(_build_torii_colliders(transforms, root))
+	return 0
+
+
+## Plan gates of the 3×3 chunks around [param coord], as Vector3(x, 0, z) for the distance rules.
+func _torii_gates_ring(coord: Vector2i) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for ox in range(-1, 2):
+		for oz in range(-1, 2):
+			for g in _torii_plan(coord + Vector2i(ox, oz)):
+				out.append(Vector3(g.x, 0.0, g.y))
+	return out
+
+
+## True when the world point (wx, wz) lies in the passage of a decorative gate, or within [param pad]
+## of it (posts included). The gate's frame: local z runs along the path, local x across it.
+func _in_torii_opening(wx: float, wz: float, pad: float) -> bool:
+	var cx := int(roundf(wx / _chunk_size))
+	var cz := int(roundf(wz / _chunk_size))
+	for ox in range(-1, 2):
+		for oz in range(-1, 2):
+			for g in _torii_plan(Vector2i(cx + ox, cz + oz)):
+				var d := Vector2(wx - g.x, wz - g.y)
+				var along := Vector2(sin(g.z), cos(g.z))
+				var across := Vector2(cos(g.z), -sin(g.z))
+				if absf(d.dot(across)) <= TORII_OPENING_HALF.x + pad and absf(d.dot(along)) <= TORII_OPENING_HALF.y + pad:
+					return true
+	return false
 
 
 func _torii_spec() -> Dictionary:
@@ -822,8 +895,22 @@ func _torii_spec() -> Dictionary:
 		"scale_min": 0.0, "scale_max": 0.0, "grow": 0.0,
 		"tree_clear": profile.torii_tree_clearance, "prop_clear": profile.torii_prop_clearance,
 		"bury": 0.0, "obstacle": true,
-		"path_share": profile.torii_on_path, "path_offset": _path_half_width() + 2.8, "avoid_path": false,
+		"path_share": profile.torii_on_path, "path_offset": 0.0, "avoid_path": false,
 	}
+
+
+## Where a decorative gate at (wx, wz) stands on a footpath: the nearest centre-line point
+## within TORII_PATH_SNAP, with the yaw that runs its passage along the path. Vector3(x, z, yaw);
+## yaw is NAN when no footpath is that close (the gate keeps its random yaw).
+func _torii_path_pose(wx: float, wz: float) -> Vector3:
+	if paths == null:
+		return Vector3(wx, wz, NAN)
+	# The rendered centre line, so the gate meets the path the player sees (not the raw route).
+	var n := paths.smooth_nearest(Vector2(wx, wz), TORII_PATH_SNAP, PATH_SIMPLIFY_TOL)
+	if n == Vector4.ZERO:
+		return Vector3(wx, wz, NAN)
+	# The passage is local Z, (sin yaw, cos yaw): the same convention as ToriiManager.
+	return Vector3(n.x, n.y, atan2(n.z, n.w))
 
 
 func _lantern_spec() -> Dictionary:
@@ -865,13 +952,7 @@ func _extra_tree_spots(coord: Vector2i) -> Dictionary:
 	var field := _path_field(coord)
 	var path_gap := _path_half_width() + profile.path_tree_clearance
 	var base: Array = _tree_trunk_points(coord)
-	var gates: Array[Vector3] = []
-	for ox in range(-1, 2):
-		for oz in range(-1, 2):
-			var n: Node3D = _chunks.get(coord + Vector2i(ox, oz), null)
-			if n:
-				for g in n.get_meta("torii_world_positions", []):
-					gates.append(g)
+	var gates: Array[Vector3] = _torii_gates_ring(coord)
 	var accepted: Array[Vector4] = []
 	var spots: Array[Vector4] = []
 	var ids := PackedInt32Array()
@@ -889,6 +970,8 @@ func _extra_tree_spots(coord: Vector2i) -> Dictionary:
 			var yaw := _point_random(p.x, p.y, 3) * TAU if entry.random_yaw else 0.0
 			var reach := _crown_reach_at(p, e, scale, yaw)
 			# Crowns may touch the base crowns only as far as the canopy rule allows (see _near_extra).
+			if _in_torii_opening(p.x, p.y, TORII_OPENING_PAD):
+				continue
 			if _near_base(base, p, reach) or _near_points3(gates, p, EXTRA_GATE_CLEAR):
 				continue
 			if _near_extra(accepted, p, e, entry.min_spacing, reach):
@@ -1307,13 +1390,7 @@ func _back_spots(coord: Vector2i) -> Dictionary:
 	var centre := Vector2(float(coord.x) * size, float(coord.y) * size)
 	var field := _path_field(coord)
 	var path_gap := _path_half_width() + profile.path_tree_clearance
-	var gates: Array[Vector3] = []
-	for ox in range(-1, 2):
-		for oz in range(-1, 2):
-			var n: Node3D = _chunks.get(coord + Vector2i(ox, oz), null)
-			if n:
-				for g in n.get_meta("torii_world_positions", []):
-					gates.append(g)
+	var gates: Array[Vector3] = _torii_gates_ring(coord)
 	var accepted: Array[Vector4] = []
 	var out := {}
 	for e in _back_entries():
@@ -1330,6 +1407,8 @@ func _back_spots(coord: Vector2i) -> Dictionary:
 			var yaw := _point_random(p.x, p.y, 3) * TAU if entry.random_yaw else 0.0
 			# Beyond back_near the trunk stands behind the near forest, so it may overlap a near crown;
 			# it keeps off the gates and its own spacing only (the near rules would leave no room for a wall).
+			if _in_torii_opening(p.x, p.y, TORII_OPENING_PAD):
+				continue
 			if _near_points3(gates, p, EXTRA_GATE_CLEAR):
 				continue
 			if _near_extra(accepted, p, e, entry.min_spacing, 0.0):
@@ -2282,13 +2361,16 @@ func _far_tree_node(e: int) -> MultiMeshInstance3D:
 
 
 ## Senbon rows: short lines of gates in chunks where the corridor noise runs high.
-func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
+## Senbon rows of one chunk (the corridor noise runs high there): Vector4(x, z, yaw, scale) per gate,
+## world xz. Part of the chunk's gate plan (see _torii_plan), so trunks and props keep out of them too.
+func _senbon_plan(coord: Vector2i) -> Array[Vector4]:
+	var out: Array[Vector4] = []
 	var corridor_val := _corridor_noise.get_noise_2d(float(coord.x) * CORRIDOR_SCALE, float(coord.y) * CORRIDOR_SCALE)
 	if corridor_val < profile.torii_row_threshold:
-		return
+		return out
 	var axis_x := corridor_val > SENBON_AXIS_THRESHOLD
 	var size := _chunk_size
-	var transforms: Array[Transform3D] = []
+	var origin := Vector2(float(coord.x), float(coord.y)) * size
 	var span := profile.torii_row_max - profile.torii_row_min + 1
 	var gate_count := profile.torii_row_min + int((_hash01(_hash_coord(coord, 9, 0), 0) * float(span)))
 	var spacing := profile.torii_row_spacing
@@ -2297,8 +2379,8 @@ func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 		var along := start + float(g) * spacing
 		var lx := along if axis_x else -size * 0.15
 		var lz := -size * 0.15 if axis_x else along
-		var wx := root.position.x + lx
-		var wz := root.position.z + lz
+		var wx := origin.x + lx
+		var wz := origin.y + lz
 		if _in_clearing(wx, wz, 0.35):
 			continue
 		# Corridor gates keep the same trunk clearance as scattered ones.
@@ -2317,19 +2399,9 @@ func _collect_senbon_corridor(root: Node3D, coord: Vector2i) -> void:
 				break
 		if blocked:
 			continue
-		var hy := _mesh_min_height(wx, wz, 2.0) - 0.05
-		var s := torii_scale_for_height(4.4 + float(g) * 0.12)
-		var basis := Basis.from_euler(Vector3(0.0, PI * 0.5 if axis_x else 0.0, 0.0)) * Basis.from_scale(Vector3.ONE * s)
-		transforms.append(Transform3D(basis, Vector3(lx, hy, lz)))
-		var props: Array = root.get_meta("prop_world_positions", [])
-		props.append(Vector3(wx, hy, wz))
-		root.set_meta("prop_world_positions", props)
-		var gates: Array = root.get_meta("torii_world_positions", [])
-		gates.append(Vector3(wx, hy, wz))
-		root.set_meta("torii_world_positions", gates)
-	# Committed with the chunk's Torii MultiMesh (pillars included, so the
-	# corridor also steers yōkai and stops the player like other gates).
-	root.set_meta("senbon_pending", transforms)
+		var yaw := PI * 0.5 if axis_x else 0.0
+		out.append(Vector4(wx, wz, yaw, torii_scale_for_height(4.4 + float(g) * 0.12)))
+	return out
 
 
 ## Ground mesh of a chunk. Vertex colour R is the path weight (1 on the

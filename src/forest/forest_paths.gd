@@ -235,6 +235,30 @@ static func distance_to_segments(segments: PackedVector2Array, p: Vector2) -> fl
 	return best
 
 
+## The rendered centre line (see [method smooth_segments_in_rect], simplified within [param tol])
+## nearest to [param p] within [param radius]: Vector4(x, z, tangent.x, tangent.y), the point on the
+## line and the unit tangent of its segment. All zeros when no line is that close.
+func smooth_nearest(p: Vector2, radius: float, tol: float) -> Vector4:
+	var reach := Vector2(radius, radius)
+	var best := INF
+	var out := Vector4.ZERO
+	for v in smooth_segments_in_rect(Rect2(p - reach, reach * 2.0), tol):
+		var a := Vector2(v.x, v.y)
+		var b := Vector2(v.z, v.w)
+		var ab := b - a
+		var len2 := ab.length_squared()
+		if len2 < 1e-9:
+			continue
+		var t := clampf((p - a).dot(ab) / len2, 0.0, 1.0)
+		var q := a + ab * t
+		var d := p.distance_to(q)
+		if d < best and d <= radius:
+			best = d
+			var tan := ab.normalized()
+			out = Vector4(q.x, q.y, tan.x, tan.y)
+	return out
+
+
 ## Points along the paths inside [param rect], every [param spacing] metres.
 ## Each carries the path's unit tangent: Vector4(x, z, tangent.x, tangent.y).
 func samples_in_rect(rect: Rect2, spacing: float) -> Array[Vector4]:
