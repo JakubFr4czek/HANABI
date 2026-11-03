@@ -21,8 +21,13 @@ punkty interakcji: **dzwon (suzu)** i **stół ofiarny (ołtarz)**.
 
 ## 2. Stół ofiarny — wybór ofudy (D12)
 
-Bez zmian: dłoń na stole ofiarnym (VR) albo E przy stole (desktop) otwiera żółte
-karty ofudy. Wybór gasi kapliczkę na resztę przebiegu.
+Dłoń na stole ofiarnym (VR) albo E przy stole (desktop) otwiera żółte karty ofudy.
+Wybór gasi kapliczkę na resztę przebiegu.
+
+**Podpowiedź (F3, `docs/f3/README.md`):** w promieniu `HOKORA_PROMPT_RADIUS` (2.0 m) od ołtarza
+tkanina ołtarza pulsuje ciepło, a papierowa tabliczka obok pokazuje „E │ MAKE AN OFFERING"
+(VR: „TOUCH THE ALTAR"). Akceptacja: dzwonek, rozbłysk świecy, haptyka (VR). Użyta kapliczka
+traci tabliczkę.
 
 ## 3. Pierwszeństwo na desktopie (E)
 
