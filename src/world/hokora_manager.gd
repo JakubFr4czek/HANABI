@@ -16,8 +16,9 @@ extends Node3D
 ##
 ## Shrines are built inside spawn range and freed past cull range. A used slot
 ## (its yellow Ofuda choice taken, D12) is remembered for the whole run: walking back
-## never lights it again. Walking up to a shrine does nothing; a hand on the offering
-## table does (see [method poll_touch]).
+## never lights it again. Walking up to a shrine opens nothing; it only lights its prompt
+## (F3, [method prompt_shrine]). A hand on the offering table, or E on desktop, opens the
+## choice (see [method poll_touch]).
 
 const SHRINE_SCENE := preload("res://scenes/world/hokora_shrine.tscn")
 ## Keep the footprint half a chunk away from the slot edge.
@@ -49,6 +50,10 @@ var start_forward := Vector3.FORWARD
 ## Set by RunGame: a touch opens a choice only while the run is PLAYING (not in the
 ## intro, not on the end screen). Shrines still glow and ring either way.
 var accepting_offerings := true
+## F3: what the shrine sign prints. RunGame sets both from the rig: desktop gets the
+## name of its offering key ("E"), VR gets no key (the hand on the altar is the input).
+var prompt_key := "E"
+var prompt_action := "MAKE AN OFFERING"
 
 var _candidates: Dictionary = {}  # Vector2i -> Vector3 (Vector3.INF = no shrine)
 var _shrines: Dictionary = {}     # Vector2i -> HokoraShrine (built now)
@@ -189,6 +194,30 @@ func nearest_altar() -> Vector3:
 	return best
 
 
+## F3: the one shrine that shows its prompt now, or null: the nearest lit shrine whose
+## altar is within HOKORA_PROMPT_RADIUS (flat) while offerings are accepted. On desktop the
+## key reaches for a ready bell first when the bell is nearer, so the sign stays dark then:
+## it never promises what the key would not do.
+func prompt_shrine() -> HokoraShrine:
+	if not accepting_offerings or follow == null or not is_instance_valid(follow):
+		return null
+	var p := _player_pos()
+	var best: HokoraShrine = null
+	var best_d := ElementBalance.HOKORA_PROMPT_RADIUS
+	for s in _shrines.values():
+		var shrine := s as HokoraShrine
+		if not is_instance_valid(shrine) or not shrine.lit:
+			continue
+		var a := shrine.altar_position()
+		var d := _flat_distance(a, p)
+		if d <= best_d and absf(a.y - p.y) <= 2.0:
+			best = shrine
+			best_d = d
+	if best != null and prompt_key != "" and nearest_bell() != Vector3.INF:
+		return null
+	return best
+
+
 ## The choice of [param shrine] was taken: it goes dark and stays dark for the run.
 func consume(shrine: HokoraShrine) -> void:
 	_used[shrine.slot] = true
@@ -203,10 +232,11 @@ func _physics_process(delta: float) -> void:
 	if forest_world == null or follow == null or not is_instance_valid(follow):
 		return
 	var p := _player_pos()
+	var prompted := prompt_shrine()
 	for s in _shrines.values():
 		var shrine := s as HokoraShrine
 		if is_instance_valid(shrine):
-			shrine.step(delta, p)
+			shrine.step(delta, p, shrine == prompted)
 	_tick += delta
 	if _tick >= TICK:
 		_tick = 0.0
@@ -369,6 +399,7 @@ func _spawn(slot: Vector2i, spot: Vector3) -> void:
 	shrine.position = Vector3(spot.x, forest_world.height_at(spot.x, spot.z), spot.z)
 	shrine.rotation.y = _slot_rng(slot, 1).randf() * TAU
 	forest_world.connect_shrine(shrine)
+	shrine.set_prompt(prompt_key, prompt_action)
 	shrine.set_lit(not _used.has(slot))
 	_shrines[slot] = shrine
 

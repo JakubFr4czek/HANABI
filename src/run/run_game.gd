@@ -25,6 +25,9 @@ signal skill_unlocked(node_id: String)
 
 ## Health restored by each level-up (D1: the rank is the reward, the heal is the rest; D12: plus one point).
 const LEVEL_UP_HEAL_HP := 10.0
+## Desktop key that reaches for the nearest offering table or bell (D12, P8). The shrine
+## sign (F3) prints its name, so the prompt cannot drift from the binding.
+const OFFERING_KEY := KEY_E
 
 @export var high_score_path := "user://high_score.cfg"
 @export var base_magnet_radius := 3.8
@@ -264,6 +267,13 @@ func _configure_run_forest() -> void:
 		hokora_manager.name = "HokoraManager"
 		add_child(hokora_manager)
 	hokora_manager.setup(forest_world, player, forest_world.torii_manager)
+	# F3: the shrine sign reads the input this rig actually uses for the offering.
+	if player is XRPlayer:
+		hokora_manager.prompt_key = ""
+		hokora_manager.prompt_action = "TOUCH THE ALTAR"
+	else:
+		hokora_manager.prompt_key = OS.get_keycode_string(OFFERING_KEY)
+		hokora_manager.prompt_action = "MAKE AN OFFERING"
 	# D13: wind, crickets and a far temple bell; silent until the run starts (splash, end screen).
 	if get_node_or_null("RunForestAmbience") == null:
 		forest_ambience = RunForestAmbience.new()
@@ -659,7 +669,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	var key: int = event.physical_keycode
-	if key == KEY_E and player is DesktopPlayer:
+	if key == OFFERING_KEY and player is DesktopPlayer:
 		reach_for_offering()
 		get_viewport().set_input_as_handled()
 		return
@@ -737,10 +747,20 @@ func _poll_shrine_touch() -> void:
 	if shrine == null:
 		return
 	if shrine_offering.try_open(shrine):
+		_offering_haptic()
 		GameEvents.log_event("hokora_offering_opened", {"slot": [shrine.slot.x, shrine.slot.y]})
 	else:
 		shrine.refuse()
 		GameEvents.log_event("hokora_touch_refused", {"slot": [shrine.slot.x, shrine.slot.y]})
+
+
+## F3: an accepted offering answers in both hands: a firm tap, then a soft bell-like tail.
+func _offering_haptic() -> void:
+	if player is XRPlayer:
+		var xr := player as XRPlayer
+		for holder in [xr.left_holder, xr.right_holder]:
+			if holder:
+				holder.pulse_pattern([[0.6, 0.06], [0.0, 0.05], [0.25, 0.18]])
 
 
 ## Desktop stand-in for a hand on the offering table (D12): E reaches for the nearest

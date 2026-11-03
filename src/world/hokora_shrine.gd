@@ -15,6 +15,12 @@ extends Node3D
 ## ElementBalance.HOKORA_BELL_COOLDOWN. It glows faintly while the player stands in reach.
 ## The bell works whether the shrine is lit or used: it is separate from the Ofuda choice.
 ##
+## F3 (docs/f3/NOTES.md): with the player within ElementBalance.HOKORA_PROMPT_RADIUS of a lit
+## altar ([HokoraManager] picks one shrine), the altar cloth breathes a slow warm pulse and a
+## small paper sign beside the table lights up with the input that opens the choice
+## ("E · MAKE AN OFFERING" on desktop, "TOUCH THE ALTAR" in VR). An accepted offering flares
+## the candle; a used shrine is dark and its sign never lights again.
+##
 ## The model lives under the "ModelSlot" node: the SamRi small shrine (CC BY 4.0, 2.8k tris,
 ## baked in metres by tools/prep_forest_assets.py), mossy and wet like the rest of the forest
 ## (wet_surface shader). The offering table, the candle and the suzu are built here on top of
@@ -58,6 +64,24 @@ const BELL_LOCAL := Vector3(-0.42, 0.6, 0.7)
 const BELL_COLOR := Color(0.62, 0.48, 0.2)
 ## Emission while the player stands in reach of a ready bell: a faint glow, the hint.
 const BELL_HINT_GLOW := 0.9
+## F3 prompt sign: a post beside the offering table, left of the suzu (the desktop katana
+## hangs on the right of the view and would cover it there) (shrine space, metres) with a washi
+## panel on top that turns to the player. The panel lights warm while the prompt is up.
+const SIGN_POST_LOCAL := Vector3(-0.8, 0.0, 0.95)
+const SIGN_PANEL_HEIGHT := 1.0
+const SIGN_PAPER_SIZE := Vector2(0.5, 0.26)
+const SIGN_PAPER := Color(0.78, 0.63, 0.43)
+const SIGN_PAPER_GLOW := Color(1.0, 0.66, 0.34)
+## Paper glow of a lit shrine's sign at rest (blank, a soft warm lamp) and with the prompt up.
+const SIGN_GLOW_REST := 0.22
+const SIGN_GLOW_PROMPT := 0.75
+## Ink on the lit paper: dark brown-red, like the seal ink of the ofuda.
+const SIGN_INK := Color(0.17, 0.06, 0.035)
+## Prompt fade in/out (fraction per second) and the slow breath of the altar cloth.
+const PROMPT_FADE := 5.0
+const PROMPT_PULSE_HZ := 0.4
+## Candle flare on an accepted offering: decays over this many seconds (real time).
+const FLARE_SECONDS := 1.4
 
 ## Which forest slot this shrine belongs to (set by HokoraManager).
 var slot := Vector2i.ZERO
@@ -68,6 +92,20 @@ var touch_cooldown := 0.0
 var bell_cooldown := 0.0
 ## Bells rung accepted this run at this shrine; picks the element of the next charge.
 var bell_rings := 0
+## F3: true while this shrine shows its prompt (set each physics frame by the manager).
+var prompt_shown := false
+## 0..1: how far the prompt has faded in (the cloth pulse and the sign follow it).
+var prompt_level := 0.0
+## 0..1: the candle flare of an accepted offering, decaying.
+var flare := 0.0
+var _sign_root: Node3D
+var _sign_pivot: Node3D
+var _sign_paper_mat: StandardMaterial3D
+var _key_label: Label3D
+var _sign_rule: MeshInstance3D
+var _sign_rule_mat: StandardMaterial3D
+var _action_label: Label3D
+var _player_seen := Vector3.INF
 
 var _halo: MeshInstance3D
 var _halo_mat: ShaderMaterial
@@ -87,7 +125,10 @@ func _ready() -> void:
 		_build_model(slot_root)
 	_build_halo()
 	_build_bell()
+	_build_sign()
 	_build_candle_light()
+	# The flare of an accepted offering keeps burning down while the choice holds the world.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_apply_lit()
 
 
@@ -109,8 +150,13 @@ func is_touched_by(hand: Vector3, player_pos: Vector3) -> bool:
 	return Vector2(d.x, d.z).length() <= ElementBalance.HOKORA_TOUCH_RADIUS and absf(d.y) <= 2.0
 
 
-## The touch was accepted: the bell answers, the shrine waits for the choice.
+## The touch was accepted: the bell answers, the candle flares, the sign goes out (the
+## cards take over) and the shrine waits for the choice.
 func ring_accepted() -> void:
+	flare = 1.0
+	prompt_shown = false
+	prompt_level = 0.0
+	_apply_glow()
 	if Sfx:
 		Sfx.play_at("hokora_suzu", altar_position(), -2.0, 12.0, 1.15)
 
@@ -176,10 +222,49 @@ func set_lit(value: bool) -> void:
 	_apply_lit()
 
 
+## F3: what the sign prints. An empty [param key] (VR) leaves only the action line.
+func set_prompt(key: String, action: String) -> void:
+	if _key_label == null:
+		return
+	# The key large on the left, the action in two lines on the right; with no key (VR)
+	# the action alone, centred.
+	_key_label.text = key
+	_key_label.visible = key != ""
+	_action_label.text = _two_lines(action)
+	_action_label.position.x = 0.075 if key != "" else 0.0
+	_action_label.font_size = 58 if key != "" else 64
+
+
+## Splits [param text] at the space nearest its middle (one line break).
+static func _two_lines(text: String) -> String:
+	var mid := text.length() / 2
+	var best := -1
+	for i in text.length():
+		if text[i] == " " and (best < 0 or absi(i - mid) < absi(best - mid)):
+			best = i
+	return text if best < 0 else text.substr(0, best) + "\n" + text.substr(best + 1)
+
+
+## True when the sign is lit enough to read (tests and the visual check).
+func sign_visible() -> bool:
+	return _sign_paper_mat != null and _key_label != null and prompt_level > 0.5 and _action_label.visible
+
+
+## The centre of the sign's paper, world space.
+func sign_position() -> Vector3:
+	return _sign_pivot.global_position if _sign_pivot else global_position
+
+
 ## Per-physics-frame: lantern flicker, the halo turns to face the player, and the
-## suzu rings when the player comes near (not while the shrine is dark).
-func step(delta: float, player_pos: Vector3) -> void:
+## suzu rings when the player comes near (not while the shrine is dark). [param prompted]
+## is the manager's pick: this shrine shows its prompt (F3).
+func step(delta: float, player_pos: Vector3, prompted := false) -> void:
 	_clock += delta
+	_player_seen = player_pos
+	prompt_shown = prompted and lit
+	prompt_level = move_toward(prompt_level, 1.0 if prompt_shown else 0.0, PROMPT_FADE * delta)
+	_face_sign(player_pos)
+	_apply_glow()
 	touch_cooldown = maxf(touch_cooldown - delta, 0.0)
 	bell_cooldown = maxf(bell_cooldown - delta, 0.0)
 	if _bell_mat:
@@ -188,11 +273,11 @@ func step(delta: float, player_pos: Vector3) -> void:
 	var flicker := 1.0 + 0.07 * sin(_clock * 3.1 + float(slot.x) * 0.7) + 0.04 * sin(_clock * 7.3)
 	if _candle_light:
 		_candle_light.visible = lit and _holds_candle_light(player_pos)
-		_candle_light.light_energy = CANDLE_LIGHT_ENERGY * flicker
+		_candle_light.light_energy = CANDLE_LIGHT_ENERGY * flicker * (1.0 + 0.2 * prompt_level + 1.5 * flare)
 	if _halo == null:
 		return
 	if lit:
-		_halo_mat.set_shader_parameter("intensity", LANTERN_INTENSITY * flicker)
+		_halo_mat.set_shader_parameter("intensity", LANTERN_INTENSITY * flicker * (1.0 + 0.35 * prompt_level + 1.2 * flare))
 		var to_player := player_pos - _halo.global_position
 		to_player.y = 0.0
 		if to_player.length_squared() > 0.01:
@@ -202,6 +287,55 @@ func step(delta: float, player_pos: Vector3) -> void:
 		if _suzu_cd <= 0.0 and Vector2(d.x, d.z).length() < SUZU_RANGE and Sfx:
 			Sfx.play_at("hokora_suzu", altar_position(), -8.0, 14.0, 1.0)
 			_suzu_cd = SUZU_INTERVAL
+
+
+## The flare burns down in real time, also while the choice holds the world.
+func _process(delta: float) -> void:
+	if flare <= 0.0:
+		return
+	flare = maxf(flare - delta / FLARE_SECONDS, 0.0)
+	_apply_glow()
+	if get_tree().paused and _halo and lit:
+		_halo_mat.set_shader_parameter("intensity", LANTERN_INTENSITY * (1.0 + 1.2 * flare))
+
+
+## The prompt and the flare on the lit materials: the cloth breathes, the sign lights.
+func _apply_glow() -> void:
+	if not lit:
+		return
+	var breath := 0.75 + 0.25 * sin(_clock * TAU * PROMPT_PULSE_HZ)
+	if _altar_cloth_mat:
+		_altar_cloth_mat.emission_energy_multiplier = 0.45 + 0.9 * prompt_level * breath + 0.8 * flare
+	if _flame_mat:
+		_flame_mat.emission_energy_multiplier = 1.8 * (1.0 + 2.0 * flare)
+	_apply_sign()
+
+
+func _apply_sign() -> void:
+	if _sign_paper_mat == null:
+		return
+	# A used shrine takes its sign away with its light: nothing left to offer.
+	_sign_root.visible = lit
+	var t := prompt_level if lit else 0.0
+	_sign_paper_mat.emission_energy_multiplier = lerpf(SIGN_GLOW_REST, SIGN_GLOW_PROMPT, t)
+	var ink := Color(SIGN_INK, t)
+	_key_label.modulate = ink
+	_action_label.modulate = ink
+	_action_label.visible = t > 0.01
+	_key_label.visible = t > 0.01 and _key_label.text != ""
+	if _sign_rule:
+		_sign_rule_mat.albedo_color = Color(SIGN_INK, 0.8 * t)
+		_sign_rule.visible = _key_label.visible
+
+
+## The panel turns on its post to face the player (yaw only), like the lantern halo.
+func _face_sign(player_pos: Vector3) -> void:
+	if _sign_pivot == null:
+		return
+	var to_player := player_pos - _sign_pivot.global_position
+	to_player.y = 0.0
+	if to_player.length_squared() > 0.01:
+		_sign_pivot.global_rotation = Vector3(0.0, atan2(to_player.x, to_player.z), 0.0)
 
 
 ## True when this lit shrine is the one nearest the player (flat distance) and within reach.
@@ -233,6 +367,11 @@ func _apply_lit() -> void:
 	if _halo and _halo_mat:
 		_halo.visible = lit
 		_halo_mat.set_shader_parameter("intensity", LANTERN_INTENSITY if lit else 0.0)
+	if not lit:
+		prompt_shown = false
+		prompt_level = 0.0
+		flare = 0.0
+	_apply_sign()
 
 
 func _build_halo() -> void:
@@ -277,6 +416,85 @@ func _build_bell() -> void:
 	bell.position = BELL_LOCAL
 	bell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(bell)
+
+
+## F3 sign: a dark wooden post beside the offering table, a frame on top and the washi
+## paper with two ink lines (the input, the action). Unshaded text, no light: the paper's
+## own warm emission is the glow. Four small meshes per shrine, only the shrine near the
+## player shows the text.
+func _build_sign() -> void:
+	var wood := _material(Color(0.16, 0.11, 0.075), 0.85)
+	_sign_root = Node3D.new()
+	_sign_root.name = "PromptSign"
+	_sign_root.position = SIGN_POST_LOCAL
+	add_child(_sign_root)
+	var post := _add_box(_sign_root, "SignPost", Vector3(0.04, SIGN_PANEL_HEIGHT - 0.14, 0.04),
+		Vector3(0.0, (SIGN_PANEL_HEIGHT - 0.14) * 0.5, 0.0), wood)
+	post.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_sign_pivot = Node3D.new()
+	_sign_pivot.name = "Panel"
+	_sign_pivot.position = Vector3(0.0, SIGN_PANEL_HEIGHT, 0.0)
+	_sign_root.add_child(_sign_pivot)
+	# The panel leans back a little, like a lectern, so it reads from standing height.
+	var lean := Node3D.new()
+	lean.name = "Lean"
+	lean.rotation.x = deg_to_rad(-12.0)
+	_sign_pivot.add_child(lean)
+	var frame := _add_box(lean, "SignFrame", Vector3(SIGN_PAPER_SIZE.x + 0.05, SIGN_PAPER_SIZE.y + 0.05, 0.025), Vector3.ZERO, wood)
+	frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_sign_paper_mat = StandardMaterial3D.new()
+	_sign_paper_mat.albedo_color = SIGN_PAPER
+	_sign_paper_mat.roughness = 0.92
+	_sign_paper_mat.emission_enabled = true
+	_sign_paper_mat.emission = SIGN_PAPER_GLOW
+	_sign_paper_mat.emission_energy_multiplier = 0.0
+	var paper := MeshInstance3D.new()
+	paper.name = "SignPaper"
+	var quad := QuadMesh.new()
+	quad.size = SIGN_PAPER_SIZE
+	paper.mesh = quad
+	paper.material_override = _sign_paper_mat
+	paper.position = Vector3(0.0, 0.0, 0.0130)
+	paper.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	lean.add_child(paper)
+	_key_label = _sign_label("SignKey", UiTypography.font(700), 190, Vector3(-0.155, 0.0, 0.0145))
+	_action_label = _sign_label("SignAction", UiTypography.font(700), 58, Vector3(0.075, 0.0, 0.0145))
+	_action_label.line_spacing = -6.0
+	# A thin ink rule between the key and the action, like the column line of an ofuda.
+	var rule := MeshInstance3D.new()
+	rule.name = "SignRule"
+	var rq := QuadMesh.new()
+	rq.size = Vector2(0.006, SIGN_PAPER_SIZE.y * 0.7)
+	rule.mesh = rq
+	_sign_rule_mat = StandardMaterial3D.new()
+	_sign_rule_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_sign_rule_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_sign_rule_mat.albedo_color = Color(SIGN_INK, 0.0)
+	rule.material_override = _sign_rule_mat
+	rule.position = Vector3(-0.085, 0.0, 0.0145)
+	rule.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	lean.add_child(rule)
+	_sign_rule = rule
+	lean.add_child(_key_label)
+	lean.add_child(_action_label)
+	set_prompt("E", "MAKE AN OFFERING")
+
+
+static func _sign_label(node_name: String, font: Font, size: int, at: Vector3) -> Label3D:
+	var l := Label3D.new()
+	l.name = node_name
+	l.font = font
+	l.font_size = size
+	l.pixel_size = 0.0008
+	l.outline_size = 0
+	l.shaded = false
+	l.double_sided = false
+	l.modulate = Color(SIGN_INK, 0.0)
+	l.position = at
+	l.render_priority = 1
+	l.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	l.visible = false
+	return l
 
 
 ## The asset: the SamRi shrine (house, roof, stairs, shimenawa, plinth), then the offering

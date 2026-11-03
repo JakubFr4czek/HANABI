@@ -154,6 +154,10 @@ const XP_LEVEL_STEP := 40
 const HOKORA_HAND_RADIUS := 0.35
 const HOKORA_TOUCH_RADIUS := 2.2
 const HOKORA_REFUSE_ENEMY_RADIUS := 3.5
+## F3: within this flat distance of a lit altar the shrine shows its prompt (the warm
+## pulse of the altar cloth and the lit paper sign). Inside HOKORA_TOUCH_RADIUS on purpose:
+## the sign never promises a press that would not reach.
+const HOKORA_PROMPT_RADIUS := 2.0
 
 # --- Hokora suzu bell: one elemental charge (D21, P8) ---------------------------------
 ## A hand or the blade tip within HOKORA_BELL_HAND_RADIUS of the suzu, with the player
