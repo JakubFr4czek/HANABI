@@ -11,7 +11,7 @@ signal dismissed
 const SHOW_SEC := 6.0
 const FADE_SEC := 0.6
 const MOVE_DISMISS_M := 0.6
-const DISTANCE := 1.35
+const DISTANCE := 1.5
 const DROP := 0.22
 const PLATE_SIZE := Vector2(0.56, 0.2)
 const PLATE_COLOR := Color(0.035, 0.04, 0.07, 0.78)
@@ -51,9 +51,11 @@ func _place() -> void:
 	fwd.y = 0.0
 	fwd = fwd.normalized() if fwd.length_squared() > 1e-4 else Vector3.FORWARD
 	var pos := _head.global_position + fwd * DISTANCE + Vector3.DOWN * DROP
-	global_transform = Transform3D(Basis.looking_at(-fwd, Vector3.UP), pos)
-	# Tilt the plate back a little so it faces the eyes above it.
-	rotate_object_local(Vector3.RIGHT, atan2(DROP, DISTANCE))
+	# The plate's front (+Z, where quads and Label3D face) looks back at the eyes:
+	# -Z points along the view. (F4 round 1: it faced away and read mirrored.)
+	global_transform = Transform3D(Basis.looking_at(fwd, Vector3.UP), pos)
+	# Tilt the top away a little so the face looks up at the eyes above it.
+	rotate_object_local(Vector3.RIGHT, -atan2(DROP, DISTANCE))
 	_start = _head.global_position
 
 
@@ -63,7 +65,12 @@ func _build() -> void:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 		m.disable_fog = true
+		# Drawn over the world like the Oni speech bubble: no tree, rain or ground
+		# geometry may hide it, and fog never eats it.
+		m.no_depth_test = true
 	_plate_mat.albedo_color = PLATE_COLOR
+	_plate_mat.render_priority = 10
+	_rule_mat.render_priority = 11
 	_rule_mat.albedo_color = RULE_COLOR
 	var plate := MeshInstance3D.new()
 	var q := QuadMesh.new()
@@ -95,10 +102,10 @@ func _build() -> void:
 		lbl.outline_modulate = Color(0.01, 0.01, 0.02, 0.9)
 		lbl.shaded = false
 		lbl.double_sided = true
-		lbl.no_depth_test = false
+		lbl.no_depth_test = true
 		lbl.fixed_size = false
-		lbl.render_priority = 2
-		lbl.outline_render_priority = 1
+		lbl.render_priority = 15
+		lbl.outline_render_priority = 14
 		lbl.position = Vector3(0.0, top - i * LINE_PITCH, 0.002)
 		add_child(lbl)
 		_labels.append(lbl)

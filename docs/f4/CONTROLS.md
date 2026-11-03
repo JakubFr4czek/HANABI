@@ -76,11 +76,15 @@ on the menu's CONTROLS page.
 - `before_01_run_start.png` / `after_01_run_start_hint.png`
 - `after_02_controls_map.png`
 
-## Known issue (open)
-The windowed pixel check (`tests/f4_controls_shots.tscn`) **fails**: in
-`after_01_run_start_hint.png` the hint plate is NOT visible, although the node is in the
-tree, visible, alpha 1, placed 1.35 m in front of the desktop camera (projects to the
-lower centre of the frame). Not yet diagnosed (time limit) — suspects: the unshaded
-transparent quads / Label3D under gl_compatibility in this scene (draw order vs. fog/rain),
-or the plate facing. The headless logic tests (show once, fade, dismiss on walk) pass.
-`after_02_controls_map.png` shows the menu's CONTROLS page with the F4 table.
+## Round 1 fixes (review of b3df9b7)
+- **Hint not in the shots**: the capture waited physics frames; on slow xvfb several
+  physics frames fall into one rendered frame, so before/after were the same stale image
+  (byte-identical, rain included). The shot now waits `RenderingServer.frame_post_draw`.
+  The plate also faced away from the eyes (Label3D text would read mirrored in VR) — fixed;
+  it is now 1.5 m ahead, drawn like the Oni speech bubble (`no_depth_test`, render
+  priority 10–15, no fog) so trees/rain never hide it. Pixel check: 92 % dark plate px,
+  5.5 % bright text px in its box (before: 0 %).
+- **Controls map overlaps**: callout bodies are one line (short texts in `SCHEME`), rows at a
+  74 px pitch, the three rule lines moved up (792/824/856) clear of the footer at 918.
+- Open: on the 960×540 desktop shot the hint is small (≈13 % of the frame width); in the
+  headset it is ≈21° wide at 1.5 m.

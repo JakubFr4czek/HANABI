@@ -1077,13 +1077,13 @@ func _draw_controls() -> void:
 			_draw_callout(layout.hands[side][i], Vector2(cx, 585.0), i, side == "left")
 
 	# Rules that are not tied to one button, then the inputs the game does not read.
-	_text(String(layout.rules[0]), Vector2(66.0, 834.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 1468.0)
-	_text(String(layout.rules[1]), Vector2(66.0, 860.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 1468.0)
+	_text(String(layout.rules[0]), Vector2(66.0, 792.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 1468.0)
+	_text(String(layout.rules[1]), Vector2(66.0, 824.0), 22, DIM, HORIZONTAL_ALIGNMENT_LEFT, 1468.0)
 	var labels: Array[String] = []
 	for g: Dictionary in layout.footnote:
 		labels.append(String(g.label))
 		_note_drawn(g)
-	_text("Also in the map:  " + "  ·  ".join(labels), Vector2(66.0, 886.0), 22, FAINT, HORIZONTAL_ALIGNMENT_LEFT, 1468.0)
+	_text("Also in the map:  " + "  ·  ".join(labels), Vector2(66.0, 856.0), 22, FAINT, HORIZONTAL_ALIGNMENT_LEFT, 1468.0)
 
 
 ## One controller in front view (icon units; the left hand mirrors x). The
@@ -1152,7 +1152,8 @@ static func _rounded_points(rect: Rect2, radius: float, steps := 6) -> PackedVec
 ## A callout: title and body beside the controller, with a leader to its control.
 func _draw_callout(c: Dictionary, origin: Vector2, index: int, is_left: bool) -> void:
 	_note_drawn(c)
-	var y := 344.0 + float(index) * 80.0
+	# F4: 74 px a row, one-line bodies: the six callouts never touch, and the rules below get room.
+	var y := 338.0 + float(index) * 74.0
 	var anchor: Vector2 = c.anchor
 	var point := origin + anchor
 	var col := Color(DIM, 0.9) if c.system else GILT
@@ -1163,10 +1164,10 @@ func _draw_callout(c: Dictionary, origin: Vector2, index: int, is_left: bool) ->
 	draw_circle(point, 4.5, col)
 	if is_left:
 		_text(String(c.title), Vector2(52.0, y), 26, title_col, HORIZONTAL_ALIGNMENT_RIGHT, 356.0, 600)
-		_wrapped(String(c.body), Vector2(52.0, y + 30.0), 23, DIM, 356.0, 2, HORIZONTAL_ALIGNMENT_RIGHT)
+		_wrapped(String(c.body), Vector2(52.0, y + 30.0), 23, DIM, 356.0, 1, HORIZONTAL_ALIGNMENT_RIGHT)
 	else:
 		_text(String(c.title), Vector2(1126.0, y), 26, title_col, HORIZONTAL_ALIGNMENT_LEFT, 408.0, 600)
-		_wrapped(String(c.body), Vector2(1126.0, y + 30.0), 23, DIM, 408.0, 2, HORIZONTAL_ALIGNMENT_LEFT)
+		_wrapped(String(c.body), Vector2(1126.0, y + 30.0), 23, DIM, 408.0, 1, HORIZONTAL_ALIGNMENT_LEFT)
 
 
 func _note_drawn(item: Dictionary) -> void:

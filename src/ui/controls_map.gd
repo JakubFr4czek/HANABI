@@ -120,12 +120,12 @@ const SCHEME := {
 		"body": "Walk · click: sprint"},
 	"stick_turn": {"actions": ["primary"], "title": "THUMBSTICK", "body": "Turn, snap or smooth"},
 	"trigger": {"actions": ["trigger"], "title": "TRIGGER",
-		"body": "Throw element · free hand: charge"},
+		"body": "Throw · free hand: charge"},
 	"grip": {"actions": ["grip"], "title": "GRIP", "body": "Grab or drop the katana"},
 	"face_top": {"actions": ["ax_button"], "title": "INTERACT",
 		"body": "Shrine, bell · skip intro"},
 	"face_bottom": {"actions": ["by_button"], "title": "ELEMENT SKILL",
-		"body": "With katana; grip + B/Y recalls"},
+		"body": "Fist + B/Y: recall katana"},
 	"menu": {"actions": ["menu_button"], "title": "MENU", "body": "Skill tree · settings"},
 }
 
