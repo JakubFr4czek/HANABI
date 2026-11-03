@@ -920,10 +920,13 @@ func _test_n8_meta_ai_end_to_end() -> void:
 		_check("%s -> local fallback (%s, %d frames, worst frame %.0f ms)" % [mode, r.d.get("fallback_reason", ""), r.frames, r.worst_ms],
 			String(r.d.get("source", "")) == "fallback" and r.frames <= 60 and r.worst_ms < 250.0)
 	server.mode = "hang"
-	var t := await _n8_ask(client, int(OniAiClient.TIMEOUT_SECONDS * hz) + 40)
-	var limit := int(ceil(OniAiClient.TIMEOUT_SECONDS * hz)) + 2
-	_check("timeout -> fallback the tick the deadline passes (%s, %d frames <= %d, worst frame %.0f ms)" % [t.d.get("fallback_reason", ""), t.frames, limit, t.worst_ms],
-		String(t.d.get("fallback_reason", "")) == "timeout" and t.frames <= limit and t.worst_ms < 250.0
+	var t := await _n8_ask(client, int(OniAiClient.TIMEOUT_SECONDS * hz * 2.0) + 60)
+	# Game time, not frame count: the fallback lands in the tick the 3 s deadline passes.
+	var limit_s := OniAiClient.TIMEOUT_SECONDS + float(t.max_dt) * 1.5
+	_check("timeout -> fallback the tick the deadline passes (%s, %.3f s game time <= %.3f, %d frames, worst frame %.0f ms)" % [
+			t.d.get("fallback_reason", ""), t.game_s, limit_s, t.frames, t.worst_ms],
+		String(t.d.get("fallback_reason", "")) == "timeout" and float(t.game_s) <= limit_s
+		and float(t.game_s) >= OniAiClient.TIMEOUT_SECONDS - 0.05 and t.worst_ms < 250.0
 		and not client._is_busy)
 	server.mode = "ok"
 	server.decision = {"tactic": "teleport_behind_player", "attack": "nuke", "speech": "Hah."}
@@ -964,11 +967,15 @@ func _n8_ask(client: OniAiClient, max_frames: int = 90) -> Dictionary:
 		box.done = true)
 	var frames := 0
 	var worst := 0.0
+	var game_s := 0.0
+	var max_dt := 0.0
 	var last := Time.get_ticks_usec()
 	while not box.done and frames < max_frames:
 		await get_tree().process_frame
+		game_s += get_process_delta_time()
+		max_dt = maxf(max_dt, get_process_delta_time())
 		var now := Time.get_ticks_usec()
 		worst = maxf(worst, (now - last) / 1000.0)
 		last = now
 		frames += 1
-	return {"d": box.d, "frames": frames, "worst_ms": worst}
+	return {"d": box.d, "frames": frames, "worst_ms": worst, "game_s": game_s, "max_dt": max_dt}
