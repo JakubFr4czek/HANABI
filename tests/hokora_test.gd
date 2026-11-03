@@ -17,7 +17,12 @@ extends Node
 ##   and one candle light stands in the whole run: the nearest lit shrine only (N6)
 ## - Windowed only (pixels, SKIP headless): a shrine 20 m out reads as a warm spot brighter
 ##   than the sky, and at 3 m its body is not a black silhouette (N6)
-## godot --headless --path . --fixed-fps 90 res://tests/hokora_test.tscn -- --desktop
+## - F3: outside HOKORA_PROMPT_RADIUS no prompt; at 1.5 m in front the altar breathes warm and
+##   the sign prints the offering key from RunGame.OFFERING_KEY; a real E key event opens the
+##   choice exactly once (a second press while open and a press after the cut do nothing), the
+##   candle flares, and the used shrine never shows its prompt again
+## - Windowed only: at 1.5 m the lit sign sits whole in the frame and its ink reads on the paper
+## godot --headless --path . --fixed-fps 90 res://tests/hokora_test.tscn -- --desktop [--only-f3]
 
 const RUN_SCENE := preload("res://scenes/run.tscn")
 const TEST_SAVE_PATH := "user://test_hokora_high_score.cfg"
@@ -47,6 +52,13 @@ func _run_all() -> void:
 	await _frames(4)
 
 	await _test_walking_up_opens_nothing()
+	await _test_prompt_only_in_reach()
+	await _test_key_press_opens_once()
+	await _test_prompt_reads_at_1p5m()
+	# `-- --only-f3`: the F3 checks alone (the windowed pixel run takes minutes otherwise).
+	if "--only-f3" in OS.get_cmdline_user_args():
+		run.queue_free()
+		return
 	await _test_touch_refused_with_enemy_close()
 	await _test_touch_holds_the_world()
 	await _test_katana_hits_only_cards()
@@ -77,6 +89,113 @@ func _test_walking_up_opens_nothing() -> void:
 	await _frames(60)
 	_check("Walking up to a shrine opens no choice (no touch)", not run.shrine_offering.is_open())
 	_check("The shrine stays lit, the world runs", shrine.lit and not get_tree().paused)
+
+
+## F3: the prompt is the shrine's answer to the player standing at its altar, nothing else.
+func _test_prompt_only_in_reach() -> void:
+	_fresh_run()
+	await _frames(8)
+	var shrine := run.hokora_manager.shrine_at(Vector2i.ZERO)
+	if shrine == null:
+		_check("F3: the opening shrine exists", false)
+		return
+	_stand_in_front(shrine, 6.0)
+	await _frames(30)
+	_check("F3: 6 m from the altar there is no prompt (no sign text, manager picks none)",
+		not shrine.prompt_shown and not shrine.sign_visible() and run.hokora_manager.prompt_shrine() == null)
+	var cloth_far := shrine._altar_cloth_mat.emission_energy_multiplier
+	_stand_in_front(shrine, 2.6)
+	await _frames(30)
+	_check("F3: 2.6 m (outside %.1f m) still no prompt" % ElementBalance.HOKORA_PROMPT_RADIUS,
+		not shrine.prompt_shown and not shrine.sign_visible())
+	_stand_in_front(shrine, 1.5)
+	await _frames(30)
+	_check("F3: 1.5 m in front of the altar the prompt is up and the sign is lit",
+		shrine.prompt_shown and shrine.sign_visible() and run.hokora_manager.prompt_shrine() == shrine)
+	var key := OS.get_keycode_string(RunGame.OFFERING_KEY)
+	_check("F3: the sign prints the offering key from the binding ('%s' == '%s')" % [shrine._key_label.text, key],
+		shrine._key_label.text == key and shrine._key_label.visible and shrine._action_label.text != "")
+	_check("F3: the altar cloth glows warmer at the prompt (%.2f > %.2f)" % [shrine._altar_cloth_mat.emission_energy_multiplier, cloth_far],
+		shrine._altar_cloth_mat.emission_energy_multiplier > cloth_far + 0.3)
+	_check("F3: the prompt opens nothing by itself", not run.shrine_offering.is_open() and shrine.lit)
+
+
+## F3: one press of the real key opens the choice once; the reward comes from the cut; a
+## second press, during the choice or after it, does nothing.
+func _test_key_press_opens_once() -> void:
+	_fresh_run()
+	await _frames(8)
+	var shrine := run.hokora_manager.shrine_at(Vector2i.ZERO)
+	if shrine == null:
+		return
+	var counts := {"opened": 0, "chosen": 0}
+	var on_open := func(_s: HokoraShrine) -> void: counts["opened"] += 1
+	var on_chosen := func(_s: HokoraShrine, _k: int) -> void: counts["chosen"] += 1
+	run.shrine_offering.opened.connect(on_open)
+	run.shrine_offering.chosen.connect(on_chosen)
+	var claimed := run.shrines_claimed
+	_stand_in_front(shrine, 1.5)
+	await _frames(30)
+	_press_offering_key()
+	await _frames(3)
+	_check("F3: one E press at the prompt opens the choice (opened %d)" % counts["opened"],
+		counts["opened"] == 1 and run.shrine_offering.is_open())
+	_check("F3: the candle flares (%.2f) and the sign goes out for the cards" % shrine.flare,
+		shrine.flare > 0.5 and not shrine.prompt_shown)
+	_press_offering_key()
+	await _frames(3)
+	_check("F3: a second press while the choice is open opens nothing more (opened %d)" % counts["opened"],
+		counts["opened"] == 1)
+	var card: OfudaTalisman = null
+	for c in get_tree().get_nodes_in_group("ofuda_talismans"):
+		if not (c as OfudaTalisman).is_queued_for_deletion():
+			card = c
+	if card:
+		card.slice(card.global_position, Vector3.RIGHT)
+	await _frames(30)
+	_check("F3: the cut grants the reward exactly once (chosen %d, claimed +%d)" % [counts["chosen"], run.shrines_claimed - claimed],
+		counts["chosen"] == 1 and run.shrines_claimed == claimed + 1)
+	_check("F3: the used shrine is dark and shows no prompt at the altar",
+		not shrine.lit and not shrine.prompt_shown and not shrine.sign_visible() and run.hokora_manager.prompt_shrine() == null)
+	_press_offering_key()
+	await _frames(30)
+	_check("F3: a press at a used shrine does nothing (opened %d, chosen %d, still dark)" % [counts["opened"], counts["chosen"]],
+		counts["opened"] == 1 and counts["chosen"] == 1 and not run.shrine_offering.is_open() and not shrine.lit and not shrine.sign_visible())
+	run.shrine_offering.opened.disconnect(on_open)
+	run.shrine_offering.chosen.disconnect(on_chosen)
+	await _frames(60)
+
+
+## Windowed only (F3): at 1.5 m, looking down at the altar as a player does, the lit sign
+## sits whole in the frame and its ink reads on the warm paper.
+func _test_prompt_reads_at_1p5m() -> void:
+	if not _rendering():
+		print("SKIP  F3: the prompt sign reads at 1.5 m (windowed only: pixels)")
+		return
+	_fresh_run()
+	await _frames(8)
+	var shrine := run.hokora_manager.shrine_at(Vector2i.ZERO)
+	if shrine == null:
+		return
+	_stand_in_front(shrine, 1.5)
+	_look_down(20.0)
+	await _frames(50)
+	var img := player.get_viewport().get_texture().get_image()
+	var viewport := player.get_viewport().get_visible_rect().size
+	var paper_xf := (shrine.get_node("PromptSign/Panel/Lean/SignPaper") as Node3D).global_transform
+	var half := HokoraShrine.SIGN_PAPER_SIZE * 0.5
+	var rect := _box_rect(player.camera, paper_xf, AABB(Vector3(-half.x, -half.y, 0.0), Vector3(half.x * 2.0, half.y * 2.0, 0.001)), viewport)
+	var inside := Rect2i(Vector2i.ZERO, Vector2i(viewport)).encloses(rect) and rect.position.x > 0 and rect.end.x < int(viewport.x) - 1 and rect.position.y > 0 and rect.end.y < int(viewport.y) - 1
+	_check("F3 1.5 m: the sign sits whole in the frame (%s in %s)" % [rect, viewport], inside and rect.size.x >= 60)
+	# Inside the paper only (12 % in from each edge): the dark pixels there are ink, not the night.
+	var inner := rect.grow_individual(-int(rect.size.x * 0.12), -int(rect.size.y * 0.12), -int(rect.size.x * 0.12), -int(rect.size.y * 0.12))
+	var paper := _quantile_luma(img, inner, 0.8)
+	var ink := _quantile_luma(img, inner, 0.04)
+	_check("F3 1.5 m: the paper is lit (luma %.2f) and the ink reads on it (ink %.2f, contrast %.1f : 1)" % [paper, ink, (paper + 0.05) / (ink + 0.05)],
+		paper > 0.45 and (paper + 0.05) / (ink + 0.05) >= 4.5)
+	_check("F3 1.5 m: the paper glows warm, not white or neon (%.0f°)" % (_bright_colour(img, rect, 0.3).h * 360.0),
+		_is_warm(_bright_colour(img, rect, 0.3), 15.0, 60.0, 0.2))
+	_look_down(0.0)
 
 
 func _test_touch_refused_with_enemy_close() -> void:
@@ -773,6 +892,35 @@ func _ahead(meters: float) -> Vector3:
 	var p := player.global_position + fwd * meters
 	p.y = run.forest_world.height_at(p.x, p.z)
 	return p
+
+
+## Stands the player [param meters] in front of the shrine's altar (along its +Z), facing it.
+func _stand_in_front(shrine: HokoraShrine, meters: float) -> void:
+	var a := shrine.altar_position()
+	var front := shrine.global_basis.z
+	front.y = 0.0
+	front = front.normalized()
+	var stand := a + front * meters
+	stand.y = run.forest_world.height_at(stand.x, stand.z)
+	player.teleport(stand, atan2(-(a.x - stand.x), -(a.z - stand.z)))
+	run.forest_world.finish_pending()
+
+
+func _look_down(degrees: float) -> void:
+	player._pitch = deg_to_rad(-degrees)
+	player.camera.rotation.x = player._pitch
+
+
+## A real key event for the offering key (what a desktop player presses).
+func _press_offering_key() -> void:
+	var ev := InputEventKey.new()
+	ev.physical_keycode = RunGame.OFFERING_KEY
+	ev.keycode = RunGame.OFFERING_KEY
+	ev.pressed = true
+	get_viewport().push_input(ev)
+	var up := ev.duplicate() as InputEventKey
+	up.pressed = false
+	get_viewport().push_input(up)
 
 
 func _teleport_next_to(shrine: HokoraShrine) -> void:

@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/f3_prompt_shots.gd" id="1_shots"]
+
+[node name="F3PromptShots" type="Node"]
+script = ExtResource("1_shots")
