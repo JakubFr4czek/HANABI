@@ -52,6 +52,8 @@ const LABEL_COLOR := Color(0.96, 0.93, 0.84)
 const VALUE_COLOR := Color(1.0, 1.0, 1.0)
 const KCAL_BAR_COLOR := Color(0.98, 0.84, 0.52)
 ## The kcal bar fills at this estimate (kcal): a bar for a whole run, not a goal.
+## F6: the stamina bar, a pale cool tone apart from HP teal and KCAL gold; amber when winded.
+const STAMINA_COLOR := Color(0.68, 0.82, 0.96)
 const KCAL_BAR_FULL := 100.0
 const SANDBOX_COLOR := Color(1.0, 0.7, 0.3)
 const PARRY_GLOW_SECONDS := 0.42
@@ -98,6 +100,7 @@ var _bound_player: Node3D = null
 var _view_camera: Camera3D
 var _elements: ElementSystem
 var _calories: CalorieMeter
+var _stamina: Stamina
 var _parry_glow := 0.0
 var _level_text_left := 0.0
 var _level_text := ""
@@ -518,6 +521,11 @@ func _refresh_rows() -> void:
 	else:
 		set_row("time", "CZAS", _clock_text(_run_seconds))
 
+	if _stamina:
+		var stamina_pips: Array[Color] = []
+		set_row("stamina", "STAMINA", str(ceili(_stamina.value - 0.001)), _stamina.ratio(),
+			AMBER if _stamina.is_exhausted else STAMINA_COLOR, stamina_pips, AMBER if _stamina.is_exhausted else VALUE_COLOR)
+
 
 ## mm:ss for the run time.
 static func _clock_text(seconds: float) -> String:
@@ -591,6 +599,11 @@ func bind_elements(es: ElementSystem) -> void:
 ## The pips take the charges' colours, oldest first; the slots past the last charge are empty.
 func _on_charges_changed(charges: Array[String]) -> void:
 	_charges = charges.duplicate()
+
+
+## F6: the stamina the STAMINA row shows (called once by RunGame).
+func bind_stamina(s: Stamina) -> void:
+	_stamina = s
 
 
 ## Hands the HUD the calorie meter it shows (called once by RunGame).

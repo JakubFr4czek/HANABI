@@ -59,6 +59,10 @@ var _base_move_speed := -1.0
 ## Ink boost (RunGame) and the walking-pace setting, both multiplying the base speed.
 var _move_scale := 1.0
 var walk_scale := 1.0
+## F6: the move-stick click latches a sprint; it ends when the stick is let go
+## or the stamina runs out (RunGame calls [method cancel_sprint]).
+var sprint_latched := false
+const SPRINT_STICK_DEADZONE := 0.25
 
 
 func _ready() -> void:
@@ -180,9 +184,36 @@ func _process(delta: float) -> void:
 			# The move stick's click asks for a sprint (F4/F6); in the training
 			# room only, it also cycles the held weapon's element.
 			if c == _get_move_controller():
+				sprint_latched = true
 				sprint_requested.emit()
 			if not run_element_mode and holder.held:
 				holder.held.set_element(next_element(holder.held.element))
+
+
+	if not is_moving():
+		sprint_latched = false
+
+
+## F6: the move stick's deflection (the off hand's thumbstick).
+func move_input() -> Vector2:
+	var c := _get_move_controller()
+	return c.get_vector2("primary") if c else Vector2.ZERO
+
+
+## F6: the stick is pushed far enough to walk and locomotion is on.
+func is_moving() -> bool:
+	var direct := _get_movement_direct()
+	if direct and not bool(direct.get("enabled")):
+		return false
+	return move_input().length() > SPRINT_STICK_DEADZONE
+
+
+func wants_sprint() -> bool:
+	return sprint_latched
+
+
+func cancel_sprint() -> void:
+	sprint_latched = false
 
 
 func _ability_direction(_controller: XRController3D) -> Vector3:

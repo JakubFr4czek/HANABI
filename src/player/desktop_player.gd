@@ -186,6 +186,25 @@ func _unhandled_input(event: InputEvent) -> void:
 				reset_requested.emit()
 
 
+## F6: Shift held = sprint.
+func wants_sprint() -> bool:
+	return Input.is_physical_key_pressed(KEY_SHIFT)
+
+
+## F6: a WASD key is held and the body may move.
+func is_moving() -> bool:
+	if movement_locked or get_tree().paused:
+		return false
+	for k in [KEY_W, KEY_A, KEY_S, KEY_D]:
+		if Input.is_physical_key_pressed(k):
+			return true
+	return false
+
+
+func cancel_sprint() -> void:
+	pass
+
+
 func get_look_direction() -> Vector3:
 	var dir := -camera.global_basis.z
 	dir.y = 0.0

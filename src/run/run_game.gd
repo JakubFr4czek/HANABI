@@ -71,6 +71,8 @@ var pause_controller: PauseController
 var diegetic_hud: DiegeticHud
 ## Estimated kilocalories of this run (D14), shown inside the wrist ring.
 var calorie_meter: CalorieMeter
+## F6: sprint stamina, stepped here and shown on the wrist.
+var stamina := Stamina.new()
 var element_system: ElementSystem
 var forest_world: ForestWorld
 const RUN_COMBAT_FOG := preload("res://src/run/run_combat_fog.gd")
@@ -402,6 +404,8 @@ func _setup_run_nodes() -> void:
 	add_child(calorie_meter)
 	calorie_meter.setup(player)
 	diegetic_hud.bind_calories(calorie_meter)
+	diegetic_hud.bind_stamina(stamina)
+	stamina.exhausted.connect(_on_stamina_exhausted)
 	GameEvents.hit_landed.connect(_on_game_hit)
 	pause_controller = PauseController.new()
 	pause_controller.name = "PauseController"
@@ -504,6 +508,7 @@ func start_run() -> void:
 	run_time = 0.0
 	if calorie_meter:
 		calorie_meter.reset()
+	stamina.reset()
 	xp = 0
 	level = 1
 	xp_to_next = xp_for_level(1)
@@ -688,8 +693,12 @@ func _physics_process(delta: float) -> void:
 
 	# Abyssal Sea (Ink Node 5): +20% locomotion while standing in own ink, and the
 	# shrine speed buff (D12) on top; both multiply with the walking pace of Settings.
+	# F6: sprint drains stamina; an empty bar slows the player until it refills to 30%.
+	var can_run := state == RunState.PLAYING and not get_tree().paused and player != null
+	stamina.step(delta, can_run and player.has_method("wants_sprint") and player.wants_sprint(),
+		can_run and player.has_method("is_moving") and player.is_moving())
 	if element_system:
-		apply_locomotion_speed(element_system.get_player_speed_multiplier() * buffs.speed_multiplier())
+		apply_locomotion_speed(element_system.get_player_speed_multiplier() * buffs.speed_multiplier() * stamina.speed_multiplier())
 
 	# Step soul orbs even while a menu or a shrine choice holds the world.
 	if _souls_root == null:
@@ -1242,6 +1251,20 @@ func _refresh_hud() -> void:
 		var freed := soul_vessels.released_count()
 		var total := soul_vessels.total()
 		diegetic_hud.set_row("souls", "DUSZE", "%d/%d" % [freed, total], float(freed) / float(total), SoulVessel.SOUL_COLOR)
+
+
+## F6: out of breath – the sprint ends and both hands get a short, soft double pulse.
+func _on_stamina_exhausted() -> void:
+	if player and player.has_method("cancel_sprint"):
+		player.cancel_sprint()
+	GameEvents.log_event("stamina_exhausted", {"t": snappedf(run_time, 0.1)})
+	if player is XRPlayer and VrComfortSettings:
+		var amp := VrComfortSettings.haptic_amplitude(0.35)
+		if amp > 0.0:
+			for c in [(player as XRPlayer).left_controller, (player as XRPlayer).right_controller]:
+				if c:
+					c.trigger_haptic_pulse("haptic", 0.0, amp, 0.12, 0.0)
+					c.trigger_haptic_pulse("haptic", 0.0, amp * 0.7, 0.1, 0.25)
 
 
 func _on_parry_diegetic(_info: Dictionary) -> void:

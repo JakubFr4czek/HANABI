@@ -298,8 +298,8 @@ func _rows_and_figure() -> void:
 	var health := (run.player as DesktopPlayer).health
 
 	# The rows, top to bottom: HP, KCAL, ŁADUNKI, CZAS (F1).
-	_check("rows read top to bottom: HP, KCAL, ŁADUNKI, CZAS (%s)" % [hud.row_keys()],
-		hud.row_keys() == ["hp", "kcal", "charges", "time"])
+	_check("rows read top to bottom: HP, KCAL, ŁADUNKI, CZAS, STAMINA (%s)" % [hud.row_keys()],
+		hud.row_keys() == ["hp", "kcal", "charges", "time", "stamina"])
 	_check("row labels read HP, KCAL, ŁADUNKI, CZAS",
 		hud.row_label("hp") == "HP" and hud.row_label("kcal") == "KCAL"
 		and hud.row_label("charges") == "ŁADUNKI" and hud.row_label("time") == "CZAS")
@@ -374,19 +374,35 @@ func _rows_and_figure() -> void:
 	_check("the rows fit the column (half width %.4f m)" % half_w, fits)
 	_check("the rows stack top to bottom without overlap", stacked)
 
-	# F6/F7 API: a new row set with set_row lands under CZAS and shows.
-	hud.set_row("stamina", "STAMINA", "100", 1.0, DiegeticHud.TEAL)
-	await _frames(2)
+	# F6: the run's stamina row sits under CZAS and follows the bar (amber when winded).
 	var stamina := hud.row_labels("stamina")
-	_check("set_row adds a row under CZAS (%d rows)" % hud.row_keys().size(),
-		hud.row_keys().size() == 5 and hud.row_keys()[4] == "stamina")
-	_check("the new row carries its label, value and bar", stamina.size() == 2 and stamina[0].text == "STAMINA"
-		and stamina[1].text == "100" and absf(hud.row_fill("stamina") - 1.0) < 0.001)
-	_check("the new row sits below CZAS", _plate_box(hud, stamina[0]).position.y >= _plate_box(hud, hud.row_labels("time")[0]).end.y)
-	hud.set_row("stamina", "STAMINA", "40", 0.4, DiegeticHud.TEAL)
+	_check("the STAMINA row sits under CZAS and reads full (%s)" % hud.row_value("stamina"), stamina.size() == 2
+		and stamina[0].text == "STAMINA" and hud.row_value("stamina") == "100" and absf(hud.row_fill("stamina") - 1.0) < 0.001
+		and _plate_box(hud, stamina[0]).position.y >= _plate_box(hud, hud.row_labels("time")[0]).end.y)
+	# Read straight after the refresh: the run keeps stepping (and refilling) the bar every tick.
+	run.stamina.value = 40.0
+	run._refresh_hud()
+	_check("the STAMINA row follows the bar (%s, fill %.2f)" % [hud.row_value("stamina"), hud.row_fill("stamina")],
+		hud.row_value("stamina") == "40" and absf(hud.row_fill("stamina") - 0.4) < 0.01)
+	run.stamina.value = 0.0
+	run.stamina.is_exhausted = true
+	run._refresh_hud()
+	_check("winded: STAMINA reads 0 in amber", hud.row_value("stamina") == "0" and stamina[1].modulate.is_equal_approx(DiegeticHud.AMBER))
+	run.stamina.reset()
+
+	# F1 API: a new row set with set_row lands under the last one and shows.
+	hud.set_row("probe", "PROBA", "100", 1.0, DiegeticHud.TEAL)
+	await _frames(2)
+	var probe := hud.row_labels("probe")
+	_check("set_row adds a row under STAMINA (%d rows)" % hud.row_keys().size(),
+		hud.row_keys().size() == 6 and hud.row_keys()[5] == "probe")
+	_check("the new row carries its label, value and bar", probe.size() == 2 and probe[0].text == "PROBA"
+		and probe[1].text == "100" and absf(hud.row_fill("probe") - 1.0) < 0.001)
+	_check("the new row sits below STAMINA", _plate_box(hud, probe[0]).position.y >= _plate_box(hud, stamina[0]).end.y)
+	hud.set_row("probe", "PROBA", "40", 0.4, DiegeticHud.TEAL)
 	await _frames(1)
-	_check("set_row updates an existing row in place (%s, fill %.2f)" % [hud.row_value("stamina"), hud.row_fill("stamina")],
-		hud.row_keys().size() == 5 and hud.row_value("stamina") == "40" and absf(hud.row_fill("stamina") - 0.4) < 0.01)
+	_check("set_row updates an existing row in place (%s, fill %.2f)" % [hud.row_value("probe"), hud.row_fill("probe")],
+		hud.row_keys().size() == 6 and hud.row_value("probe") == "40" and absf(hud.row_fill("probe") - 0.4) < 0.01)
 	run.queue_free()
 	await _frames(2)
 

@@ -56,6 +56,8 @@ func _run_all() -> void:
 	for cycle in 2:
 		var tag := "run %d" % (cycle + 1)
 		await _intro_and_grab(tag)
+		if cycle == 0:
+			await _sprint_and_rest(tag)
 		await _fight(tag, 40.0 if cycle == 0 else 20.0)
 		await _die_and_restart(tag)
 
@@ -121,6 +123,54 @@ func _fight(tag: String, seconds: float) -> void:
 	_check("%s: the katana stays in the hand through the fight" % tag, xr.right_holder.held == run.katana)
 	if hp_low:
 		print("    (%s: the player was topped up to stay alive)" % tag)
+
+
+## F6: click the move stick and sprint 5 s: the bar empties and the pace drops to x0.6; let go
+## and rest: it refills after 1 s at 15/s, back to full in about 7.7 s. Fixed 1/90 s ticks.
+func _sprint_and_rest(tag: String) -> void:
+	var st := run.stamina
+	var hud := run.diegetic_hud
+	sim.set_stick("left", Vector2(0.0, 1.0))
+	await _frames(3)
+	var walk := xr.get_move_speed()
+	_check("%s: stamina starts full, HUD reads 100 (%s)" % [tag, hud.row_value("stamina")],
+		is_equal_approx(st.value, Stamina.MAX) and hud.row_value("stamina") == "100" and absf(hud.row_fill("stamina") - 1.0) < 0.01)
+	sim.set_button("left", "primary_click", true)
+	await _frames(2)
+	sim.set_button("left", "primary_click", false)
+	await _frames(2)
+	_check("%s: the move-stick click sprints (speed %.2f vs walk %.2f)" % [tag, xr.get_move_speed(), walk],
+		st.is_sprinting and absf(xr.get_move_speed() - walk * Stamina.SPRINT_SCALE) < 0.05)
+	var feet0 := _feet()
+	for i in 455:
+		xr.health.heal(xr.health.max_hp)
+		await get_tree().physics_frame
+	await _frames(2)
+	var ran := Vector2(_feet().x - feet0.x, _feet().z - feet0.z).length()
+	_check("%s: 5 s of sprint empties the bar (%.1f) and HUD reads 0 (%s), ran %.1f m" % [tag, st.value, hud.row_value("stamina"), ran],
+		st.value == 0.0 and st.is_exhausted and hud.row_value("stamina") == "0" and ran > 4.0)
+	_check("%s: empty = winded pace x0.6 (speed %.2f vs walk %.2f)" % [tag, xr.get_move_speed(), walk],
+		absf(xr.get_move_speed() - walk * Stamina.EXHAUSTED_SCALE) < 0.05)
+	_check("%s: running out ends the sprint latch" % tag, not xr.wants_sprint())
+	sim.set_stick("left", Vector2.ZERO)
+	var t := 0.0
+	var t_recovered := -1.0
+	var t_full := -1.0
+	while t < 9.0 and t_full < 0.0:
+		xr.health.heal(xr.health.max_hp)
+		await get_tree().physics_frame
+		t += 1.0 / 90.0
+		if t_recovered < 0.0 and not st.is_exhausted:
+			t_recovered = t
+		if st.value >= Stamina.MAX:
+			t_full = t
+	var expect_full := Stamina.REGEN_DELAY_SEC + Stamina.MAX / Stamina.REGEN_PER_SEC
+	var expect_rec := Stamina.REGEN_DELAY_SEC + Stamina.MAX * Stamina.RECOVER_RATIO / Stamina.REGEN_PER_SEC
+	_check("%s: winded until 30%% (%.2f s, expected %.2f s)" % [tag, t_recovered, expect_rec], absf(t_recovered - expect_rec) < 0.15)
+	_check("%s: rest refills to 100 in %.2f s (expected %.2f s)" % [tag, t_full, expect_full], absf(t_full - expect_full) < 0.15)
+	await _frames(2)
+	_check("%s: walk pace is back after the rest (%.2f)" % [tag, xr.get_move_speed()], absf(xr.get_move_speed() - walk) < 0.05)
+	_check("%s: HUD reads full again (%s)" % [tag, hud.row_value("stamina")], hud.row_value("stamina") == "100")
 
 
 func _die_and_restart(tag: String) -> void:
