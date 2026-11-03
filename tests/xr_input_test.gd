@@ -81,6 +81,8 @@ func _run() -> void:
 	await _check_charge_activation()
 	await _check_thumbstick_cycles_element()
 	await _check_run_element_mode()
+	await _check_f4_standard_mapping("right")
+	await _check_f4_standard_mapping("left")
 	await _check_parry_echo()
 	_check_gloves()
 
@@ -246,15 +248,16 @@ func _check_thumbstick_cycles_element() -> void:
 		katana.element == XRPlayer.next_element(middle) and katana.element != middle)
 
 
-## In a run, A with empty hands fires ability 1 instead of resetting, the thumbstick
-## never cycles elements, and B fires ability 2 from the off-hand blade.
+## In a run (F4), A is the interaction (shrine, bell, skip intro): never ability 1 nor
+## the room reset; the thumbstick never cycles elements, and B fires ability 2 from
+## the off-hand blade.
 func _check_run_element_mode() -> void:
 	await _release_all()
 	_clear()
 	xr.run_element_mode = true
 	await _tap("right", "ax_button")
-	_check("in a run, A with empty hands fires ability 1 instead of resetting",
-		_count("ability_1_requested") == 1 and _count("reset_requested") == 0)
+	_check("in a run, A with empty hands is the interaction, not ability 1 or a reset",
+		_count("interact_requested") == 1 and _count("ability_1_requested") == 0 and _count("reset_requested") == 0)
 
 	await _hold_blade("left", kanabo)
 	var before := kanabo.element
@@ -264,6 +267,49 @@ func _check_run_element_mode() -> void:
 	await _tap("right", "by_button")
 	_check("in a run, B fires ability 2 from the blade in the other hand", _count("ability_2_requested") == 1)
 	xr.run_element_mode = false
+
+
+## F4 standard Quest mapping (docs/f4/CONTROLS.md) for [param dominant]: the katana
+## hand's trigger throws the element (ability 1), the free hand's trigger spends a
+## charge, grip holds and drops the katana, A and X interact, B/Y is the element skill,
+## left Menu opens the menu, and the move stick's click (off hand) asks for a sprint.
+func _check_f4_standard_mapping(dominant: String) -> void:
+	await _release_all()
+	xr.set_dominant_hand(dominant)
+	xr.run_element_mode = true
+	var off := "left" if dominant == "right" else "right"
+	await _hold_blade(dominant, katana)
+	_clear()
+	await _pull_trigger(dominant, 0.9)
+	_check("[%s] the katana hand's trigger throws the element (ability 1)" % dominant,
+		_count("ability_1_requested") == 1 and _count("charge_activation_requested") == 0)
+	await _pull_trigger(off, 0.9)
+	_check("[%s] the free hand's trigger spends a charge, no throw" % dominant,
+		_count("charge_activation_requested") == 1 and _count("ability_1_requested") == 1)
+	await _tap(dominant, "ax_button")
+	await _tap(off, "ax_button")
+	_check("[%s] A and X both interact and fire nothing else" % dominant,
+		_count("interact_requested") == 2 and _count("ability_1_requested") == 1 and _count("reset_requested") == 0)
+	await _tap(dominant, "by_button")
+	_check("[%s] B/Y on the katana hand is the element skill (ability 2)" % dominant, _count("ability_2_requested") == 1)
+	await _tap("left", "menu_button")
+	_check("[%s] the left Menu button opens the menu" % dominant, _count("menu_requested") == 1)
+	await _tap(off, "primary_click")
+	_check("[%s] clicking the move stick (%s) asks for a sprint" % [dominant, off], _count("sprint_requested") == 1)
+	await _tap(dominant, "primary_click")
+	_check("[%s] clicking the turn stick does not" % dominant, _count("sprint_requested") == 1)
+	_check("[%s] the katana stays in hand through all of it" % dominant, _holder(dominant).held == katana)
+	sim.set_grip(dominant, 0.0)
+	await _frames(4)
+	_check("[%s] opening the grip drops the katana" % dominant, _holder(dominant).held == null)
+	katana.global_transform = _holder(dominant).global_transform
+	sim.set_grip(dominant, 1.0)
+	await _frames(4)
+	_check("[%s] closing the grip on it takes the katana again" % dominant, _holder(dominant).held == katana)
+	await _release_all()
+	katana.global_position = FAR_POINT
+	xr.run_element_mode = false
+	xr.set_dominant_hand("right")
 
 
 ## A parry echoes softly into the free hand only; the blade hand gets nothing.
@@ -298,6 +344,8 @@ func _connect_signals() -> void:
 	xr.ability_2_requested.connect(_on_ability.bind("ability_2_requested"))
 	xr.charge_activation_requested.connect(_bump.bind("charge_activation_requested"))
 	xr.menu_requested.connect(_bump.bind("menu_requested"))
+	xr.interact_requested.connect(_bump.bind("interact_requested"))
+	xr.sprint_requested.connect(_bump.bind("sprint_requested"))
 	GameEvents.event_logged.connect(_on_event)
 
 

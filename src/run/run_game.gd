@@ -419,6 +419,8 @@ func _setup_run_nodes() -> void:
 		if xr.toggle_attacks_requested.is_connected(toggle_dummy_attacks):
 			xr.toggle_attacks_requested.disconnect(toggle_dummy_attacks)
 		xr.reset_requested.connect(_on_xr_primary_button)
+		if not xr.interact_requested.is_connected(_on_xr_interact):
+			xr.interact_requested.connect(_on_xr_interact)
 
 	run_intro = RunIntro.new()
 	run_intro.name = "RunIntro"
@@ -568,6 +570,7 @@ func _begin_play_after_intro() -> void:
 	GameEvents.log_event("run_started", {"high_score": high_score})
 	run_started.emit()
 	_play_run_start_bell()
+	_show_controls_hint()
 	_refresh_hud()
 
 
@@ -577,6 +580,35 @@ func apply_locomotion_speed(multiplier: float) -> void:
 		(player as DesktopPlayer).move_speed = _base_move_speed * multiplier
 	elif player is XRPlayer:
 		(player as XRPlayer).set_move_speed_scale(multiplier)
+
+
+## F4: the controls hint, once per run, when play begins (after the intro).
+var controls_hint: ControlsHint
+var controls_hint_shown := false
+
+
+func _show_controls_hint() -> void:
+	if controls_hint_shown:
+		return
+	var head := get_tree().get_first_node_in_group("player_head") as Node3D
+	if head == null:
+		return
+	controls_hint_shown = true
+	controls_hint = ControlsHint.new()
+	var dominant := "right"
+	if player is XRPlayer:
+		dominant = (player as XRPlayer).dominant_hand
+	controls_hint.setup(head, dominant)
+	add_child(controls_hint)
+	GameEvents.log_event("controls_hint_shown", {"dominant": dominant})
+
+
+## A/X in a run (F4): skips the intro, else reaches for the shrine in front of you.
+func _on_xr_interact() -> void:
+	if state == RunState.INTRO and run_intro and run_intro.is_active():
+		run_intro.skip()
+	elif state == RunState.PLAYING and not get_tree().paused:
+		reach_for_offering()
 
 
 func _on_xr_primary_button() -> void:
@@ -763,8 +795,9 @@ func _offering_haptic() -> void:
 				holder.pulse_pattern([[0.6, 0.06], [0.0, 0.05], [0.25, 0.18]])
 
 
-## Desktop stand-in for a hand on the offering table (D12): E reaches for the nearest
-## altar for one physics frame. VR does not use it; its hands touch the altar.
+## Stand-in for a hand on the offering table (D12): E on desktop, A/X in VR (F4)
+## reach for the nearest altar or bell for one physics frame. VR hands also
+## still open it by touch; the shrine's own reach check applies either way.
 func reach_for_offering() -> void:
 	_desktop_reach = true
 
@@ -784,7 +817,7 @@ func _poll_shrine_bell(reach: bool) -> bool:
 		for holder in [xr.left_holder, xr.right_holder]:
 			if holder:
 				points.append(holder.global_position)
-	elif reach:
+	if reach:
 		var bell := hokora_manager.nearest_bell()
 		if bell != Vector3.INF:
 			points.append(bell)
@@ -815,7 +848,7 @@ func _hand_positions(reach: bool) -> Array[Vector3]:
 		for holder in [xr.left_holder, xr.right_holder]:
 			if holder and holder.held == null:
 				out.append(holder.global_position)
-	elif reach and hokora_manager:
+	if reach and hokora_manager:
 		var altar := hokora_manager.nearest_altar()
 		if altar != Vector3.INF:
 			out.append(altar)

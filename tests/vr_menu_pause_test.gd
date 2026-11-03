@@ -81,6 +81,7 @@ func _run_all() -> void:
 	await _test_audio_settings()
 	await _test_access_and_pace()
 	await _test_controls_page_matches_action_map()
+	await _test_controls_scheme_and_hint()
 	await _test_slow_motion_survives_pause()
 	await _test_refused_states()
 	await _test_music_ducking()
@@ -970,6 +971,79 @@ func _test_controls_page_matches_action_map() -> void:
 	await _release_triggers()
 	await _tap_menu_button()
 	_restore_settings_file(backup)
+
+
+## F4: every row of the controls table is bound on both hands in the action map, the
+## drawn callouts say what the table says, and the start-of-run hint shows once and goes.
+func _test_controls_scheme_and_hint() -> void:
+	var bound := {}
+	for b: Dictionary in ControlsMap.bindings():
+		bound["%s/%s" % [b.side, b.action]] = true
+	var unbound: Array[String] = []
+	for row in ControlsMap.SCHEME:
+		for a in ControlsMap.SCHEME[row].actions:
+			for side in ["left", "right"]:
+				if row == "menu" and side == "right":
+					continue  # the right top button is Meta, the system's
+				if not bound.has("%s/%s" % [side, a]):
+					unbound.append("%s:%s/%s" % [row, side, a])
+	_check("F4: every control of the table has a binding on both hands (unbound %s)" % [unbound], unbound.is_empty())
+	for dominant in ["right", "left"]:
+		var lay := ControlsMap.layout(dominant)
+		var wrong: Array[String] = []
+		for side in ["left", "right"]:
+			for c: Dictionary in lay.hands[side]:
+				var row := String(c.slot)
+				if row == "stick":
+					row = "stick_move" if side == lay.roles.move else "stick_turn"
+				elif row == "top_button":
+					if c.system:
+						continue
+					row = "menu"
+				if String(c.body) != String(ControlsMap.SCHEME[row].body):
+					wrong.append("%s/%s" % [side, c.slot])
+		_check("F4 [%s]: the drawn map says what the table says (wrong %s)" % [dominant, wrong], wrong.is_empty())
+	_check("F4: the hint names the sticks by the dominant hand",
+		ControlsMap.hint_lines("left")[0].begins_with("RIGHT STICK  walk") and ControlsMap.hint_lines("right")[0].begins_with("LEFT STICK  walk"))
+
+	# The run showed the hint once, when play began; asking again shows nothing new.
+	_check("F4: the run showed the controls hint when play began", run.controls_hint_shown)
+	var first := run.controls_hint
+	run._show_controls_hint()
+	_check("F4: the hint is shown only once per run", run.controls_hint == first)
+
+	# A hint stepped by hand: in view, then gone after its time; another gone on a walk.
+	var head := Node3D.new()
+	add_child(head)
+	head.global_position = Vector3(0.0, 1.6, 0.0)
+	var hint := ControlsHint.new()
+	hint.setup(head, "right")
+	add_child(hint)
+	hint.set_process(false)
+	for _i in 10:
+		hint._process(0.1)
+	var ahead := hint.global_position - head.global_position
+	_check("F4: the hint fades in ahead of the eyes, a little low (at %s)" % ahead,
+		hint.visible and ahead.z < -1.0 and ahead.y < 0.0 and ahead.y > -0.4 and hint.lines.size() == 4)
+	for _i in int((ControlsHint.SHOW_SEC + ControlsHint.FADE_SEC) / 0.1) + 2:
+		if is_instance_valid(hint):
+			hint._process(0.1)
+	await _frames(1)
+	_check("F4: the hint is gone after its few seconds", not is_instance_valid(hint))
+	var hint2 := ControlsHint.new()
+	hint2.setup(head, "right")
+	add_child(hint2)
+	hint2.set_process(false)
+	hint2._process(0.3)
+	head.global_position += Vector3(0.0, 0.0, -0.8)
+	hint2._process(0.1)
+	_check("F4: walking off dismisses the hint at once", hint2.is_leaving() and hint2.visible)
+	for _i in 10:
+		if is_instance_valid(hint2):
+			hint2._process(0.1)
+	await _frames(1)
+	_check("F4: and it fades away", not is_instance_valid(hint2))
+	head.queue_free()
 
 
 ## The body text of the drawn callout for [param side] and [param slot] ("" if none).

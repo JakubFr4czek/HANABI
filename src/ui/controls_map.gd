@@ -112,6 +112,35 @@ static func layout(dominant: String) -> Dictionary:
 	return out
 
 
+## The F4 scheme (standard Quest layout, docs/f4/CONTROLS.md): one row per control,
+## the action-map action(s) it reads and what it does. The callouts, the start-of-run
+## hint ([method hint_lines]) and the tests all read this table.
+const SCHEME := {
+	"stick_move": {"actions": ["primary", "primary_click"], "title": "THUMBSTICK",
+		"body": "Walk · click: sprint"},
+	"stick_turn": {"actions": ["primary"], "title": "THUMBSTICK", "body": "Turn, snap or smooth"},
+	"trigger": {"actions": ["trigger"], "title": "TRIGGER",
+		"body": "Throw element · free hand: charge"},
+	"grip": {"actions": ["grip"], "title": "GRIP", "body": "Grab or drop the katana"},
+	"face_top": {"actions": ["ax_button"], "title": "INTERACT",
+		"body": "Shrine, bell · skip intro"},
+	"face_bottom": {"actions": ["by_button"], "title": "ELEMENT SKILL",
+		"body": "With katana; grip + B/Y recalls"},
+	"menu": {"actions": ["menu_button"], "title": "MENU", "body": "Skill tree · settings"},
+}
+
+
+## The start-of-run hint (F4): four short lines, sticks named for [param dominant].
+static func hint_lines(dominant: String) -> Array[String]:
+	var r := roles_for(dominant)
+	return [
+		"%s STICK  walk   ·   %s STICK  turn" % [String(r.move).to_upper(), String(r.turn).to_upper()],
+		"TRIGGER  throw element   ·   GRIP  katana",
+		"A / X  interact   ·   B / Y  element skill",
+		"MENU  skill tree & settings",
+	]
+
+
 ## Short rules that are not tied to one button, shown under the drawing.
 const RULES := [
 	"Recenter: hold Menu for 1 s, or hold B/Y for 0.6 s with an empty hand.",
@@ -175,23 +204,23 @@ static func _callout(b: Dictionary, slot: String, roles: Dictionary) -> Dictiona
 				c.body = "Reserved by the headset"
 				c.system = true
 			else:
-				c.title = "MENU"
-				c.body = "Tap: skill tree"
+				c.title = SCHEME.menu.title
+				c.body = SCHEME.menu.body
 		"face_top":
-			c.title = "%s  ·  ABILITY 1" % letter
-			c.body = "Element skill 1, either hand"
+			c.title = "%s  ·  %s" % [letter, SCHEME.face_top.title]
+			c.body = SCHEME.face_top.body
 		"face_bottom":
-			c.title = "%s  ·  ABILITY 2" % letter
-			c.body = "Skill 2; grip + B/Y recalls"
+			c.title = "%s  ·  %s" % [letter, SCHEME.face_bottom.title]
+			c.body = SCHEME.face_bottom.body
 		"stick":
 			c.title = "THUMBSTICK"
-			c.body = "Walk, smooth locomotion" if side == roles.move else "Turn, snap or smooth"
+			c.body = SCHEME.stick_move.body if side == roles.move else SCHEME.stick_turn.body
 		"trigger":
-			c.title = "TRIGGER"
-			c.body = "Pick in menus · skip splash"
+			c.title = SCHEME.trigger.title
+			c.body = SCHEME.trigger.body
 		"grip":
-			c.title = "GRIP"
-			c.body = "Grab or drop the katana"
+			c.title = SCHEME.grip.title
+			c.body = SCHEME.grip.body
 	return c
 
 

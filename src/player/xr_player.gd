@@ -2,10 +2,14 @@ class_name XRPlayer
 extends Node3D
 ## VR player rig: XR Tools origin, camera, hands, smooth locomotion (left stick),
 ## snap turn (right stick) and a [WeaponHolder] in each hand.
-## A/X: [signal ability_1_requested] (or reset in dev). B/Y: [signal ability_2_requested]
-## when holding katana (with grip when disarmed, B/Y recalls weapon).
+## Standard Quest mapping (F4, docs/f4/CONTROLS.md):
+## Trigger of the katana hand: [signal ability_1_requested] (element throw);
+## trigger of the free hand while the other holds the blade: [signal charge_activation_requested].
+## A/X: in a run [signal interact_requested] (shrine, bell, skip intro); in the dojo
+## ability 1 with a blade, else reset. B/Y: [signal ability_2_requested] when holding
+## katana (with grip when disarmed, B/Y recalls weapon).
 ## Left Menu button: tap = [signal menu_requested], hold 1.0s = [method recenter_view].
-## Thumbstick click: cycle element in test room.
+## Move-stick click: [signal sprint_requested] (F6). Thumbstick click: cycle element in test room.
 
 signal reset_requested
 signal toggle_attacks_requested
@@ -14,6 +18,10 @@ signal ability_2_requested(direction: Vector3)
 ## Off-hand trigger while the other hand holds the blade: spend the oldest Torii charge (D21).
 signal charge_activation_requested
 signal menu_requested
+## A/X in a run: reach for the shrine / bell in front of you, or skip the intro (F4).
+signal interact_requested
+## Click of the move stick (F4; sprint itself arrives with F6).
+signal sprint_requested
 
 ## Standard collision layer for player body (layer 20, 1 << 19). Shared across
 ## XR Tools PlayerBody, DesktopPlayer, HeldWeapon, and Torii gates.
@@ -130,7 +138,9 @@ func _process(delta: float) -> void:
 	var ax_pressed := _pressed_once("ax_r", right_controller.is_button_pressed("ax_button")) \
 		or _pressed_once("ax_l", left_controller.is_button_pressed("ax_button"))
 	if ax_pressed:
-		if run_element_mode or right_holder.held != null or left_holder.held != null:
+		if run_element_mode:
+			interact_requested.emit()
+		elif right_holder.held != null or left_holder.held != null:
 			ability_1_requested.emit(_ability_direction(get_dominant_controller()))
 		else:
 			reset_requested.emit()
@@ -145,14 +155,18 @@ func _process(delta: float) -> void:
 	elif run_element_mode and (by_r or by_l) and (right_holder.held != null or left_holder.held != null):
 		ability_2_requested.emit(_ability_direction(get_dominant_controller()))
 
-	# Charge activation (D21): the off-hand trigger spends the oldest Torii charge,
-	# only while the other hand holds the blade. Edges are read every frame so
-	# the trigger state never sticks.
-	var charge_r := _pressed_once("charge_r", right_controller.get_float("trigger") > CHARGE_TRIGGER_THRESHOLD)
-	var charge_l := _pressed_once("charge_l", left_controller.get_float("trigger") > CHARGE_TRIGGER_THRESHOLD)
-	if charge_r and left_holder.held != null and right_holder.held == null:
+	# Trigger (F4): the hand holding the katana throws its element (ability 1);
+	# the free hand, while the other holds the blade, spends the oldest Torii
+	# charge (D21). Edges are read every frame so the trigger state never sticks.
+	var trig_r := _pressed_once("charge_r", right_controller.get_float("trigger") > CHARGE_TRIGGER_THRESHOLD)
+	var trig_l := _pressed_once("charge_l", left_controller.get_float("trigger") > CHARGE_TRIGGER_THRESHOLD)
+	if trig_r and right_holder.held != null:
+		ability_1_requested.emit(_ability_direction(right_controller))
+	elif trig_l and left_holder.held != null:
+		ability_1_requested.emit(_ability_direction(left_controller))
+	elif trig_r and left_holder.held != null:
 		charge_activation_requested.emit()
-	elif charge_l and right_holder.held != null and left_holder.held == null:
+	elif trig_l and right_holder.held != null:
 		charge_activation_requested.emit()
 
 	for c in [left_controller, right_controller]:
@@ -162,8 +176,11 @@ func _process(delta: float) -> void:
 		if holder.held == null:
 			_step_view_button(c, gripping, _delta)
 		if _pressed_once("click_" + c.name, c.is_button_pressed("primary_click")):
-			# Thumbstick click NEVER fires combat abilities (ELEMENTS_PLAN);
-			# in the training room only, it cycles the held weapon's element.
+			# Thumbstick click NEVER fires combat abilities (ELEMENTS_PLAN).
+			# The move stick's click asks for a sprint (F4/F6); in the training
+			# room only, it also cycles the held weapon's element.
+			if c == _get_move_controller():
+				sprint_requested.emit()
 			if not run_element_mode and holder.held:
 				holder.held.set_element(next_element(holder.held.element))
 
@@ -288,6 +305,14 @@ func _get_turn_controller() -> XRController3D:
 	if turn and turn.get_parent() is XRController3D:
 		return turn.get_parent() as XRController3D
 	return right_controller
+
+
+## The hand whose stick walks (the off hand): its click is the sprint (F4).
+func _get_move_controller() -> XRController3D:
+	var direct := _get_movement_direct()
+	if direct and direct.get_parent() is XRController3D:
+		return direct.get_parent() as XRController3D
+	return right_controller if dominant_hand == "left" else left_controller
 
 
 func _get_vignette() -> Node:
