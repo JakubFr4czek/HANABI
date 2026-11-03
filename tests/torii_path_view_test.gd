@@ -14,6 +14,7 @@ const VIEW_DISTANCE := 14.0
 
 var failures := 0
 var out_path := "/tmp/hanabi_f2_path_view.png"
+var forced_gate := Vector2.INF
 
 
 func _ready() -> void:
@@ -25,6 +26,11 @@ func _ready() -> void:
 	var i := args.find("--out")
 	if i >= 0 and i + 1 < args.size():
 		out_path = args[i + 1]
+	# --gate x z: take this path point as the gate (the camera is set from the path there). Used to
+	# shoot the same camera on an older checkout, where no gate may stand on the path.
+	var g := args.find("--gate")
+	if g >= 0 and g + 2 < args.size():
+		forced_gate = Vector2(float(args[g + 1]), float(args[g + 2]))
 	await _run()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	get_tree().quit(1 if failures > 0 else 0)
@@ -46,7 +52,10 @@ func _run() -> void:
 	# The gate: the decorative gate nearest the origin that stands on a footpath (centre within 0.3 m
 	# of the rendered line). The view starts VIEW_DISTANCE metres behind it, along the path.
 	var gate := _pick_gate(forest)
-	_check("A decorative gate stands on a footpath near the glade", gate != Vector3.INF)
+	if forced_gate != Vector2.INF:
+		gate = Vector3(forced_gate.x, forest.height_at(forced_gate.x, forced_gate.y), forced_gate.y)
+	else:
+		_check("A decorative gate stands on a footpath near the glade", gate != Vector3.INF)
 	if gate == Vector3.INF:
 		run.queue_free()
 		return
