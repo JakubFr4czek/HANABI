@@ -6,7 +6,8 @@ name: correctness
 
 on:
   schedule:
-    - cron: "22 */4 * * *"
+    - cron: "22 4-20/4 * * *"
+    - cron: "22 0 * * *"   # nightly run: also coverage
   workflow_dispatch:
     inputs:
       fuzz_seeds:
@@ -171,6 +172,7 @@ jobs:
 
   coverage:
     name: Code coverage (Nano Coverage)
+    if: github.event_name != 'schedule' || github.event.schedule == '22 0 * * *'  # ~4 h on pi2: once a day + manual only
     runs-on: [self-hosted, pi2]  # Raspberry Pi 2 (4 GB) runs all self-hosted CI; one runner = jobs run one after another
     timeout-minutes: 240
     steps:
@@ -224,7 +226,7 @@ jobs:
       - name: Run the suite + one fuzz seed instrumented
         continue-on-error: true
         run: |
-          xvfb-run -a -s "-screen 0 1600x900x24" zsh tools/run_tests.sh 2 > ci_out/tests_instrumented.txt 2>&1 || true
+          xvfb-run -a -s "-screen 0 1600x900x24" zsh tools/run_tests.sh 3 > ci_out/tests_instrumented.txt 2>&1 || true
           timeout 1200 "$GODOT" --headless --path . --fixed-fps 90 res://tests/ci/fuzz_runner.tscn -- --xr-sim --seed=1 --steps=150 > ci_out/fuzz_instrumented.log 2>&1 || true
           grep -E '^testy:' ci_out/tests_instrumented.txt || true
       - name: Report + restore scripts
