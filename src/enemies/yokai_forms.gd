@@ -22,14 +22,20 @@ const EYE_Z := 0.13
 ## (y, rx, rz) rings, bottom to top. The chest is wider than deep and narrows at the hips.
 ## Broad shoulders over a narrower waist; the torso leans forward (CHEST_LEAN, see tube).
 const CHEST_RINGS := [
-	Vector3(-0.21, 0.150, 0.096), Vector3(-0.09, 0.176, 0.112), Vector3(0.04, 0.184, 0.122),
-	Vector3(0.17, 0.198, 0.118), Vector3(0.22, 0.166, 0.100),
+	Vector3(-0.235, 0.118, 0.078), Vector3(-0.21, 0.150, 0.096), Vector3(-0.09, 0.176, 0.112),
+	Vector3(0.04, 0.186, 0.124), Vector3(0.15, 0.198, 0.120), Vector3(0.198, 0.182, 0.108),
+	Vector3(0.222, 0.140, 0.088), Vector3(0.236, 0.080, 0.058),
 ]
+## N12: a rounded trapezius (low, so the mask keeps the sky beside it) over the shoulders (the last three rings) instead of a flat
+## cap, and a domed belly under the chest; ORGANIC_LUMP breaks the turned-on-a-lathe look and
+## SHOULDER_HUNCH raises and swells one side (a lightly crooked, hunched body).
+const ORGANIC_LUMP := 0.06
+const SHOULDER_HUNCH := 0.05
 const CHEST_LEAN := 0.22
 ## Limb profiles: (fraction of the capsule's height, fraction of its radius), top to bottom.
 ## Bulky, not sticks: full upper arm and forearm belly, thin wrist; thick thigh and calf, thin ankle.
-const ARM_PROFILE := [Vector2(-0.5, 0.70), Vector2(-0.4, 0.95), Vector2(-0.2, 1.20), Vector2(0.05, 1.02), Vector2(0.30, 1.30), Vector2(0.5, 1.38)]
-const LEG_PROFILE := [Vector2(-0.5, 0.75), Vector2(-0.35, 1.00), Vector2(-0.2, 1.22), Vector2(0.0, 1.12), Vector2(0.3, 1.45), Vector2(0.5, 1.30)]
+const ARM_PROFILE := [Vector2(-0.54, 0.40), Vector2(-0.5, 0.70), Vector2(-0.4, 0.95), Vector2(-0.2, 1.20), Vector2(0.05, 1.02), Vector2(0.30, 1.30), Vector2(0.5, 1.38), Vector2(0.57, 0.95)]
+const LEG_PROFILE := [Vector2(-0.54, 0.45), Vector2(-0.5, 0.75), Vector2(-0.35, 1.00), Vector2(-0.2, 1.22), Vector2(0.0, 1.12), Vector2(0.3, 1.45), Vector2(0.5, 1.30), Vector2(0.56, 0.85)]
 ## The visible head: inside the mask, never through its face (the collision sphere is 0.115).
 const HEAD_VISUAL_RADIUS := 0.088
 const PELVIS_RINGS := [Vector3(-0.085, 0.122, 0.080), Vector3(0.0, 0.140, 0.092), Vector3(0.085, 0.132, 0.086)]
@@ -46,9 +52,9 @@ static var _cache := {}
 static func body_mesh(part_name: String, def: Dictionary) -> Mesh:
 	match part_name:
 		"chest":
-			return _cached("chest", func() -> Mesh: return tube(CHEST_RINGS, 12, true, 0.0, CHEST_LEAN))
+			return _cached("chest", func() -> Mesh: return tube(CHEST_RINGS, 12, true, 0.0, CHEST_LEAN, ORGANIC_LUMP, SHOULDER_HUNCH))
 		"pelvis":
-			return _cached("pelvis", func() -> Mesh: return tube(PELVIS_RINGS, 12, true))
+			return _cached("pelvis", func() -> Mesh: return tube(PELVIS_RINGS, 12, true, 0.0, 0.0, ORGANIC_LUMP * 0.6))
 	match String(def.shape):
 		"capsule":
 			var r := float(def.radius)
@@ -60,7 +66,7 @@ static func body_mesh(part_name: String, def: Dictionary) -> Mesh:
 					var rings: Array = []
 					for step in profile:
 						rings.append(Vector3(float(step.x) * h, float(step.y) * r, float(step.y) * r))
-					return tube(rings, 10, true))
+					return tube(rings, 10, true, 0.0, 0.0, ORGANIC_LUMP * 0.7))
 			return _cached("capsule_%.3f_%.3f" % [r, h], func() -> Mesh:
 				var m := CapsuleMesh.new()
 				m.radius = r
@@ -215,7 +221,9 @@ static func claw() -> Mesh:
 ## A closed or open tube through (y, rx, rz) rings, bottom to top, with [param segs] sides.
 ## [param jag] > 0 ragged-cuts the last ring (a torn hem). Winding is outward (clockwise
 ## front faces, Godot's convention), normals point out of the surface.
-static func tube(rings: Array, segs: int, caps: bool, jag: float = 0.0, lean: float = 0.0) -> ArrayMesh:
+## [param lump] > 0 swells or dents each vertex by up to ±lump/2 of its radius (fixed hash,
+## smooth enough at these ring counts); [param hunch] lifts and widens the +X side's upper half.
+static func tube(rings: Array, segs: int, caps: bool, jag: float = 0.0, lean: float = 0.0, lump: float = 0.0, hunch: float = 0.0) -> ArrayMesh:
 	var verts := PackedVector3Array()
 	var norms := PackedVector3Array()
 	var uvs := PackedVector2Array()
@@ -232,6 +240,12 @@ static func tube(rings: Array, segs: int, caps: bool, jag: float = 0.0, lean: fl
 				var h := _hash01(s)
 				k = 1.0 + (h - 0.5) * 2.0 * jag / maxf(ring.y, 1e-3)
 				dy = -jag * 1.4 * h * h
+			if lump > 0.0 and r > 0 and r < n - 1:
+				k *= 1.0 + (_hash01(r * 31 + s * 7 + 3) - 0.5) * lump
+			if hunch > 0.0 and cos(a) > 0.0:
+				var upper := clampf(ring.x / maxf(absf(float(rings[n - 1].x)), 1e-3), 0.0, 1.0)
+				k *= 1.0 + hunch * cos(a) * upper
+				dy += hunch * 0.3 * cos(a) * upper * ring.y
 			# lean: the ring shifts forward (+Z) in proportion to its height, a bent pose in the mesh itself.
 			verts.append(Vector3(cos(a) * ring.y * k, ring.x + dy, sin(a) * ring.z * k + lean * ring.x))
 			norms.append(Vector3(cos(a) / maxf(ring.y, 1e-4), 0.0, sin(a) / maxf(ring.z, 1e-4)).normalized())

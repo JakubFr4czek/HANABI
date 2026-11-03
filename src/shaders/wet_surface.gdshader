@@ -35,6 +35,9 @@ uniform int orm_mode : hint_range(0, 2) = 0;
 uniform vec3 emission_tint : source_color = vec3(0.0);
 uniform float procedural_ao : hint_range(0.0, 1.0) = 0.0;
 uniform float fog_rim : hint_range(0.0, 2.5) = 0.0;
+// N12: a fixed-colour fresnel rim (emission, no light), so a dark body separates from the fog.
+// Black by default: only the yōkai materials set it, the world's surfaces are unchanged.
+uniform vec3 rim_tint : source_color = vec3(0.0);
 // 1 = ordinary dielectric highlight. 0 = diffuse only (forest props in the fog).
 uniform float specular_scale : hint_range(0.0, 1.0) = 1.0;
 // When above 0, the sky fill is the fog color instead of a cool self-light.
@@ -140,10 +143,10 @@ void fragment() {
 	float tex_sat = max(max(tex.r, tex.g), tex.b) - min(min(tex.r, tex.g), tex.b);
 	float gate = mix(1.0, smoothstep(0.4, 0.65, tex_luma) * smoothstep(0.15, 0.35, tex_sat), paper_gate);
 	vec3 emission = flash_color * flash + sky + tex * emission_tint * gate + col * sky_lit;
-	if (fog_rim > 0.0) {
+	if (fog_rim > 0.0 || dot(rim_tint, rim_tint) > 0.0) {
 		vec3 view_dir = normalize((INV_VIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
 		float rim = pow(clamp(1.0 - abs(dot(normalize(wn), view_dir)), 0.0, 1.0), 2.4);
-		emission += col * fog_rim * rim * 0.85;
+		emission += col * fog_rim * rim * 0.85 + rim_tint * rim * (1.0 - up);
 	}
 	EMISSION = emission;
 }

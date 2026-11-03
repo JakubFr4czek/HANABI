@@ -26,6 +26,9 @@ const FACE_HOOD_LUMA := 0.05
 ## Right eye in the head frame (the mask's socket, YokaiForms.EYE_*). Kept as numbers so the
 ## same scene also runs on the pre-N3 tree for the PRE shots.
 const EYE_LOCAL := Vector3(0.0305, -0.02, 0.13)
+## N12: the body's fresnel rim must lift the yōkai's pixels at 4 m by at least this much mean
+## luminance against the same frame with the rim off (it is what separates it from the fog).
+const RIM_LIFT := 0.006
 
 var out_dir := ""
 var failures := 0
@@ -49,6 +52,8 @@ func _ready() -> void:
 func _run_all() -> void:
 	var run: RunGame = RUN_SCENE.instantiate()
 	run.skip_run_intro = true
+	# The run-start controls hint (added after N3) floats over the yōkai's head in this view.
+	run.controls_hint_shown = true
 	add_child(run)
 	var player := run.player as DesktopPlayer
 	var director := run.wave_director
@@ -117,6 +122,29 @@ func _run_all() -> void:
 	near.place_at(near.global_position, 0.0)
 	await _frames(30)
 	await _shot("1b_swarm_1m5")
+	director.clear_enemies()
+
+	# N12: one swarm yōkai at 4 m (the video distance): the rounded body with its rim reads
+	# against the fog, and the rim is what lifts it (the same frame with the rim off).
+	var mid := director.spawn_enemy_at(Vector3(0.0, _ground(director, 0.0, -1.8), -1.8), player.global_position, Elements.NONE)
+	mid.set_pose("stalk")
+	await _frames(30)
+	var lit := await _shot("n12_swarm_4m")
+	var box := _body_box(player, mid)
+	mid.visible = false
+	await RenderingServer.frame_post_draw
+	var fog4 := get_viewport().get_texture().get_image()
+	mid.visible = true
+	mid._skin.set_shader_parameter("rim_tint", Color.BLACK)
+	await RenderingServer.frame_post_draw
+	var unlit := get_viewport().get_texture().get_image()
+	mid._skin.set_shader_parameter("rim_tint", Yokai.SKIN_RIM)
+	var c4 := _silhouette_contrast(lit, fog4, box)
+	var lift := _mean_luma(lit, box) - _mean_luma(unlit, box)
+	print("4 m: silhouette contrast %.3f, rim lift %.4f" % [c4, lift])
+	_check("the yōkai reads against the fog at 4 m (contrast %.3f ≥ %.2f)" % [c4, SILHOUETTE_CONTRAST], c4 >= SILHOUETTE_CONTRAST)
+	# The box is mostly fog, so the lift is diluted: a small mean means a clear edge.
+	_check("the body's rim lifts its silhouette at 4 m (Δ luma %.4f ≥ %.3f)" % [lift, RIM_LIFT], lift >= RIM_LIFT)
 	director.clear_enemies()
 
 	# 3. Elite at 3 m, and the same body in a Kirisute cut (the pieces keep the mask on the head piece).

@@ -18,7 +18,14 @@ const BURST_ACCEL := 24.0
 ## Parts a very strong clean cut takes off. A leg or the head is fatal.
 const SEVERABLE := ["arm_l", "arm_r", "leg_l", "leg_r", "head"]
 ## Skin of a swarm body; an elite tints it a little toward its element.
-const SKIN_BASE := Color(0.18, 0.17, 0.26)
+const SKIN_BASE := Color(0.165, 0.155, 0.225)
+## N12: moon-silver fresnel rim on the body (shader emission, no light source): the silhouette
+## separates from the storm fog at 3–8 m. A school or elite tints it a little (SCHOOL_RIM_MIX).
+const SKIN_RIM := Color(0.26, 0.28, 0.36)
+const SCHOOL_RIM_MIX := 0.4
+## N12: underside shading of the skin (the shader's procedural_ao): a soft top-to-bottom
+## gradient over each rounded form instead of one flat colour.
+const SKIN_AO := 0.7
 ## Elite eyes, sigil and claws burn this much brighter than a swarm's, so the
 ## element still reads from across the fog.
 const ELITE_LIFT := 1.3
@@ -175,10 +182,12 @@ func _ready() -> void:
 	_skin.set_shader_parameter("roughness_wet", 0.34)
 	_skin.set_shader_parameter("wetness", 0.50)
 	_skin.set_shader_parameter("waterline_y", -10.0)
-	_skin.set_shader_parameter("grain_amount", 0.35)
+	_skin.set_shader_parameter("grain_amount", 0.5)
 	_skin.set_shader_parameter("grain_scale", 28.0)
 	_skin.set_shader_parameter("fill", 1.65)
 	_skin.set_shader_parameter("flash_color", Color(1.0, 0.36, 0.22))
+	_skin.set_shader_parameter("procedural_ao", SKIN_AO)
+	_skin.set_shader_parameter("rim_tint", SKIN_RIM)
 
 	# The demon mask (N3): its own albedo, ORM and normal map through the wet shader. The
 	# albedo is a dark lacquer; the base colour lifts it to an aged, desaturated tone.
@@ -330,6 +339,7 @@ func _reset_spawn_look() -> void:
 	_skin.set_shader_parameter("base_color", SKIN_BASE)
 	_skin.set_shader_parameter("fill", 1.65)
 	_skin.set_shader_parameter("flash", 0.0)
+	_set_rim(SKIN_RIM)
 	_mask_mat.set_shader_parameter("fill", MASK_FILL)
 	_mask_mat.set_shader_parameter("flash", 0.0)
 	_sash.set_shader_parameter("base_color", Color(0.46, 0.055, 0.075))
@@ -355,6 +365,7 @@ func _apply_kind_visuals() -> void:
 		if body_element != Elements.NONE:
 			_apply_element_eyes(Elements.eye_color(body_element))
 			EyeGlow.set_glow(_eye_glows, SCHOOL_EYE_GLOW)
+			_set_rim(SKIN_RIM.lerp(Elements.eye_color(body_element) * 0.25, SCHOOL_RIM_MIX))
 		return
 	# No node scaling: scaling the Yokai node moves rigid-body parts away
 	# from their joint anchors (shapes do not scale with the node), so elite
@@ -368,6 +379,16 @@ func _apply_kind_visuals() -> void:
 	_apply_element_eyes(Elements.eye_color(body_element))
 	_sash.set_shader_parameter("base_color", accent.darkened(0.55))
 	_claw_mat.emission = ember * 1.2
+	_set_rim(SKIN_RIM.lerp(accent * 0.3, 0.6))
+
+
+## The body's fresnel rim colour (N12); the death dissolve fades it with the eyes.
+var _rim := SKIN_RIM
+
+
+func _set_rim(c: Color) -> void:
+	_rim = c
+	_skin.set_shader_parameter("rim_tint", c)
 
 
 ## The elite's lit colour (eyes, sigil, claws). The accents of ink and storm are
@@ -936,6 +957,7 @@ func _physics_process(delta: float) -> void:
 		_eyes.emission_energy_multiplier = maxf(0.0, (1.0 - t * 2.0) * 0.85)
 		EyeGlow.set_glow(_eye_glows, maxf(0.0, 1.0 - t * 2.5))
 		_sigil_mat.emission_energy_multiplier = maxf(0.0, (1.0 - t * 2.0) * 0.55)
+		_skin.set_shader_parameter("rim_tint", _rim * maxf(0.0, 1.0 - t * 2.0))
 		# The body falls limp; once it is down (or after the longest fall)
 		# it comes apart into sakura petals that the wind carries off.
 		if _dissolve_timer >= _dissolve_duration or (_dissolve_timer >= 0.3 and _body_landed()):
