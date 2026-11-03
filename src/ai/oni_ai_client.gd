@@ -20,7 +20,13 @@ const MELEE_STANDOFF_MIN := 1.4
 const MELEE_STANDOFF_MAX := 1.9
 const TIMEOUT_SECONDS := 3.0
 const VALID_TACTICS: Array[String] = [
-	"stalk", "advance", "retreat", "circle_left", "circle_right", "attack", "taunt"
+	"stalk", "advance", "retreat", "circle_left", "circle_right", "attack", "taunt",
+	# F5: the katana duelist boss (masked swordsman) picks among these.
+	"aggressive", "defensive", "feint", "flank_left", "flank_right",
+]
+## F5: tactics of the masked katana swordsman boss (subset of VALID_TACTICS).
+const DUELIST_TACTICS: Array[String] = [
+	"aggressive", "defensive", "feint", "flank_left", "flank_right", "retreat"
 ]
 const VALID_ATTACKS: Array[String] = [
 	"slam", "sweep", "thrust", "combo"
@@ -74,6 +80,9 @@ var last_request_url := ""
 var _pending_callback: Callable
 var _is_busy := false
 var _rng := RandomNumberGenerator.new()
+## F5: true when the client drives the katana duelist boss (prompt and fallback use
+## the swordsman's tactics; the fallback tactic "duel" = the duelist's own logic).
+var katana_mode := false
 
 
 func _ready() -> void:
@@ -158,6 +167,7 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 		"Authorization: Bearer " + key,
 	]
 
+	var speech_lang := "Polish" if lang == "pl" else "English"
 	var sys_prompt := (
 		"You are the combat intelligence of the Oni Warlord in a VR Japanese dark-fantasy sword duel. "
 		+ "Analyze current state and respond ONLY with a raw JSON object (no markdown, no backticks): "
@@ -165,7 +175,16 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 		+ "\"attack\": \"slam\"|\"sweep\"|\"thrust\"|\"combo\", "
 		+ "\"target_distance\": float between 1.5 and 1.9, "
 		+ "\"speech\": short taunt in %s, max 8 words, under 60 chars}."
-	) % ["Polish" if lang == "pl" else "English"]
+	) % speech_lang
+	if katana_mode:
+		sys_prompt = (
+			"You are the combat intelligence of a masked ronin swordsman (katana, Oni mask) in a VR Japanese dark-fantasy sword duel. "
+			+ "Choose the tactic for the next few seconds. Respond ONLY with a raw JSON object (no markdown, no backticks): "
+			+ "{\"tactic\": \"aggressive\"|\"defensive\"|\"feint\"|\"flank_left\"|\"flank_right\"|\"retreat\", "
+			+ "\"attack\": \"slam\"|\"sweep\"|\"thrust\"|\"combo\", "
+			+ "\"target_distance\": float between 1.4 and 1.9, "
+			+ "\"speech\": short taunt in %s, max 8 words, under 60 chars}."
+		) % speech_lang
 
 	var body_dict := {
 		"model": model,
@@ -262,7 +281,7 @@ func _validate_decision(raw: Dictionary, state: Dictionary) -> Dictionary:
 	var fallback := local_fallback_decision(state)
 
 	var tactic := String(raw.get("tactic", fallback.tactic)).to_lower().strip_edges()
-	if not VALID_TACTICS.has(tactic):
+	if not VALID_TACTICS.has(tactic) or (katana_mode and not DUELIST_TACTICS.has(tactic)):
 		tactic = fallback.tactic
 
 	var attack := String(raw.get("attack", fallback.attack)).to_lower().strip_edges()
@@ -301,8 +320,13 @@ func local_fallback_decision(state: Dictionary) -> Dictionary:
 	var tactic := "stalk"
 	var attack := "slam"
 	var target_d := 1.8
+	if katana_mode:
+		# Offline: the swordsman keeps its own duelist logic; only the taunt comes from here.
+		tactic = "duel"
 
-	if dist > 3.2:
+	if katana_mode:
+		pass
+	elif dist > 3.2:
 		tactic = "advance"
 		target_d = 1.9
 	elif dist < 1.6:

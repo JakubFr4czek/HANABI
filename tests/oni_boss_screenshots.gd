@@ -45,6 +45,7 @@ func _ready() -> void:
 	cam = player.camera
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
+	run.wave_director.boss_katana_duelist = false  # F5: the old kanabō Oni, by flag
 	oni = run.wave_director.spawn_oni_boss(player.global_position)
 	# The player's own katana crosses the boss in the reference frames; hide it so the Oni reads.
 	if run.katana:

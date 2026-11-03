@@ -36,6 +36,9 @@ var _view_forward := Vector3.ZERO
 var reserved_slots := 0
 ## The planner's Oni cue, held until spawn_oni_boss places the Oni (see step_director).
 var _oni_due := false
+## F5 (Jakub 02.11): the run boss is the test-room katana duelist driven by the Meta AI
+## client, with the demon mask as its mark. false = the old kanabō Oni (tests only).
+var boss_katana_duelist := true
 ## Test seam: refuse this many Oni placements in a row, as if no legal spot came up.
 var _oni_refusals := 0
 ## Ziarno dla strumieni losowych (N7 pomiar). -1 = losowe jak dotąd.
@@ -371,7 +374,10 @@ func spawn_oni_boss(facing_target: Vector3, view_forward: Vector3 = Vector3.ZERO
 		return null
 	var pos := _ring_point(facing_target, angle, 9.2)
 	var oni := RunOniBoss.new()
+	oni.katana_duelist = boss_katana_duelist
 	oni.profile = EnemyCatalog.make_oni_profile(p.hp_for(maxi(wave, 1), run_seconds) * p.oni_hp_mult)
+	if boss_katana_duelist:
+		oni.profile.display_name = "Masked Ronin"
 	oni.hold_sword = true
 	var dir := facing_target - pos
 	dir.y = 0.0

@@ -37,9 +37,18 @@ static var _cached_body_mesh: Mesh
 static var _cached_kanabo_mesh: Mesh
 
 var speech_bubble: OniSpeechBubble
+## F5: the run boss is the test-room katana duelist (TrainingDummy + DuelistBrain),
+## human-sized, with the N3 demon mask as its only mark. Set before add_child.
+## false = the old 2.7 m kanabō Oni (kept for tests and the training scenes).
+var katana_duelist := false
+## Mask scale on the human-sized head (radius 0.115 m, as the yōkai head the mask is
+## baked for): a hair larger so it covers the wooden face and its band.
+const DUELIST_MASK_SCALE := 1.06
 
 
 func _define_parts() -> Dictionary:
+	if katana_duelist:
+		return super._define_parts()
 	var s_scale := ONI_SCALE
 	var d := {
 		"pelvis": {"shape": "box", "size": Vector3(0.30, 0.18, 0.18) * s_scale, "pos": Vector3(0, 0.98 * s_scale, 0), "mass": 24.0, "zone": "torso"},
@@ -137,7 +146,12 @@ func _ready() -> void:
 
 	super._ready()
 
-	_apply_oni_visuals()
+	if katana_duelist:
+		# Same silhouette as the test-room swordsman; only the demon mask marks the boss.
+		if parts.has("head"):
+			_attach_oni_mask(parts["head"] as RagdollPart)
+	else:
+		_apply_oni_visuals()
 	_attach_oni_rim_light()
 
 	speech_bubble = OniSpeechBubble.new()
@@ -154,7 +168,7 @@ func _physics_process(delta: float) -> void:
 	_update_oni_readability()
 	if speech_bubble and parts.has("head"):
 		var head_part := parts["head"] as RagdollPart
-		speech_bubble.global_position = head_part.global_position + Vector3(0.0, 0.72, 0.0)
+		speech_bubble.global_position = head_part.global_position + Vector3(0.0, 0.5 if katana_duelist else 0.72, 0.0)
 
 
 func _update_oni_readability() -> void:
@@ -214,7 +228,7 @@ func set_difficulty(new_difficulty: DuelistDifficulty) -> void:
 
 
 func _sword_grip_transform() -> Transform3D:
-	if not parts.has("lower_arm_r"):
+	if katana_duelist or not parts.has("lower_arm_r"):
 		return super._sword_grip_transform()
 	var forearm: RagdollPart = parts["lower_arm_r"]
 	var grip_rot := Basis.from_euler(Vector3(deg_to_rad(-78.0), deg_to_rad(12.0), deg_to_rad(6.0)))
@@ -224,6 +238,9 @@ func _sword_grip_transform() -> Transform3D:
 
 func equip_sword() -> void:
 	super.equip_sword()
+	if katana_duelist:
+		_steel_blade()
+		return
 	if sword:
 		sword.visible = false
 		# Hit segment = the visible kanabō head, not a katana blade. Mesh AABB
@@ -273,6 +290,23 @@ func _attach_oni_body_shell(pelvis: RagdollPart) -> void:
 	body_mi.scale = Vector3(1.48, 1.20, 1.48)
 	body_mi.material_override = _armor
 	pelvis.add_child(body_mi)
+
+
+## F5: the test-room duelist's blade, same shape and physics, in polished steel so the
+## boss reads as a swordsman with a katana in the dark forest (the wooden bokken vanished).
+func _steel_blade() -> void:
+	if sword == null:
+		return
+	var steel := StandardMaterial3D.new()
+	steel.albedo_color = Color(0.66, 0.68, 0.72)
+	steel.metallic = 0.75
+	steel.roughness = 0.24
+	steel.emission_enabled = true
+	steel.emission = Color(0.16, 0.17, 0.2)
+	for node in sword.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh is BoxMesh:
+			mi.material_override = steel
 
 
 func _attach_kanabo_visual() -> void:
@@ -343,11 +377,18 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 	mask_mi.position = Vector3(0.0, 0.03, 0.16)
 	# The yōkai mask is 0.22 m wide; at 1.88 the boss mask is about 0.41 m wide, as before (N3 fix2).
 	mask_mi.scale = Vector3.ONE * ONI_MASK_SCALE
+	var mask_scale := ONI_MASK_SCALE
+	if katana_duelist:
+		# Human head: the mask sits on the face, about 0.23 m wide; the plain wooden
+		# eyes and band of the training duelist stay under it.
+		mask_scale = DUELIST_MASK_SCALE
+		mask_mi.position = Vector3(0.0, 0.0, 0.004)
+		mask_mi.scale = Vector3.ONE * mask_scale
 	mask_mi.material_override = _mask
 	var eye_l := MeshInstance3D.new()
 	var eye_m := SphereMesh.new()
 	# Sized to the scaled mask: about 0.05 m eyes on the boss, as before.
-	eye_m.radius = 0.05 / ONI_MASK_SCALE
+	eye_m.radius = (0.05 if mask_scale == ONI_MASK_SCALE else 0.016) / mask_scale
 	eye_m.height = 2.0 * eye_m.radius
 	eye_l.mesh = eye_m
 	var eye_mat := StandardMaterial3D.new()
@@ -376,6 +417,9 @@ static func _fallback_mask_mesh() -> Mesh:
 
 
 func _try_hit_player(damage: float, attack: String) -> void:
+	if katana_duelist:
+		super._try_hit_player(damage, attack)
+		return
 	if _hit_player_this_strike or sword == null:
 		return
 	var health := get_tree().get_first_node_in_group("player_health") as PlayerHealth

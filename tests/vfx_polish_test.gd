@@ -27,6 +27,7 @@ func _run_all() -> void:
 		(y.current_pose == "stalk" or y.current_pose == "approach") and arm_err < 28.0)
 	y.prepare_for_spawn()
 	_check("prepare_for_spawn resets dead state", not y.is_dead and y.current_pose == "stalk")
+	run.wave_director.boss_katana_duelist = false  # F5: the old kanabō Oni, by flag
 	var oni: RunOniBoss = run.wave_director.spawn_oni_boss(player.global_position)
 	await _frames(8)
 	_check("Oni boss spawns with RunOniBoss visuals", oni != null and oni.is_in_group("oni_boss"))

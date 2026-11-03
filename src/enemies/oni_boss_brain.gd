@@ -20,11 +20,29 @@ var phase := 1
 var _ai_timer := 0.5  # First decision shortly after spawn
 var _last_ai_decision := {}
 var _recent_player_actions: Array[String] = []
+## F5: true when this brain drives the masked katana swordsman (the test-room duelist
+## as the run boss). The AI picks a tactic from OniAiClient.DUELIST_TACTICS every
+## 2-5 s; "duel" = no override, the duelist's own logic (offline fallback).
+var katana_mode := false
+## The swordsman tactic being executed now (F5).
+var current_tactic := "duel"
+## Seconds the current tactic still holds before it lapses back to "duel".
+var tactic_time_left := 0.0
 
 
 func setup(p_body: Node3D, p_profile: EnemyProfile) -> void:
 	super.setup(p_body, p_profile)
 	attacks_enabled = true
+	katana_mode = bool(p_body.get("katana_duelist")) if p_body != null else false
+	if katana_mode:
+		# The test-room duelist's own katana reach and damage stay as they are.
+		_apply_phase_parameters()
+		if ai_client == null:
+			ai_client = OniAiClient.new()
+			ai_client.name = "OniAiClient"
+			ai_client.katana_mode = true
+			add_child(ai_client)
+		return
 	attack_table["vertical"].range = 2.85
 	attack_table["vertical"].damage = 25.0
 	attack_table["horizontal"].range = 2.80
@@ -43,6 +61,8 @@ func think(delta: float, ctx: Dictionary) -> Dictionary:
 	_poll_ai(delta, ctx)
 
 	var intent := super.think(delta, ctx)
+	if katana_mode:
+		return _katana_tactic_intent(delta, ctx, intent)
 
 	# Active pursuit when outside normal engage distance
 	var has_player := ctx.has("player_position") and ctx.has("self_position")
@@ -84,6 +104,9 @@ func refresh_phase_parameters() -> void:
 
 
 func _apply_phase_parameters() -> void:
+	if katana_mode:
+		_apply_katana_parameters()
+		return
 	match phase:
 		1:
 			difficulty.move_speed = 1.85
@@ -109,7 +132,7 @@ func _poll_ai(delta: float, ctx: Dictionary) -> void:
 	_ai_timer -= delta
 	if _ai_timer > 0.0 or ai_client == null:
 		return
-	_ai_timer = AI_POLL_INTERVAL
+	_ai_timer = _rng.randf_range(2.0, 5.0) if katana_mode else AI_POLL_INTERVAL
 
 	var state_data := _gather_combat_state(ctx)
 	ai_client.request_decision(state_data, _on_ai_decision)
@@ -145,6 +168,14 @@ func _on_ai_decision(decision: Dictionary) -> void:
 	var speech: String = decision.get("speech", "")
 	if speech != "":
 		speech_requested.emit(speech)
+	if katana_mode:
+		_apply_katana_tactic(String(decision.get("tactic", "duel")), String(decision.get("attack", "")))
+		GameEvents.log_event("oni_ai_decision_applied", {
+			"tactic": current_tactic,
+			"attack": decision.get("attack", ""),
+			"source": decision.get("source", "fallback"),
+		})
+		return
 
 	var tactic: String = decision.get("tactic", "advance")
 	match tactic:
@@ -207,3 +238,103 @@ func apply_ai_decision(decision: Dictionary) -> void:
 
 func update_combat_phase() -> void:
 	_update_phase({})
+
+
+
+# --- F5: the masked katana swordsman ------------------------------------------------
+
+## Phase parameters for the human-sized swordsman: the "hard" duelist, a touch quicker
+## each phase. The tactic of the moment is laid on top (see _apply_katana_tactic).
+func _apply_katana_parameters() -> void:
+	var base := EnemyCatalog.oni_difficulty()
+	difficulty.move_speed = [1.15, 1.35, 1.6][clampi(phase - 1, 0, 2)]
+	difficulty.aggression = [0.5, 0.65, 0.8][clampi(phase - 1, 0, 2)]
+	difficulty.combo_chance = base.combo_chance + 0.12 * (phase - 1)
+	difficulty.windup_scale = base.windup_scale * [1.0, 0.92, 0.82][clampi(phase - 1, 0, 2)]
+	difficulty.damage_scale = base.damage_scale
+	difficulty.block_chance = base.block_chance
+	difficulty.feint_chance = base.feint_chance
+	difficulty.riposte_chance = base.riposte_chance
+	match current_tactic:
+		"aggressive":
+			difficulty.aggression = 1.0
+			difficulty.combo_chance = minf(difficulty.combo_chance + 0.3, 0.9)
+			difficulty.move_speed *= 1.2
+		"defensive":
+			difficulty.aggression = 0.15
+			difficulty.block_chance = 0.85
+			difficulty.riposte_chance = minf(base.riposte_chance + 0.3, 0.9)
+		"feint":
+			difficulty.feint_chance = 1.0
+
+
+## Executes a tactic the AI (or the test mock) picked; unknown names fall back to "duel".
+func _apply_katana_tactic(tactic: String, attack: String) -> void:
+	if not OniAiClient.DUELIST_TACTICS.has(tactic):
+		tactic = "duel"
+	current_tactic = tactic
+	tactic_time_left = 4.5
+	_apply_katana_parameters()
+	match tactic:
+		"aggressive":
+			if state == State.STALK:
+				force_attack(_katana_attack(attack))
+		"feint":
+			# A feinted cut: the wind-up switches line half-way (DuelistBrain feint).
+			if state == State.STALK:
+				force_attack(_katana_attack(attack))
+		"flank_left":
+			_circle_dir = 1.0
+		"flank_right":
+			_circle_dir = -1.0
+		"retreat":
+			# Breaks off a wind-up and gives ground before the next exchange.
+			if state == State.ATTACK:
+				_enter_recover(0.3)
+			_retreat_time = 1.2
+			_cooldown = maxf(_cooldown, 1.6)
+
+
+func _katana_attack(attack: String) -> String:
+	match attack:
+		"sweep": return "horizontal"
+		"thrust": return "thrust"
+	return "vertical"
+
+
+## Footwork of the tactic on top of the duelist's own intent.
+func _katana_tactic_intent(delta: float, ctx: Dictionary, intent: Dictionary) -> Dictionary:
+	if tactic_time_left > 0.0:
+		tactic_time_left -= delta
+		if tactic_time_left <= 0.0:
+			current_tactic = "duel"
+			_apply_katana_parameters()
+	if not (ctx.has("player_position") and ctx.has("self_position")):
+		return intent
+	if state != State.STALK and not (current_tactic == "retreat" and state == State.RECOVER):
+		return intent
+	var to_player: Vector3 = ctx.player_position - ctx.self_position
+	to_player.y = 0.0
+	var dist := to_player.length()
+	if dist < 0.01:
+		return intent
+	var fwd := to_player / dist
+	var side := Vector3(fwd.z, 0.0, -fwd.x)
+	var speed := difficulty.move_speed
+	match current_tactic:
+		"flank_left", "flank_right":
+			var s := 1.0 if current_tactic == "flank_left" else -1.0
+			intent.move = side * s * speed * 0.8 + fwd * clampf(dist - 2.0, -0.5, 0.5) * speed
+			intent.plant = false
+		"retreat":
+			if dist < 3.2:
+				intent.move = -fwd * speed
+				intent.plant = false
+		"defensive":
+			pass
+		_:
+			# Pursuit: the boss does not wait at the edge of the forest for the player.
+			if dist > 3.0:
+				intent.move = fwd * speed * 1.3
+				intent.plant = false
+	return intent

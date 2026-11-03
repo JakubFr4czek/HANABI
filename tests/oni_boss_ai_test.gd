@@ -21,7 +21,7 @@ func _ready() -> void:
 	# from it, so the run is reproducible instead of depending on the launch's random seed.
 	seed(20260604)
 	GameEvents.event_logged.connect(func(e: Dictionary): events.append(e))
-	get_tree().create_timer(75.0).timeout.connect(func():
+	get_tree().create_timer(150.0).timeout.connect(func():
 		print("\nWATCHDOG TIMEOUT in oni_boss_ai_test!")
 		get_tree().quit(1)
 	)
@@ -38,6 +38,7 @@ func _run_all() -> void:
 	await _test_real_physical_hit_and_parry()
 	await _test_ai_brain_mock_and_failsafe()
 	_test_http_reply_parsing()
+	await _test_f5_katana_boss_in_run()
 	await _test_real_pixel_contrast_and_fog_readability()
 
 
@@ -55,6 +56,7 @@ func _test_boss_geometric_scale_and_grounding() -> void:
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
 
+	run.wave_director.boss_katana_duelist = false  # F5: the old kanabō Oni, by flag
 	var oni: RunOniBoss = run.wave_director.spawn_oni_boss(player.global_position)
 	await _frames(15)  # Let ragdoll settle on ground
 
@@ -85,6 +87,7 @@ func _test_boss_approach() -> void:
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
 
+	run.wave_director.boss_katana_duelist = false  # F5: the old kanabō Oni, by flag
 	var oni: RunOniBoss = run.wave_director.spawn_oni_boss(player.global_position)
 	await _frames(4)
 
@@ -121,6 +124,7 @@ func _test_three_attacks_and_phase_behaviors() -> void:
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
 
+	run.wave_director.boss_katana_duelist = false  # F5: the old kanabō Oni, by flag
 	var oni: RunOniBoss = run.wave_director.spawn_oni_boss(player.global_position)
 	var brain := oni.brain as OniBossBrain
 	# Fixed seed: the decision RNG (block/feint/combo rolls) must not decide whether
@@ -248,6 +252,7 @@ func _test_real_physical_hit_and_parry() -> void:
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
 
+	run.wave_director.boss_katana_duelist = false  # F5: the old kanabō Oni, by flag
 	var oni: RunOniBoss = run.wave_director.spawn_oni_boss(player.global_position)
 	var health := run.get_tree().get_first_node_in_group("player_health") as PlayerHealth
 	# Measured in the boss frame: the kanabō chop lands ~1.73 m forward of the pelvis
@@ -500,6 +505,7 @@ func _test_real_pixel_contrast_and_fog_readability() -> void:
 	run.wave_director.stop_director()
 	run.wave_director.clear_enemies()
 
+	run.wave_director.boss_katana_duelist = false  # F5: the old kanabō Oni, by flag
 	var oni: RunOniBoss = run.wave_director.spawn_oni_boss(player.global_position)
 	await _frames(10)
 
@@ -676,3 +682,126 @@ func _sample_color(img: Image, pos: Vector2, radius: int = 2) -> Color:
 
 func _color_delta(a: Color, b: Color) -> float:
 	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length()
+
+
+
+## F5: the run boss is the test-room katana duelist, driven by the AI client.
+func _test_f5_katana_boss_in_run() -> void:
+	print("\n[TEST] F5. Katana duelist boss in the run (demo profile, AI tactics, fallback, defeat)")
+	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
+	add_child(run)
+	await _frames(8)
+	var player := run.player as DesktopPlayer
+	var health := run.get_tree().get_first_node_in_group("player_health") as PlayerHealth
+	if health:
+		health.max_hp = 100000.0
+		health.hp = 100000.0
+	var director := run.wave_director
+	# The demo run in fixed 0.1 s steps of virtual time (the N7 stand-in player kills the
+	# yōkai): the boss is looked at the moment the director places it (~2:00).
+	await _frames(60)
+	run.set_physics_process(false)
+	director.profile = load(WaveProfile.preset_path("demo")) as WaveProfile
+	var seen := {"t": -1.0, "katana": false, "brain": false, "sword": false, "kanabo": true, "shell": true, "mask": false, "hp": 0.0}
+	director.oni_spawned.connect(func(b: RunOniBoss) -> void:
+		if seen.t >= 0.0:
+			return
+		var bb := b.brain as OniBossBrain
+		seen.t = director.run_seconds
+		seen.katana = b.katana_duelist
+		seen.brain = bb != null and bb.katana_mode and bb.ai_client != null and bb.ai_client.katana_mode
+		seen.sword = b.sword != null and b.sword.visible
+		seen.kanabo = b.find_child("OniKanaboVisual", true, false) != null
+		seen.shell = b.find_child("OniBodyShell", true, false) != null
+		seen.mask = b.find_child("OniMask", true, false) != null
+		seen.hp = b.profile.max_hp)
+	var sim := N7PacingSim.new()
+	await sim.play(get_tree(), run, director, 160.0, 20260604, false)
+	run.set_physics_process(true)
+	_check("Demo run: the boss appears at the Oni's moment (%.1f s, in [120, 150])" % seen.t,
+		seen.t >= 120.0 and seen.t <= 150.0)
+	_check("Run boss = the katana duelist (katana visible, no kanabō/Oni shell, demon mask on)",
+		seen.katana and seen.sword and not seen.kanabo and not seen.shell and seen.mask)
+	_check("Run boss brain drives the duelist in katana mode with the AI client", seen.brain)
+	var standard_hp := EnemyCatalog.make_swarm_profile(director.get_profile().hp_for(1, 0.0)).max_hp
+	_check("Boss has more HP than a plain enemy (%.0f vs %.0f)" % [seen.hp, standard_hp],
+		seen.hp > standard_hp * 3.0)
+
+	# Fresh boss close by, the yōkai of the demo cleared away.
+	director.stop_director()
+	director.clear_enemies()
+	var boss := director.spawn_oni_boss(player.global_position)
+	var brain := boss.brain as OniBossBrain
+	await _frames(30)
+	var h := boss.get_measured_height()
+	_check("Swordsman silhouette stays human-sized (%.2f m)" % h, h >= 1.55 and h <= 2.0)
+
+	# 1. The mock AI answers "flank_left": the brain takes the tactic and circles to its left.
+	# A box, not a plain local: lambdas capture locals by value.
+	var reply := {"r": {"tactic": "flank_left", "attack": "sweep", "speech": "Twój bok jest odsłonięty."}}
+	brain.ai_client.set_mock_provider(func(_state: Dictionary) -> Dictionary: return reply.r)
+	boss.global_position = player.global_position + Vector3(0.0, 0.0, -2.4)
+	boss.reset_body()
+	await _frames(10)
+	brain._ai_timer = 0.0
+	await _frames(3)
+	_check("AI reply sets the swordsman tactic (got %s)" % brain.current_tactic, brain.current_tactic == "flank_left")
+	_check("AI speech shows in the bubble ('%s')" % boss.speech_bubble.get_text(),
+		boss.speech_bubble.is_showing() and boss.speech_bubble.get_text() == "Twój bok jest odsłonięty.")
+	var p0 := boss.root_part().global_position
+	var fwd := player.global_position - p0
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var side := Vector3(fwd.z, 0.0, -fwd.x)
+	brain._ai_timer = 99.0
+	await _frames(120)
+	var lateral := (boss.root_part().global_position - p0).dot(side)
+	_check("flank_left is executed: the boss steps sideways to its left (%.2f m)" % lateral, lateral > 0.25)
+
+	# 2. The next reply switches to "retreat": the boss gives ground.
+	reply.r = {"tactic": "retreat", "speech": "Jeszcze nie teraz."}
+	var d0 := _flat_dist(boss.root_part().global_position, player.global_position)
+	brain._ai_timer = 0.0
+	await _frames(3)
+	brain._ai_timer = 99.0
+	await _frames(60)
+	var d1 := _flat_dist(boss.root_part().global_position, player.global_position)
+	_check("The reply changes the tactic to retreat and the boss backs off (%.2f -> %.2f m)" % [d0, d1],
+		brain.current_tactic == "retreat" and d1 > d0 + 0.3)
+
+	# 3. No key: the local fallback answers at once, the duelist keeps its own logic.
+	brain.ai_client.clear_mock_provider()
+	var old_key: String = VrComfortSettings.meta_api_key
+	VrComfortSettings.meta_api_key = ""
+	brain.tactic_time_left = 0.0
+	boss.global_position = player.global_position + Vector3(0.0, 0.0, -6.0)
+	boss.reset_body()
+	await _frames(5)
+	brain._ai_timer = 0.0
+	await _frames(3)
+	_check("No key -> fallback decision without waiting (tactic %s, busy %s)" % [brain.current_tactic, brain.ai_client._is_busy],
+		brain.current_tactic == "duel" and not brain.ai_client._is_busy
+		and String(brain._last_ai_decision.get("source", "")) == "fallback")
+	for _k in 200:
+		await _frames(2)
+		if _flat_dist(boss.root_part().global_position, player.global_position) <= 3.0:
+			break
+	var df := _flat_dist(boss.root_part().global_position, player.global_position)
+	_check("Fallback boss keeps fighting: it closes in from 6 m (%.2f m)" % df, df <= 3.0)
+	VrComfortSettings.meta_api_key = old_key
+
+	# 4. HP -> 0 ends the fight: the boss is defeated for good.
+	var defeated := {"hit": false}
+	director.oni_defeated.connect(func(_o: RunOniBoss, _h: Dictionary) -> void: defeated.hit = true)
+	var chest := boss.parts["chest"] as RagdollPart
+	boss.receive_hit(chest, {
+		"base_damage": boss.hp + 50.0, "zone": "torso", "element": "physical",
+		"point": chest.global_position, "knockback": Vector3.ZERO,
+	})
+	var wait := int((boss.profile.knockdown_time + boss.profile.getup_time + 0.3) * Engine.physics_ticks_per_second)
+	await _frames(wait)
+	_check("HP -> 0 defeats the katana boss (signal %s, active %s)" % [defeated.hit, director.has_active_oni()],
+		defeated.hit and not director.has_active_oni())
+	run.queue_free()
+	await _frames(4)
