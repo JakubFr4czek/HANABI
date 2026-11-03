@@ -25,16 +25,19 @@ const RING_OFFSET := Vector3(0.0, 0.064, 0.098)
 const LABEL_Y := 0.0021
 
 ## The column (plate frame, z = plate depth). Row i's top edge sits at ROW_TOP + i * ROW_PITCH.
-const PANEL_HALF_WIDTH := 0.0275
-const ROW_TOP := -0.0195
-const ROW_PITCH := 0.0153
-const ROW_LABEL_DOWN := 0.0040
-const ROW_BAR_DOWN := 0.0101
-const BAR_HEIGHT := 0.0029
-const PIP_SIZE := 0.0039
-const PIP_PITCH := 0.0052
-const LABEL_FONT := 22
-const VALUE_FONT := 28
+const PANEL_HALF_WIDTH := 0.026
+const ROW_TOP := -0.0215
+const ROW_PITCH := 0.0185
+const ROW_LABEL_DOWN := 0.0050
+const ROW_BAR_DOWN := 0.0125
+const BAR_HEIGHT := 0.0034
+const PIP_SIZE := 0.0046
+const PIP_PITCH := 0.0062
+## Dark backing plate under the rows (F1 rev.): text reads on any ground. Its margin around the text.
+const PLATE_PAD := 0.0055
+const PLATE_COLOR := Color(0.035, 0.04, 0.07, 0.72)
+const LABEL_FONT := 31
+const VALUE_FONT := 39
 const SANDBOX_FONT := 18
 const GUARD_FONT := 22
 
@@ -45,7 +48,7 @@ const HP_WARN_RATIO := 0.5
 const HP_CRITICAL_RATIO := 0.25
 const TRACK_COLOR := Color(0.08, 0.08, 0.1, 0.55)
 const CHARGE_EMPTY_COLOR := Color(0.3, 0.3, 0.34)
-const LABEL_COLOR := Color(0.82, 0.84, 0.88)
+const LABEL_COLOR := Color(0.96, 0.93, 0.84)
 const VALUE_COLOR := Color(1.0, 1.0, 1.0)
 const KCAL_BAR_COLOR := Color(0.98, 0.84, 0.52)
 ## The kcal bar fills at this estimate (kcal): a bar for a whole run, not a goal.
@@ -86,6 +89,7 @@ var _labels: Array[Label3D] = []
 ## Every bar and pip material, with its resting alpha: the fade scales the alpha.
 var _mat_alpha := {}
 var _bars: Array[MeshInstance3D] = []
+var _plate: MeshInstance3D
 
 var _presence := 0.0
 var _raised := false
@@ -162,6 +166,12 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	font.variation_embolden = 0.35
 	_font = font
 
+	_plate = _quad("ReadoutPlate", Vector3.ZERO, Vector2(1.0, 1.0), PLATE_COLOR)
+	(_plate.material_override as StandardMaterial3D).render_priority = 1
+	wrist_face.add_child(_plate)
+	_bars.append(_plate)
+	_plate.visible = true
+
 	# The four rows of F1, in reading order. F6 (stamina) and F7 (souls) add theirs with set_row.
 	_add_row("hp", "HP")
 	_add_row("kcal", "KCAL")
@@ -224,6 +234,8 @@ func set_row(key: String, label_text: String, value_text: String, ratio: float =
 	_set_text(row.value, value_text)
 	row.value.modulate = value_colour
 	var has_pips := not pips.is_empty()
+	# With pips the value sits on the pips' line, right of them; otherwise on the label's line.
+	row.value.position.z = row_top(int(row.index)) + (ROW_BAR_DOWN if has_pips else ROW_LABEL_DOWN)
 	var has_bar := ratio >= 0.0 and not has_pips
 	row.track.visible = has_bar
 	row.fill.visible = has_bar and ratio > 0.0
@@ -279,7 +291,7 @@ func row_keys() -> Array[String]:
 func _add_row(key: String, label_text: String) -> Dictionary:
 	var index := _row_keys.size()
 	var top := row_top(index)
-	var row := {}
+	var row := {"index": index}
 	row.label = _make_label("%sLabel" % key.capitalize(), _font, LABEL_FONT, Vector3(-PANEL_HALF_WIDTH, LABEL_Y, top + ROW_LABEL_DOWN))
 	(row.label as Label3D).horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	(row.label as Label3D).modulate = LABEL_COLOR
@@ -307,7 +319,18 @@ func _add_row(key: String, label_text: String) -> Dictionary:
 		m.visible = false
 	_rows[key] = row
 	_row_keys.append(key)
+	_fit_plate()
 	return row
+
+
+## The backing plate covers the column: from the top row's top edge to the bottom of the last bar, padded.
+func _fit_plate() -> void:
+	if _plate == null:
+		return
+	var top := ROW_TOP - PLATE_PAD
+	var bottom := row_top(_row_keys.size() - 1) + ROW_BAR_DOWN + BAR_HEIGHT * 0.5 + PLATE_PAD
+	(_plate.mesh as QuadMesh).size = Vector2(PANEL_HALF_WIDTH * 2.0 + PLATE_PAD * 2.0, bottom - top)
+	_plate.position = Vector3(0.0, LABEL_Y - 0.0004, (top + bottom) * 0.5)
 
 
 ## A flat bar or pip, lying on the plate like the labels, unshaded and faded with the readout.

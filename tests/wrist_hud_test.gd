@@ -41,6 +41,7 @@ func _run() -> void:
 	await _kcal_in_run()
 	await _charges_in_run()
 	await _sandbox_mark_in_run()
+	await _pixel_contrast_in_run()
 
 
 # --- Rig: placement, clearance, gesture ----------------------------------------------
@@ -401,6 +402,85 @@ func _japanese_on_readout(hud: DiegeticHud) -> Array[String]:
 				found.append("%s: %s" % [l.name, text])
 				break
 	return found
+
+
+## F1 (pixels): the HP text must read on what is behind it in the frame the player sees. In the
+## real run scene, the readout raised, the screen rectangle of the HP label and value is
+## measured against the ring of pixels just outside it (the ground the text sits on). Text is
+## the brightest tenth of the rectangle, its ground the median of the ring; the WCAG ratio must be
+## at least 4.5:1. Needs a window (the frame is read back): headless it prints SKIP, and
+## visual-perf runs it under xvfb.
+func _pixel_contrast_in_run() -> void:
+	if DisplayServer.get_name() == "headless":
+		print("SKIP  pixel contrast of the HP text (needs a window: run under xvfb)")
+		return
+	var run: RunGame = RUN_SCENE.instantiate()
+	run.skip_run_intro = true
+	run.high_score_path = "user://test_wrist_pixels_save.cfg"
+	add_child(run)
+	await _frames(8)
+	var player := run.player as DesktopPlayer
+	var hud := run.diegetic_hud
+	run.wave_director.stop_director()
+	run.wave_director.clear_enemies()
+	player.teleport(Vector3(0.0, 0.0, 2.0), 0.0)
+	player.camera.rotation.x = deg_to_rad(-34.0)
+	player.hand_offset = Vector3(0.18, -0.14, 0.0)
+	player.health.hp = player.health.max_hp
+	run._refresh_hud()
+	player.wrist_check = true
+	await _frames(40)
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	var cam := player.camera
+	var box := _screen_box(cam, hud.row_labels("hp"))
+	var size := Vector2(img.get_width(), img.get_height())
+	var inside := box.position.x >= 1.0 and box.position.y >= 1.0 and box.end.x <= size.x - 1.0 and box.end.y <= size.y - 1.0
+	_check("HP text is on screen in the frame (box %s in %s)" % [box, size], inside and box.size.x > 4.0)
+	if inside:
+		var text_lum: Array[float] = []
+		var ground: Array[float] = []
+		var pad := 6
+		for y in range(int(box.position.y) - pad, int(box.end.y) + pad):
+			for x in range(int(box.position.x) - pad, int(box.end.x) + pad):
+				if x < 0 or y < 0 or x >= size.x or y >= size.y:
+					continue
+				var lum := _luminance(img.get_pixel(x, y))
+				if x >= box.position.x and x < box.end.x and y >= box.position.y and y < box.end.y:
+					text_lum.append(lum)
+				else:
+					ground.append(lum)
+		text_lum.sort()
+		ground.sort()
+		var top_tenth := text_lum.slice(int(text_lum.size() * 0.9))
+		var text_mean := 0.0
+		for v in top_tenth:
+			text_mean += v
+		text_mean /= maxf(float(top_tenth.size()), 1.0)
+		var ground_mid := ground[ground.size() / 2]
+		var ratio := (maxf(text_mean, ground_mid) + 0.05) / (minf(text_mean, ground_mid) + 0.05)
+		_check("HP text against its ground in the frame: %.1f:1 (text %.2f, ground %.2f)" % [ratio, text_mean, ground_mid],
+			ratio >= 4.5)
+	player.wrist_check = false
+	run.queue_free()
+	await _frames(2)
+
+
+## The screen rectangle that covers the given labels' boxes, projected from the camera.
+func _screen_box(cam: Camera3D, labels: Array[Label3D]) -> Rect2:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for l in labels:
+		var a := l.get_aabb()
+		for i in 8:
+			var corner := a.position + a.size * Vector3(i & 1, (i >> 1) & 1, (i >> 2) & 1)
+			var world := l.global_transform * corner
+			if cam.is_position_behind(world):
+				continue
+			var p := cam.unproject_position(world)
+			lo = lo.min(p)
+			hi = hi.max(p)
+	return Rect2(lo, hi - lo)
 
 
 func _contrast(a: Color, b: Color) -> float:
