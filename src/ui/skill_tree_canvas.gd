@@ -1190,47 +1190,47 @@ func _draw_ai() -> void:
 	var active := VrComfortSettings.ai_boss_enabled if VrComfortSettings else true
 	var key := VrComfortSettings.get_effective_meta_api_key() if VrComfortSettings else ""
 	var masked := VrComfortSettings.get_masked_api_key() if VrComfortSettings else ""
-	var lang := VrComfortSettings.ai_language if VrComfortSettings else "pl"
+	var lang := VrComfortSettings.ai_language if VrComfortSettings else "en"
 
-	_settings_button("ai_toggle", "AI BOSS: " + ("WŁĄCZONY" if active else "WYŁĄCZONY"), active)
-	_settings_button("ai_key_paste", "WKLEJ KLUCZ (SCHOWEK)", false)
-	_settings_button("ai_key_clear", "USUŃ KLUCZ", false)
-	_settings_button("ai_lang_pl", "JĘZYK: PL", lang == "pl")
+	_settings_button("ai_toggle", "AI BOSS: " + ("ON" if active else "OFF"), active)
+	_settings_button("ai_key_paste", "PASTE KEY (CLIPBOARD)", false)
+	_settings_button("ai_key_clear", "CLEAR KEY", false)
+	_settings_button("ai_lang_pl", "LANG: PL", lang == "pl")
 	_settings_button("ai_lang_en", "LANG: EN", lang == "en")
 
 	var card_rect := Rect2(100.0, 460.0, 1400.0, 370.0)
 	_box(card_rect, LACQUER_SUNK, GILT_DIM, 1, 12)
 
-	_text("STATUS I KONFIGURACJA MODELU", Vector2(130.0, 485.0), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 600)
+	_text("MODEL STATUS AND CONFIGURATION", Vector2(130.0, 485.0), 26, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 600)
 
 	var status_text := ""
 	var status_col := GILT
 	if not active:
-		status_text = "STATUS: WYŁĄCZONY (Boss używa wyłącznie lokalnej sztucznej inteligencji)"
+		status_text = "STATUS: OFF (the boss uses only its local AI)"
 		status_col = DIM
 	elif key != "":
-		status_text = "STATUS: AKTYWNY (Połączono z Meta Model API: muse-spark-1.3)"
+		status_text = "STATUS: ACTIVE (connected to Meta Model API: muse-spark-1.3)"
 		status_col = Color(0.35, 0.95, 0.45)
 	else:
-		status_text = "STATUS: BRAK KLUCZA (Automatyczny lokalny fallback - walka rule-based działa w 100%)"
+		status_text = "STATUS: NO KEY (automatic local fallback - rule-based combat works 100%)"
 		status_col = Color(0.95, 0.65, 0.25)
 
 	_text(status_text, Vector2(130.0, 528.0), 22, status_col, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 600)
 
-	var key_display := ("KLUCZ API META: " + masked) if key != "" else "KLUCZ API META: [NIE SKONFIGUROWANO]"
+	var key_display := ("META API KEY: " + masked) if key != "" else "META API KEY: [NOT CONFIGURED]"
 	_text(key_display, Vector2(130.0, 568.0), 22, PAPER, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 500)
 
-	_text("DOSTAWCA: Meta Model API | MODEL: muse-spark-1.3 | ENDPOINT: https://api.meta.ai/v1", Vector2(130.0, 608.0), 20, DIM, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 500)
+	_text("PROVIDER: Meta Model API | MODEL: muse-spark-1.3 | ENDPOINT: https://api.meta.ai/v1", Vector2(130.0, 608.0), 20, DIM, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 500)
 
-	var help1 := "Kolejność odczytu: 1. Ustawienia gry (user://), 2. Plik secrets/meta_api_key.txt, 3. Lokalny fallback."
-	var help2 := "Brak sieci, błąd lub timeout (>3s) NIGDY nie zawiesza gry - boss natychmiast walczy lokalnym FSM."
-	var help3 := "Klucz jest bezpiecznie maskowany i nigdy nie trafia do repozytorium ani logów zdarzeń."
+	var help1 := "Read order: 1. Game settings (user://), 2. File secrets/meta_api_key.txt, 3. Local fallback."
+	var help2 := "No network, an error or a timeout (>3s) NEVER stalls the game - the boss fights on with its local FSM at once."
+	var help3 := "The key is masked and never goes into the repository or the event logs."
 	_wrapped(help1, Vector2(130.0, 655.0), 20, DIM, 1340.0, 1)
 	_wrapped(help2, Vector2(130.0, 690.0), 20, DIM, 1340.0, 1)
 	_wrapped(help3, Vector2(130.0, 725.0), 20, DIM, 1340.0, 1)
 	var overlay := VrComfortSettings.ai_demo_overlay if VrComfortSettings else false
-	_settings_button("ai_overlay", "DEMO OVERLAY „ONI MYŚLI”: " + ("WŁ." if overlay else "WYŁ."), overlay)
-	_text("Tabliczka pod dymkiem bossa: taktyka i źródło (ai / fallback) – do nagrania wideo.",
+	_settings_button("ai_overlay", "DEMO OVERLAY \"ONI THINKS\": " + ("ON" if overlay else "OFF"), overlay)
+	_text("Plate under the boss bubble: tactic and source (ai / fallback) – for the demo video.",
 		Vector2(670.0, 776.0), 20, DIM, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 500)
 
 

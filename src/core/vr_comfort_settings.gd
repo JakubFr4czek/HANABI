@@ -57,8 +57,9 @@ var body_weight_kg: float = 70.0
 var ai_boss_enabled: bool = true
 var meta_api_key: String = ""
 var ai_model: String = "muse-spark-1.3"
-var ai_language: String = "pl"
-## N8: the "Oni myśli: <taktyka> – <źródło>" plate under the boss's bubble, for the
+## N21: English by default; a config saved before N21 (key "language") is ignored.
+var ai_language: String = "en"
+## N8: the "Oni thinks: <tactic> – <source>" plate under the boss's bubble, for the
 ## demo video. Off by default.
 var ai_demo_overlay: bool = false
 ## Sandbox (D9): off by default. Read by RunGame, which passes it to SkillTreeData.sandbox.
@@ -125,7 +126,9 @@ func load_settings() -> void:
 		ai_boss_enabled = bool(cfg.get_value("meta_ai", "enabled", ai_boss_enabled))
 		meta_api_key = String(cfg.get_value("meta_ai", "api_key", meta_api_key))
 		ai_model = String(cfg.get_value("meta_ai", "model", ai_model))
-		ai_language = String(cfg.get_value("meta_ai", "language", ai_language))
+		ai_language = String(cfg.get_value("meta_ai", "language_n21", "en"))
+		if ai_language != "pl" and ai_language != "en":
+			ai_language = "en"
 		ai_endpoint = String(cfg.get_value("meta_ai", "endpoint", DEFAULT_META_ENDPOINT))
 		ai_demo_overlay = bool(cfg.get_value("meta_ai", "demo_overlay", ai_demo_overlay))
 
@@ -159,6 +162,7 @@ func save_settings() -> void:
 	cfg.set_value("meta_ai", "api_key", meta_api_key)
 	cfg.set_value("meta_ai", "model", ai_model)
 	cfg.set_value("meta_ai", "language", ai_language)
+	cfg.set_value("meta_ai", "language_n21", ai_language)
 	cfg.set_value("meta_ai", "endpoint", ai_endpoint)
 	cfg.set_value("meta_ai", "demo_overlay", ai_demo_overlay)
 	cfg.set_value("sandbox", "enabled", sandbox_enabled)

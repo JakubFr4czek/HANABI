@@ -245,8 +245,8 @@ func validate() -> PackedStringArray:
 static func preset_list() -> Array[Array]:
 	return [
 		["demo", "Demo 3 min"],
-		["demo_gentle", "Demo – łagodny"],
-		["default", "Domyślny"],
+		["demo_gentle", "Demo – gentle"],
+		["default", "Default"],
 		["hardcore", "Hardcore"],
 	]
 
@@ -255,7 +255,7 @@ static func preset_path(file: String) -> String:
 	return "%s/%s.tres" % [PRESET_DIR, file]
 
 
-## The profile the game uses when none is set. Same numbers as the "Domyślny" preset.
+## The profile the game uses when none is set. Same numbers as the "Default" preset.
 static func load_default() -> WaveProfile:
 	var res := load(preset_path("default")) as WaveProfile
 	return res if res != null else WaveProfile.new()

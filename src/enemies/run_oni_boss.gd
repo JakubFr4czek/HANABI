@@ -50,7 +50,7 @@ const DUELIST_MASK_SCALE := 1.06
 const DUELIST_BODY_SCALE := 1.08
 ## N13 entrance: he stops, faces the player and speaks for this long before the duel.
 const DUELIST_INTRO_HOLD := 1.8
-const DUELIST_INTRO_LINE := "Koniec twojej drogi!"
+const DUELIST_INTRO_LINE := "Your path ends here!"
 ## N13: ember fresnel rim on his own wood material only (the scene light is untouched),
 ## so the dark silhouette separates from the fog at 4–10 m.
 const DUELIST_RIM := Color(0.86, 0.42, 0.21)

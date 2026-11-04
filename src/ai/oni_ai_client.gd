@@ -249,7 +249,7 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 	_pending_callback = callback
 
 	var model: String = settings.ai_model if settings != null else DEFAULT_MODEL
-	var lang: String = settings.ai_language if settings != null else "pl"
+	var lang: String = settings.ai_language if settings != null else "en"
 
 	var headers: PackedStringArray = [
 		"Content-Type: application/json",
@@ -277,6 +277,7 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 			+ "\"speech\": short taunt in %s, max 8 words, under 60 chars}."
 		) % speech_lang
 	sys_prompt += style_hint
+	sys_prompt += " The speech field MUST be written in %s only." % speech_lang
 
 	var body_dict := {
 		"model": model,
@@ -429,7 +430,7 @@ func local_fallback_decision(state: Dictionary) -> Dictionary:
 	var phase := int(state.get("phase", 1))
 	var dist := float(state.get("distance", 3.0))
 	var s := _get_settings()
-	var lang: String = s.ai_language if s != null else "pl"
+	var lang: String = s.ai_language if s != null else "en"
 
 	var tactic := "stalk"
 	var attack := "slam"

@@ -130,6 +130,19 @@ jobs:
           } > "$cfg"
           cat "$cfg"
 
+      - name: Meta API key (from secret, never logged)
+        env:
+          META_API_KEY: ${{ secrets.META_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${META_API_KEY:-}" ]; then
+            mkdir -p secrets
+            printf '%s' "$META_API_KEY" > secrets/meta_api_key.txt
+            echo "Meta API key written to secrets/meta_api_key.txt (packed via include_filter)."
+          else
+            echo "META_API_KEY secret is empty: building without a key (boss uses the local AI fallback)."
+          fi
+
       - name: Import project (headless)
         run: |
           set -euo pipefail

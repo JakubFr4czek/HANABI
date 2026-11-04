@@ -145,10 +145,10 @@ func _test_three_attacks_and_phase_behaviors() -> void:
 		profile_leash >= 40.0)
 
 	# The AI decision path must reach the speech bubble and show the AI text.
-	brain.apply_ai_decision({"tactic": "advance", "attack": "slam", "speech": "Poczuj gniew demonów!", "source": "ai"})
+	brain.apply_ai_decision({"tactic": "advance", "attack": "slam", "speech": "Feel the wrath of the demons!", "source": "ai"})
 	await _frames(6)
 	_check("AI decision text is shown in the boss speech bubble (got '%s')" % oni.speech_bubble.get_text(),
-		oni.speech_bubble.is_showing() and oni.speech_bubble.get_text() == "Poczuj gniew demonów!")
+		oni.speech_bubble.is_showing() and oni.speech_bubble.get_text() == "Feel the wrath of the demons!")
 
 	# Position player facing boss at 2.4 m along boss forward vector (in view cone, reads all telegraphed attacks)
 	var b_pos := oni.root_part().global_position
@@ -409,7 +409,7 @@ func _test_ai_brain_mock_and_failsafe() -> void:
 		return {
 			"tactic": "advance",
 			"attack": "thrust",
-			"speech": "Poczuj gniew demonów!"
+			"speech": "Feel the wrath of the demons!"
 		}
 	)
 
@@ -421,7 +421,7 @@ func _test_ai_brain_mock_and_failsafe() -> void:
 	_check("Mock provider was invoked", box["called"])
 	_check("Whitelisted tactic returned (advance)", box["result"].get("tactic") == "advance")
 	_check("Whitelisted attack returned (thrust)", box["result"].get("attack") == "thrust")
-	_check("Whitelisted speech returned (Poczuj gniew demonów!)", box["result"].get("speech") == "Poczuj gniew demonów!")
+	_check("Whitelisted speech returned (Feel the wrath of the demons!)", box["result"].get("speech") == "Feel the wrath of the demons!")
 
 	# 2. Failsafe: provider returns invalid malicious tactic and attack
 	ai_client.set_mock_provider(func(_state: Dictionary) -> Dictionary:
@@ -909,7 +909,7 @@ func _test_n8_meta_ai_end_to_end() -> void:
 		applied.size() > 0 and applied[0].has("x"))
 	_check("the AI speech shows in the bubble ('%s')" % bubble_text, bubble_text == "You always cut from the right.")
 	_check("demo overlay names tactic and source ('%s')" % thought,
-		thought.begins_with("Oni myśli: flank_left") and thought.contains("ai"))
+		thought.begins_with("Oni thinks: flank_left") and thought.contains("ai"))
 	# The bubble fades after a few seconds when no new line comes.
 	brain._ai_timer = 999.0
 	# N17: the same 4.35 s, counted in physics ticks (hz is the physics rate). _frames()

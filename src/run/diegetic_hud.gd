@@ -4,7 +4,7 @@ extends Node3D
 ## column of Latin rows, each a label, a value and, where it has one, a bar or pips:
 ## - HP: a bar (teal -> amber -> red, pulsing when critical) and the current / max;
 ## - KCAL: the estimate from [CalorieMeter] as a bar (full at KCAL_BAR_FULL) and a figure;
-## - ŁADUNKI: the charges held (D21) as pips in their element's colour, oldest first; while an
+## - CHARGES: the charges held (D21) as pips in their element's colour, oldest first; while an
 ##   element is imbued, its seconds left in the element's colour beside them;
 ## - CZAS: the run time, mm:ss. A level-up flashes here for a moment (LV n, +1 PT).
 ## Further rows (STAMINA, DUSZE) are added with [method set_row] and sit under the last one.
@@ -41,7 +41,7 @@ const VALUE_FONT := 39
 ## F6 rev.: a fixed gap (m) between a row's label (left edge) and its value (right edge); a value
 ## that would not fit shrinks, then the label, so nothing touches or overlaps.
 const LABEL_VALUE_GAP := 0.0045
-## The value on a pip row (ŁADUNKI) sits on the pips' line, smaller so it clears the label above.
+## The value on a pip row (CHARGES) sits on the pips' line, smaller so it clears the label above.
 const PIP_VALUE_FONT := 30
 const MIN_FIT_FONT := 20
 const SANDBOX_FONT := 18
@@ -185,7 +185,7 @@ func _setup_wrist_unit(player: Node3D) -> void:
 	# The four rows of F1, in reading order. F6 (stamina) and F7 (souls) add theirs with set_row.
 	_add_row("hp", "HP")
 	_add_row("kcal", "KCAL")
-	_add_row("charges", "ŁADUNKI")
+	_add_row("charges", "CHARGES")
 	_add_row("time", "CZAS")
 
 	sandbox_label = _make_label("SandboxLabel", font, SANDBOX_FONT, Vector3(-PLATE_SIZE.x * 0.5 + 0.002, LABEL_Y, -PLATE_SIZE.y * 0.5 + 0.0038))
@@ -555,7 +555,7 @@ func _refresh_rows() -> void:
 		var beat := 0.35 + 0.65 * (0.5 + 0.5 * sin(_clock * 18.8496)) if _element_warn else 1.0
 		element_colour = Color(tint * beat, 1.0)
 		element_value = "%d s" % ceili(es.element_time_remaining)
-	set_row("charges", "ŁADUNKI", element_value, -1.0, VALUE_COLOR, pips, element_colour)
+	set_row("charges", "CHARGES", element_value, -1.0, VALUE_COLOR, pips, element_colour)
 
 	if _level_text_left > 0.0:
 		var no_pips: Array[Color] = []

@@ -24,7 +24,7 @@ var _tween: Tween
 var _alpha := 0.0
 var _bg_mat: StandardMaterial3D
 var _border_mat: StandardMaterial3D
-## N8 demo overlay: "Oni myśli: <taktyka> – <źródło>" on a small lacquer slip under the
+## N8 demo overlay: "Oni thinks: <tactic> – <source>" on a small lacquer slip under the
 ## bubble; shown only with Settings › Meta AI › demo overlay on.
 var _thought_plate: MeshInstance3D
 var _thought_label: Label3D
@@ -109,7 +109,7 @@ func set_thought(tactic: String, attack: String, source: String) -> void:
 	var what := tactic
 	if attack != "" and tactic in ["aggressive", "feint", "attack"]:
 		what += " (" + attack + ")"
-	_thought_text = "Oni myśli: %s – %s" % [what, src]
+	_thought_text = "Oni thinks: %s – %s" % [what, src]
 	_thought_label.text = _thought_text
 	var font: Font = _thought_label.font if _thought_label.font != null else ThemeDB.fallback_font
 	var w := font.get_string_size(_thought_text, HORIZONTAL_ALIGNMENT_LEFT, -1, _thought_label.font_size).x
