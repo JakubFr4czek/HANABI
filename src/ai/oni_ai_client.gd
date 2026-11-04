@@ -20,7 +20,9 @@ const DEFAULT_MODEL := "muse-spark-1.3"
 ## 1.43 and 2.03 m (see run_oni_boss.gd); a standoff outside that range whiffs.
 const MELEE_STANDOFF_MIN := 1.4
 const MELEE_STANDOFF_MAX := 1.9
-const TIMEOUT_SECONDS := 3.0
+## N22: a real muse-spark reply takes ~2.2–2.9 s (TLS + minimal reasoning); the Oni fights
+## locally while waiting, so a longer deadline only lets real replies land.
+const TIMEOUT_SECONDS := 6.0
 ## N8: the boss says one short line; longer replies are cut at a word boundary + "…".
 const MAX_SPEECH_CHARS := 60
 ## N8 (debug/test only): `-- --oni-ai-endpoint=http://127.0.0.1:PORT/v1/chat/completions`
@@ -286,7 +288,10 @@ func request_decision(state: Dictionary, callback: Callable) -> void:
 			{"role": "user", "content": JSON.stringify(state)},
 		],
 		"temperature": 0.7,
-		"max_tokens": 100,
+		# N22: muse-spark is a reasoning model – 100 tokens were all eaten by reasoning
+		# (content null, finish_reason "length"). Minimal effort + room for the JSON.
+		"max_tokens": 600,
+		"reasoning_effort": "minimal",
 	}
 
 	var json_body := JSON.stringify(body_dict)
@@ -337,12 +342,16 @@ func _on_http_request_completed(result: int, response_code: int, _headers: Packe
 		decision_received.emit(fallback)
 		return
 
+	# N22: type-safe – any null / unexpected shape means "no reply" -> local fallback.
 	var res_dict := json.data as Dictionary
 	var content := ""
-	var choices: Array = res_dict.get("choices", [])
-	if choices.size() > 0 and choices[0] is Dictionary:
-		var msg: Dictionary = choices[0].get("message", {})
-		content = String(msg.get("content", "")).strip_edges()
+	var choices_v: Variant = res_dict.get("choices", [])
+	if choices_v is Array and (choices_v as Array).size() > 0 and (choices_v as Array)[0] is Dictionary:
+		var msg_v: Variant = ((choices_v as Array)[0] as Dictionary).get("message", {})
+		if msg_v is Dictionary:
+			var content_v: Variant = (msg_v as Dictionary).get("content", "")
+			if content_v is String:
+				content = (content_v as String).strip_edges()
 
 	# Remove potential markdown fences ```json ... ```
 	if content.begins_with("```"):
@@ -378,18 +387,23 @@ func _sanitize_response(raw: Dictionary, state: Dictionary = {}) -> Dictionary:
 func _validate_decision(raw: Dictionary, state: Dictionary) -> Dictionary:
 	var fallback := local_fallback_decision(state)
 
-	var tactic := String(raw.get("tactic", fallback.tactic)).to_lower().strip_edges()
+	var tactic := _as_text(raw.get("tactic", fallback.tactic)).to_lower().strip_edges()
 	if not VALID_TACTICS.has(tactic) or (katana_mode and not DUELIST_TACTICS.has(tactic)):
 		tactic = fallback.tactic
 
-	var attack := String(raw.get("attack", fallback.attack)).to_lower().strip_edges()
+	var attack := _as_text(raw.get("attack", fallback.attack)).to_lower().strip_edges()
 	if not VALID_ATTACKS.has(attack):
 		attack = fallback.attack
 
-	var target_d := float(raw.get("target_distance", fallback.target_distance))
+	var td_v: Variant = raw.get("target_distance", fallback.target_distance)
+	var target_d: float = float(fallback.target_distance)
+	if td_v is float or td_v is int:
+		target_d = float(td_v)
+	elif td_v is String and (td_v as String).is_valid_float():
+		target_d = (td_v as String).to_float()
 	target_d = clampf(target_d, MELEE_STANDOFF_MIN, MELEE_STANDOFF_MAX)
 
-	var speech := String(raw.get("speech", fallback.speech)).strip_edges()
+	var speech := _as_text(raw.get("speech", fallback.speech)).strip_edges()
 	# Strip non-printable / control characters and sanitize length
 	speech = clip_speech(speech)
 	if speech == "":
@@ -402,6 +416,15 @@ func _validate_decision(raw: Dictionary, state: Dictionary) -> Dictionary:
 		"speech": speech,
 		"source": "ai",
 	}
+
+
+## N22: null-safe text (null / numbers / dicts from a model reply never raise a script error).
+static func _as_text(v: Variant) -> String:
+	if v == null:
+		return ""
+	if v is String or v is StringName:
+		return String(v)
+	return str(v)
 
 
 ## One printable line of at most [constant MAX_SPEECH_CHARS] chars, cut at a word + "…".
