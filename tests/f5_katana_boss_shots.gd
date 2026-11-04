@@ -37,6 +37,8 @@ func _ready() -> void:
 
 	run = RUN_SCENE.instantiate()
 	run.skip_run_intro = true
+	# The run-start controls hint lives 6 s; the boss enters at ≥ 60 s, so hide it here too.
+	run.controls_hint_shown = true
 	run.high_score_path = "user://f5_shots_save.cfg"
 	add_child(run)
 	player = run.player as DesktopPlayer

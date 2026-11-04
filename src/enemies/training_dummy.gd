@@ -38,7 +38,7 @@ var _ik_comfort := ""
 ## Spot the dummy returns to when not sparring, and how far it may roam from it.
 var home_position := Vector3.ZERO
 ## Uniform size of the body (N13: the run boss is a head taller than the yōkai). Scales every
-## part, joint and the sword grip; masses, torques and the blade stay. Set before add_child.
+## part, joint and the sword grip (torques by k²); masses and the blade stay. Set before add_child.
 var body_scale := 1.0
 
 var _straw := ShaderMaterial.new()  # weathered wood (wet_surface shader)
@@ -135,7 +135,7 @@ func _define_parts() -> Dictionary:
 
 
 ## [param defs] with every length (sizes, radii, heights, positions, joints, extra shapes)
-## times [param k]. Feet stay on y = 0; masses, torques and joint limits are unchanged.
+## times [param k], joint torques times k². Feet stay on y = 0; masses and limits are unchanged.
 static func scale_part_defs(defs: Dictionary, k: float) -> Dictionary:
 	var out := {}
 	for part_name in defs:
@@ -143,6 +143,10 @@ static func scale_part_defs(defs: Dictionary, k: float) -> Dictionary:
 		for key in ["size", "pos", "joint", "radius", "height"]:
 			if def.has(key):
 				def[key] = def[key] * k
+		# Same mass on longer limbs: inertia grows with length², so do the muscles, or the
+		# bigger body moves (steps, backs off) slower than the one it was tuned on.
+		if def.has("max_torque"):
+			def["max_torque"] = float(def["max_torque"]) * k * k
 		var extras: Array = def.get("extra_shapes", [])
 		for extra: Dictionary in extras:
 			for key in ["size", "offset", "radius", "height"]:
@@ -747,7 +751,7 @@ func _blocked_toward(dir: Vector3) -> bool:
 	if sword:
 		own.append(sword.get_rid())
 	for h in [-0.6, -0.1]:
-		var a := Vector3(from.x, from.y + h, from.z)
+		var a := Vector3(from.x, from.y + h * body_scale, from.z)
 		var q := PhysicsRayQueryParameters3D.create(a, a + dir * 0.5, 1, own)
 		if not space.intersect_ray(q).is_empty():
 			return true

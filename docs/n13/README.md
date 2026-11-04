@@ -16,10 +16,24 @@ Decyzje (4.11, supervisor): zmieniony tylko boss i moment jego wejścia, las/św
 Zrzut z gry (run.tscn, 5 m): `after_boss_5m.png`, `after_ai_bubble_5m.png`
 (`tests/f5_katana_boss_shots.tscn -- --shots docs/n13 --tag after --distance 5`).
 
-Ocena (surowo): boss stoi w kadrze na ścieżce, maska i dymek czytelne; ciało nadal ciemne (drewniane
-bryły) i z 5 m czyta się głównie jako sylwetka, rim jest subtelny. Na zrzucie środek ciała zasłania
-plansza sterowania (overlay sceny testowej, nie wejścia). Brak zrzutu PRZED z tej samej kamery (limit czasu).
+## fix1 (review 68b826c)
 
-Testy: back_spawn_test, run_loop_test – pass. oni_boss_ai_test: 3 fail, z czego 2 (Phase 3 windup,
-HP→0) padały już przed zmianą (baseline: 5 fail); nowy fail: „retreat” – większy boss cofa się
-0,15 m zamiast >0,3 m (te same momenty przy dłuższych kończynach). Do poprawy: moment/masa ×scale.
+- **Rim/fill tylko na materiale bossa:** `rim_tint` (1,0; 0,5; 0,24), `rim_power` 1,3, `fog_rim` 1,6,
+  `fill` 2,8 (szermierz z sali: 1,6). Oświetlenie sceny i lasu bez zmian.
+- **Plansza sterowania:** w grze żyje tylko 6 s od startu runu (lub do 0,6 m ruchu), a boss wchodzi
+  najwcześniej po ~60 s, więc **w prawdziwej grze nie zasłania wejścia**. Zasłaniała tylko w scenie
+  zrzutów (run startuje tuż przed spawnem) – tam jest teraz wyłączona (`controls_hint_shown = true`).
+- **Ruch większego ciała:** momenty stawów ×k² (`scale_part_defs`), promienie `_blocked_toward` ×k.
+
+Ocena (surowo): z 5 m boss stoi na ścieżce, cały w kadrze. Żarowy rim obrysowuje ramiona, nogi
+i bark, więc sylwetka wyraźnie odcina się od lasu, a maska i dymek są czytelne. Słabe: przód torsu
+dalej jest ciemną bryłą (drewniane kloce z sali testowej), a rim w kolorze żaru wygląda trochę
+„neonowo” na krawędziach nóg. To czytelne, ale nie premium. Lepszy model ciała/zbroi to osobne zadanie.
+Brak zrzutu PRZED z tej samej kamery.
+
+Testy (fix1): back_spawn_test – pass. oni_boss_ai_test – nadal **FAIL „retreat”**: boss cofa się
+o 0,17 m w 1 s (próg >0,3 m, nie osłabiony). Log: `move_velocity` dochodzi do ~1 m/s wstecz po
+0,5 s, ale ciało nie nadąża za kotwicą. Momenty ×k² i `anchor_gain` ×k² (cofnięte) nic nie dały,
+więc przyczyna leży gdzie indziej (stopy/tarcie lub balans przy wyższym pelvisie) – do dalszej
+diagnozy. Stare faile: HP→0 (był przed N13), Phase 3 windup i „requests every 2–5 s”
+są niestabilne (przechodzą/padają między przebiegami; baseline przed N13: 5 faili).

@@ -52,8 +52,10 @@ const DUELIST_INTRO_HOLD := 1.8
 const DUELIST_INTRO_LINE := "Koniec twojej drogi!"
 ## N13: ember fresnel rim on his own wood material only (the scene light is untouched),
 ## so the dark silhouette separates from the fog at 4–10 m.
-const DUELIST_RIM := Color(0.62, 0.24, 0.10)
-const DUELIST_RIM_POWER := 1.9
+const DUELIST_RIM := Color(1.0, 0.5, 0.24)
+const DUELIST_RIM_POWER := 1.3
+## Sky fill of his wood (the duelist default is 1.6): torso and limbs model out of the dark.
+const DUELIST_FILL := 2.8
 
 
 func _define_parts() -> Dictionary:
@@ -165,7 +167,8 @@ func _ready() -> void:
 			_attach_oni_mask(parts["head"] as RagdollPart)
 		_straw.set_shader_parameter("rim_tint", DUELIST_RIM)
 		_straw.set_shader_parameter("rim_power", DUELIST_RIM_POWER)
-		_straw.set_shader_parameter("fog_rim", 1.2)
+		_straw.set_shader_parameter("fog_rim", 1.6)
+		_straw.set_shader_parameter("fill", DUELIST_FILL)
 	else:
 		_apply_oni_visuals()
 	_attach_oni_rim_light()
@@ -207,7 +210,7 @@ func _update_oni_readability() -> void:
 		else:
 			_rim.light_energy = 0.0
 	if katana_duelist:
-		_straw.set_shader_parameter("rim_tint", DUELIST_RIM * lerpf(1.0, 1.35, near))
+		_straw.set_shader_parameter("rim_tint", DUELIST_RIM * lerpf(1.0, 1.4, near))
 	_mask.set_shader_parameter("fill", lerpf(2.35, 3.25, near))
 	_mask.set_shader_parameter("fog_rim", lerpf(1.35, 2.05, near))
 	_flesh.set_shader_parameter("fill", lerpf(0.85, 1.25, near))
