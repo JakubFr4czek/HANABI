@@ -30,3 +30,19 @@ z innego stanu. To wniosek, nie zmierzony dowód.
 - oni_boss_ai_test przebieg 1: **ALL PASSED** (retreat 2,08 → 3,32 m, flank 1,04 m, HP→0 ok,
   Phase 3 windup 0,47 vs 0,68 s, requests gaps [4,39; 2,84; 3,61] s). Przebieg trwał 898 s,
   bo maszyna była obciążona.
+- Scena wizualna `f5_katana_boss_shots` (xvfb, gl_compatibility, 960×540) → `after_01_boss_4m.png`
+  i `after_02_ai_bubble.png`. Wyniki: boss 3,95 m od kamery, głowa i stopy w kadrze, ciało
+  odcina się od lasu (51%), maska czyta się (Δ 1,57), dymek w kadrze: PASS.
+  **FAIL: „katana is in frame and visible” (1/9 próbek).** Na zrzucie z intro (guard) ciemne,
+  cienkie ostrze ginie na tle ciemnego torsu i lasu. N15 zmienia tylko footwork taktyki retreat,
+  a ten kadr to planted guard z intro, więc najpewniej fail jest starszy (z czytelności N13).
+  Nie sprawdziłem tego na bazowym commicie, bo zabrakło czasu.
+- Ocena zrzutu: sylwetka i rim czytelne, maska wyraźna. Słabo: kończyny wyglądają jak cienkie
+  rurki, katana bossa jest prawie niewidoczna (ciemna stal w ciemności). To do poprawy osobno,
+  bo zakres N15 zabrania zmian wyglądu.
+- **Brak drugiego przebiegu** oni_boss_ai_test: jeden przebieg trwał ~15 min, a limit 45 min się kończył.
+
+## Dalej
+1. Drugi przebieg oni_boss_ai_test (stabilność retreat/HP→0/windup/requests).
+2. Check katany w `f5_katana_boss_shots`: porównać z 21107dc. Jeśli to N13, dać lekki połysk
+   krawędzi samej klingi (bez zmiany rimu ciała).
