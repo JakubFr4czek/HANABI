@@ -37,3 +37,15 @@ o 0,17 m w 1 s (próg >0,3 m, nie osłabiony). Log: `move_velocity` dochodzi do 
 więc przyczyna leży gdzie indziej (stopy/tarcie lub balans przy wyższym pelvisie) – do dalszej
 diagnozy. Stare faile: HP→0 (był przed N13), Phase 3 windup i „requests every 2–5 s”
 są niestabilne (przechodzą/padają między przebiegami; baseline przed N13: 5 faili).
+
+## fix2 (review bdf3e5a)
+
+- `DUELIST_BODY_SCALE` 1,15 → **1,08** (≈1,93 m; test wzrostu 1,85–2,3 m przechodzi). Momenty ×k² zostają.
+- Rim przygaszony: `rim_tint` (0,86; 0,42; 0,21), `rim_power` 1,6 (węższa, mniej „neonowa” krawędź).
+  Na nowym `after_boss_5m.png` tors i kończyny dalej odcinają się od lasu. Przód torsu jest ciemny.
+- **Retreat nadal FAIL** (cofa się o 0,14 m, próg >0,3 m, nie osłabiony). Bisekcja (oni_boss_ai_test, po 1 przebiegu):
+  skala 1,08 → 0,14 m; **skala 1,0** → 0,14 m; demo 120 s zamiast 60 s → 0,14 m; **bez wejścia (intro)** → 0,21 m.
+  Żadna z tych zmian osobno nie przywraca progu, więc skala nie jest przyczyną. Baseline sprzed N13 przeszedł ten
+  check w jednym przebiegu. Nie sprawdziłem jeszcze: kombinacji zmian, wpływu frontowego spawnu w symulacji dema
+  i niestabilności samego checku (kilka przebiegów baseline).
+- Stare faile: HP→0 (był przed N13). Phase 3 windup i „requests every 2–5 s” są niestabilne, padają w części przebiegów.

@@ -738,7 +738,7 @@ func _test_f5_katana_boss_in_run() -> void:
 	var brain := boss.brain as OniBossBrain
 	await _frames(30)
 	var h := boss.get_measured_height()
-	# N13: a head taller than the yōkai (body_scale 1.15), still a man, not the 2.7 m Oni.
+	# N13: a head taller than the yōkai (body_scale 1.08), still a man, not the 2.7 m Oni.
 	_check("Swordsman silhouette is a tall man (%.2f m, 1.85–2.3 m)" % h, h >= 1.85 and h <= 2.3)
 	_check("N13 entrance: the boss holds and faces the player first (intro %.2f s)" % brain.intro_hold,
 		brain.intro_hold > 0.5 and boss.speech_bubble.is_showing())

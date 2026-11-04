@@ -46,14 +46,14 @@ var katana_duelist := false
 const DUELIST_MASK_SCALE := 1.06
 ## N13: the boss swordsman is a head taller than the yōkai (~1.95 m to the crown): every
 ## part, hitbox and the grip scale together (TrainingDummy.body_scale).
-const DUELIST_BODY_SCALE := 1.15
+const DUELIST_BODY_SCALE := 1.08
 ## N13 entrance: he stops, faces the player and speaks for this long before the duel.
 const DUELIST_INTRO_HOLD := 1.8
 const DUELIST_INTRO_LINE := "Koniec twojej drogi!"
 ## N13: ember fresnel rim on his own wood material only (the scene light is untouched),
 ## so the dark silhouette separates from the fog at 4–10 m.
-const DUELIST_RIM := Color(1.0, 0.5, 0.24)
-const DUELIST_RIM_POWER := 1.3
+const DUELIST_RIM := Color(0.86, 0.42, 0.21)
+const DUELIST_RIM_POWER := 1.6
 ## Sky fill of his wood (the duelist default is 1.6): torso and limbs model out of the dark.
 const DUELIST_FILL := 2.8
 
