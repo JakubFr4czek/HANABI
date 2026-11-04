@@ -106,7 +106,8 @@ Shaders, procedural sounds, the Oni body and kanabō, the lacquer menu board and
 - Run forest trees (`cherry_forest.gltf`, `cherry_forest_albedo.jpg`, `cherry_forest_normal.jpg`): "Cherry Blossom Tree" by **Grab3D** (CC0), crown simplified and the daylight blossoms recolored to night foliage, `assets/models/environment/forest_trees/`
 - Run forest torii (distant MultiMesh): procedural torii gate from **polyfork.dev** (commercial/CC0 kit, no attribution required; credited here by choice)
 - Interactive Torii gate & andon lantern: hexagonal paper andon with eaves and ribs, procedural mesh by project author (CC0)
-- Custom shaders (blade rim fresnel, katana steel edge light, wrist element plate, torii halo): project author (CC0)
+- Custom shaders (blade rim fresnel, katana steel edge light, wrist element plate, torii halo, Oni boss blade steel `src/shaders/boss_blade_steel.gdshader` from N16): project author (CC0)
+- N12–N19 (organic yōkai bodies, the katana Oni boss entrance, ember rim, demo exposure lift, speech bubble fixes): procedural meshes, shaders and code by the project author; no new third-party assets
 - Oni boss: body `oni_body_run.glb` + kanabō `oni_kanabo_run.glb` (project CC0, `tools/gen_oni_body_glb.py`; §17/§21 no account-free external boss mesh); mask: the demon mask below.
 - Demon mask (yōkai faces and the Oni boss mask): "Japanese demon mask" by Eques_inferno (https://sketchfab.com/3d-models/japanese-demon-mask-da21beea26034da9b889ec075bec6207), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — modified (decimated to 1.7k triangles, retextured: albedo, ORM and normal map at 1K, `tools/bake_yokai_mask.py`).
 - Memorial stele engraving font: **Yuji Boku** (Kinuta, SIL OFL), `assets/fonts/YujiBoku-Regular.ttf`

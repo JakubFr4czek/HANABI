@@ -1,8 +1,8 @@
 # HANABI (花火) — hackathon submission
 
 > Paste-ready text for the Meta Global AI Developer Hackathon 2026 form (Indie developer track).
-> Every name and number below was checked against `docs/GDD.md` and the code on 2026-11-03
-> (see "Consistency check" at the end). Video plan: [`docs/submission/SHOT_LIST.md`](submission/SHOT_LIST.md).
+> Every name and number below was checked against `docs/GDD.md` and the code on 2026-11-03,
+> and again after N12–N19 on 2026-11-04 (see "Consistency check" at the end). Video plan: [`docs/submission/SHOT_LIST.md`](submission/SHOT_LIST.md).
 > Screenshots: [`docs/submission/`](submission/).
 
 ## Tagline
@@ -23,7 +23,7 @@ The four schools form a counter ring, and each has two abilities on A/B and a fi
 Kill yōkai, collect soul orbs, level up, find roadside shrines and slice an ofuda for a one-minute
 buff, and free the five villager souls sealed in stone statues.
 
-Every few minutes an Oni with a kanabō walks out of the trees. Its tactics come from Meta's Muse
+Every few minutes a masked Oni swordsman walks out of the fog in front of you, katana drawn. Its tactics come from Meta's Muse
 Spark model, which reads how you fight and tells you so — "You always cut from the right."
 
 ## How we used Meta AI
@@ -40,8 +40,10 @@ Only what actually runs in the build is listed here.
   The local duelist AI executes it (e.g. `flank_left` makes the Oni step aside); the LLM never
   drives per-frame movement. The line appears in a speech bubble over the Oni's head.
 - **Guard rails:** tactics and attacks are whitelisted (anything else falls back to the local
-  `duel` logic), the standoff is clamped to 1.4–1.9 m (the kanabō's real reach), speech is one line
-  of at most 60 characters, a tactic holds for 4.5 s.
+  `duel` logic), the standoff is clamped to 1.4–1.9 m (the boss katana's real reach), speech is one line
+  of at most 60 characters, a tactic holds for 4.5 s. A reply that arrives late (a newer request
+  already answered, decisions on hold, or the boss already dead) is dropped, so it never changes
+  the tactic or pops a stale line; the bubble fades out about 4 s after the last line.
 - **Never blocks the game:** with no key, a 3 s timeout (counted in game frames), HTTP 401/500, a
   network error or malformed JSON, the Oni falls back in the same frame to its local state machine
   and prewritten EN/PL lines. The fight works 100 % offline.
@@ -73,11 +75,17 @@ Details: [`docs/META_AI.md`](META_AI.md).
 - **Shrines and ofuda.** Roadside hokora: touch the offering, three yellow ofuda rise, slice one for
   speed +20 % or damage +20 % for 60 s, or a heal (35 % of max HP now, 15 % over 10 s).
 - **Waves and the Oni.** A wave director with a calm opening that ramps up, elites, and a periodic
-  2.7 m Oni boss with telegraphed kanabō attacks. A run goal: free 5 villager souls; death ends
+  Oni boss (first at 3 min, then every 200 s): a masked katana swordsman a head taller than the
+  yōkai (~1.95 m), who enters in front of you 6–7.5 m away, stops for a spoken intro line and then
+  duels with real blade-on-blade parries, feints and back-hop retreats; a faint ember rim and a
+  moonlit steel sheen on his blade keep him readable in the fog. He dies the moment his HP hits 0. A run goal: free 5 villager souls; death ends
   the run on a memorial stele, and slicing the Restart Ema starts a new one.
 - **Splash and opening strike.** HANABI and NANJO films, a 3-second in-engine opening strike
   (six yōkai cut in half, ending in a white flash), then the seiza intro: you descend into the
   glade and take the katana from a spirit gate.
+- **Demo mode (`-- --demo`).** A 3-minute trailer profile: the Oni arrives at 60 s, and the first
+  10 s are slightly brighter (tonemap exposure only, easing back over 8 s). The default run is
+  unchanged.
 - **VR comfort and settings.** Snap (15–90°) or smooth turn, tunnelling vignette, walking pace,
   seated mode and eye height, left/right-handed play, audio buses, flash reduction for lightning and
   fireworks, haptic strength, a controls map drawn from the OpenXR action map. Diegetic wrist HUD
@@ -90,8 +98,9 @@ Details: [`docs/META_AI.md`](META_AI.md).
 - PCVR / desktop: Godot 4.7.2 runs the project directly (desktop rig with mouse and keyboard).
 
 ## Known limitations (honest)
-- **Enemy art is stylised and low-detail.** Yōkai bodies are simple low-poly humanoids with
-  sculpted masks; next to the scanned katana and torii they look the cheapest part of the game.
+- **Enemy art is stylised.** Yōkai are procedural low-poly bodies (V torso, forward lean, merged
+  hands and feet, long claws, skin gradient) with a sculpted mask; next to the scanned katana and
+  torii they are still the least detailed part of the game.
 - **Meta AI is only the Oni.** The GDD's "awakened" swarm enemies, cross-run memory and voice (TTS)
   are not built. The Muse Spark integration is tested end-to-end against a local mock server of the
   chat-completions API; a live run needs a valid key, and the request format follows our reading of
@@ -124,7 +133,11 @@ and the Godot OpenXR Vendors plugin.
 | Tree costs 1/1/1/2/3 | `skill_tree_data.gd` `"cost"`; GDD §6 |
 | Counter ring ×1.5 / ×0.5 / ×1.0 | GDD §5 (D17); `ElementBalance.BEATS` |
 | Player HP 100 | `PlayerHealth.max_hp = 100.0`; GDD §7 |
-| Oni 2.7 m, kanabō | `src/enemies/run_oni_boss.gd` header |
+| Run Oni = katana swordsman, body scale 1.08 (~1.95 m), 1.8 s intro | `WaveDirector.boss_katana_duelist = true`; `RunOniBoss.DUELIST_BODY_SCALE`, `DUELIST_INTRO_HOLD` |
+| Oni enters 6–7.5 m in front, ±22° | `WaveDirector.ONI_ENTRY_MIN/MAX`, `ONI_ENTRY_HALF_ANGLE` |
+| First Oni 180 s, every 200 s; demo 60 s | `WaveProfile.oni_first_seconds`, `oni_interval`; `data/waves/demo.tres` |
+| Demo exposure lift 10 s + 8 s ease | `RunDemoGrade.HOLD_SECONDS`, `FADE_SECONDS` |
+| Late AI replies dropped, bubble 3.5 s + fades | `OniBossBrain` (N18); `OniSpeechBubble.DEFAULT_DURATION`; `tests/oni_bubble_fade_test` |
 | Muse Spark endpoint/model, 2–5 s, 3 s timeout, 60 chars, 1.4–1.9 m | `src/ai/oni_ai_client.gd`; `docs/META_AI.md` |
 | 5 soul vessels | `SoulVesselManager.COUNT`; `docs/f7/README.md` |
 | Edge ×1.0, flat ×0.3, spine ×0.2, hilt ×0.3 | GDD §4 |
