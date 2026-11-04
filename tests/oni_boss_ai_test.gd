@@ -912,7 +912,10 @@ func _test_n8_meta_ai_end_to_end() -> void:
 		thought.begins_with("Oni myśli: flank_left") and thought.contains("ai"))
 	# The bubble fades after a few seconds when no new line comes.
 	brain._ai_timer = 999.0
-	await _frames(int((OniSpeechBubble.DEFAULT_DURATION + OniSpeechBubble.FADE_OUT_TIME + 0.4) * hz))
+	# N17: the same 4.35 s, counted in physics ticks (hz is the physics rate). _frames()
+	# counts render frames, which run at ~500 fps here, so this wait used to be ~0.8 s.
+	for _f in int((OniSpeechBubble.DEFAULT_DURATION + OniSpeechBubble.FADE_OUT_TIME + 0.4) * hz):
+		await get_tree().physics_frame
 	_check("the bubble is gone a few seconds after the last line", not boss.speech_bubble.is_showing())
 	_check("the overlay stays while the setting is on", boss.speech_bubble.is_overlay_showing())
 	VrComfortSettings.ai_demo_overlay = false

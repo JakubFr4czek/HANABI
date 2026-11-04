@@ -206,20 +206,22 @@ func show_speech(text: String, duration: float = DEFAULT_DURATION) -> void:
 	_set_speech_nodes(true)
 	visible = true
 
+	# N17: one tween per line. The previous line's hold/fade tween used to keep running
+	# next to the new one, so an old timer faded and hid the newer line and two chains
+	# fought over the alpha. Now a new line replaces the whole chain, and the bubble is
+	# hidden exactly FADE_IN + duration + FADE_OUT after the LAST line.
+	# Game time (physics ticks, like the boss, its AI timer and TimeController), not the
+	# render rate: at hundreds of fps the bubble no longer lives on a different clock
+	# than the fight it belongs to.
 	if _tween and _tween.is_valid():
 		_tween.kill()
-
 	_tween = create_tween()
-	_tween.set_parallel(true)
-	# Fade in
+	_tween.set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
 	_tween.tween_method(_set_alpha, _alpha, 1.0, FADE_IN_TIME)
+	_tween.tween_interval(duration)
+	_tween.tween_method(_set_alpha, 1.0, 0.0, FADE_OUT_TIME)
+	_tween.tween_callback(_on_fade_out_finished)
 	speech_displayed.emit(text)
-
-	# Hold, then fade out
-	var hold_tween := create_tween()
-	hold_tween.tween_interval(FADE_IN_TIME + duration)
-	hold_tween.tween_method(_set_alpha, 1.0, 0.0, FADE_OUT_TIME)
-	hold_tween.tween_callback(_on_fade_out_finished)
 
 
 func _set_alpha(val: float) -> void:

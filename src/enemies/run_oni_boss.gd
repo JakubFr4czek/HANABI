@@ -514,6 +514,14 @@ func _allow_revive_after_knockout() -> bool:
 func receive_hit(part: RagdollPart, hit: Dictionary) -> Dictionary:
 	_last_hit = hit
 	var result := super.receive_hit(part, hit)
+	# N17: the boss never revives, so HP 0 is death at once, whatever the body is doing.
+	# TrainingDummy defers a knockout to the next STANDING (to refill a revivable dummy);
+	# a blow landing while he lies in KNOCKED_DOWN / GETTING_UP (or the stuck failsafe
+	# restarting the get-up) left him at hp 0 on the ground, never defeated.
+	if hp <= 0.0 and not is_dead:
+		_revive_on_getup = false
+		_on_permanent_defeat()
+		return result
 	if bool(hit.get("kirisute_offer", false)) and not is_dead:
 		_open_wound(part, hit)
 	return result
