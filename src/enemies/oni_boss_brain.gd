@@ -16,12 +16,18 @@ signal phase_changed(new_phase: int)
 signal thought_changed(tactic: String, attack: String, source: String)
 
 const AI_POLL_INTERVAL := 3.5
+## N18: the longest gap the brain itself ever waits between asks (katana 2–5 s, Oni 3.5 s).
+## A timer set above this means decisions are on hold (intro, a test, a pause): a reply that
+## lands then is late and is dropped.
+const AI_MAX_POLL_GAP := 5.0
 
 var ai_client: OniAiClient
 var phase := 1
 
 var _ai_timer := 0.5  # First decision shortly after spawn
 var _last_ai_decision := {}
+## N18: number of the newest request; a reply carrying an older number is stale.
+var _ai_request_seq := 0
 var _recent_player_actions: Array[String] = []
 ## F5: true when this brain drives the masked katana swordsman (the test-room duelist
 ## as the run boss). The AI picks a tactic from OniAiClient.DUELIST_TACTICS every
@@ -164,7 +170,35 @@ func _poll_ai(delta: float, ctx: Dictionary) -> void:
 	_ai_timer = _rng.randf_range(2.0, 5.0) if katana_mode else AI_POLL_INTERVAL
 
 	var state_data := _gather_combat_state(ctx)
-	ai_client.request_decision(state_data, _on_ai_decision)
+	_ai_request_seq += 1
+	ai_client.request_decision(state_data, _on_ai_reply.bind(_ai_request_seq))
+
+
+## N18: a reply to a request this brain sent. An async HTTP reply can land long after it
+## was asked for – after a newer request, after decisions were put on hold, or after the
+## boss died – and would then show a fresh line in the bubble and switch tactics on a
+## fight that has moved on. Such replies are dropped (logged), never applied.
+func _on_ai_reply(decision: Dictionary, seq: int) -> void:
+	var why := ""
+	if seq != _ai_request_seq:
+		why = "superseded"
+	elif _ai_timer > AI_MAX_POLL_GAP:
+		why = "decisions_on_hold"
+	elif not _boss_alive():
+		why = "boss_dead"
+	if why != "":
+		GameEvents.log_event("oni_ai_decision_dropped", {
+			"reason": why, "source": decision.get("source", "fallback"), "seq": seq,
+		})
+		return
+	_on_ai_decision(decision)
+
+
+func _boss_alive() -> bool:
+	if body == null or not is_instance_valid(body) or not body.is_inside_tree():
+		return false
+	var boss := body as TrainingDummy
+	return boss == null or boss.hp > 0.0
 
 
 func _gather_combat_state(ctx: Dictionary) -> Dictionary:
