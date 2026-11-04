@@ -49,6 +49,7 @@ a nie 44 klatki później. Progi bez zmian: ≥4/9 próbek, Δ > 0,05, r = 2.
 ## Zrzuty
 - `before_01_boss_4m.png`: stan e2d6076 (ten sam kadr z N15). Klinga ginie.
 - `after_01_boss_4m.png`: N16. Klinga czyta się jako jasna stal od dłoni ponad głowę.
+- `after_02_ai_bubble.png`: N16, kadr z dymkiem AI (ten sam przebieg).
 
 ## Dalej
 1. HP → 0 w oni_boss_ai_test: boss utyka w knockdown (body state 2). Sprawdzić czas get-up
