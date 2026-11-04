@@ -1,0 +1,26 @@
+WARNING: Property not found: 'xr/openxr/extensions/hand_tracking'.
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+WARNING: Custom solver bias for shapes is not supported when using Jolt Physics. Any such value will be ignored. This shape belongs to '<unknown>' and 0 other object(s).
+--- N19: Oni speech bubble fade + late AI replies ---
+PASS  an AI reply in time shows its line ('Linia pierwsza.')
+PASS  the line is still up half-way through its hold
+PASS  the bubble is gone a few seconds after the last line (gone after 3.99 s, life 4.01 s)
+PASS  a reply landing while decisions are on hold shows no line (showing=false, 'Linia pierwsza.')
+PASS  ... and changes no tactic (flank_left)
+PASS  ... and is logged as dropped (decisions_on_hold)
+PASS  the newest reply shows its line ('Nowa linia.')
+PASS  an older (superseded) reply does not replace it ('Nowa linia.')
+PASS  ... and is logged as dropped (superseded)
+PASS  ... and the tactic stays the newest one (flank_right)
+PASS  the poll gap is in the normal range (4.11 s), so only death can drop the reply
+PASS  a reply landing after the boss died shows no line ('Nowa linia.')
+PASS  ... and is logged as dropped (boss_dead)
+ALL PASSED (0 failed)
+GUARD SUMMARY: clean
+ERROR: Pages in use exist at exit in PagedAllocator: N20RasterizerSceneDummy21GeometryInstanceDummyE
+WARNING: Leaked instance dependency: Bug - did not call instance_notify_deleted when freeing.
+WARNING: 3 ObjectDB instances were leaked at exit (run with `--verbose` for details).
+ERROR: 1 RID allocations of type 'N13RendererDummy15MaterialStorage13DummyMaterialE' were leaked at exit.
+ERROR: 1 RID allocations of type 'N13RendererDummy15MaterialStorage11DummyShaderE' were leaked at exit.
+ERROR: 1 RID allocations of type 'N13RendererDummy9DummyMeshE' were leaked at exit.
+ERROR: 1 RID allocations of type 'N17RendererSceneCull8InstanceE' were leaked at exit.
