@@ -90,7 +90,7 @@ zestaw testów przeszedł; w razie wątpliwości powtórz pojedynczy test (`tool
 Każde ponowne uruchomienie testów po instrumentacji wymaga ponownego `coverage_instrument.gd`, bo raport przywraca skrypty.
 
 ## Raspberry Pi runners (since 2026-11-02)
-- All self-hosted CI runs on `pi2` (Pi 2 `pi-runner`, 4 GB, [pi-host]). One runner, so jobs run one after another.
+- All self-hosted CI ran on one self-hosted Raspberry Pi runner, so jobs ran one after another.
   Godot 4.7.2 arm64 in `~/ci-tools/godot`, gdtoolkit 4.5.0 + scons venv in `~/ci-tools/venv` (links in `~/ci-tools/bin`), gitleaks in `~/ci-tools/bin`,
   Nano Coverage built for arm64 in `~/ci-tools/nano-coverage/nano_coverage_godot`, cache and visual/perf baseline in `~/ci-cache`.
   Runner `~/actions-runner-hanabi`, user systemd unit `gh-runner-hanabi.service` (linger on).
