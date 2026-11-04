@@ -78,6 +78,8 @@ var forest_world: ForestWorld
 const RUN_COMBAT_FOG := preload("res://src/run/run_combat_fog.gd")
 
 var combat_fog: Node
+## N14: demo-only start exposure lift (`-- --demo`); inert in the default run.
+var demo_grade: RunDemoGrade
 var run_intro: RunIntro
 var distant_fireworks: DistantFireworks = null
 var run_splash: RunSplash
@@ -318,6 +320,12 @@ func _configure_run_forest() -> void:
 func _configure_run_light(we: WorldEnvironment, moon: DirectionalLight3D, world: WorldGenProfile) -> void:
 	if we and we.environment:
 		WorldGenLook.apply_light(we.environment, world)
+		if demo_grade == null:
+			demo_grade = RunDemoGrade.new()
+			demo_grade.name = "RunDemoGrade"
+			demo_grade.enabled = RunDemoGrade.demo_launch()
+			add_child(demo_grade)
+		demo_grade.bind_environment(we.environment)
 	if moon:
 		WorldGenLook.apply_moon(moon, world)
 
@@ -694,6 +702,8 @@ func _physics_process(delta: float) -> void:
 		_poll_shrine_touch()
 	elif combat_fog:
 		combat_fog.step(p_pos, [], false)
+	if demo_grade:
+		demo_grade.step(run_time)
 
 	# Abyssal Sea (Ink Node 5): +20% locomotion while standing in own ink, and the
 	# shrine speed buff (D12) on top; both multiply with the walking pace of Settings.
