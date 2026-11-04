@@ -773,7 +773,8 @@ func _test_f5_katana_boss_in_run() -> void:
 	brain._ai_timer = 99.0
 	await _frames(60)
 	var d1 := _flat_dist(boss.root_part().global_position, player.global_position)
-	_check("The reply changes the tactic to retreat and the boss backs off (%.2f -> %.2f m)" % [d0, d1],
+	_check("The reply changes the tactic to retreat and the boss backs off (%.2f -> %.2f m; body state %d, balance %.2f, blocked %s, brain state %d)" % [
+			d0, d1, boss.state, boss.balance, str(boss._move_blocked), brain.state],
 		brain.current_tactic == "retreat" and d1 > d0 + 0.3)
 
 	# 3. No key: the local fallback answers at once, the duelist keeps its own logic.
@@ -807,7 +808,9 @@ func _test_f5_katana_boss_in_run() -> void:
 	})
 	var wait := int((boss.profile.knockdown_time + boss.profile.getup_time + 0.3) * Engine.physics_ticks_per_second)
 	await _frames(wait)
-	_check("HP -> 0 defeats the katana boss (signal %s, active %s)" % [defeated.hit, director.has_active_oni()],
+	_check("HP -> 0 defeats the katana boss (signal %s, active %s, hp %.1f, dead %s, body state %s)" % [defeated.hit, director.has_active_oni(),
+			boss.hp if is_instance_valid(boss) else 0.0, str(boss.is_dead) if is_instance_valid(boss) else "freed",
+			str(boss.state) if is_instance_valid(boss) else "freed"],
 		defeated.hit and not director.has_active_oni())
 	run.queue_free()
 	await _frames(4)

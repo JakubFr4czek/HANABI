@@ -34,6 +34,15 @@ var tactic_time_left := 0.0
 ## N13 entrance: seconds the swordsman stands planted in guard, faces the player and
 ## speaks before the duel starts. Any cut on him, or the first AI decision, ends it at once.
 var intro_hold := 0.0
+## N15: seconds left of the retreat's opening back-hop (hiki-ashi: planted, bursting slide
+## back, so the body really leaves the player's reach instead of trailing its walk anchor).
+var _retreat_hop := 0.0
+## N15: the retreat gives at least this much ground (3.2 m, or ~1 m past where it began).
+var _retreat_until := -1.0
+const RETREAT_HOP_TIME := 0.45
+const RETREAT_HOP_SPEED := 1.7
+## Back-off directions tried when straight back is walled (a trunk, a rock): degrees off -fwd.
+const RETREAT_DODGE_ANGLES := [0.0, 35.0, -35.0, 70.0, -70.0]
 
 
 ## Starts the entrance: hold for [param seconds]; the first AI decision waits for its end.
@@ -341,6 +350,8 @@ func _apply_katana_tactic(tactic: String, attack: String) -> void:
 			if state == State.ATTACK:
 				_enter_recover(0.3)
 			_retreat_time = 1.2
+			_retreat_hop = RETREAT_HOP_TIME
+			_retreat_until = -1.0
 			_cooldown = maxf(_cooldown, 1.6)
 
 
@@ -376,9 +387,18 @@ func _katana_tactic_intent(delta: float, ctx: Dictionary, intent: Dictionary) ->
 			intent.move = side * s * speed * 0.8 + fwd * clampf(dist - 2.0, -0.5, 0.5) * speed
 			intent.plant = false
 		"retreat":
-			if dist < 3.2:
-				intent.move = -fwd * speed
-				intent.plant = false
+			if _retreat_until < 0.0:
+				_retreat_until = maxf(3.2, dist + 1.0)
+			if dist < _retreat_until:
+				var back := _retreat_direction(-fwd)
+				if _retreat_hop > 0.0:
+					# Opening hop: planted burst (TrainingDummy.burst), the feet slide back.
+					_retreat_hop -= delta
+					intent.move = back * speed * RETREAT_HOP_SPEED
+					intent.plant = true
+				else:
+					intent.move = back * speed
+					intent.plant = false
 		"defensive":
 			pass
 		_:
@@ -387,3 +407,16 @@ func _katana_tactic_intent(delta: float, ctx: Dictionary, intent: Dictionary) ->
 				intent.move = fwd * speed * 1.3
 				intent.plant = false
 	return intent
+
+
+## N15: straight back, or the first clear diagonal if a trunk/rock stands behind the boss
+## (TrainingDummy._blocked_toward zeroes the walk into a wall, so he would just stand there).
+func _retreat_direction(back: Vector3) -> Vector3:
+	if body == null or not body.has_method("_blocked_toward"):
+		return back
+	var sgn := 1.0 if _circle_dir >= 0.0 else -1.0
+	for deg: float in RETREAT_DODGE_ANGLES:
+		var dir := back.rotated(Vector3.UP, deg_to_rad(deg * sgn))
+		if not bool(body.call("_blocked_toward", dir)):
+			return dir
+	return back
