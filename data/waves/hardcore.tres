@@ -11,6 +11,7 @@ rest_calm = 8.0
 wave_credits_full = 20.0
 peak_budget_mult = 1.7
 cap_step_seconds = 30.0
+cap_hard = 6
 elite_from_seconds = 120.0
 elite_chance_full = 0.35
 hp_per_wave = 0.16

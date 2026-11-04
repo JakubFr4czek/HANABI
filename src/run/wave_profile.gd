@@ -60,7 +60,8 @@ const GROUP_SIM := "Simulation"
 @export_group(GROUP_CAPS)
 @export_range(1, 12, 1) var cap_start := 2
 @export_range(10.0, 300.0, 1.0, "suffix:s") var cap_step_seconds := 45.0
-@export_range(1, 16, 1) var cap_hard := 8
+## N23: 8 -> 5 alive at once (each yōkai is a full active ragdoll; PCVR lagged at 7–8).
+@export_range(1, 16, 1) var cap_hard := 5
 
 ## Where yōkai appear: a ring round the player, outside the camera's view cone.
 @export_group(GROUP_RING)

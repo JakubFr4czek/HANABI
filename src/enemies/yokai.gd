@@ -1168,7 +1168,12 @@ func _apply_move(move: Vector3, delta: float, planted := false) -> void:
 		move = Vector3.ZERO
 		_move_blocked = false
 	else:
-		_move_blocked = _blocked_toward(move.normalized())
+		# N23: the forward wall probe (2 rays) runs every ~0.1 s, not every physics tick.
+		_block_probe_t -= delta
+		if _block_probe_t <= 0.0:
+			_block_probe_t = BLOCK_PROBE_INTERVAL
+			_block_probe_hit = _blocked_toward(move.normalized())
+		_move_blocked = _block_probe_hit
 	_detour_time = maxf(_detour_time - delta, 0.0)
 	if _move_blocked and move.length_squared() > 0.01:
 		# Walk around a trunk: widen the angle until clear, preferring the side
@@ -1201,12 +1206,22 @@ func _apply_move(move: Vector3, delta: float, planted := false) -> void:
 		overlay_pose = ""
 
 
+const BLOCK_PROBE_INTERVAL := 0.1
+var _block_probe_t := randf() * BLOCK_PROBE_INTERVAL
+var _block_probe_hit := false
+var _own_rids: Array[RID] = []
+var _own_rids_n := -1
+
+
 func _blocked_toward(dir: Vector3) -> bool:
 	var space := get_world_3d().direct_space_state
 	var from := root_part().global_position
-	var own: Array[RID] = []
-	for p: RagdollPart in parts.values():
-		own.append(p.get_rid())
+	if _own_rids_n != parts.size():
+		_own_rids.clear()
+		for p: RagdollPart in parts.values():
+			_own_rids.append(p.get_rid())
+		_own_rids_n = parts.size()
+	var own := _own_rids
 	for h in [-0.5, -0.1]:
 		var a := Vector3(from.x, from.y + h, from.z)
 		var q := PhysicsRayQueryParameters3D.create(a, a + dir * 0.45, 1, own)
