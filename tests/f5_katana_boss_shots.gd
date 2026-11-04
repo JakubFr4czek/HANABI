@@ -15,6 +15,8 @@ var tag := "after"
 var run: RunGame
 var player: DesktopPlayer
 var failures := 0
+var _blade_mid := Vector3.ZERO
+var _blade_tip := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -80,6 +82,12 @@ func _ready() -> void:
 	await _frames(90)
 	var img := get_viewport().get_texture().get_image()
 	img.save_png(out_dir.path_join("%s_01_boss_4m.png" % tag))
+	# N16: the blade line of THIS frame. The checks run after the bubble shot (~44 frames
+	# later); the boss sways a few pixels meanwhile and a 2 px blade then fell beside the
+	# samples. Thresholds unchanged.
+	var sword := boss.sword
+	_blade_mid = sword.global_transform * ((sword.blade_start + sword.blade_tip) * 0.5)
+	_blade_tip = sword.get_tip_global()
 
 	# The AI bubble: a mock reply goes through the brain as a real decision does.
 	brain.ai_client.set_mock_provider(func(_s: Dictionary) -> Dictionary:
@@ -126,10 +134,8 @@ func _pixel_checks(boss: RunOniBoss, empty: Image, img: Image, img_b: Image) -> 
 	var cover := float(changed) / maxf(float(total), 1.0)
 	_check("the boss body reads against the forest (%.0f%% of its column changed)" % (cover * 100.0), cover > 0.25)
 	# Katana: blade mid and tip project inside the frame and change pixels around them.
-	var sword := boss.sword
-	var mid := sword.global_transform * ((sword.blade_start + sword.blade_tip) * 0.5)
-	var mid_px := cam.unproject_position(mid)
-	var tip_px := cam.unproject_position(sword.get_tip_global())
+	var mid_px := cam.unproject_position(_blade_mid)
+	var tip_px := cam.unproject_position(_blade_tip)
 	var blade_seen := 0
 	for k in 9:
 		var p := mid_px.lerp(tip_px, float(k) / 8.0)

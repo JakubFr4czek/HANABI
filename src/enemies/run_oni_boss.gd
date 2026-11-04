@@ -22,6 +22,7 @@ const KANABO_HIT_RADIUS := 0.105
 
 const ONI_BODY_GLB := preload("res://assets/models/enemies/oni_body_run.glb")
 const ONI_KANABO_GLB := preload("res://assets/models/enemies/oni_kanabo_run.glb")
+const BOSS_BLADE_SHADER := preload("res://src/shaders/boss_blade_steel.gdshader")
 
 var is_dead := false
 ## Open Kirisute wounds (D4 §8): most this many glow at once (Quest budget).
@@ -319,18 +320,18 @@ func _attach_oni_body_shell(pelvis: RagdollPart) -> void:
 
 ## F5: the test-room duelist's blade, same shape and physics, in polished steel so the
 ## boss reads as a swordsman with a katana in the dark forest (the wooden bokken vanished).
+## N16: the night has no specular moon and no reflections, so plain metal read black;
+## the blade has its own faint sheen and moonlit edges (BOSS_BLADE_SHADER). Only the
+## blade (the BoxMesh) gets it: handle and guard keep their dark wrap.
 func _steel_blade() -> void:
 	if sword == null:
 		return
-	var steel := StandardMaterial3D.new()
-	steel.albedo_color = Color(0.66, 0.68, 0.72)
-	steel.metallic = 0.75
-	steel.roughness = 0.24
-	steel.emission_enabled = true
-	steel.emission = Color(0.16, 0.17, 0.2)
+	var steel := ShaderMaterial.new()
+	steel.shader = BOSS_BLADE_SHADER
 	for node in sword.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
 		if mi.mesh is BoxMesh:
+			steel.set_shader_parameter("half_height", (mi.mesh as BoxMesh).size.y * 0.5)
 			mi.material_override = steel
 
 
