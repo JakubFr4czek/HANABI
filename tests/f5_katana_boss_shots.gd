@@ -61,7 +61,11 @@ func _ready() -> void:
 	var empty := get_viewport().get_texture().get_image()
 
 	director.boss_katana_duelist = tag != "before"
-	var spot := eye + fwd * DISTANCE
+	var dist := DISTANCE
+	var di := OS.get_cmdline_user_args().find("--distance")
+	if di >= 0 and di + 1 < OS.get_cmdline_user_args().size():
+		dist = float(OS.get_cmdline_user_args()[di + 1])
+	var spot := eye + fwd * dist
 	spot.y = run.forest_world.height_at(spot.x, spot.z)
 	var boss := director.spawn_oni_boss(player.global_position)
 	boss.set_attacks_enabled(false)

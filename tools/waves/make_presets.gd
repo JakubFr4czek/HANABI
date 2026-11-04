@@ -37,7 +37,7 @@ func _demo() -> WaveProfile:
 	p.cap_hard = 7
 	p.elite_from_seconds = 100.0
 	p.elite_chance_full = 0.5
-	p.oni_first_seconds = 120.0
+	p.oni_first_seconds = 60.0
 	p.oni_interval = 100.0
 	return p
 

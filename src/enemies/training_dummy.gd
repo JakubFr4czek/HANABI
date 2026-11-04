@@ -37,6 +37,9 @@ var _ik_comfort := ""
 
 ## Spot the dummy returns to when not sparring, and how far it may roam from it.
 var home_position := Vector3.ZERO
+## Uniform size of the body (N13: the run boss is a head taller than the yōkai). Scales every
+## part, joint and the sword grip; masses, torques and the blade stay. Set before add_child.
+var body_scale := 1.0
 
 var _straw := ShaderMaterial.new()  # weathered wood (wet_surface shader)
 var _sash := StandardMaterial3D.new()
@@ -93,7 +96,7 @@ func _ready() -> void:
 		equip_sword()
 	_pose_degrees = _define_poses()
 	arm_ik = SwordArmIK.new()
-	arm_ik.setup(self, _rest_grip(), sword, _pose_degrees["guard"])
+	arm_ik.setup(self, _scaled_rest_grip(), sword, _pose_degrees["guard"])
 	_ik_comfort = "guard"
 	state_changed.connect(_on_state_changed)
 
@@ -128,7 +131,25 @@ func _define_parts() -> Dictionary:
 			# Feet slide over the stone (suri-ashi) instead of sticking and skipping.
 			"friction": 0.25,
 			"extra_shapes": [{"shape": "box", "size": Vector3(0.10, 0.06, 0.24), "offset": Vector3(0, -0.24, 0.05)}]}
-	return d
+	return scale_part_defs(d, body_scale) if body_scale != 1.0 else d
+
+
+## [param defs] with every length (sizes, radii, heights, positions, joints, extra shapes)
+## times [param k]. Feet stay on y = 0; masses, torques and joint limits are unchanged.
+static func scale_part_defs(defs: Dictionary, k: float) -> Dictionary:
+	var out := {}
+	for part_name in defs:
+		var def: Dictionary = (defs[part_name] as Dictionary).duplicate(true)
+		for key in ["size", "pos", "joint", "radius", "height"]:
+			if def.has(key):
+				def[key] = def[key] * k
+		var extras: Array = def.get("extra_shapes", [])
+		for extra: Dictionary in extras:
+			for key in ["size", "offset", "radius", "height"]:
+				if extra.has(key):
+					extra[key] = extra[key] * k
+		out[part_name] = def
+	return out
 
 
 ## Mirror a z-axis range for the right side.
@@ -450,7 +471,13 @@ func equip_sword() -> void:
 ## forearm to horizontal, the blade ends up pointing up-forward.
 func _sword_grip_transform() -> Transform3D:
 	var forearm: RagdollPart = parts["lower_arm_r"]
-	return forearm.global_transform * (_rest["lower_arm_r"].affine_inverse() * _rest_grip())
+	return forearm.global_transform * (_rest["lower_arm_r"].affine_inverse() * _scaled_rest_grip())
+
+
+## The rest grip for this body's [member body_scale] (the hand moves with the forearm).
+func _scaled_rest_grip() -> Transform3D:
+	var g := _rest_grip()
+	return Transform3D(g.basis, g.origin * body_scale)
 
 
 ## The sword in the rest frame while the arm hangs in its rest pose.

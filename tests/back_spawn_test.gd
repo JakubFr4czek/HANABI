@@ -57,6 +57,7 @@ func _run() -> void:
 	# The Oni has its own ring placement: same rule, with the view turned to several sides.
 	var oni_count := 0
 	var oni_closest := INF
+	var oni_in_front := 0
 	for i in 36:
 		var yaw := i * TAU / 36.0
 		director.clear_enemies()
@@ -65,7 +66,15 @@ func _run() -> void:
 			continue
 		oni_count += 1
 		oni_closest = minf(oni_closest, _from_behind_deg(oni.global_position, center, yaw))
+		# N13 entrance: in front of the player, in frame, 6–7.5 m away (fallback ring: 9.2 m).
+		var off := oni.global_position - center
+		off.y = 0.0
+		if absf(angle_difference(yaw, atan2(off.x, off.z))) <= deg_to_rad(23.0) \
+				and off.length() >= 5.9 and off.length() <= 7.6:
+			oni_in_front += 1
 	_check("Oni placed in every view direction (%d of 36)" % oni_count, oni_count >= 30)
+	_check("N13: Oni enters in front of the player at 6–7.5 m (%d of %d)" % [oni_in_front, oni_count],
+		oni_count >= 30 and oni_in_front >= oni_count - 4)
 	_check("Oni never in the back sector (closest to dead behind %.1f°)" % oni_closest,
 		oni_count >= 30 and oni_closest >= BACK_LIMIT_DEG)
 	director.clear_enemies()
@@ -140,12 +149,12 @@ func _pacing_checks() -> void:
 		s.longest_empty_after_60 <= MAX_QUIET_AFTER_60)
 	_check("8 min: never more live yōkai than the Quest cap (max %d)" % s.max_alive,
 		s.max_alive <= WaveProfile.QUEST_YOKAI_CAP)
-	# The 3-minute demo on the real forest: the Oni is placed in [120, 150] s, and the stand-in
+	# The 3-minute demo on the real forest: the Oni is placed in [60, 100] s (N13: earlier entrance), and the stand-in
 	# player meets the first yōkai in the calm opening (not before 20 s).
 	var demo := await _pacing_run(PACING_SEED, "demo", DEMO_SECONDS)
 	var demo_s: Dictionary = demo.summary
-	_check("Demo 3 min: the Oni is placed at %.1f s, inside [120, 150] s" % demo_s.first_oni,
-		demo_s.first_oni >= 120.0 and demo_s.first_oni <= 150.0)
+	_check("Demo 3 min: the Oni is placed at %.1f s, inside [60, 100] s" % demo_s.first_oni,
+		demo_s.first_oni >= 60.0 and demo_s.first_oni <= 100.0)
 	_check("Demo 3 min: the first yōkai reaches the player at %.1f s (after the calm opening)" % demo_s.first_contact,
 		demo_s.first_contact >= 20.0)
 	_check("Demo 3 min: never more live yōkai than the Quest cap (max %d)" % demo_s.max_alive,

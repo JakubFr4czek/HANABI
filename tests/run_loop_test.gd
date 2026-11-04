@@ -258,15 +258,15 @@ func _spawn_pacing_checks(run: RunGame) -> void:
 	_check("Wave presets (demo 3 min, demo, default, hardcore) load and validate without errors (%d)" % errors,
 		demo != null and hard != null and demo3 != null and errors == 0)
 
-	# The 3-minute demo (N7): the Oni comes on the first PEAK after 120 s, inside 120–150 s.
+	# The demo (N13): the Oni comes on the first PEAK after 60 s, inside 60–100 s.
 	var demo_oni := -1.0
 	var demo_plan := WavePlanner.new(demo3, 7)
 	for i in 3000:
 		if demo_plan.step(0.1, 0, false).oni:
 			demo_oni = demo_plan.t
 			break
-	_check("Demo: the Oni is cued at %.1f s, inside [120, 150] s" % demo_oni,
-		demo_oni >= 120.0 and demo_oni <= 150.0)
+	_check("Demo: the Oni is cued at %.1f s, inside [60, 100] s" % demo_oni,
+		demo_oni >= 60.0 and demo_oni <= 100.0)
 	# A spawn the director cannot place hands its credits back (N7): the wave keeps its budget.
 	var refund_plan := WavePlanner.new(profile, 5)
 	refund_plan.credits = 5.0

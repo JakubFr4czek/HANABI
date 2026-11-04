@@ -14,4 +14,4 @@ cap_step_seconds = 30.0
 cap_hard = 7
 elite_from_seconds = 100.0
 elite_chance_full = 0.5
-oni_first_seconds = 120.0
+oni_first_seconds = 60.0

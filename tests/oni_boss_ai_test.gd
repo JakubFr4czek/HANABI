@@ -722,8 +722,8 @@ func _test_f5_katana_boss_in_run() -> void:
 	var sim := N7PacingSim.new()
 	await sim.play(get_tree(), run, director, 160.0, 20260604, false)
 	run.set_physics_process(true)
-	_check("Demo run: the boss appears at the Oni's moment (%.1f s, in [120, 150])" % seen.t,
-		seen.t >= 120.0 and seen.t <= 150.0)
+	_check("Demo run: the boss appears at the Oni's moment (%.1f s, in [60, 100], N13)" % seen.t,
+		seen.t >= 60.0 and seen.t <= 100.0)
 	_check("Run boss = the katana duelist (katana visible, no kanabō/Oni shell, demon mask on)",
 		seen.katana and seen.sword and not seen.kanabo and not seen.shell and seen.mask)
 	_check("Run boss brain drives the duelist in katana mode with the AI client", seen.brain)
@@ -738,7 +738,10 @@ func _test_f5_katana_boss_in_run() -> void:
 	var brain := boss.brain as OniBossBrain
 	await _frames(30)
 	var h := boss.get_measured_height()
-	_check("Swordsman silhouette stays human-sized (%.2f m)" % h, h >= 1.55 and h <= 2.0)
+	# N13: a head taller than the yōkai (body_scale 1.15), still a man, not the 2.7 m Oni.
+	_check("Swordsman silhouette is a tall man (%.2f m, 1.85–2.3 m)" % h, h >= 1.85 and h <= 2.3)
+	_check("N13 entrance: the boss holds and faces the player first (intro %.2f s)" % brain.intro_hold,
+		brain.intro_hold > 0.5 and boss.speech_bubble.is_showing())
 
 	# 1. The mock AI answers "flank_left": the brain takes the tactic and circles to its left.
 	# A box, not a plain local: lambdas capture locals by value.

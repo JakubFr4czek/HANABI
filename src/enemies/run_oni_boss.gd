@@ -44,6 +44,16 @@ var katana_duelist := false
 ## Mask scale on the human-sized head (radius 0.115 m, as the yōkai head the mask is
 ## baked for): a hair larger so it covers the wooden face and its band.
 const DUELIST_MASK_SCALE := 1.06
+## N13: the boss swordsman is a head taller than the yōkai (~1.95 m to the crown): every
+## part, hitbox and the grip scale together (TrainingDummy.body_scale).
+const DUELIST_BODY_SCALE := 1.15
+## N13 entrance: he stops, faces the player and speaks for this long before the duel.
+const DUELIST_INTRO_HOLD := 1.8
+const DUELIST_INTRO_LINE := "Koniec twojej drogi!"
+## N13: ember fresnel rim on his own wood material only (the scene light is untouched),
+## so the dark silhouette separates from the fog at 4–10 m.
+const DUELIST_RIM := Color(0.62, 0.24, 0.10)
+const DUELIST_RIM_POWER := 1.9
 
 
 func _define_parts() -> Dictionary:
@@ -138,6 +148,9 @@ func _ready() -> void:
 	_mask.set_shader_parameter("procedural_ao", 0.42)
 	_mask.set_shader_parameter("emission_tint", Color(0.35, 0.32, 0.28))
 
+	if katana_duelist:
+		body_scale = DUELIST_BODY_SCALE
+
 	# Attach specialized Oni AI brain before super._ready()
 	if brain == null:
 		brain = OniBossBrain.new()
@@ -150,6 +163,9 @@ func _ready() -> void:
 		# Same silhouette as the test-room swordsman; only the demon mask marks the boss.
 		if parts.has("head"):
 			_attach_oni_mask(parts["head"] as RagdollPart)
+		_straw.set_shader_parameter("rim_tint", DUELIST_RIM)
+		_straw.set_shader_parameter("rim_power", DUELIST_RIM_POWER)
+		_straw.set_shader_parameter("fog_rim", 1.2)
 	else:
 		_apply_oni_visuals()
 	_attach_oni_rim_light()
@@ -162,6 +178,9 @@ func _ready() -> void:
 		var oni_brain := brain as OniBossBrain
 		oni_brain.speech_requested.connect(func(text: String): speech_bubble.show_speech(text))
 		oni_brain.thought_changed.connect(speech_bubble.set_thought)
+		if katana_duelist:
+			oni_brain.start_intro(DUELIST_INTRO_HOLD)
+			speech_bubble.show_speech(DUELIST_INTRO_LINE)
 
 
 func _physics_process(delta: float) -> void:
@@ -187,6 +206,8 @@ func _update_oni_readability() -> void:
 			_rim.omni_range = lerpf(3.2, 4.6, near)
 		else:
 			_rim.light_energy = 0.0
+	if katana_duelist:
+		_straw.set_shader_parameter("rim_tint", DUELIST_RIM * lerpf(1.0, 1.35, near))
 	_mask.set_shader_parameter("fill", lerpf(2.35, 3.25, near))
 	_mask.set_shader_parameter("fog_rim", lerpf(1.35, 2.05, near))
 	_flesh.set_shader_parameter("fill", lerpf(0.85, 1.25, near))
@@ -382,14 +403,14 @@ func _attach_oni_mask(head: RagdollPart) -> void:
 	if katana_duelist:
 		# Human head: the mask sits on the face, about 0.23 m wide; the plain wooden
 		# eyes and band of the training duelist stay under it.
-		mask_scale = DUELIST_MASK_SCALE
-		mask_mi.position = Vector3(0.0, 0.0, 0.004)
+		mask_scale = DUELIST_MASK_SCALE * body_scale
+		mask_mi.position = Vector3(0.0, 0.0, 0.004 * body_scale)
 		mask_mi.scale = Vector3.ONE * mask_scale
 	mask_mi.material_override = _mask
 	var eye_l := MeshInstance3D.new()
 	var eye_m := SphereMesh.new()
 	# Sized to the scaled mask: about 0.05 m eyes on the boss, as before.
-	eye_m.radius = (0.05 if mask_scale == ONI_MASK_SCALE else 0.016) / mask_scale
+	eye_m.radius = (0.05 if mask_scale == ONI_MASK_SCALE else 0.016 * body_scale) / mask_scale
 	eye_m.height = 2.0 * eye_m.radius
 	eye_l.mesh = eye_m
 	var eye_mat := StandardMaterial3D.new()

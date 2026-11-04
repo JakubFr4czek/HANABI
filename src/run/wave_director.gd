@@ -51,6 +51,10 @@ const YOKAI_POOL_CAP := 14
 ## Nothing spawns behind the player: the back sector is 120° wide, centred on the
 ## opposite of the view direction, so anything within 60° of "behind" is refused.
 const BEHIND_SECTOR_HALF := deg_to_rad(60.0)
+## N13: the Oni's entrance spot – within this yaw of the player's view, this far away.
+const ONI_ENTRY_HALF_ANGLE := deg_to_rad(22.0)
+const ONI_ENTRY_MIN := 6.0
+const ONI_ENTRY_MAX := 7.5
 
 
 func _ready() -> void:
@@ -365,14 +369,25 @@ func spawn_oni_boss(facing_target: Vector3, view_forward: Vector3 = Vector3.ZERO
 	var p := get_profile()
 	var has_view := view_forward.length_squared() > 0.0001
 	var yaw_view := atan2(view_forward.x, view_forward.z)
-	var angle := _rng.randf() * TAU
-	for i in 16:
-		if not has_view or _is_legal_angle(angle, yaw_view, 0.0):
-			break
-		angle = _rng.randf() * TAU
-	if has_view and not _is_legal_angle(angle, yaw_view, 0.0):
-		return null
-	var pos := _ring_point(facing_target, angle, 9.2)
+	var pos := Vector3.INF
+	# N13: the boss enters in front of the player, close enough to read at once (in frame,
+	# 6–7.5 m, clear of trunks): an entrance, not a figure somewhere off to the side.
+	if has_view:
+		for i in 12:
+			var a := yaw_view + _rng.randf_range(-ONI_ENTRY_HALF_ANGLE, ONI_ENTRY_HALF_ANGLE)
+			var cand := _ring_point(facing_target, a, _rng.randf_range(ONI_ENTRY_MIN, ONI_ENTRY_MAX))
+			if is_clear_of_world(cand):
+				pos = cand
+				break
+	if pos == Vector3.INF:
+		var angle := _rng.randf() * TAU
+		for i in 16:
+			if not has_view or _is_legal_angle(angle, yaw_view, 0.0):
+				break
+			angle = _rng.randf() * TAU
+		if has_view and not _is_legal_angle(angle, yaw_view, 0.0):
+			return null
+		pos = _ring_point(facing_target, angle, 9.2)
 	var oni := RunOniBoss.new()
 	oni.katana_duelist = boss_katana_duelist
 	oni.profile = EnemyCatalog.make_oni_profile(p.hp_for(maxi(wave, 1), run_seconds) * p.oni_hp_mult)

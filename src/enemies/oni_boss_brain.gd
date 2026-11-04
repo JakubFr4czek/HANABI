@@ -31,6 +31,15 @@ var katana_mode := false
 var current_tactic := "duel"
 ## Seconds the current tactic still holds before it lapses back to "duel".
 var tactic_time_left := 0.0
+## N13 entrance: seconds the swordsman stands planted in guard, faces the player and
+## speaks before the duel starts. Any cut on him, or the first AI decision, ends it at once.
+var intro_hold := 0.0
+
+
+## Starts the entrance: hold for [param seconds]; the first AI decision waits for its end.
+func start_intro(seconds: float) -> void:
+	intro_hold = seconds
+	_ai_timer = maxf(_ai_timer, seconds)
 
 
 func setup(p_body: Node3D, p_profile: EnemyProfile) -> void:
@@ -61,6 +70,14 @@ func setup(p_body: Node3D, p_profile: EnemyProfile) -> void:
 
 func think(delta: float, ctx: Dictionary) -> Dictionary:
 	_update_phase(ctx)
+	if katana_mode and intro_hold > 0.0:
+		intro_hold = maxf(intro_hold - delta, 0.0)
+		_poll_ai(delta, ctx)
+		var hold := {"pose": "guard", "attacking": false, "move": Vector3.ZERO, "tell": 0.0,
+			"arm_speed": difficulty.arm_speed, "plant": true}
+		if ctx.has("player_position"):
+			hold["face_position"] = ctx.player_position
+		return hold
 	_poll_ai(delta, ctx)
 
 	var intent := super.think(delta, ctx)
@@ -188,6 +205,7 @@ func _player_style() -> Dictionary:
 
 
 func _on_ai_decision(decision: Dictionary) -> void:
+	intro_hold = 0.0
 	_last_ai_decision = decision
 	var speech: String = decision.get("speech", "")
 	if speech != "":
@@ -243,6 +261,7 @@ func on_parried(info: Dictionary) -> void:
 
 func on_hit(hit: Dictionary) -> void:
 	super.on_hit(hit)
+	intro_hold = 0.0
 	_record_player_action("cut")
 
 
